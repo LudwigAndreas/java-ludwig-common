@@ -9,6 +9,7 @@ Each module provides a focused set of utilities or functionality and can be reus
 
 ## 📁 Project Structure
 
+```text
 ludwig-common/
 │
 ├── pom.xml # Root POM – aggregates all modules
@@ -22,6 +23,7 @@ ludwig-common/
 │ └── pom.xml
 │
 └── README.md
+```
 
 Each module has:
 - Its own `pom.xml` and dependencies
