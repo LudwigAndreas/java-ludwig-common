@@ -13,6 +13,9 @@
 
     <modules>
         <module>common-utils</module>
+        <module>odata-filter-spring-boot-starter</module>
+        <module>db-core</module>
+        <module>outbox-spring-boot-starter</module>
     </modules>
 
     <properties>

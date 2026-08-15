@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for outbox-spring-boot-starter. Changeset ids/author are namespaced ("outbox-NNN", "ludwig-outbox")
+      so they never collide with a consuming application's own changesets in the shared DATABASECHANGELOG table -
+      see OutboxLiquibaseAutoConfiguration, which registers this changelog as a second, independent
+      SpringLiquibase bean. Postgres-only: JSONB columns and partial/expression indexes throughout.
+    -->
+
+    <changeSet id="outbox-001-create-outbox-message" author="ludwig-outbox">
+        <createTable tableName="outbox_message">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="aggregate_type" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="aggregate_id" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_type" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_version" type="INT" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="JSONB">
+                <constraints nullable="false"/>
+            </column>
+            <column name="headers" type="JSONB"/>
+            <column name="ordering_key" type="VARCHAR(255)"/>
+            <column name="transport" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="destination" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="VARCHAR(255)"/>
+            <column name="status" type="VARCHAR(20)" defaultValue="PENDING">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_attempts" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_attempt_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="locked_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="locked_by" type="VARCHAR(255)"/>
+            <column name="last_error" type="TEXT"/>
+            <column name="published_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="trace_id" type="VARCHAR(64)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="outbox-002-index-poll" author="ludwig-outbox">
+        <sql>CREATE INDEX idx_outbox_message_poll ON outbox_message (status, next_attempt_at) WHERE status IN ('PENDING', 'FAILED');</sql>
+        <rollback>DROP INDEX idx_outbox_message_poll;</rollback>
+    </changeSet>
+
+    <changeSet id="outbox-003-index-ordering-key" author="ludwig-outbox">
+        <sql>CREATE INDEX idx_outbox_message_ordering_key ON outbox_message (ordering_key) WHERE ordering_key IS NOT NULL;</sql>
+        <rollback>DROP INDEX idx_outbox_message_ordering_key;</rollback>
+    </changeSet>
+
+    <changeSet id="outbox-004-unique-idempotency-key" author="ludwig-outbox">
+        <sql>CREATE UNIQUE INDEX ux_outbox_message_idempotency_key ON outbox_message (idempotency_key) WHERE idempotency_key IS NOT NULL;</sql>
+        <rollback>DROP INDEX ux_outbox_message_idempotency_key;</rollback>
+    </changeSet>
+
+    <changeSet id="outbox-005-create-status-history" author="ludwig-outbox">
+        <createTable tableName="outbox_status_history">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="outbox_message_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempt_number" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="detail" type="TEXT"/>
+        </createTable>
+        <createIndex tableName="outbox_status_history" indexName="idx_outbox_status_history_message_id">
+            <column name="outbox_message_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

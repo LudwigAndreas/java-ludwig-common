@@ -35,6 +35,9 @@ Each module has:
 | Module Name    | Description                                     |
 |----------------|-------------------------------------------------|
 | `common-utils` | General-purpose helper functions and utilities  |
+| [`odata-filter-spring-boot-starter`](odata-filter-spring-boot-starter/README.md) | Enterprise-ready OData `$filter`/`$top`/`$skip`/`$orderby` support for Spring Boot + Spring Data JPA REST APIs |
+| [`db-core`](db-core/README.md) | Base entity classes, auditing, soft delete, exceptions and QueryDSL/Spring Data JPA utilities for Java 17 + Postgres + Spring Boot services |
+| [`outbox-spring-boot-starter`](outbox-spring-boot-starter/README.md) | Enterprise-ready transactional outbox for Java 17 + Postgres + Spring Boot: `FOR UPDATE SKIP LOCKED` polling, retry/backoff, dead-letter handling, ordering, idempotency, Kafka/REST dispatch with multi-destination routing, metrics and audit |
 
 [//]: # (| `kafka-tools`  | Kafka-related producers, consumers, and helpers |)
 
