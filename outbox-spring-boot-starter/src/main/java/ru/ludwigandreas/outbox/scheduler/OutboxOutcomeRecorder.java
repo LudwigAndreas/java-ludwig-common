@@ -9,6 +9,7 @@ import ru.ludwigandreas.outbox.entity.OutboxStatus;
 import ru.ludwigandreas.outbox.metrics.OutboxMetrics;
 import ru.ludwigandreas.outbox.repository.OutboxMessageRepository;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -41,11 +42,14 @@ public class OutboxOutcomeRecorder {
     @Transactional
     public void recordSuccess(UUID messageId) {
         OutboxMessage message = repository.getByIdOrThrow(messageId);
+        Instant publishedAt = Instant.now();
         message.setStatus(OutboxStatus.PUBLISHED);
-        message.setPublishedAt(Instant.now());
+        message.setPublishedAt(publishedAt);
         message.setLastError(null);
         auditLogger.onTransition(message, OutboxStatus.PROCESSING, OutboxStatus.PUBLISHED, "dispatched");
         metrics.recordDispatchSucceeded(message.getEventType(), message.getTransport(), message.getDestination());
+        metrics.recordEndToEndLatency(message.getEventType(), message.getTransport(),
+                Duration.between(message.getCreatedAt(), publishedAt));
     }
 
     @Transactional

@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import ru.ludwigandreas.db.core.audit.AuditorAwareAdapter;
 import ru.ludwigandreas.db.core.audit.AuditorProvider;
 import ru.ludwigandreas.db.core.audit.SpringSecurityAuditorProvider;
+import ru.ludwigandreas.db.core.metrics.DbCoreMetrics;
 
 import java.util.Optional;
 
@@ -37,8 +38,8 @@ public class DatabaseAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AuditorAware.class)
-    public AuditorAware<String> auditorAware(AuditorProvider<String> auditorProvider) {
-        return new AuditorAwareAdapter<>(auditorProvider);
+    public AuditorAware<String> auditorAware(AuditorProvider<String> auditorProvider, DbCoreMetrics metrics) {
+        return new AuditorAwareAdapter<>(auditorProvider, metrics);
     }
 
     @Configuration(proxyBeanMethods = false)

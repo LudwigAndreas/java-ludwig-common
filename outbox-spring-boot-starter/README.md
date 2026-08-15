@@ -165,6 +165,11 @@ consuming application.
 | `ludwig.outbox.kafka.send-timeout` | `10s` | Max time to wait for Kafka broker acknowledgement per message |
 | `ludwig.outbox.routes.<name>.*` / `ludwig.outbox.default-route.*` | - | See [Multi-destination routing](#multi-destination-routing) |
 
+Beyond publish/filter/dispatch counts and dispatch-call duration, `ludwig.outbox.latency` records the
+full end-to-end time from `OutboxMessage.createdAt` to the moment it's recorded `PUBLISHED` - polling
+interval, retry backoff and queueing time included, not just the dispatch call itself. This is the metric
+worth an SLA/alert on.
+
 ## Testing
 
 `mvn test` runs the unit test suite (backoff calculation, route resolution, filtering, serialization,

@@ -27,4 +27,8 @@ public class NoopOutboxMetrics implements OutboxMetrics {
     @Override
     public void recordDispatchDuration(String transport, String destination, Duration duration) {
     }
+
+    @Override
+    public void recordEndToEndLatency(String eventType, String transport, Duration duration) {
+    }
 }

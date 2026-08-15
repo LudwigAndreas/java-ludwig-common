@@ -31,6 +31,9 @@ public class ODataFilterProperties {
     @NestedConfigurationProperty
     private final Web web = new Web();
 
+    @NestedConfigurationProperty
+    private final Metrics metrics = new Metrics();
+
     public int getMaxDepth() {
         return maxDepth;
     }
@@ -83,6 +86,10 @@ public class ODataFilterProperties {
         return web;
     }
 
+    public Metrics getMetrics() {
+        return metrics;
+    }
+
     public enum PageSizeExceededStrategy {
         /** Reject the request with {@link ru.ludwigandreas.odatafilter.exception.PageSizeExceededException}. */
         REJECT,
@@ -123,6 +130,19 @@ public class ODataFilterProperties {
 
         public void setDollarPrefixedParametersOnly(boolean dollarPrefixedParametersOnly) {
             this.dollarPrefixedParametersOnly = dollarPrefixedParametersOnly;
+        }
+    }
+
+    public static class Metrics {
+
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 }

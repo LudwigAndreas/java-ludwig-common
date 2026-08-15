@@ -14,15 +14,37 @@
 
     <name>Common retrying library</name>
 
-    <properties>
-        <jupiter.version>5.12.2</jupiter.version>
-    </properties>
+    <!-- Java version and third-party dependency versions are centralized in the parent pom. -->
 
+    <!-- No explicit JUnit versions here: they're resolved from the spring-boot-dependencies BOM
+         (imported once in the parent pom), which keeps junit-jupiter-* and junit-platform-* mutually
+         compatible - pinning junit-jupiter independently while junit-platform-launcher stayed
+         BOM-managed previously mixed Jupiter 5.12.2 with Platform 1.10.5 and broke test discovery
+         with a NoSuchMethodError. -->
     <dependencies>
+        <!-- Optional: RetryingCall.withMetrics(...) instrumentation. common-utils stays framework-free
+             for everyone who doesn't call it - Micrometer is never required to just use retries. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>${jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Actually runs the tests: junit-jupiter-api alone only lets them compile, Surefire needs
+             the engine (to execute @Test methods) and the platform launcher (to discover them) too. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

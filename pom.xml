@@ -16,12 +16,53 @@
         <module>odata-filter-spring-boot-starter</module>
         <module>db-core</module>
         <module>outbox-spring-boot-starter</module>
+        <module>hot-reload-spring-boot-starter</module>
     </modules>
 
     <properties>
-        <java.version>18</java.version>
+        <!-- Single source of truth for the JDK baseline every module compiles against. -->
+        <java.version>17</java.version>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!--
+            Single source of truth for every third-party dependency version shared across modules.
+            Child modules reference these via ${...} instead of redeclaring the literal version, so
+            bumping one here can't leave another module silently behind.
+        -->
+        <spring-boot.version>3.3.5</spring-boot.version>
+        <lombok.version>1.18.34</lombok.version>
+        <querydsl.version>5.1.0</querydsl.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
+        <resilience4j.version>2.2.0</resilience4j.version>
+        <spring-kafka.version>3.2.4</spring-kafka.version>
+        <spring-vault.version>3.1.2</spring-vault.version>
+        <freemarker.version>2.3.32</freemarker.version>
+        <olingo.version>4.10.0</olingo.version>
+        <!-- JUnit (jupiter + platform) is deliberately NOT pinned here: it comes from the imported
+             spring-boot-dependencies BOM below, which keeps the whole JUnit 5 stack internally
+             consistent. Pinning it independently caused a Jupiter/Platform version-skew bug - see
+             common-utils/pom.xml. -->
     </properties>
+
+    <!--
+        Imported once here rather than per-module: every child inherits this dependencyManagement
+        automatically (standard Maven parent/child inheritance - no re-import needed), so all modules
+        resolve the same version of every Spring Boot-managed transitive dependency (Micrometer,
+        Jackson, Hibernate Validator, SnakeYAML, ...) instead of each module's own import potentially
+        drifting from the others.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <extensions>
@@ -44,8 +85,7 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.9.0</version>
                     <configuration>
-                        <source>${java.version}</source>
-                        <target>${java.version}</target>
+                        <release>${maven.compiler.release}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
                     </configuration>
                 </plugin>

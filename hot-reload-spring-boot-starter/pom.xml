@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>hot-reload-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Hot Reload Spring Boot starter</name>
+    <description>
+        Enterprise-ready hot reload for Java 17 + Spring Boot services: typed and validated configuration,
+        live-reloading property/YAML files, FreeMarker templates and HashiCorp Vault secrets (KV polling
+        and lease-renewed dynamic secrets, Kubernetes auth), with environment variables/system properties
+        always able to override reloaded values. Plug-and-play: add the dependency, point it at your
+        files and/or Vault paths, and bound configuration beans refresh themselves as sources change.
+    </description>
+
+    <!-- Java version, third-party dependency versions and the spring-boot-dependencies BOM import
+         are all centralized in the parent pom - see its <properties>/<dependencyManagement>. -->
+
+    <dependencies>
+        <!-- Environment/PropertySource machinery, ApplicationEvent publishing -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- Logging facade only - the consuming application supplies the binding (logback, log4j2, ...) -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- YAML property file parsing (org.yaml.snakeyaml.Yaml), shipped by spring-boot proper -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+        </dependency>
+
+        <!-- Typed configuration validation -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.validator</groupId>
+            <artifactId>hibernate-validator</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: HashiCorp Vault secret sources (KV polling + lease-renewed dynamic secrets) -->
+        <dependency>
+            <groupId>org.springframework.vault</groupId>
+            <artifactId>spring-vault-core</artifactId>
+            <version>${spring-vault.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: hot-reloadable FreeMarker templates -->
+        <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+            <version>${freemarker.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: reload success/failure counts, seconds-since-last-success gauge -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Hibernate Validator's default message interpolator needs an EL implementation on the classpath -->
+        <dependency>
+            <groupId>org.glassfish</groupId>
+            <artifactId>jakarta.el</artifactId>
+            <version>4.0.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -19,29 +19,8 @@
         nesting-depth limits, max page size, role-based field access control and pluggable validation.
     </description>
 
-    <properties>
-        <java.version>17</java.version>
-        <maven.compiler.release>17</maven.compiler.release>
-
-        <spring-boot.version>3.3.5</spring-boot.version>
-        <olingo.version>4.10.0</olingo.version>
-        <testcontainers.version>1.21.4</testcontainers.version>
-        <querydsl.version>5.1.0</querydsl.version>
-
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+    <!-- Java version, third-party dependency versions and the spring-boot-dependencies BOM import
+         are all centralized in the parent pom - see its <properties>/<dependencyManagement>. -->
 
     <dependencies>
         <!-- Spring Boot autoconfiguration machinery -->
@@ -95,6 +74,13 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: applied/rejected-filter counts and parse-duration metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
             <optional>true</optional>
         </dependency>
 

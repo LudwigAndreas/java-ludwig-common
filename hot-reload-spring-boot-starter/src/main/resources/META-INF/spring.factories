@@ -1,0 +1,2 @@
+org.springframework.boot.env.EnvironmentPostProcessor=\
+ru.ludwigandreas.hotreload.config.HotReloadEnvironmentPostProcessor

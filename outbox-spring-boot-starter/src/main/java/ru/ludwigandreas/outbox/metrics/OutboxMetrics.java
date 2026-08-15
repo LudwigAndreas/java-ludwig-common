@@ -20,4 +20,12 @@ public interface OutboxMetrics {
     void recordDeadLettered(String eventType, String transport);
 
     void recordDispatchDuration(String transport, String destination, Duration duration);
+
+    /**
+     * End-to-end latency from {@code OutboxMessage.createdAt} to the moment it was recorded PUBLISHED -
+     * time actually spent sitting in the outbox (polling interval, retry backoff, queueing behind other
+     * messages), not just the dispatch call itself ({@link #recordDispatchDuration}). The metric worth
+     * alerting an SLA on.
+     */
+    void recordEndToEndLatency(String eventType, String transport, Duration duration);
 }

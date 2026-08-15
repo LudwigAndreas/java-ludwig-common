@@ -138,6 +138,16 @@ role-restricted fields) via an auto-registered `@RestControllerAdvice`. Disable 
 `odata.filter.web.problem-detail-advice-enabled=false` to handle these exceptions yourself; all of
 them extend `ODataFilterException`.
 
+## Metrics
+
+Optional (only if Micrometer is on the classpath, enabled by default via
+`odata.filter.metrics.enabled`): `odata.filter.applied` counts successfully parsed/translated filters,
+`odata.filter.rejected` counts every rejection tagged by `entityType` and `reason` (the rejecting
+exception's simple name - `FilterSyntaxException`, `FilterAccessDeniedException`,
+`PageSizeExceededException`, ...), and `odata.filter.parse.duration` times the whole `parse` call
+regardless of outcome. A sustained spike in `rejected` is either a client bug or someone probing for
+what's filterable - worth alerting on either way.
+
 ## Testing
 
 `mvn test` runs the unit test suite (parser, policy resolution, field/role validation, predicate

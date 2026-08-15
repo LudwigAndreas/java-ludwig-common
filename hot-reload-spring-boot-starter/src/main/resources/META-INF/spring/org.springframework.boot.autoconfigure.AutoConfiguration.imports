@@ -1,0 +1,3 @@
+ru.ludwigandreas.hotreload.config.HotReloadAutoConfiguration
+ru.ludwigandreas.hotreload.config.HotReloadVaultAutoConfiguration
+ru.ludwigandreas.hotreload.config.HotReloadFreemarkerAutoConfiguration

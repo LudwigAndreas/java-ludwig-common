@@ -5,6 +5,12 @@
     <file url="file://$PROJECT_DIR$/common-utils/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/db-core/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/db-core/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/hot-reload-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/hot-reload-spring-boot-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/outbox-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
   </component>

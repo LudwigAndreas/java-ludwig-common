@@ -57,9 +57,32 @@ duplicates that handful of lines instead of risking undefined same-attribute-nam
 `SnapshotEntity` - their id type is whatever the source system uses (`Long`, `String`, `UUID`, ...),
 never forced to UUID.
 
+### `ExternalEntity` provenance fields
+
+`ExternalEntity` carries `importedAt`/`sourceSystem`/`sourceVersion`/`sourceTimestamp`, shared by every
+outer entity - `importedAt` is filled in automatically on first persist and (like `sourceSystem`) never
+changes afterward; `sourceVersion`/`sourceTimestamp` stay mutable so a plain `ExternalEntity` subclass
+can be upserted in place each time a new version is fetched, without needing `SnapshotEntity`'s
+immutability:
+
+```java
+@Entity
+@Table(name = "customers")
+public class Customer extends ExternalEntity<String> {  // id = the source system's id
+    private String name;
+}
+
+// on each fetch: load-or-create, update fields, save - an ordinary UPDATE
+Customer customer = customerRepository.findById(externalId).orElseGet(Customer::new);
+customer.setSourceVersion(newData.version());
+customer.setName(newData.name());
+customerRepository.save(customer);
+```
+
 ### `SnapshotEntity`
 
-An immutable point-in-time copy of externally-sourced data:
+An immutable point-in-time copy of externally-sourced data - adds nothing over `ExternalEntity` but the
+immutability guarantee:
 
 ```java
 @Entity
@@ -69,8 +92,14 @@ public class CustomerSnapshot extends SnapshotEntity<String> {  // id = the sour
 }
 ```
 
-`SnapshotImmutabilityListener` (attached automatically) fills `importedAt` on first persist and
-throws `IntegrityViolationException` on any later `@PreUpdate` - snapshot rows are append-only.
+`SnapshotImmutabilityListener` (attached automatically) throws `IntegrityViolationException` on any
+`@PreUpdate` - snapshot rows are append-only.
+
+Note that since `ID` here is still the source system's id (per `ExternalEntity`), this shape supports
+exactly one row per external entity, immutable once written - suitable for "import once, never touched
+again" data. If you need to keep every fetched *version* of the same external entity as its own row
+(true version history), give the snapshot a generated surrogate id instead and keep the source id as a
+plain, non-unique column, so multiple rows can share it.
 
 ### Soft delete
 
@@ -123,6 +152,14 @@ Pageable pageable = PageableUtils.of(page, size, properties.getMaxPageSize(), so
 `Predicates.allOf` filters out `null` expressions and always returns a safe, non-null predicate;
 `PageableUtils.of` clamps the page size and applies a default sort when none was requested.
 
+## Metrics
+
+Optional (only if Micrometer is on the classpath): `ludwig.db.auditor.resolved` counts every
+`AuditorAware` lookup, tagged `present=true/false` - a sustained run of `false` usually means Spring
+Security isn't wired the way this module expects. `ludwig.db.snapshot.mutation.blocked` counts rejected
+writes to an immutable `SnapshotEntity`, tagged by entity type - worth alerting on, since it means
+something in your system thinks it owns data that's actually owned by an external source.
+
 ## Configuration (`ludwig.db.*`)
 
 | Property | Default | Meaning |
@@ -130,6 +167,7 @@ Pageable pageable = PageableUtils.of(page, size, properties.getMaxPageSize(), so
 | `ludwig.db.auditing-enabled` | `true` | Enables `@EnableJpaAuditing` wiring |
 | `ludwig.db.default-page-size` | `20` | Convention default for `PageableUtils` callers |
 | `ludwig.db.max-page-size` | `200` | Convention upper bound for `PageableUtils` callers |
+| `ludwig.db.metrics.enabled` | `true` | Emit Micrometer metrics (only if Micrometer is on the classpath) |
 
 ## Testing
 

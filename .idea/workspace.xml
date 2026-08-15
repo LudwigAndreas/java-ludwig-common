@@ -1,10 +1,78 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PropertiesComponent">
-    <property name="project.structure.last.edited" value="Project" />
-    <property name="project.structure.proportion" value="0.0" />
-    <property name="project.structure.side.proportion" value="0.2" />
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
   </component>
+  <component name="ChangeListManager">
+    <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/common-utils/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/common-utils/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/common-utils/src/main/java/ru/ludwigandreas/common/retryer/RetryingCall.java" beforeDir="false" afterPath="$PROJECT_DIR$/common-utils/src/main/java/ru/ludwigandreas/common/retryer/RetryingCall.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/audit/AuditorAwareAdapter.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/audit/AuditorAwareAdapter.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseProperties.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/ExternalEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/ExternalEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/SnapshotEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/SnapshotEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/listener/SnapshotImmutabilityListener.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/listener/SnapshotImmutabilityListener.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterProperties.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/core/ODataFilterService.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/core/ODataFilterService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/MicrometerOutboxMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/MicrometerOutboxMetrics.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/NoopOutboxMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/NoopOutboxMetrics.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/OutboxMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/OutboxMetrics.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxOutcomeRecorder.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxOutcomeRecorder.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="183" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "customColor": "",
+  "associatedIndex": 6
+}]]></component>
+  <component name="ProjectId" id="3HxlUAdvKdq7Bvmtmm1kllwPzre" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "master",
+    "kotlin-language-version-configured": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
   <component name="RunManager">
     <configuration default="true" type="JetRunConfigurationType">
       <module name="ludwig-common" />
@@ -19,5 +87,27 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-30f59d01ecdd-37e91769500f-intellij.indexing.shared.core-IU-261.25134.95" />
+        <option value="bundled-js-predefined-d6986cc7102b-31caf2ab9e3c-JavaScript-IU-261.25134.95" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="" />
+      <created>1786817614729</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1786817614729</updated>
+      <workItem from="1786817616340" duration="4442000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
 </project>

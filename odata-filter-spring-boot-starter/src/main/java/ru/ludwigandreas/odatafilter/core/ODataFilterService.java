@@ -2,6 +2,7 @@ package ru.ludwigandreas.odatafilter.core;
 
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.Expressions;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import org.springframework.context.ApplicationEventPublisher;
@@ -12,6 +13,7 @@ import ru.ludwigandreas.odatafilter.audit.FilterAppliedEvent;
 import ru.ludwigandreas.odatafilter.config.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.exception.FilterSyntaxException;
 import ru.ludwigandreas.odatafilter.exception.PageSizeExceededException;
+import ru.ludwigandreas.odatafilter.metrics.ODataFilterMetrics;
 import ru.ludwigandreas.odatafilter.parser.ODataFilterParser;
 import ru.ludwigandreas.odatafilter.parser.ODataOrderByParser;
 import ru.ludwigandreas.odatafilter.parser.OrderByTerm;
@@ -41,6 +43,7 @@ public class ODataFilterService {
     private final FilterPrincipalResolver principalResolver;
     private final List<FilterValidator> customValidators;
     private final ApplicationEventPublisher eventPublisher;
+    private final ODataFilterMetrics metrics;
 
     private final ODataFilterParser filterParser = new ODataFilterParser();
     private final ODataOrderByParser orderByParser = new ODataOrderByParser();
@@ -51,16 +54,33 @@ public class ODataFilterService {
             PredicateBuilder predicateBuilder,
             FilterPrincipalResolver principalResolver,
             List<FilterValidator> customValidators,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            ODataFilterMetrics metrics) {
         this.properties = properties;
         this.policyRegistry = policyRegistry;
         this.predicateBuilder = predicateBuilder;
         this.principalResolver = principalResolver;
         this.customValidators = List.copyOf(customValidators);
         this.eventPublisher = eventPublisher;
+        this.metrics = metrics;
     }
 
     public <T> ODataQuery<T> parse(
+            Class<T> entityType, String filter, Integer top, Integer skip, String orderBy, Boolean count) {
+        long startNanos = System.nanoTime();
+        try {
+            ODataQuery<T> result = doParse(entityType, filter, top, skip, orderBy, count);
+            metrics.recordFilterApplied(entityType.getSimpleName());
+            return result;
+        } catch (RuntimeException e) {
+            metrics.recordFilterRejected(entityType.getSimpleName(), e.getClass().getSimpleName());
+            throw e;
+        } finally {
+            metrics.recordParseDuration(entityType.getSimpleName(), Duration.ofNanos(System.nanoTime() - startNanos));
+        }
+    }
+
+    private <T> ODataQuery<T> doParse(
             Class<T> entityType, String filter, Integer top, Integer skip, String orderBy, Boolean count) {
         EntityFilterPolicy policy = policyRegistry.policyFor(entityType);
         Set<String> callerRoles = principalResolver.resolveRoles();

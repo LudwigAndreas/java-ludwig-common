@@ -47,4 +47,9 @@ public class MicrometerOutboxMetrics implements OutboxMetrics {
         registry.timer(PREFIX + "dispatch.duration", Tags.of("transport", transport, "destination", destination))
                 .record(duration);
     }
+
+    @Override
+    public void recordEndToEndLatency(String eventType, String transport, Duration duration) {
+        registry.timer(PREFIX + "latency", Tags.of("eventType", eventType, "transport", transport)).record(duration);
+    }
 }

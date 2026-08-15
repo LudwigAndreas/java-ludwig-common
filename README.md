@@ -38,6 +38,7 @@ Each module has:
 | [`odata-filter-spring-boot-starter`](odata-filter-spring-boot-starter/README.md) | Enterprise-ready OData `$filter`/`$top`/`$skip`/`$orderby` support for Spring Boot + Spring Data JPA REST APIs |
 | [`db-core`](db-core/README.md) | Base entity classes, auditing, soft delete, exceptions and QueryDSL/Spring Data JPA utilities for Java 17 + Postgres + Spring Boot services |
 | [`outbox-spring-boot-starter`](outbox-spring-boot-starter/README.md) | Enterprise-ready transactional outbox for Java 17 + Postgres + Spring Boot: `FOR UPDATE SKIP LOCKED` polling, retry/backoff, dead-letter handling, ordering, idempotency, Kafka/REST dispatch with multi-destination routing, metrics and audit |
+| [`hot-reload-spring-boot-starter`](hot-reload-spring-boot-starter/README.md) | Enterprise-ready hot reload for Java 17 + Spring Boot: typed/validated configuration, live-reloading property/YAML files and FreeMarker templates, HashiCorp Vault secrets (KV polling, lease-renewed dynamic secrets, Kubernetes auth), environment variables always able to override a reloaded value |
 
 [//]: # (| `kafka-tools`  | Kafka-related producers, consumers, and helpers |)
 

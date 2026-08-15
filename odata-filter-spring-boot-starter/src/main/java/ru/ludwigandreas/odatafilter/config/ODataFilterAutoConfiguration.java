@@ -10,6 +10,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.core.GrantedAuthority;
 import ru.ludwigandreas.odatafilter.core.ODataFilterService;
+import ru.ludwigandreas.odatafilter.metrics.ODataFilterMetrics;
 import ru.ludwigandreas.odatafilter.policy.FilterPolicyRegistry;
 import ru.ludwigandreas.odatafilter.querydsl.PredicateBuilder;
 import ru.ludwigandreas.odatafilter.security.AnonymousFilterPrincipalResolver;
@@ -60,9 +61,10 @@ public class ODataFilterAutoConfiguration {
             PredicateBuilder predicateBuilder,
             FilterPrincipalResolver principalResolver,
             ObjectProvider<FilterValidator> validators,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            ODataFilterMetrics metrics) {
         List<FilterValidator> orderedValidators = validators.orderedStream().toList();
-        return new ODataFilterService(
-                properties, policyRegistry, predicateBuilder, principalResolver, orderedValidators, eventPublisher);
+        return new ODataFilterService(properties, policyRegistry, predicateBuilder, principalResolver,
+                orderedValidators, eventPublisher, metrics);
     }
 }

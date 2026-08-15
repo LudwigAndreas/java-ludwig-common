@@ -20,6 +20,12 @@ public class DatabaseProperties {
      */
     private int maxPageSize = 200;
 
+    private final Metrics metrics = new Metrics();
+
+    public Metrics getMetrics() {
+        return metrics;
+    }
+
     public boolean isAuditingEnabled() {
         return auditingEnabled;
     }
@@ -42,5 +48,18 @@ public class DatabaseProperties {
 
     public void setMaxPageSize(int maxPageSize) {
         this.maxPageSize = maxPageSize;
+    }
+
+    public static class Metrics {
+
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 }

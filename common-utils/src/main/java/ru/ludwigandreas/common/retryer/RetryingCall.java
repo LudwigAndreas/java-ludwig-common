@@ -1,6 +1,11 @@
 package ru.ludwigandreas.common.retryer;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Main class for executing operations with retry capabilities.
@@ -8,6 +13,8 @@ import java.util.concurrent.Callable;
 public class RetryingCall {
     private final RetryPolicy retryPolicy;
     private RetryListener retryListener;
+    private MeterRegistry meterRegistry;
+    private String operationName;
 
     private RetryingCall(RetryPolicy retryPolicy) {
         this.retryPolicy = retryPolicy != null ? retryPolicy : new RetryPolicy();
@@ -31,6 +38,23 @@ public class RetryingCall {
      */
     public RetryingCall withListener(RetryListener listener) {
         this.retryListener = listener;
+        return this;
+    }
+
+    /**
+     * Opt into Micrometer instrumentation: an {@code retry.attempts} counter (one increment per
+     * attempt made, tagged {@code operation}) and a {@code retry.call} timer (one recording per
+     * {@link #call}/{@link #run}/{@link #get} invocation, tagged {@code operation}, {@code outcome}
+     * ({@code success}/{@code failure}) and, on failure, {@code exception}). Never called means never
+     * instrumented - Micrometer stays entirely optional.
+     *
+     * @param meterRegistry registry to publish meters to
+     * @param operationName identifies this call site in the {@code operation} tag, e.g. {@code "payment-gateway-charge"}
+     * @return this RetryingCall instance for chaining
+     */
+    public RetryingCall withMetrics(MeterRegistry meterRegistry, String operationName) {
+        this.meterRegistry = meterRegistry;
+        this.operationName = operationName;
         return this;
     }
 
@@ -72,6 +96,8 @@ public class RetryingCall {
         Throwable lastException = null;
         Object lastResult = null;
         boolean resultRetryNeeded = false;
+        int attemptsMade = 0;
+        long startNanos = System.nanoTime();
 
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             if (attempt > 0 && retryListener != null) {
@@ -82,6 +108,9 @@ public class RetryingCall {
                 }
             }
 
+            attemptsMade++;
+            recordAttempt();
+
             try {
                 T result = callable.call();
                 lastResult = result;
@@ -89,6 +118,7 @@ public class RetryingCall {
                 // Check if we should retry based on the result
                 resultRetryNeeded = retryPolicy.shouldRetryOnResult(result);
                 if (!resultRetryNeeded || attempt >= maxRetries) {
+                    recordOutcome("success", null, startNanos);
                     return result;
                 }
 
@@ -116,6 +146,7 @@ public class RetryingCall {
 
         // If we got here, all attempts failed
         if (lastException != null) {
+            recordOutcome("failure", lastException.getClass().getSimpleName(), startNanos);
             if (lastException instanceof RuntimeException) {
                 throw (RuntimeException) lastException;
             } else {
@@ -123,8 +154,30 @@ public class RetryingCall {
             }
         } else {
             // This would be unusual - all attempts returned results that needed retries
+            recordOutcome("failure", RetryExhaustedException.class.getSimpleName(), startNanos);
             throw new RetryExhaustedException("Max retries reached (" + maxRetries + ") with unsatisfactory results");
         }
+    }
+
+    private void recordAttempt() {
+        if (meterRegistry == null) {
+            return;
+        }
+        Counter.builder("retry.attempts")
+                .tag("operation", operationName)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    private void recordOutcome(String outcome, String exceptionType, long startNanos) {
+        if (meterRegistry == null) {
+            return;
+        }
+        Timer.Builder timer = Timer.builder("retry.call")
+                .tag("operation", operationName)
+                .tag("outcome", outcome)
+                .tag("exception", exceptionType == null ? "none" : exceptionType);
+        timer.register(meterRegistry).record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
     }
 
     private void sleep(long millis) {
