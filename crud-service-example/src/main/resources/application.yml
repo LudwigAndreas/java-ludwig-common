@@ -1,0 +1,192 @@
+spring:
+  application:
+    name: product-catalog
+
+  datasource:
+    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/catalog}
+    username: ${CATALOG_DB_USER:catalog}
+    password: ${CATALOG_DB_PASSWORD:catalog}
+    hikari:
+      maximum-pool-size: 10
+      # Fail fast on a saturated pool instead of piling requests up behind it.
+      # Hikari's own settings are plain milliseconds, not Spring Durations.
+      connection-timeout: 3000
+
+  jpa:
+    # The schema is owned by Liquibase; Hibernate only checks that the mappings match it and
+    # refuses to start if they have drifted apart.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # The edge exchanges the browser's session cookie for a short-lived token from this issuer;
+          # Spring Boot builds the JwtDecoder from here (JWKS fetch, key rotation, caching included).
+          issuer-uri: ${OIDC_ISSUER_URI:https://login.example.internal/realms/corp}
+
+  jackson:
+    default-property-inclusion: non_null
+
+  # The API answers in the caller's Accept-Language; see LocalizationConfig.
+  web:
+    locale: en
+    locale-resolver: accept_header
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    # Errors are rendered exclusively by ApiExceptionHandler as RFC 7807 problems.
+    whitelabel:
+      enabled: false
+  shutdown: graceful
+
+# --- ludwig db-core ------------------------------------------------------------------------------
+ludwig:
+  db:
+    auditing-enabled: true
+    default-page-size: 20
+    max-page-size: 100
+
+  # --- ludwig outbox ---------------------------------------------------------------------------
+  outbox:
+    # The changelog is included by this service's own master changelog, so the module must not also
+    # apply it as a second, standalone SpringLiquibase.
+    liquibase:
+      enabled: false
+    # Local runs without a broker: start with -Dludwig.outbox.polling.enabled=false, and events
+    # simply accumulate as PENDING rows until a poller runs somewhere.
+    polling:
+      enabled: ${OUTBOX_POLLING_ENABLED:true}
+      fixed-delay: 5s
+      batch-size: 100
+    retry:
+      max-attempts: 10
+      initial-interval: 1s
+      multiplier: 2.0
+      max-interval: 5m
+    default-route:
+      transport: KAFKA
+      destination: catalog.product-events
+    routes:
+      product-events:
+        transport: KAFKA
+        destination: catalog.product-events
+        event-types: ProductCreated,ProductUpdated,ProductDeleted
+
+  # --- ludwig security -------------------------------------------------------------------------
+  security:
+    # Audience is what makes a token service-specific. Without it, any token the same issuer minted
+    # for any other service in the mesh is accepted here; the module refuses to start without one.
+    jwt:
+      audiences: product-catalog
+      tenant-claim: tenant_id
+
+    # Partner access over mTLS, terminated by Envoy. trusted-proxies is the load-bearing setting:
+    # x-forwarded-client-cert is an ordinary header, and what makes it trustworthy is that only the
+    # sidecar can reach this port. The partner registry itself lives in the security_partner table
+    # (identity-projection), so onboarding a partner needs no release.
+    mtls:
+      enabled: ${PARTNER_MTLS_ENABLED:false}
+      trusted-proxies: ${MESH_PROXY_CIDRS:127.0.0.1/32}
+      service-identity-prefix: spiffe://mesh/ns/
+
+    authorities:
+      # Fail startup rather than silently running on the no-op resolver, where nobody has any role.
+      require-resolver: true
+      cache:
+        # The window in which a revoked role still works. The identity projection also evicts on
+        # change, so this is the backstop for a missed Kafka event, not the normal path.
+        ttl: 60s
+
+    data:
+      # Anything without a policy below is denied. The only safe default.
+      default-access: NONE
+      policies:
+        product:
+          read:
+            ROLE_CATALOG_ADMIN: ALL
+            ROLE_CATALOG_READER: ALL
+            # Editors see the whole catalog but write only what they created - see below.
+            ROLE_CATALOG_EDITOR: ALL
+            # A partner sees only products filed under its own partner code.
+            ROLE_CATALOG_PARTNER: PARTNER
+            # ROLE_CATALOG_WATCHER is deliberately absent here: "every product I am named on" compares a
+            # custom axis against the caller's own subject, which this policy language cannot express.
+            # It is granted by watcherDataScopeProvider in SecurityConfig, and unioned with whatever the
+            # policies above allow.
+          write:
+            ROLE_CATALOG_ADMIN: ALL
+            ROLE_CATALOG_EDITOR: OWN
+            ROLE_CATALOG_PARTNER: PARTNER
+          delete:
+            ROLE_CATALOG_ADMIN: ALL
+
+  # --- ludwig identity projection --------------------------------------------------------------
+  identity:
+    # The changelog is included by this service's own master changelog, so the module must not also
+    # apply it as a second, standalone SpringLiquibase.
+    liquibase:
+      enabled: false
+    kafka:
+      enabled: ${IDENTITY_PROJECTION_ENABLED:true}
+      topic: ${OIDC_USER_TOPIC:corp.identity.users}
+      # Every service keeps its own projection and therefore needs its own consumer group.
+      group-id: product-catalog-identity-projection
+    # Peer services calling this one, keyed by workload identity. In configuration rather than in a
+    # table because which service may call which is part of the deployment topology.
+    service-roles:
+      "[spiffe://mesh/ns/orders/sa/orders]":
+        - ROLE_CATALOG_READER
+
+# --- ludwig odata-filter -------------------------------------------------------------------------
+odata:
+  filter:
+    max-depth: 4
+    max-page-size: 100
+    default-page-size: 20
+    max-nested-property-depth: 2
+    max-expression-length: 2048
+    # A $top above the maximum is capped rather than rejected - a client asking for too much still
+    # gets a useful answer.
+    page-size-exceeded-strategy: CLAMP
+    web:
+      # This service localizes filter errors itself; see ApiExceptionHandler.
+      problem-detail-advice-enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    ru.ludwigandreas.example.catalog: INFO

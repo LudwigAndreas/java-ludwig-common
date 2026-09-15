@@ -1,0 +1,126 @@
+# Envoy edge for partner traffic: terminates mTLS, validates the client chain against the partner CA
+# bundle, and forwards the verified result as x-forwarded-client-cert.
+#
+# The service behind this never re-verifies the certificate. That makes two things in here
+# load-bearing, and everything else detail:
+#
+#   1. `forward_client_cert_details: SANITIZE_SET` - replace any inbound XFCC rather than appending to
+#      it. With APPEND_FORWARD a client can prepend its own element and be read as a partner.
+#   2. `require_client_certificate: true` together with a validation context that pins the partner CA.
+#      A route reachable without a client certificate is a route with no authentication.
+#
+# The service must also be unreachable except through this proxy - see ludwig.security.mtls.trusted-proxies.
+# Everything here is defence in depth on top of that, not a substitute for it.
+
+static_resources:
+
+  listeners:
+    - name: partner_ingress
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8443 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: partner_ingress
+                use_remote_address: true
+                # Trust exactly one hop of X-Forwarded-For (this listener). Anything larger lets a
+                # client choose the address the service sees as its peer.
+                xff_num_trusted_hops: 0
+
+                # --- the XFCC contract ------------------------------------------------------------
+                forward_client_cert_details: SANITIZE_SET
+                set_current_client_cert_details:
+                  uri: true       # SPIFFE id: the identifier that survives certificate renewal
+                  dns: true
+                  subject: true
+                  # The PEM would put kilobytes of certificate into every log line and audit record,
+                  # and the service deliberately never parses it.
+                  cert: false
+                  chain: false
+
+                route_config:
+                  name: partner_routes
+                  # Identity headers a client might set for itself. The service strips these again
+                  # (IdentityHeaderStrippingFilter) - twice, because one misconfigured route here is
+                  # otherwise a privilege escalation.
+                  request_headers_to_remove:
+                    - x-forwarded-user
+                    - x-forwarded-email
+                    - x-forwarded-groups
+                    - x-auth-request-user
+                    - x-auth-request-email
+                    - x-auth-request-groups
+                    - x-ludwig-subject
+                    - x-ludwig-roles
+                    - x-ludwig-tenant
+                  virtual_hosts:
+                    - name: partner_api
+                      domains: ["*"]
+                      routes:
+                        # Partners reach the public API surface and nothing else. This is the coarse
+                        # denial the edge is genuinely good at; which rows they get is decided in the
+                        # service, which is the only place that knows what a row is.
+                        - match: { prefix: "/api/v1/" }
+                          route:
+                            cluster: product_catalog
+                            timeout: 15s
+                        - match: { prefix: "/" }
+                          direct_response:
+                            status: 404
+                            body: { inline_string: "not found" }
+
+                http_filters:
+                  # Per-partner rate limiting keyed on the certificate's SPIFFE id belongs here, not
+                  # in the service: it should cost the service nothing.
+                  - name: envoy.filters.http.local_ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                      stat_prefix: partner_rate_limit
+                      token_bucket:
+                        max_tokens: 200
+                        tokens_per_fill: 200
+                        fill_interval: 1s
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              # Without this, the listener happily serves clients that presented no certificate and
+              # XFCC is simply absent - which the service reads as "unauthenticated", but only after
+              # the request has already reached it.
+              require_client_certificate: true
+              common_tls_context:
+                tls_params:
+                  tls_minimum_protocol_version: TLSv1_2
+                tls_certificates:
+                  - certificate_chain: { filename: /etc/envoy/tls/server.crt }
+                    private_key: { filename: /etc/envoy/tls/server.key }
+                validation_context:
+                  # Only the partner CA. Using the system trust store here would accept a certificate
+                  # from any public CA - that is, from anyone.
+                  trusted_ca: { filename: /etc/envoy/tls/partner-ca-bundle.pem }
+                  crl: { filename: /etc/envoy/tls/partner-ca.crl }
+                  # Optional second gate: only these SPIFFE ids, regardless of what the CA signed.
+                  # Belt and braces with the service's own partner registry; useful when the partner
+                  # CA also issues certificates for things that are not partners.
+                  match_typed_subject_alt_names:
+                    - san_type: URI
+                      matcher: { prefix: "spiffe://partners/" }
+
+  clusters:
+    - name: product_catalog
+      type: STRICT_DNS
+      connect_timeout: 2s
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: product_catalog
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: product-catalog.svc.cluster.local, port_value: 8080 }

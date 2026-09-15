@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="catalog-005-product-watcher" author="ludwig-catalog">
+        <comment>
+            Subjects named on a product. This is the membership axis of data-level access - "everything I
+            am named on" - which a column on `product` cannot express, because a product has many
+            watchers and a row has one value per column.
+        </comment>
+        <createTable tableName="product_watcher">
+            <column name="product_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="watcher_subject" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey tableName="product_watcher" columnNames="product_id, watcher_subject"
+                       constraintName="pk_product_watcher"/>
+        <addForeignKeyConstraint baseTableName="product_watcher" baseColumnNames="product_id"
+                                 referencedTableName="product" referencedColumnNames="id"
+                                 constraintName="fk_product_watcher_product" onDelete="CASCADE"/>
+    </changeSet>
+
+    <changeSet id="catalog-006-product-watcher-index" author="ludwig-catalog">
+        <comment>
+            The scoped query asks "which products is this subject named on", so the index has to lead
+            with the subject - the primary key above leads with product_id and cannot serve it.
+        </comment>
+        <createIndex tableName="product_watcher" indexName="idx_product_watcher_subject">
+            <column name="watcher_subject"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

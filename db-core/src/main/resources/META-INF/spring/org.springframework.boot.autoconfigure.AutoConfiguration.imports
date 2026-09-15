@@ -1,1 +1,2 @@
 ru.ludwigandreas.db.core.config.DatabaseAutoConfiguration
+ru.ludwigandreas.db.core.config.DbCoreMetricsAutoConfiguration

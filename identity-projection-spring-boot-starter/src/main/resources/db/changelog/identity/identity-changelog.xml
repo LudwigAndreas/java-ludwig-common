@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for identity-projection-spring-boot-starter. Changeset ids and author are namespaced
+      ("identity-NNN", "ludwig-identity") so they never collide with a consuming application's own
+      changesets in the shared DATABASECHANGELOG table - see IdentityLiquibaseAutoConfiguration, which
+      registers this changelog as a second, independent SpringLiquibase bean.
+    -->
+
+    <changeSet id="identity-001-create-security-user" author="ludwig-identity">
+        <comment>
+            Local projection of the OIDC directory. The primary key is the provider's `sub`: it is what
+            every token carries and what every lookup is by, so a surrogate key would only add a join to
+            the hottest query in the service.
+        </comment>
+        <createTable tableName="security_user">
+            <column name="id" type="VARCHAR(255)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="display_name" type="VARCHAR(255)"/>
+            <column name="tenant_id" type="VARCHAR(128)"/>
+            <column name="status" type="VARCHAR(32)" defaultValue="ACTIVE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="imported_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_system" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_version" type="VARCHAR(64)"/>
+            <!-- When the change happened upstream. The projection compares incoming events against this
+                 to drop out-of-order replays, so it is functional data, not provenance decoration. -->
+            <column name="source_timestamp" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <createIndex tableName="security_user" indexName="idx_security_user_tenant">
+            <column name="tenant_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="identity-002-create-security-user-role" author="ludwig-identity">
+        <comment>
+            Role codes exactly as the directory names them; normalization to the ROLE_ prefix happens on
+            read, so a change of convention needs no data migration.
+        </comment>
+        <createTable tableName="security_user_role">
+            <column name="user_id" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="role_code" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey tableName="security_user_role" columnNames="user_id, role_code"
+                       constraintName="pk_security_user_role"/>
+        <addForeignKeyConstraint baseTableName="security_user_role" baseColumnNames="user_id"
+                                 referencedTableName="security_user" referencedColumnNames="id"
+                                 constraintName="fk_security_user_role_user" onDelete="CASCADE"/>
+        <createIndex tableName="security_user_role" indexName="idx_security_user_role_code">
+            <column name="role_code"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="identity-003-create-security-partner" author="ludwig-identity">
+        <comment>
+            Registry of external organizations allowed to call with a client certificate. `code` is the
+            stable business id used in grants and in row-level partner_id columns; the certificate
+            identifiers below change at every renewal and the code never does.
+        </comment>
+        <createTable tableName="security_partner">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)"/>
+            <column name="updated_by" type="VARCHAR(255)"/>
+            <column name="code" type="VARCHAR(128)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uq_security_partner_code"/>
+            </column>
+            <column name="display_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="spiffe_id" type="VARCHAR(512)"/>
+            <column name="dns_san" type="VARCHAR(255)"/>
+            <column name="subject_dn" type="VARCHAR(512)"/>
+            <column name="certificate_hash" type="VARCHAR(128)"/>
+            <column name="status" type="VARCHAR(32)" defaultValue="ACTIVE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!-- Certificate identifiers are unique across partners: two partners recognized by the same
+             SPIFFE id would make which one a request is attributed to depend on row order. -->
+        <addUniqueConstraint tableName="security_partner" columnNames="spiffe_id"
+                             constraintName="uq_security_partner_spiffe_id"/>
+        <createIndex tableName="security_partner" indexName="idx_security_partner_dns_san">
+            <column name="dns_san"/>
+        </createIndex>
+        <createIndex tableName="security_partner" indexName="idx_security_partner_subject_dn">
+            <column name="subject_dn"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="identity-004-create-security-partner-role" author="ludwig-identity">
+        <createTable tableName="security_partner_role">
+            <column name="partner_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="role_code" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey tableName="security_partner_role" columnNames="partner_id, role_code"
+                       constraintName="pk_security_partner_role"/>
+        <addForeignKeyConstraint baseTableName="security_partner_role" baseColumnNames="partner_id"
+                                 referencedTableName="security_partner" referencedColumnNames="id"
+                                 constraintName="fk_security_partner_role_partner" onDelete="CASCADE"/>
+    </changeSet>
+
+    <changeSet id="identity-005-create-security-grant" author="ludwig-identity">
+        <comment>
+            Explicit, optionally time-boxed data-scope grants. These widen what the role policy allows and
+            can never narrow it - narrowing is done by removing roles.
+        </comment>
+        <createTable tableName="security_grant">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Who granted this, and when, is the question an auditor asks first. -->
+            <column name="created_by" type="VARCHAR(255)"/>
+            <column name="updated_by" type="VARCHAR(255)"/>
+            <column name="subject" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="principal_type" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="resource_type" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="action" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="dimension" type="VARCHAR(64)"/>
+            <column name="dimension_value" type="VARCHAR(255)"/>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <!-- Exactly the lookup DatabaseDataScopeProvider runs, in column order. -->
+        <createIndex tableName="security_grant" indexName="idx_security_grant_lookup">
+            <column name="subject"/>
+            <column name="principal_type"/>
+            <column name="resource_type"/>
+            <column name="action"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="identity-006-security-grant-dimension-check" author="ludwig-identity">
+        <comment>
+            A dimension without a value would be read as a denial at runtime; rejecting it at write time
+            instead means the malformed row never exists to be misread.
+        </comment>
+        <sql>
+            ALTER TABLE security_grant
+                ADD CONSTRAINT ck_security_grant_dimension_value
+                CHECK (dimension IS NULL OR dimension_value IS NOT NULL)
+        </sql>
+        <rollback>
+            ALTER TABLE security_grant DROP CONSTRAINT ck_security_grant_dimension_value
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- This service's own schema. -->
+    <include file="classpath:db/changelog/changes/0001-catalog-schema.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0002-catalog-reference-data.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0003-catalog-security.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0004-catalog-watchers.xml" relativeToChangelogFile="false"/>
+
+    <!--
+        The outbox module ships its own changelog inside its jar. Including it here (rather than
+        letting the module apply it standalone - see ludwig.outbox.liquibase.enabled=false) keeps
+        every table this service owns under one migration history. Its changeset ids are namespaced
+        (outbox-NNN/ludwig-outbox), so they cannot collide with the ones above.
+    -->
+    <include file="classpath:db/changelog/outbox/outbox-changelog.xml" relativeToChangelogFile="false"/>
+
+    <!--
+        Same arrangement for the identity projection's tables (security_user, security_partner,
+        security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false.
+    -->
+    <include file="classpath:db/changelog/identity/identity-changelog.xml" relativeToChangelogFile="false"/>
+</databaseChangeLog>

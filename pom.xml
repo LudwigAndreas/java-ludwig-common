@@ -16,7 +16,10 @@
         <module>odata-filter-spring-boot-starter</module>
         <module>db-core</module>
         <module>outbox-spring-boot-starter</module>
+        <module>security-spring-boot-starter</module>
+        <module>identity-projection-spring-boot-starter</module>
         <module>hot-reload-spring-boot-starter</module>
+        <module>crud-service-example</module>
     </modules>
 
     <properties>
@@ -31,7 +34,10 @@
             bumping one here can't leave another module silently behind.
         -->
         <spring-boot.version>3.3.5</spring-boot.version>
-        <lombok.version>1.18.34</lombok.version>
+        <!-- 1.18.34 fails on current JDK 17 patch releases with
+             "ExceptionInInitializerError: com.sun.tools.javac.code.TypeTag :: UNKNOWN" - Lombok reaches
+             into javac internals and needs a build that knows the compiler it is running under. -->
+        <lombok.version>1.18.38</lombok.version>
         <querydsl.version>5.1.0</querydsl.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <resilience4j.version>2.2.0</resilience4j.version>
@@ -39,6 +45,8 @@
         <spring-vault.version>3.1.2</spring-vault.version>
         <freemarker.version>2.3.32</freemarker.version>
         <olingo.version>4.10.0</olingo.version>
+        <mapstruct.version>1.6.3</mapstruct.version>
+        <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <!-- JUnit (jupiter + platform) is deliberately NOT pinned here: it comes from the imported
              spring-boot-dependencies BOM below, which keeps the whole JUnit 5 stack internally
              consistent. Pinning it independently caused a Jupiter/Platform version-skew bug - see

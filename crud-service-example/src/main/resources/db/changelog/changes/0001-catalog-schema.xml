@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Column types follow what db-core's AuditedEntity maps to, because the application starts
+        with hibernate.ddl-auto=validate: uuid ids, a bigint version, and timestamptz audit columns
+        (Hibernate 6 maps java.time.Instant to TIMESTAMP WITH TIME ZONE).
+    -->
+
+    <changeSet id="catalog-001-product-category" author="ludwig-catalog">
+        <createTable tableName="product_category">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_product_category"/>
+            </column>
+            <column name="code" type="varchar(64)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_product_category_code"/>
+            </column>
+            <column name="name" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="updated_by" type="varchar(255)"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="catalog-002-product" author="ludwig-catalog">
+        <createTable tableName="product">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_product"/>
+            </column>
+            <column name="sku" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="varchar(2000)"/>
+            <column name="price" type="numeric(19,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="supplier_cost" type="numeric(19,2)"/>
+            <column name="status" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="stock_quantity" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category_id" type="uuid">
+                <constraints nullable="false"
+                             foreignKeyName="fk_product_category"
+                             referencedTableName="product_category"
+                             referencedColumnNames="id"/>
+            </column>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="updated_by" type="varchar(255)"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="catalog-003-product-indexes" author="ludwig-catalog">
+        <!--
+            SKU uniqueness is enforced case-insensitively because that is how the application looks
+            products up (ProductQueryRepositoryImpl#lookupBySku). A plain unique constraint would
+            let 'ABC-1' and 'abc-1' both exist while the lookup treats them as the same product.
+        -->
+        <sql>CREATE UNIQUE INDEX uk_product_sku_lower ON product (lower(sku))</sql>
+        <rollback>DROP INDEX uk_product_sku_lower</rollback>
+
+        <createIndex tableName="product" indexName="ix_product_category_id">
+            <column name="category_id"/>
+        </createIndex>
+        <createIndex tableName="product" indexName="ix_product_status">
+            <column name="status"/>
+        </createIndex>
+        <!-- Backs the default ordering of the search endpoint (created_at desc). -->
+        <createIndex tableName="product" indexName="ix_product_created_at">
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

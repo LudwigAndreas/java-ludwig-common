@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        The columns data-level authorization scopes on. `created_by` already exists (db-core's
+        AuditedEntity writes it), so only the partner column is new.
+    -->
+
+    <changeSet id="catalog-003-product-supplier-partner" author="ludwig-catalog">
+        <comment>
+            Which partner a product belongs to. Holds the partner's stable business code, not a
+            certificate identifier: certificates are renewed, and a scope column that changed at renewal
+            would silently revoke a partner's access to its own rows.
+        </comment>
+        <addColumn tableName="product">
+            <column name="supplier_partner_id" type="varchar(128)"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="catalog-004-product-scope-indexes" author="ludwig-catalog">
+        <comment>
+            Every scoped query filters on one of these, and an unindexed scope column turns "show me my
+            own products" into a sequential scan on every page of every list request.
+        </comment>
+        <createIndex tableName="product" indexName="idx_product_created_by">
+            <column name="created_by"/>
+        </createIndex>
+        <createIndex tableName="product" indexName="idx_product_supplier_partner">
+            <column name="supplier_partner_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

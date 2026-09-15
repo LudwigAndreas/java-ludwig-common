@@ -1,0 +1,28 @@
+# Laptop profile: no identity provider, no session layer, no Kafka.
+#
+# Activate with -Dspring.profiles.active=local. The caller then comes from the X-Local-* headers
+# (see LocalAuthenticationConfig), which is a deliberate backdoor and needs the second switch below
+# before it does anything.
+ludwig:
+  security:
+    local-authentication:
+      enabled: true
+    # Nothing validates tokens here, so there is no audience to require. In every deployed
+    # environment this stays at its default (true).
+    jwt:
+      require-audience: false
+
+  identity:
+    # No broker locally; the projection tables exist and are queried, they are simply not fed.
+    kafka:
+      enabled: false
+
+  outbox:
+    # Events accumulate as PENDING rows instead of being dispatched.
+    polling:
+      enabled: false
+
+logging:
+  level:
+    # The module's access-decision trail; denials are logged at WARN.
+    ru.ludwigandreas.security.audit: DEBUG
