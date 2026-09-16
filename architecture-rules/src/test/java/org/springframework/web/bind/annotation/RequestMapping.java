@@ -1,0 +1,16 @@
+package org.springframework.web.bind.annotation;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/** Test stub of the real annotation, carrying the members the path rule inspects. */
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.METHOD})
+public @interface RequestMapping {
+
+    String[] value() default {};
+
+    String[] path() default {};
+}

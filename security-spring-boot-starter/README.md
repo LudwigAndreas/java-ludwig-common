@@ -396,7 +396,7 @@ the same change.
 | Role resolution and cache | `AuthorityResolver`, `AuthorityLookup`, `AuthorityCache` | pluggable; Caffeine when present, no-op otherwise |
 | Resource-level rules | `@PreAuthorize` / `@PostAuthorize` | method security is enabled by the module |
 | Data-level rules | `DataAccessGuard`, `DataScopeMapping`, `DataScopePredicateFactory`, `DataScopePermissionEvaluator` | QueryDSL predicate + single-object check |
-| Localized RFC 7807 401/403 | `ProblemDetailAuthenticationEntryPoint`, `ProblemDetailAccessDeniedHandler`, `SecurityMessages` | your bundle first, the module's shipped one as fallback |
+| Localized RFC 9457 401/403 | `ProblemDetailAuthenticationEntryPoint`, `ProblemDetailAccessDeniedHandler`, `SecurityMessages` | your bundle first, the module's shipped one as fallback |
 | Header hygiene | `IdentityHeaderStrippingFilter` | strips XFCC and `x-forwarded-user`-style headers from untrusted peers |
 | Audit trail | `AccessAuditLogger`, `AccessDecision`, `AuthorizationDeniedAuditListener` | denials at WARN on a dedicated logger — role-level *and* row-level; no payloads, no tokens |
 | Startup validation | `DataScopePolicyValidator`, `ScopePolicies` | policies parsed and checked against the mappings before the first request |
@@ -420,7 +420,7 @@ the same change.
 
 ## Errors a client sees
 
-Both are RFC 7807 problems, localized, and deliberately uninformative:
+Both are RFC 9457 (formerly RFC 7807) problems, localized, and deliberately uninformative:
 
 ```json
 { "type": "urn:ludwig:security:ludwig.security.error.forbidden",
@@ -435,9 +435,15 @@ permission model. Override any message by defining the same key in your own bund
 looks there first.
 
 `@PreAuthorize` and the data guard throw *inside* MVC dispatch, after the security filter chain has handed
-the request over, so the module's `AccessDeniedHandler` never sees them. If your service has its own
-`@RestControllerAdvice`, add handlers for `AccessDeniedException` and `AuthenticationException` there —
-see `ApiExceptionHandler` in the [example service](../crud-service-example/README.md).
+the request over, so the module's `AccessDeniedHandler` never sees them. Left unhandled, those denials
+surface as 500s. Two ways to cover them:
+
+- add [`web-core-spring-boot-starter`](../web-core-spring-boot-starter/README.md). Its advice handles
+  both types, and this module contributes a `SecurityProblemMapper` and its message bundle to that
+  pipeline, so an in-dispatch denial comes back under the *same* code shown above — a client never has
+  to know which layer denied it. Nothing to configure;
+- or, if your service renders problems from its own `@RestControllerAdvice`, add handlers for
+  `AccessDeniedException` and `AuthenticationException` there yourself.
 
 ---
 

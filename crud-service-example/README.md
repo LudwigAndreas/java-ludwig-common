@@ -16,11 +16,34 @@ top of them looks like.
 | No hand-written boilerplate | Lombok on the entities, MapStruct for every model-to-model conversion, db-core for ids/auditing/versioning |
 | Type-safe data access | QueryDSL-JPA against generated Q-types only - no JDBC, no JPQL/SQL strings, no derived query methods |
 | Three model layers | `web.dto` (wire) → `service.model` (domain) → `repository.entity` (JPA), each mapped by a generated mapper |
-| Localization | One message bundle drives validation messages *and* RFC 7807 error bodies, resolved per request from `Accept-Language` |
+| Localization | One message bundle drives validation messages *and* RFC 9457 error bodies, resolved per request from `Accept-Language` - all of it from the web-core starter, which this service configures rather than implements |
 | Safe query API | OData `$filter`/`$orderby`/`$top`/`$skip`, restricted by per-field, per-role policy on the entity |
 | Reliable events | Every write records its event in the transactional outbox in the same transaction |
 | Resource-level access | `@PreAuthorize` per endpoint; roles come from the local projection of the OIDC user stream, never from token claims |
 | Data-level access | A caller's scope is ANDed into the search query and re-checked on every load by id - one `DataScopeMapping` bean is the only security code this service writes |
+
+## Architecture test
+
+The conventions this service demonstrates - three model layers, no entity past the service layer,
+QueryDSL-only data access, transactions in the service layer, configuration read in one place - are
+not only described here, they are checked. `ArchitectureTest` enables the shared
+[`architecture-rules`](../architecture-rules/README.md) library:
+
+```java
+@AnalyzeArchitecture(
+        packagesOf = CatalogApplication.class,
+        enable = "domain-isolation",
+        disable = {"kafka", "storage"})
+class ArchitectureTest extends ArchitectureRulesTest {
+}
+```
+
+39 rules run against this module's bytecode on every build, each as its own named test. Kafka and
+object storage are switched off because this service has neither. The names only a service can supply
+- the shared base entity from `db-core`, the shared base exception from `web-core` - are declared in
+`src/test/resources/architecture-rules.properties`, and every run leaves a console summary plus
+`target/architecture-report.json` behind.
+
 
 ## Running it
 
@@ -73,7 +96,7 @@ curl -sS localhost:8080/api/v1/products/00000000-0000-0000-0000-000000000000 "${
 Now change only the caller and watch the same endpoints answer differently:
 
 ```bash
-# no caller at all -> 401, as an RFC 7807 problem in the caller's language
+# no caller at all -> 401, as an RFC 9457 problem in the caller's language
 curl -sS localhost:8080/api/v1/products
 
 # a partner creating a product: the row is stamped with its partner code, taken from the principal
@@ -141,21 +164,31 @@ field, 403 for one the caller's roles don't cover.
 
 ## Localization
 
-`LocalizationConfig` wires one `MessageSource` (`i18n/messages[_ru].properties`), an
-`AcceptHeaderLocaleResolver` limited to the languages that actually have bundles, and a
-`LocalValidatorFactoryBean` bound to that same `MessageSource`. As a result:
+All of it comes from [`web-core-spring-boot-starter`](../web-core-spring-boot-starter/README.md).
+This service has no exception advice, no `MessageSource` configuration and no locale resolver of its
+own - it contributes only its own vocabulary:
 
-- Bean Validation messages are bundle keys (`{catalog.validation.product.sku.required}`), so a
-  400 lists per-field messages in the caller's language.
-- Business failures carry a code plus arguments (`LocalizedException`), never a formatted string;
-  the text is resolved once, in `ApiExceptionHandler`, against the request locale.
-- OData filter errors are handled here too - `odata.filter.web.problem-detail-advice-enabled` is
-  set to `false` so the starter's English-only advice doesn't answer instead.
-- An unsupported language falls back to English rather than to the server's own locale
-  (`fallbackToSystemLocale=false`), so responses don't depend on host configuration.
+- four `LocalizedException` subclasses, each naming an outcome (`ProblemStatus.CONFLICT`) and a
+  message code plus arguments, never a formatted string;
+- `i18n/messages[_ru].properties`, holding *only* this service's codes (`error.product.*`,
+  `error.category.*`) and its Bean Validation keys (`{catalog.validation.product.sku.required}`).
 
-Every response is an RFC 7807 `ProblemDetail` with a stable machine-readable `code` alongside the
-localized `title`/`detail`, so clients can branch on the code and show the text.
+Everything else is resolved by the starter's pipeline. The generic HTTP errors (validation, 401, 403,
+404, conflict, 500) ship with web-core, the query errors with the OData starter and the 401/403
+wording with the security starter - each contributes a message bundle, and resolution consults this
+service's bundle *first*, so any of their messages can be reworded by adding that key here. Nothing
+has to be configured and nothing has to be re-handled.
+
+That last point is the whole reason the starter exists, and this service is where the problem showed
+up. Its `ApiExceptionHandler` used to carry a comment explaining that
+`odata.filter.web.problem-detail-advice-enabled` was set to `false` because that starter's messages
+were English-only - so this service re-handled all seven of its exception types by hand to keep one
+localized error shape. That flag is gone from `application.yml`, along with the advice, the
+`LocalizationConfig` and the `PageResponse` DTO: four files of boilerplate that every service copied.
+
+Every response is an RFC 9457 `ProblemDetail` with a stable machine-readable `code` alongside the
+localized `title`/`detail`, so clients can branch on the code and show the text. It also carries a
+`traceId`, which is what makes the 500 message's "quote the trace id" actionable.
 
 ## Events
 
@@ -267,9 +300,12 @@ provider's Kafka topic, whose changelog this service includes in its own master 
 outbox module's. `ludwig.security.authorities.require-resolver: true` makes starting *without* that
 projection a failure rather than a service where nobody holds any role.
 
-Denials come back as localized RFC 7807 problems. `@PreAuthorize` and the data guard throw inside MVC
-dispatch, after the security filter chain has handed the request over, so `ApiExceptionHandler` handles
-`AccessDeniedException` and `AuthenticationException` itself - without that they would surface as 500s.
+Denials come back as localized RFC 9457 problems under `ludwig.security.error.*`. `@PreAuthorize` and
+the data guard throw inside MVC dispatch, after the security filter chain has handed the request over,
+so the module's own `AccessDeniedHandler` never sees them - without something handling them there they
+would surface as 500s. The web-core starter's advice does, and the security module contributes a mapper
+so an in-dispatch denial reports the same code its filter-chain handlers write for the same condition:
+a client never has to know which layer denied it.
 
 ## Notes on wiring
 

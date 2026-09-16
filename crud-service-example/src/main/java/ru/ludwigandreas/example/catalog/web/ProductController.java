@@ -21,7 +21,7 @@ import ru.ludwigandreas.example.catalog.service.ProductService;
 import ru.ludwigandreas.example.catalog.service.model.Product;
 import ru.ludwigandreas.example.catalog.service.model.ProductQuery;
 import ru.ludwigandreas.example.catalog.web.dto.CreateProductRequest;
-import ru.ludwigandreas.example.catalog.web.dto.PageResponse;
+import ru.ludwigandreas.webcore.web.PageResponse;
 import ru.ludwigandreas.example.catalog.web.dto.ProductResponse;
 import ru.ludwigandreas.example.catalog.web.dto.UpdateProductRequest;
 import ru.ludwigandreas.example.catalog.web.mapper.ProductDtoMapper;

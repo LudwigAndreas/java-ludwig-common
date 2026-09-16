@@ -1,8 +1,8 @@
 package ru.ludwigandreas.example.catalog.service.exception;
 
 import java.util.UUID;
-import ru.ludwigandreas.example.catalog.support.i18n.LocalizedException;
-import ru.ludwigandreas.example.catalog.support.i18n.ProblemStatus;
+import ru.ludwigandreas.webcore.problem.LocalizedException;
+import ru.ludwigandreas.webcore.problem.ProblemStatus;
 
 /**
  * The request referenced a category that does not exist. Rendered as HTTP 422: the request was

@@ -89,6 +89,18 @@
             <scope>provided</scope>
         </dependency>
 
+        <!--
+            Optional: the shared localized problem pipeline. When present, this module contributes
+            its message bundle and a mapper so that a 401/403 raised inside an MVC dispatch comes
+            back under the same codes its filter-chain handlers use - see SecurityProblemMapper.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

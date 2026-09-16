@@ -77,6 +77,19 @@
             <optional>true</optional>
         </dependency>
 
+        <!--
+            Optional: the shared localized problem pipeline. When present, this module contributes a
+            mapper and a message bundle to it instead of registering its own exception advice - see
+            ODataFilterWebAutoConfiguration. Optional so that a service which does not use the
+            web-core starter keeps working, on the legacy advice, with no change.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Optional: applied/rejected-filter counts and parse-duration metrics -->
         <dependency>
             <groupId>io.micrometer</groupId>

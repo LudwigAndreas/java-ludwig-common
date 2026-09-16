@@ -28,6 +28,9 @@ import ru.ludwigandreas.security.principal.SystemPrincipalTemplate;
 import ru.ludwigandreas.security.web.ProblemDetailAccessDeniedHandler;
 import ru.ludwigandreas.security.web.ProblemDetailAuthenticationEntryPoint;
 import ru.ludwigandreas.security.web.SecurityMessages;
+import ru.ludwigandreas.security.web.SecurityProblemMapper;
+import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
+import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
  * The module's shared beans: identity-to-authority resolution, its cache, the audit sink and the two
@@ -123,6 +126,29 @@ public class LudwigSecurityAutoConfiguration {
                                                           SecurityProperties properties) {
         return new ProblemDetailAccessDeniedHandler(objectMapper.getIfAvailable(ObjectMapper::new),
                 messages, properties.getProblemTypePrefix());
+    }
+
+    /**
+     * This module's error text, contributed to the shared problem pipeline.
+     *
+     * <p>{@link SecurityMessages} keeps resolving the same bundle for the two filter-chain handlers,
+     * which have to write a response without an MVC dispatch and so cannot use that pipeline.
+     * Contributing the bundle as well is what makes both paths - a rejection in the filter chain and
+     * one from a {@code @PreAuthorize} - produce the same text for the same code.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "ludwigSecurityProblemMessageBundle")
+    @ConditionalOnClass(ProblemMessageBundle.class)
+    public ProblemMessageBundle ludwigSecurityProblemMessageBundle() {
+        return ProblemMessageBundle.of("i18n/ludwig-security-messages");
+    }
+
+    /** Keeps an in-dispatch 401/403 under the same codes the filter-chain handlers use. */
+    @Bean
+    @ConditionalOnMissingBean(SecurityProblemMapper.class)
+    @ConditionalOnClass(ExceptionProblemMapper.class)
+    public SecurityProblemMapper ludwigSecurityProblemMapper() {
+        return new SecurityProblemMapper();
     }
 
     @Bean

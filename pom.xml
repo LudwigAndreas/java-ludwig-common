@@ -19,6 +19,8 @@
         <module>security-spring-boot-starter</module>
         <module>identity-projection-spring-boot-starter</module>
         <module>hot-reload-spring-boot-starter</module>
+        <module>web-core-spring-boot-starter</module>
+        <module>architecture-rules</module>
         <module>crud-service-example</module>
     </modules>
 
@@ -46,6 +48,7 @@
         <freemarker.version>2.3.32</freemarker.version>
         <olingo.version>4.10.0</olingo.version>
         <mapstruct.version>1.6.3</mapstruct.version>
+        <archunit.version>1.5.0</archunit.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <!-- JUnit (jupiter + platform) is deliberately NOT pinned here: it comes from the imported
              spring-boot-dependencies BOM below, which keeps the whole JUnit 5 stack internally
@@ -95,6 +98,17 @@
                     <configuration>
                         <release>${maven.compiler.release}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
+                        <!--
+                            Keeps method parameter names in the bytecode. Spring reads them to bind
+                            a @RequestParam/@PathVariable without the name being repeated in the
+                            annotation, and a parameter-level constraint violation can only name the
+                            parameter it rejected if they are present - without this, a 400 reports
+                            the offending input as "arg0". Spring Boot's own parent pom sets this
+                            flag for the same reasons; this repository does not inherit from it.
+                        -->
+                        <compilerArgs>
+                            <arg>-parameters</arg>
+                        </compilerArgs>
                     </configuration>
                 </plugin>
                 <plugin>

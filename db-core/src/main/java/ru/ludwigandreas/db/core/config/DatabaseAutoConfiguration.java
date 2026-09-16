@@ -15,6 +15,9 @@ import ru.ludwigandreas.db.core.audit.AuditorAwareAdapter;
 import ru.ludwigandreas.db.core.audit.AuditorProvider;
 import ru.ludwigandreas.db.core.audit.SpringSecurityAuditorProvider;
 import ru.ludwigandreas.db.core.metrics.DbCoreMetrics;
+import ru.ludwigandreas.db.core.web.DbCoreProblemMapper;
+import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
+import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 import java.util.Optional;
 
@@ -40,6 +43,30 @@ public class DatabaseAutoConfiguration {
     @ConditionalOnMissingBean(AuditorAware.class)
     public AuditorAware<String> auditorAware(AuditorProvider<String> auditorProvider, DbCoreMetrics metrics) {
         return new AuditorAwareAdapter<>(auditorProvider, metrics);
+    }
+
+    /**
+     * This module's exceptions, declared as meanings for the shared problem pipeline to render, and
+     * the localized text for them.
+     *
+     * <p>Only registered when the web-core starter is on the classpath. Without it, nothing here
+     * changes: these exceptions are answered by whatever advice the service has, exactly as before.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(ExceptionProblemMapper.class)
+    static class ProblemMappingConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(DbCoreProblemMapper.class)
+        public DbCoreProblemMapper dbCoreProblemMapper() {
+            return new DbCoreProblemMapper();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(name = "dbCoreProblemMessageBundle")
+        public ProblemMessageBundle dbCoreProblemMessageBundle() {
+            return ProblemMessageBundle.of("i18n/ludwig-db-messages");
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

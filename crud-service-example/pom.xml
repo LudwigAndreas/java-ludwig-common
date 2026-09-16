@@ -43,6 +43,15 @@
             <artifactId>outbox-spring-boot-starter</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- The REST foundation: localized RFC 9457 problems, LocalizedException/ProblemStatus and
+             the paged response envelope. This is what removes this service's own exception advice,
+             localization config and page DTO - and what makes the OData, security and db-core
+             modules render their errors in the caller's language through one pipeline. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- Authentication (edge-minted JWT + partner mTLS) and both levels of authorization. -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
@@ -110,6 +119,18 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            The service proves its own architecture on every build: one annotated test class, and the
+            rules of the shared library run against this module's bytecode. Test-scoped - none of it
+            ships.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

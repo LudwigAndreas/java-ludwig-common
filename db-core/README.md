@@ -27,6 +27,7 @@ public class Order extends AuditedEntity<UUID> {
 }
 ```
 
+
 ## Entity hierarchy
 
 Two families, both rooted at `AbstractEntity<ID>` (id contract + `equals`/`hashCode`/`toString`):
@@ -151,6 +152,32 @@ Pageable pageable = PageableUtils.of(page, size, properties.getMaxPageSize(), so
 
 `Predicates.allOf` filters out `null` expressions and always returns a safe, non-null predicate;
 `PageableUtils.of` clamps the page size and applies a default sort when none was requested.
+
+## Error responses
+
+When [`web-core-spring-boot-starter`](../web-core-spring-boot-starter/README.md) is on the classpath,
+this module contributes a `DbCoreProblemMapper` and the `i18n/ludwig-db-messages` bundle to its shared
+problem pipeline, so its exceptions reach a client as localized RFC 9457 problems under
+`ludwig.db.error.*` instead of as 500s.
+
+`EntityNotFoundException` is the one that matters. `getByIdOrThrow` raises it, and a service layer
+normally converts a missing row into its own localized exception first — but only on the paths where
+someone remembered to. Everywhere else it reached the advice unmapped and was answered as a 500: a
+missing row reported as a server fault, on exactly the code paths nobody had reviewed. Mapped here, the
+safety net is the default:
+
+| Exception | Status | Code |
+|---|---|---|
+| `EntityNotFoundException` | 404 | `ludwig.db.error.entity-not-found` |
+| `DuplicateEntityException` | 409 | `ludwig.db.error.duplicate-entity` |
+| `IntegrityViolationException` | 409 | `ludwig.db.error.integrity-violation` |
+| `UnsupportedIdTypeException` | 500 | `ludwig.db.error.unsupported-id-type` |
+
+The text is deliberately generic — this module knows the entity class, not what the API calls it. A
+service wanting *"No product exists with id X"* throws its own `LocalizedException`, which takes
+precedence over this mapper.
+
+Without that starter nothing changes: these exceptions are answered by whatever advice the service has.
 
 ## Metrics
 

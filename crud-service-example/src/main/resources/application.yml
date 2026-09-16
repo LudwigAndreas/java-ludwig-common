@@ -43,11 +43,6 @@ spring:
   jackson:
     default-property-inclusion: non_null
 
-  # The API answers in the caller's Accept-Language; see LocalizationConfig.
-  web:
-    locale: en
-    locale-resolver: accept_header
-
   threads:
     virtual:
       enabled: true
@@ -55,13 +50,25 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
   error:
-    # Errors are rendered exclusively by ApiExceptionHandler as RFC 7807 problems.
+    # Errors are rendered exclusively by the web-core starter's advice as RFC 9457 problems.
     whitelabel:
       enabled: false
   shutdown: graceful
 
-# --- ludwig db-core ------------------------------------------------------------------------------
+# --- ludwig web-core -----------------------------------------------------------------------------
 ludwig:
+  web:
+    problem:
+      # Keeps the type URIs this API has always published. Point it at real documentation and the
+      # type member becomes dereferenceable, which is what RFC 9457 intends it for.
+      type-prefix: "urn:catalog:error:"
+    i18n:
+      # The two languages this service has complete bundles for. A caller asking for anything else
+      # gets English in full rather than a half-translated response.
+      supported-locales: en,ru
+      default-locale: en
+
+  # --- ludwig db-core --------------------------------------------------------------------------
   db:
     auditing-enabled: true
     default-page-size: 20
@@ -169,9 +176,10 @@ odata:
     # A $top above the maximum is capped rather than rejected - a client asking for too much still
     # gets a useful answer.
     page-size-exceeded-strategy: CLAMP
-    web:
-      # This service localizes filter errors itself; see ApiExceptionHandler.
-      problem-detail-advice-enabled: false
+    # Nothing to switch off here any more. The starter contributes an ExceptionProblemMapper and its
+    # own message bundle to the web-core pipeline, so query errors come back localized and in the
+    # same shape as every other error - which is what this service used to disable that starter's
+    # advice and re-handle all seven of its exception types by hand to achieve.
 
 management:
   endpoints:

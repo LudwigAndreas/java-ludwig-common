@@ -6,6 +6,7 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +28,9 @@ import ru.ludwigandreas.security.data.DataScopeMapping;
 import ru.ludwigandreas.security.data.DataScopePolicyValidator;
 import ru.ludwigandreas.security.data.DataScopeRegistry;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
+import ru.ludwigandreas.security.web.SecurityProblemMapper;
+import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
+import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
  * What the module wires up, and - more importantly - what it refuses to start with.
@@ -42,6 +46,34 @@ class SecurityAutoConfigurationTest {
                     SecurityMetricsAutoConfiguration.class,
                     DataAuthorizationAutoConfiguration.class,
                     MutualTlsAutoConfiguration.class));
+
+    @Test
+    @DisplayName("it contributes its problem mapper and bundle when web-core is present")
+    void contributesToTheSharedProblemPipeline() {
+        // Without this, an in-dispatch 403 would come back under web-core's generic code rather than
+        // the one this module's own filter-chain handlers write for the same condition.
+        runner.withPropertyValues("ludwig.security.jwt.audiences=test")
+                .run(context -> assertThat(context)
+                        .hasSingleBean(SecurityProblemMapper.class)
+                        .hasSingleBean(ProblemMessageBundle.class));
+    }
+
+    @Test
+    @DisplayName("without web-core it still starts, and simply contributes nothing")
+    void startsWithoutTheWebCoreStarter() {
+        // web-core is an optional dependency, so this autoconfiguration has to be loadable by a
+        // class loader with no web-core jar at all. Filtering the whole package rather than one
+        // class matters: the mapper and the bundle are guarded on different types from that jar,
+        // and filtering only one of them would leave a classpath that cannot exist in practice.
+        runner.withClassLoader(new FilteredClassLoader(
+                        FilteredClassLoader.PackageFilter.of("ru.ludwigandreas.webcore")))
+                .withPropertyValues("ludwig.security.jwt.audiences=test")
+                .run(context -> assertThat(context)
+                        .hasNotFailed()
+                        .hasSingleBean(AuthorityResolver.class)
+                        .doesNotHaveBean("ludwigSecurityProblemMapper")
+                        .doesNotHaveBean("ludwigSecurityProblemMessageBundle"));
+    }
 
     @Test
     @DisplayName("a service that configures nothing still gets the whole authorization stack")

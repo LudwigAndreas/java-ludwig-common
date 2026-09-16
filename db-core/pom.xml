@@ -80,6 +80,18 @@
             <scope>provided</scope>
         </dependency>
 
+        <!--
+            Optional: the shared localized problem pipeline. When present, this module contributes a
+            mapper and a message bundle so that e.g. EntityNotFoundException is answered as a
+            localized 404 rather than a 500 - see DbCoreProblemMapper.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

@@ -1,7 +1,7 @@
 package ru.ludwigandreas.example.catalog.service.exception;
 
-import ru.ludwigandreas.example.catalog.support.i18n.LocalizedException;
-import ru.ludwigandreas.example.catalog.support.i18n.ProblemStatus;
+import ru.ludwigandreas.webcore.problem.LocalizedException;
+import ru.ludwigandreas.webcore.problem.ProblemStatus;
 
 /** Another product already owns this SKU. Rendered as HTTP 409. */
 public class ProductSkuAlreadyExistsException extends LocalizedException {

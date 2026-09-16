@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>architecture-rules</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Architecture rules (ArchUnit)</name>
+    <description>
+        Reusable, independently toggleable ArchUnit rule sets (layering, cycles, domain isolation, REST
+        boundary, JPA persistence, Kafka messaging, S3 storage, Spring wiring, module boundaries,
+        test separation, configuration access) that a downstream Spring Boot service adds as a single
+        test-scoped dependency and enables with one annotation.
+    </description>
+
+    <!-- Java version and third-party dependency versions are centralized in the parent pom. -->
+
+    <dependencies>
+        <!--
+            The only hard dependency. Deliberately archunit (core) rather than archunit-junit5: the
+            rule set this library builds is decided at runtime from configuration, which ArchUnit's
+            JUnit engine cannot express (it discovers static @ArchTest fields). The JUnit integration
+            here is a @TestFactory instead - see ArchitectureRulesTest.
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>${archunit.version}</version>
+        </dependency>
+
+        <!--
+            Optional: only ru.ludwigandreas.archrules.junit needs it, and every consuming service
+            already has JUnit 5 on its test classpath. Optional keeps this library usable from a
+            plain main() or a non-JUnit runner as well.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Deliberately NOT declared: spring-context, spring-data-commons, jakarta.persistence-api,
+            spring-kafka, the AWS SDK. Every framework type this library reasons about is referenced
+            by fully qualified name (ArchUnit's String-based predicates), so the rules work against a
+            service whose framework versions - or frameworks - differ from ours, and a service with
+            no Kafka never drags in Kafka just to run the rules.
+        -->
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Test scope only, and only to parse this library's own JSON report back: asserting that the
+            report is well-formed and correctly shaped is worth more than asserting on substrings.
+            Nothing in src/main touches it - the report is written by a hand-rolled writer precisely so
+            that no consuming service inherits a JSON dependency.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <!-- Puts Implementation-Version in the manifest, which is where the JSON
+                                 report reads the tool version from: an aggregated dashboard has to be
+                                 able to tell which version of the rules produced a given report. -->
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>web-core-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Web core Spring Boot starter</name>
+    <description>
+        Enterprise-ready REST foundation for Spring Boot microservices: one localized RFC 9457
+        (formerly RFC 7807) ProblemDetail pipeline that every module contributes message bundles and
+        exception mappers to instead of shipping its own @RestControllerAdvice, transport-neutral
+        business exceptions, request-locale resolution wired into Bean Validation, and a paged
+        response envelope that does not leak Spring Data's JSON shape.
+    </description>
+
+    <!-- Java version, third-party dependency versions and the spring-boot-dependencies BOM import
+         are all centralized in the parent pom - see its <properties>/<dependencyManagement>. -->
+
+    <dependencies>
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            ProblemDetail itself lives in spring-web, and it is the one non-optional web dependency
+            here: a module that only throws LocalizedException still compiles against nothing but
+            spring-core, because the exception and ProblemStatus deliberately name no Spring type.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+
+        <!--
+            Logging, and the MDC the trace id is read from. Declared directly rather than inherited:
+            it arrived transitively through spring-data-commons, which is optional here, so removing
+            that dependency would have stopped this module compiling.
+        -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- Optional: the shared advice, the locale resolver and the argument-level validation
+             handling are Spring MVC; a batch module that only needs LocalizedException and
+             ProblemMessages must not drag MVC onto its classpath. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: PageResponse.of(Page) - the envelope is also constructible without Spring Data -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-commons</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: 401/403 mapping for the exceptions that escape the filter chain into the MVC
+            dispatch. spring-security-core, not spring-boot-starter-security: what the mapper needs
+            is two exception types, not a filter chain - and being optional and compile-scoped, it is
+            also what the tests here run against, so they exercise the mapper without standing up an
+            authentication setup that every test would then have to work around.
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: constraint-violation mapping (the exception type only) -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: optimistic-locking / integrity-violation mapping without requiring JPA -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: the servlet API is needed to read the request URI for the problem's instance -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

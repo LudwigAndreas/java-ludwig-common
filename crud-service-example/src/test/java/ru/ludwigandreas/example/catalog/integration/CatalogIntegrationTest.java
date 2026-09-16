@@ -246,13 +246,15 @@ class CatalogIntegrationTest {
         // Not annotated @Filterable at all: unreachable, however the query is phrased.
         mockMvc.perform(get("/api/v1/products").param("$filter", "contains(description, 'secret')"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("error.filter.UnfilterableFieldException"));
+                .andExpect(jsonPath("$.code").value("ludwig.odata.error.unfilterable-field"))
+                .andExpect(jsonPath("$.property").value("description"));
 
         // Annotated, but restricted to ROLE_CATALOG_ADMIN - and an editor does not hold it.
         mockMvc.perform(get("/api/v1/products").param("$filter", "supplierCost lt 5")
                         .with(TestPrincipals.editor()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("error.filter.FilterAccessDeniedException"));
+                .andExpect(jsonPath("$.code").value("ludwig.odata.error.field-forbidden"))
+                .andExpect(jsonPath("$.property").value("supplierCost"));
     }
 
     @Test
@@ -264,7 +266,7 @@ class CatalogIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalid)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("error.validation"))
+                .andExpect(jsonPath("$.code").value("ludwig.web.error.validation"))
                 .andExpect(jsonPath("$.title").value("Invalid request"))
                 .andExpect(jsonPath("$.violations[?(@.field == 'name')].message")
                         .value("Name is required."))
@@ -343,7 +345,7 @@ class CatalogIntegrationTest {
 
         mockMvc.perform(get("/api/v1/products/{id}", catalogOwned.id()).with(TestPrincipals.partner()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("error.forbidden"));
+                .andExpect(jsonPath("$.code").value("ludwig.security.error.forbidden"));
     }
 
     /**
@@ -366,7 +368,7 @@ class CatalogIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("error.forbidden"));
+                .andExpect(jsonPath("$.code").value("ludwig.security.error.forbidden"));
 
         assertThat(productRepository.getByIdOrThrow(mine.id()).getName()).isEqualTo("Editor hammer");
     }
@@ -398,7 +400,7 @@ class CatalogIntegrationTest {
 
         mockMvc.perform(get("/api/v1/products/{id}", unwatched.id()).with(TestPrincipals.watcher()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("error.forbidden"));
+                .andExpect(jsonPath("$.code").value("ludwig.security.error.forbidden"));
     }
 
     /** Deleting is admin-only, and that is a resource-level rule, so it is refused before any row is read. */
@@ -409,7 +411,7 @@ class CatalogIntegrationTest {
 
         mockMvc.perform(delete("/api/v1/products/{id}", mine.id()).with(TestPrincipals.editor()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("error.forbidden"));
+                .andExpect(jsonPath("$.code").value("ludwig.security.error.forbidden"));
     }
 
     private ProductResponse create(CreateProductRequest request) throws Exception {
