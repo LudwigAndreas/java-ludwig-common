@@ -59,7 +59,9 @@ public class HotReloadProperties {
 
     public static class FileEntry {
 
-        /** Absolute (or working-directory-relative) path to a {@code .properties}, {@code .yml} or {@code .yaml} file. */
+        /**
+         * Absolute (or working-directory-relative) path to a {@code .properties}, {@code .yml} or {@code .yaml} file.
+         */
         private String path;
 
         /** Prepended as-is to every key loaded from this file, e.g. {@code "myapp."}; empty for none. */
@@ -196,7 +198,10 @@ public class HotReloadProperties {
             /** Vault role bound to this workload's service account. */
             private String role;
 
-            /** Defaults to the projected service account token path ({@code /var/run/secrets/kubernetes.io/serviceaccount/token}). */
+            /**
+             * Defaults to the projected service account token path ({@code
+             * /var/run/secrets/kubernetes.io/serviceaccount/token}).
+             */
             private String serviceAccountTokenFile;
 
             public String getAuthPath() {
@@ -274,7 +279,10 @@ public class HotReloadProperties {
             /** Full read path of the dynamic secret, e.g. {@code "database/creds/my-role"}. */
             private String path;
 
-            /** {@code true} for engines that replace credentials outright (rotating); {@code false} to just renew the lease. */
+            /**
+             * {@code true} for engines that replace credentials outright (rotating); {@code false} to just renew the
+             * lease.
+             */
             private boolean rotating = false;
 
             private String keyPrefix = "";

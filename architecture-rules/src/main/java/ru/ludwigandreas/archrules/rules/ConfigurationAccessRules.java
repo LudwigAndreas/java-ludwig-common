@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.Set;
 
 import com.tngtech.archunit.base.DescribedPredicate;
-import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 
 import ru.ludwigandreas.archrules.ArchitectureRule;

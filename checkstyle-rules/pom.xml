@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>checkstyle-rules</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Code style rules (Checkstyle)</name>
+    <description>
+        The shared Checkstyle configuration - formatting that mirrors IntelliJ IDEA's defaults,
+        naming, source-level conventions and Javadoc - packaged as a jar so a downstream service
+        consumes it as a maven-checkstyle-plugin dependency instead of copying the XML.
+    </description>
+
+    <!--
+        Resources only: no Java, no dependencies. A build-tooling artifact must not be able to
+        drag anything onto a consumer's classpath, and the maven-checkstyle-plugin only ever
+        reads these two files off its own plugin classpath.
+
+        This repository does NOT consume the jar - the root pom points the plugin straight at
+        src/main/resources below. That is deliberate: Maven resolves plugin dependencies from
+        the local repository and not from the reactor, so a jar-based reference would make a
+        clean clone fail until someone had installed this module first. A downstream service,
+        where the artifact is already published, uses the jar. See README.md.
+    -->
+
+    <build>
+        <plugins>
+            <!--
+                Nothing here to check: the module has no Java sources, and the configuration
+                files themselves are validated by every other module that runs against them.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

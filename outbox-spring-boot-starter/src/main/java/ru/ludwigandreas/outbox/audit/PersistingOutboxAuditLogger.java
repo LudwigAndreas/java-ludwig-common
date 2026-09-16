@@ -7,7 +7,10 @@ import ru.ludwigandreas.outbox.repository.OutboxStatusHistoryRepository;
 
 import java.time.Instant;
 
-/** Enabled via {@code ludwig.outbox.audit.persist-history=true}; writes every transition to {@code outbox_status_history}. */
+/**
+ * Enabled via {@code ludwig.outbox.audit.persist-history=true}; writes every transition to {@code
+ * outbox_status_history}.
+ */
 public class PersistingOutboxAuditLogger implements OutboxAuditLogger {
 
     private final OutboxStatusHistoryRepository repository;

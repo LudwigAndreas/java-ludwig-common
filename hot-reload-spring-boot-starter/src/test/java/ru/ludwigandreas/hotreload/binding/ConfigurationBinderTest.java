@@ -18,7 +18,8 @@ class ConfigurationBinderTest {
         environment.setProperty("app.name", "demo");
         environment.setProperty("app.retries", "3");
 
-        SampleConfig config = new ConfigurationBinder(validator).bindAndValidate(environment, "app", SampleConfig.class);
+        SampleConfig config = new ConfigurationBinder(validator)
+                .bindAndValidate(environment, "app", SampleConfig.class);
 
         assertThat(config.getName()).isEqualTo("demo");
         assertThat(config.getRetries()).isEqualTo(3);

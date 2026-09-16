@@ -39,7 +39,8 @@ public class FilterPolicyRegistry {
         FilterPolicy override = entityType.getAnnotation(FilterPolicy.class);
         int maxDepth = resolve(override == null ? -1 : override.maxDepth(), defaults.getMaxDepth());
         int maxPageSize = resolve(override == null ? -1 : override.maxPageSize(), defaults.getMaxPageSize());
-        int defaultPageSize = resolve(override == null ? -1 : override.defaultPageSize(), defaults.getDefaultPageSize());
+        int defaultPageSize = resolve(
+                override == null ? -1 : override.defaultPageSize(), defaults.getDefaultPageSize());
         int maxNestedPropertyDepth = resolve(
                 override == null ? -1 : override.maxNestedPropertyDepth(), defaults.getMaxNestedPropertyDepth());
 

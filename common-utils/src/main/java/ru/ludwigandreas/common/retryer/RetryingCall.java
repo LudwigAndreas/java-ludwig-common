@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Main class for executing operations with retry capabilities.
  */
-public class RetryingCall {
+public final class RetryingCall {
     private final RetryPolicy retryPolicy;
     private RetryListener retryListener;
     private MeterRegistry meterRegistry;
@@ -49,7 +49,8 @@ public class RetryingCall {
      * instrumented - Micrometer stays entirely optional.
      *
      * @param meterRegistry registry to publish meters to
-     * @param operationName identifies this call site in the {@code operation} tag, e.g. {@code "payment-gateway-charge"}
+     * @param operationName identifies this call site in the {@code operation} tag, e.g.
+     *                      {@code "payment-gateway-charge"}
      * @return this RetryingCall instance for chaining
      */
     public RetryingCall withMetrics(MeterRegistry meterRegistry, String operationName) {
@@ -96,7 +97,6 @@ public class RetryingCall {
         Throwable lastException = null;
         Object lastResult = null;
         boolean resultRetryNeeded = false;
-        int attemptsMade = 0;
         long startNanos = System.nanoTime();
 
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
@@ -108,7 +108,6 @@ public class RetryingCall {
                 }
             }
 
-            attemptsMade++;
             recordAttempt();
 
             try {
@@ -127,7 +126,12 @@ public class RetryingCall {
                 if (delayMs > 0) {
                     sleep(delayMs);
                 }
+            // CHECKSTYLE.OFF: IllegalCatch - a general-purpose retry wrapper has to observe
+            // every failure the wrapped call can produce, an Error included: the policy decides
+            // what is retryable, and anything not retried is rethrown below rather than
+            // swallowed, so nothing is ever hidden from the caller.
             } catch (Throwable e) {
+                // CHECKSTYLE.ON: IllegalCatch
                 lastException = e;
                 lastResult = null;
                 resultRetryNeeded = false;

@@ -38,8 +38,9 @@ public class OutboxKafkaAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "kafkaOutboxDispatcher")
-    public OutboxDispatcher kafkaOutboxDispatcher(@Qualifier("outboxKafkaTemplate") KafkaTemplate<String, String> kafkaTemplate,
-                                                   OutboxProperties properties) {
+    public OutboxDispatcher kafkaOutboxDispatcher(
+            @Qualifier("outboxKafkaTemplate") KafkaTemplate<String, String> kafkaTemplate,
+            OutboxProperties properties) {
         return new KafkaOutboxDispatcher(kafkaTemplate, properties.getKafka().getSendTimeout());
     }
 }

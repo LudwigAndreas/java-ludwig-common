@@ -37,6 +37,9 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
  */
 public final class ArchitectureConditions {
 
+    /** Length of the {@code set} prefix, i.e. the offset of the property name inside a setter name. */
+    private static final int SETTER_PREFIX_LENGTH = 3;
+
     private ArchitectureConditions() {
     }
 
@@ -325,9 +328,9 @@ public final class ArchitectureConditions {
             private boolean isPublicSetter(JavaMethod method) {
                 return method.getModifiers().contains(JavaModifier.PUBLIC)
                         && !method.getModifiers().contains(JavaModifier.STATIC)
-                        && method.getName().length() > 3
+                        && method.getName().length() > SETTER_PREFIX_LENGTH
                         && method.getName().startsWith("set")
-                        && Character.isUpperCase(method.getName().charAt(3))
+                        && Character.isUpperCase(method.getName().charAt(SETTER_PREFIX_LENGTH))
                         && method.getRawParameterTypes().size() == 1;
             }
         };

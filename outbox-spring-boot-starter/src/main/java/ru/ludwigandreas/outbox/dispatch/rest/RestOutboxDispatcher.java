@@ -1,6 +1,7 @@
 package ru.ludwigandreas.outbox.dispatch.rest;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -49,7 +50,7 @@ public class RestOutboxDispatcher implements OutboxDispatcher {
             return DispatchResult.success();
         } catch (HttpStatusCodeException e) {
             HttpStatusCode status = e.getStatusCode();
-            boolean retryable = !status.is4xxClientError() || status.value() == 429;
+            boolean retryable = !status.is4xxClientError() || status.isSameCodeAs(HttpStatus.TOO_MANY_REQUESTS);
             return DispatchResult.failure("HTTP " + status.value() + ": " + e.getMessage(), retryable);
         } catch (RestClientException e) {
             return DispatchResult.failure(e.getMessage(), true);
@@ -63,7 +64,8 @@ public class RestOutboxDispatcher implements OutboxDispatcher {
         String resolved = endpoints.get(destination);
         if (resolved == null) {
             throw new OutboxDispatchException(
-                    "No REST endpoint configured under ludwig.outbox.rest.endpoints for destination '" + destination + "'");
+                    "No REST endpoint configured under ludwig.outbox.rest.endpoints for destination '"
+                            + destination + "'");
         }
         return resolved;
     }

@@ -10,7 +10,8 @@ import java.util.Locale;
  * <p>The format looks like a simple key/value list and is not:
  *
  * <pre>
- * By=spiffe://mesh/ns/edge/sa/gateway;Hash=468ed3...;Subject="/C=DE/O=ACME GmbH/CN=acme-partner";URI=spiffe://partners/acme
+ * By=spiffe://mesh/ns/edge/sa/gateway;Hash=468ed3...;Subject="/C=DE/O=ACME
+ * GmbH/CN=acme-partner";URI=spiffe://partners/acme
  * </pre>
  *
  * <p>Values may be double-quoted, a quoted value may contain the {@code ;} and {@code ,} that

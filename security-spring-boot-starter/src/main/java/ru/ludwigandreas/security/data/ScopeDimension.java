@@ -31,8 +31,10 @@ public record ScopeDimension(String name) implements Serializable, Comparable<Sc
         name = name.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
-    /** The axes {@link PolicyDataScopeProvider} understands out of the box, and the ones a strict
-     *  policy is restricted to. Anything else is a custom axis and has to be opted into. */
+    /**
+     * The axes {@link PolicyDataScopeProvider} understands out of the box, and the ones a strict
+     * policy is restricted to. Anything else is a custom axis and has to be opted into.
+     */
     public static final java.util.Set<ScopeDimension> BUILT_IN = java.util.Set.of(OWNER, TENANT, PARTNER);
 
     public static ScopeDimension of(String name) {

@@ -10,7 +10,7 @@ import ru.ludwigandreas.security.principal.LudwigPrincipal;
 
 /**
  * Bridges Spring Security's {@code hasPermission(...)} expression to this module's data scopes, so the
- * post-check can be written as an annotation instead of a call:
+ * post-check can be written as an annotation instead of a call.
  *
  * <pre>{@code
  * @PostAuthorize("hasPermission(returnObject, 'read')")

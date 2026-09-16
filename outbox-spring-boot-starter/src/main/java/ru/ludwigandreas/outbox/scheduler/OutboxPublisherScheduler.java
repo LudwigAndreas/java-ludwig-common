@@ -39,7 +39,8 @@ public class OutboxPublisherScheduler implements SmartLifecycle {
 
     @Override
     public void start() {
-        scheduledFuture = taskScheduler.scheduleWithFixedDelay(this::poll, Instant.now().plus(initialDelay), fixedDelay);
+        scheduledFuture =
+                taskScheduler.scheduleWithFixedDelay(this::poll, Instant.now().plus(initialDelay), fixedDelay);
     }
 
     @Override

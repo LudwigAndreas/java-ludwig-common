@@ -31,6 +31,13 @@ import java.util.UUID;
  */
 public class OutboxProcessingService {
 
+    /**
+     * Characters of a random UUID appended to the hostname to tell two instances on the same host
+     * apart: enough to make a collision between concurrent pollers effectively impossible, short
+     * enough to keep the owner readable in the lock column.
+     */
+    private static final int LOCK_OWNER_SUFFIX_LENGTH = 8;
+
     private static final Logger log = LoggerFactory.getLogger(OutboxProcessingService.class);
 
     private final OutboxMessageRepository repository;
@@ -79,7 +86,8 @@ public class OutboxProcessingService {
             log.warn("Dispatch threw for outbox message {}", message.getId(), e);
             result = DispatchResult.failure(String.valueOf(e.getMessage()), true);
         }
-        metrics.recordDispatchDuration(message.getTransport(), message.getDestination(), Duration.between(start, Instant.now()));
+        metrics.recordDispatchDuration(message.getTransport(), message.getDestination(),
+                Duration.between(start, Instant.now()));
 
         if (result instanceof DispatchResult.Success) {
             outcomeRecorder.recordSuccess(message.getId());
@@ -98,6 +106,6 @@ public class OutboxProcessingService {
         } catch (UnknownHostException e) {
             host = "unknown-host";
         }
-        return host + "-" + UUID.randomUUID().toString().substring(0, 8);
+        return host + "-" + UUID.randomUUID().toString().substring(0, LOCK_OWNER_SUFFIX_LENGTH);
     }
 }

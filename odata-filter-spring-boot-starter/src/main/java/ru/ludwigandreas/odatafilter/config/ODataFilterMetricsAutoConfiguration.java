@@ -25,7 +25,10 @@ public class ODataFilterMetricsAutoConfiguration {
         return new MicrometerODataFilterMetrics(registry);
     }
 
-    /** Registered whenever the bean above didn't fire (Micrometer absent/disabled/no registry) - keeps callers null-check-free. */
+    /**
+     * Registered whenever the bean above didn't fire (Micrometer absent/disabled/no registry) - keeps callers
+     * null-check-free.
+     */
     @Bean
     @ConditionalOnMissingBean(ODataFilterMetrics.class)
     public ODataFilterMetrics noopODataFilterMetrics() {

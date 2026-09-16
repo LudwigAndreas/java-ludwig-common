@@ -20,7 +20,9 @@
         <module>identity-projection-spring-boot-starter</module>
         <module>hot-reload-spring-boot-starter</module>
         <module>web-core-spring-boot-starter</module>
+        <module>observability-spring-boot-starter</module>
         <module>architecture-rules</module>
+        <module>checkstyle-rules</module>
         <module>crud-service-example</module>
     </modules>
 
@@ -50,6 +52,36 @@
         <mapstruct.version>1.6.3</mapstruct.version>
         <archunit.version>1.5.0</archunit.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
+
+        <!--
+            Code style. maven-checkstyle-plugin ships with an old Checkstyle engine bundled, so
+            the engine is pinned separately from the plugin and overridden in the plugin's own
+            <dependencies> below - a Checkstyle that does not understand records, sealed types
+            or switch expressions reports parse errors as violations.
+        -->
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+        <checkstyle.version>10.21.4</checkstyle.version>
+        <!--
+            maven.multiModuleProjectDirectory is the repository root, resolved by Maven from the
+            .mvn directory beside this pom, so the path below is correct no matter which module
+            the build was started from (`mvn test` inside db-core included).
+        -->
+        <checkstyle.config.dir>${maven.multiModuleProjectDirectory}/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle</checkstyle.config.dir>
+        <!--
+            Javadoc *presence* (a public type or method with no Javadoc at all) reports as a
+            warning so that adopting the configuration does not require writing a documentation
+            backlog first; Javadoc that is present but wrong is always an error. Raise this to
+            `error` - here or with -Dcheckstyle.docs.severity=error - once the public API of a
+            module is covered. Set it to `ignore` to switch the tier off entirely.
+        -->
+        <checkstyle.docs.severity>warning</checkstyle.docs.severity>
+        <!--
+            Whether every package must carry a package-info.java. Off by default: adopting it
+            means adding one file per package in a single sweep, which is a decision to take
+            deliberately rather than something the build should start nagging about. Set to
+            `warning` or `error` to turn it on.
+        -->
+        <checkstyle.package.info.severity>ignore</checkstyle.package.info.severity>
         <!-- JUnit (jupiter + platform) is deliberately NOT pinned here: it comes from the imported
              spring-boot-dependencies BOM below, which keeps the whole JUnit 5 stack internally
              consistent. Pinning it independently caused a Jupiter/Platform version-skew bug - see
@@ -84,6 +116,18 @@
             </extension>
         </extensions>
 
+        <!--
+            Declared here rather than in each module so that every module - and every module
+            added later - is checked without anyone having to remember to opt in. Configuration
+            and version come from pluginManagement below.
+        -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+            </plugin>
+        </plugins>
+
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -115,6 +159,85 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.3</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${maven-checkstyle-plugin.version}</version>
+                    <dependencies>
+                        <!-- Replaces the engine bundled with the plugin; see the property above. -->
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
+                    <configuration>
+                        <configLocation>${checkstyle.config.dir}/checkstyle.xml</configLocation>
+                        <suppressionsLocation>${checkstyle.config.dir}/checkstyle-suppressions.xml</suppressionsLocation>
+                        <!--
+                            Passes the severity tier into the Checkstyle configuration, which
+                            declares its own fallback, so the config also works when it is run
+                            straight from an IDE plugin with no Maven properties in sight.
+                        -->
+                        <propertyExpansion>
+                            docs.severity=${checkstyle.docs.severity}
+                            package.info.severity=${checkstyle.package.info.severity}
+                        </propertyExpansion>
+
+                        <!--
+                            Explicit source directories rather than the compile source roots: the
+                            roots include target/generated-sources, where QueryDSL's Q-types and
+                            MapStruct's mapper implementations live. Those are machine-written and
+                            unfixable, so the only sane thing is not to look at them.
+                        -->
+                        <sourceDirectories>
+                            <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                        </sourceDirectories>
+                        <testSourceDirectories>
+                            <testSourceDirectory>${project.basedir}/src/test/java</testSourceDirectory>
+                        </testSourceDirectories>
+                        <!-- Tests are production code for the purposes of style. -->
+                        <includeTestSourceDirectory>true</includeTestSourceDirectory>
+
+                        <!--
+                            Resources are scanned for the i18n bundle checks (duplicate keys, and
+                            a locale bundle whose key set has drifted from the default one).
+                        -->
+                        <includeResources>true</includeResources>
+                        <includeTestResources>true</includeTestResources>
+                        <resourceIncludes>**/*.properties</resourceIncludes>
+
+                        <!--
+                            failsOnError: a malformed configuration or an unparseable file fails
+                            the build instead of being silently reported as zero violations.
+                            violationSeverity=error: the warning tier is reported but does not
+                            break the build.
+                        -->
+                        <failOnViolation>true</failOnViolation>
+                        <failsOnError>true</failsOnError>
+                        <violationSeverity>error</violationSeverity>
+                        <consoleOutput>true</consoleOutput>
+                        <logViolationsToConsole>true</logViolationsToConsole>
+                        <!-- No xref report is generated in this build, so don't link to one. -->
+                        <linkXRef>false</linkXRef>
+                        <cacheFile>${project.build.directory}/checkstyle-cachefile</cacheFile>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>checkstyle-validate</id>
+                            <!--
+                                validate, not verify: style feedback arrives in seconds, before
+                                the compiler and the test suite have spent minutes on code that
+                                is going to be sent back anyway. Skippable for a throwaway local
+                                run with -Dcheckstyle.skip=true.
+                            -->
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.jacoco</groupId>

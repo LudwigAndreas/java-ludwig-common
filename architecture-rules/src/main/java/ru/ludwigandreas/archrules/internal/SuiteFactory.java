@@ -53,6 +53,14 @@ public final class SuiteFactory {
         return List.copyOf(resolved);
     }
 
+    private static ResolvedRule resolve(ArchitectureRulesConfiguration configuration,
+                                        ArchitectureRule rule,
+                                        String scopeName,
+                                        DescribedPredicate<JavaClass> scope) {
+        return new ResolvedRule(rule.id(), scopeName, applySuiteSettings(configuration, rule.rule()), scope,
+                configuration.severities().severityOf(rule), rule.remediation());
+    }
+
     private static List<ResolvedRule> serviceWideRules(ArchitectureRulesConfiguration configuration,
                                                        List<ArchitectureRuleSet> ruleSets,
                                                        List<String> modules) {
@@ -109,14 +117,6 @@ public final class SuiteFactory {
             }
         }
         return resolved;
-    }
-
-    private static ResolvedRule resolve(ArchitectureRulesConfiguration configuration,
-                                        ArchitectureRule rule,
-                                        String scopeName,
-                                        DescribedPredicate<JavaClass> scope) {
-        return new ResolvedRule(rule.id(), scopeName, applySuiteSettings(configuration, rule.rule()), scope,
-                configuration.severities().severityOf(rule), rule.remediation());
     }
 
     private static DescribedPredicate<JavaClass> serviceScope(List<String> excludedPackageIdentifiers) {

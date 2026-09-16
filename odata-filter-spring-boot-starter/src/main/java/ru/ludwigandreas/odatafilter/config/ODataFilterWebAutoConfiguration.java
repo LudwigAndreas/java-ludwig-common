@@ -51,7 +51,8 @@ public class ODataFilterWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(
-            prefix = "odata.filter.web", name = "argument-resolver-enabled", havingValue = "true", matchIfMissing = true)
+            prefix = "odata.filter.web", name = "argument-resolver-enabled",
+            havingValue = "true", matchIfMissing = true)
     public ODataQueryArgumentResolver odataQueryArgumentResolver(
             ODataFilterService filterService, ODataFilterProperties properties) {
         return new ODataQueryArgumentResolver(filterService, properties);
@@ -88,7 +89,8 @@ public class ODataFilterWebAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnMissingClass("ru.ludwigandreas.webcore.problem.ExceptionProblemMapper")
     @ConditionalOnProperty(
-            prefix = "odata.filter.web", name = "problem-detail-advice-enabled", havingValue = "true", matchIfMissing = true)
+            prefix = "odata.filter.web", name = "problem-detail-advice-enabled",
+            havingValue = "true", matchIfMissing = true)
     public ODataFilterExceptionHandler odataFilterExceptionHandler() {
         return new ODataFilterExceptionHandler();
     }

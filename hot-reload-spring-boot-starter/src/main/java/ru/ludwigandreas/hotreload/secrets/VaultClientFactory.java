@@ -37,7 +37,8 @@ public final class VaultClientFactory {
 
         ClientAuthentication clientAuthentication = clientAuthentication(options, endpoint, requestFactory);
         RestTemplate sessionRestTemplate = VaultClients.createRestTemplate(endpoint, requestFactory);
-        SessionManager sessionManager = new LifecycleAwareSessionManager(clientAuthentication, taskScheduler, sessionRestTemplate);
+        SessionManager sessionManager =
+                new LifecycleAwareSessionManager(clientAuthentication, taskScheduler, sessionRestTemplate);
 
         return new VaultTemplate(endpoint, requestFactory, sessionManager);
     }

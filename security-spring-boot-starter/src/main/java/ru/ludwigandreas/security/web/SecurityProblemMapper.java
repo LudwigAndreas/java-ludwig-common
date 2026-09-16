@@ -23,6 +23,9 @@ import ru.ludwigandreas.webcore.problem.ProblemStatus;
  */
 public class SecurityProblemMapper implements ExceptionProblemMapper {
 
+    /** Ahead of web-core's generic mapper for the same two types - the lower order wins. */
+    private static final int ORDER = DEFAULT_MODULE_ORDER - 100;
+
     private static final String UNAUTHORIZED = "ludwig.security.error.unauthorized";
     private static final String FORBIDDEN = "ludwig.security.error.forbidden";
 
@@ -43,7 +46,6 @@ public class SecurityProblemMapper implements ExceptionProblemMapper {
 
     @Override
     public int getOrder() {
-        // Ahead of web-core's generic mapper for the same two types.
-        return DEFAULT_MODULE_ORDER - 100;
+        return ORDER;
     }
 }

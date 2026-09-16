@@ -1,0 +1,6 @@
+ru.ludwigandreas.observability.config.ObservabilityCoreAutoConfiguration
+ru.ludwigandreas.observability.config.ObservabilityTracingAutoConfiguration
+ru.ludwigandreas.observability.config.ObservabilityWebAutoConfiguration
+ru.ludwigandreas.observability.config.ObservabilityKafkaAutoConfiguration
+ru.ludwigandreas.observability.config.ObservabilityMetricsAutoConfiguration
+ru.ludwigandreas.observability.config.ObservabilityLoggingAutoConfiguration

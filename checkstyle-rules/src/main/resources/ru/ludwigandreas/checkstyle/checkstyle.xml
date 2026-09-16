@@ -1,0 +1,960 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    ludwig-common Checkstyle configuration.
+
+    Design rules this file follows, and that anyone editing it is expected to keep:
+
+    1. IT NEVER ASKS FOR SOMETHING INTELLIJ'S DEFAULT FORMATTER WOULD UNDO.
+       The project deliberately ships no custom IDE code-style scheme, so "the style" is
+       whatever IntelliJ IDEA does out of the box: 4-space indent, 8-space continuation
+       indent, 120-column right margin, K&R braces with `} else {` on one line, operator
+       signs at the end of the wrapped line, `.` at the start of the next line in a wrapped
+       call chain, `case` indented one level inside `switch`, at most two consecutive blank
+       lines. Every whitespace rule below encodes exactly that, so `Ctrl+Alt+L` (Reformat
+       Code) always produces a Checkstyle-clean file and Checkstyle never fights the IDE.
+       If a check cannot be satisfied by reformatting, it must be a *convention* check
+       (something the formatter does not touch), not a formatting check.
+
+    2. IT STAYS OUT OF THE OTHER TOOLS' TERRITORY.
+       Structure and dependencies (layering, package cycles, which type may cross which
+       boundary, how many collaborators a class has, framework usage) belong to the
+       `architecture-rules` module - ArchUnit sees compiled bytecode and can reason about
+       them; Checkstyle cannot. Bug and security analysis (null dereferences, injection,
+       crypto misuse, resource leaks) belongs to SonarQube, which does dataflow analysis;
+       Checkstyle's regex- and AST-level view cannot. What is left, and what this file
+       owns, is source text: formatting, naming, source-level conventions and Javadoc.
+       See checkstyle-rules/README.md for the full division of labour.
+
+    3. EVERY CHECK EARNS ITS PLACE BY CATCHING A REAL MISTAKE.
+       The target reader is a developer who has not written production Java before. Checks
+       that only express taste were left out; checks that catch a defect, a maintenance
+       trap or an unreviewable diff were kept, and each block below says which.
+
+    Severity model:
+      - Everything defaults to `error` and fails the build at the `validate` phase.
+      - Javadoc *presence* is tiered separately through the `docs.severity` property
+        (default `warning`) so a team can adopt this file without a documentation sprint,
+        and raise it to `error` with -Ddocs.severity=error once the backlog is closed.
+        Javadoc *correctness* - a tag that lies about the signature, malformed HTML - is
+        always an error: wrong documentation is worse than none.
+
+    Suppressions:
+      - File-scoped, in checkstyle-suppressions.xml (generated sources, test relaxations).
+      - Line-scoped, in code: `@SuppressWarnings("checkstyle:MagicNumber")`, or
+        `// CHECKSTYLE.OFF: MagicNumber - reason` / `// CHECKSTYLE.ON: MagicNumber`,
+        or `// SUPPRESS CHECKSTYLE MagicNumber - reason` on the offending line itself.
+        All three forms require you to name the check; none of them can disable everything.
+-->
+<module name="Checker">
+
+    <property name="severity" value="error"/>
+    <property name="charset" value="UTF-8"/>
+
+    <!--
+        Scans Java sources and the resource bundles beside them. Markdown and the like are
+        excluded on purpose: the trailing-whitespace rule below would be wrong for Markdown,
+        where two trailing spaces are a line break.
+    -->
+    <property name="fileExtensions" value="java, properties"/>
+
+    <!-- ================================================================================
+         FILE-LEVEL INVARIANTS
+         ================================================================================ -->
+
+    <!--
+        A file that does not end in a newline makes the next change to its last line show up
+        as a two-line diff ("\ No newline at end of file"), which hides the actual edit.
+        IntelliJ's "Ensure every saved file ends with a line break" produces this for free.
+        `lf` rather than the platform default: the repository stores LF, and a CRLF file
+        would otherwise pass on Windows and fail in CI.
+    -->
+    <module name="NewlineAtEndOfFile">
+        <property name="lineSeparator" value="lf"/>
+    </module>
+
+    <!--
+        Tabs render at a different width in every tool, so a tab-indented file is aligned
+        for exactly one person. IntelliJ's default ("Use tab character" off) never produces
+        one; this check catches files pasted in from elsewhere.
+    -->
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+
+    <!--
+        IntelliJ's default right margin. Kept at Checker level (not inside TreeWalker) so it
+        also covers files that fail to parse. Package and import statements are exempt
+        because they cannot be wrapped, and lines whose only excess is a URL inside a
+        Javadoc `@see`/`{@link}` or a comment are exempt because breaking a URL breaks it.
+    -->
+    <module name="LineLength">
+        <property name="fileExtensions" value="java"/>
+        <property name="max" value="120"/>
+        <property name="ignorePattern" value="^package .*|^import .*|^\s*\*?\s*(//)?\s*https?://\S+$|@see\s+&lt;a href|\{@link .*\}"/>
+    </module>
+
+    <!--
+        No trailing whitespace. It is invisible, it makes diffs show untouched lines as
+        changed, and IntelliJ strips it on save by default, so a violation here means the
+        line arrived from somewhere else.
+    -->
+    <module name="RegexpSingleline">
+        <property name="id" value="TrailingWhitespace"/>
+        <property name="format" value="[ \t]+$"/>
+        <property name="minimum" value="0"/>
+        <property name="maximum" value="0"/>
+        <property name="message" value="Line has trailing whitespace."/>
+    </module>
+
+    <!--
+        At most two consecutive blank lines, which is exactly what IntelliJ's "Keep maximum
+        blank lines: 2" preserves when reformatting. Checkstyle's EmptyLineSeparator can
+        only say "one or unlimited", so the two-line ceiling is expressed as a regex: four
+        or more consecutive line ends means three or more blank lines.
+    -->
+    <module name="RegexpMultiline">
+        <property name="id" value="ConsecutiveBlankLines"/>
+        <property name="format" value="(?:\r?\n[ \t]*){4,}"/>
+        <property name="fileExtensions" value="java"/>
+        <property name="message" value="More than two consecutive blank lines (IntelliJ keeps at most two)."/>
+    </module>
+
+    <!--
+        A 2000-line file is not one unit of anything. The limit is deliberately far above
+        anything in this repository (the largest file is ~870 lines): it is a tripwire for
+        a file that has stopped being reviewable, not a style preference.
+    -->
+    <module name="FileLength">
+        <property name="max" value="2000"/>
+    </module>
+
+    <!-- ================================================================================
+         RESOURCE BUNDLES
+
+         Localization is a first-class concern here: user-facing text lives in i18n message
+         bundles, never in Java string literals. These two checks make the bundles hold
+         together, and neither has a Java-side equivalent.
+         ================================================================================ -->
+
+    <!--
+        A duplicated key in a .properties file silently wins or loses depending on load
+        order - the second definition overwrites the first with no warning anywhere.
+    -->
+    <module name="UniqueProperties">
+        <property name="fileExtensions" value="properties"/>
+    </module>
+
+    <!--
+        Every `*messages*.properties` bundle must have the same key set in every locale it
+        declares. Without this, a key added to the default bundle and forgotten in the
+        Russian one shows the raw message code to a Russian-speaking user at runtime - a
+        production defect that nothing else in the build can see.
+    -->
+    <module name="Translation">
+        <property name="fileExtensions" value="properties"/>
+        <property name="baseName" value="^.*[Mm]essages.*$"/>
+        <property name="requiredTranslations" value="ru"/>
+    </module>
+
+    <!--
+        A package with no package-info.java has no place to say what it is for, and gets no
+        package-level annotations (@NonNullApi and friends). Checker-level, because it is a
+        check about a file that is missing rather than about a file's contents.
+
+        Off by default: covering an existing codebase means adding one file per package in a
+        single sweep, which is a decision a team takes once rather than something a build
+        should start reporting on its own. Switch it on with
+        -Dcheckstyle.package.info.severity=warning (or set the property in the root pom).
+    -->
+    <module name="JavadocPackage">
+        <property name="severity" value="${package.info.severity}" default="ignore"/>
+    </module>
+
+    <!-- ================================================================================
+         SUPPRESSION PLUMBING
+         ================================================================================ -->
+
+    <module name="SuppressionFilter">
+        <property name="file" value="${checkstyle.suppressions.file}"
+                  default="checkstyle-suppressions.xml"/>
+        <property name="optional" value="true"/>
+    </module>
+
+    <!-- Makes @SuppressWarnings("checkstyle:CheckName") on a declaration actually work. -->
+    <module name="SuppressWarningsFilter"/>
+
+    <module name="TreeWalker">
+
+        <!-- Counterpart of SuppressWarningsFilter above; both halves are required. -->
+        <module name="SuppressWarningsHolder"/>
+
+        <!--
+            `// CHECKSTYLE.OFF: MagicNumber - <reason>` ... `// CHECKSTYLE.ON: MagicNumber`.
+            checkFormat forces the comment to name a specific check, so no one can switch
+            the whole file off, and the trailing text is where the reason goes.
+        -->
+        <module name="SuppressionCommentFilter">
+            <property name="offCommentFormat" value="CHECKSTYLE.OFF\: ([\w\|]+)"/>
+            <property name="onCommentFormat" value="CHECKSTYLE.ON\: ([\w\|]+)"/>
+            <property name="checkFormat" value="$1"/>
+        </module>
+
+        <!--
+            Single-line variant: `// SUPPRESS CHECKSTYLE MagicNumber - <reason>`. It covers the
+            line it sits on and the two lines below it, which is what lets it be written above
+            a declaration that carries annotations rather than trailing off the end of a line
+            that is already at the margin.
+        -->
+        <module name="SuppressWithNearbyCommentFilter">
+            <property name="commentFormat" value="SUPPRESS CHECKSTYLE (\w+)"/>
+            <property name="checkFormat" value="$1"/>
+            <property name="influenceFormat" value="2"/>
+        </module>
+
+        <!-- ============================================================================
+             SOURCE TEXT
+
+             Rules about what may appear in the characters of a source file. This is the
+             category `architecture-rules` explicitly cannot cover: ArchUnit reads compiled
+             bytecode, where comments are gone and a string literal is an opaque constant.
+             ============================================================================ -->
+
+        <!--
+            Source files are ASCII-only. Cyrillic (or any other non-ASCII text) in a literal
+            or a comment means user-facing text was hard-coded instead of going into an i18n
+            bundle, and it is the classic source of mojibake when a file is opened with the
+            wrong encoding by a tool that does not honour UTF-8.
+
+            Deliberately narrowed: suppressed for src/test, where an assertion has to spell
+            out the localized message it expects - that IS the test. See
+            checkstyle-suppressions.xml.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="NonAsciiSourceText"/>
+            <property name="format" value="[^\p{ASCII}]"/>
+            <property name="ignoreComments" value="false"/>
+            <property name="message"
+                      value="Non-ASCII character in source. User-facing text belongs in an i18n message bundle, not in Java source."/>
+        </module>
+
+        <!--
+            Nothing prints to the console. A `System.out.println` is invisible to log
+            aggregation, carries no level, no timestamp, no correlation id and no MDC, and
+            cannot be switched off in production. Use the module's SLF4J logger instead.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="ConsoleOutput"/>
+            <property name="format" value="System\s*\.\s*(out|err)\s*\."/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Do not print to the console - log through SLF4J so the output is levelled, correlated and collectable."/>
+        </module>
+
+        <!--
+            `printStackTrace()` throws a stack trace at stderr and calls the problem handled.
+            Either log it with context (`log.error(&quot;...&quot;, e)`) or let it propagate.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="PrintStackTrace"/>
+            <property name="format" value="\.printStackTrace\s*\("/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Do not call printStackTrace() - log the exception with context or let it propagate."/>
+        </module>
+
+        <!--
+            A `@author` tag records who typed the file, which git already knows and which is
+            wrong the moment someone else edits it. Ownership belongs in CODEOWNERS.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="AuthorTag"/>
+            <property name="format" value="^\s*\*\s*@author"/>
+            <property name="ignoreComments" value="false"/>
+            <property name="message" value="Do not use @author - version control and CODEOWNERS own that information."/>
+        </module>
+
+        <!--
+            Deliberately absent: a regex for commented-out code. Every formulation of it -
+            "a comment line that ends in a semicolon or a brace" being the usual one - also
+            matches ordinary prose that happens to end in a semicolon, and a style rule that
+            cries wolf on a comment explaining WHY the code below it is the way it is teaches
+            developers to stop reading the output. SonarQube's java:S125 does this properly,
+            by parsing the comment body as Java and asking whether it is a valid statement.
+        -->
+
+        <!--
+            A TODO with no ticket is a wish. Requiring an issue key means it appears on a
+            board where it can be prioritized, instead of decaying in a file nobody reopens.
+            Severity is tiered with Javadoc presence because it is a backlog concern, not a
+            correctness one.
+        -->
+        <module name="TodoComment">
+            <property name="id" value="UntrackedTodo"/>
+            <property name="format" value="\b(TODO|FIXME|XXX|HACK)\b(?!.*[A-Z]+-\d+)"/>
+            <property name="severity" value="${docs.severity}" default="warning"/>
+        </module>
+
+        <!-- ============================================================================
+             IMPORTS
+
+             Note what is NOT here: import *order*. IntelliJ's default import layout puts
+             third-party imports first and `javax`/`java` last, which is an IDE-specific
+             ordering that no Checkstyle group model reproduces exactly; pinning one here
+             would mean every `Optimize Imports` (Ctrl+Alt+O) reshuffles the file into a
+             build failure. Ordering is left to the IDE, which keeps it tidy for free. What
+             remains below are import rules that are unambiguous and that the IDE cannot
+             decide for you.
+             ============================================================================ -->
+
+        <!--
+            No on-demand (star) imports. They hide which types a file actually uses, and
+            they break the build from a distance: a new class added to an imported package
+            upstream can silently collide with a name already in scope here.
+
+            IntelliJ collapses imports into a star at 5 classes / 3 static members from one
+            package BY DEFAULT, so the project ships an .editorconfig raising both
+            thresholds to 999. That keeps the IDE from generating a violation without
+            anyone having to change their global IDE settings.
+        -->
+        <module name="AvoidStarImport"/>
+
+        <!-- An import nobody uses is a dependency the file does not have. Ctrl+Alt+O removes them. -->
+        <module name="UnusedImports">
+            <property name="processJavadoc" value="true"/>
+        </module>
+
+        <!-- Same type imported twice, or an import of java.lang / of this very package. -->
+        <module name="RedundantImport"/>
+
+        <!--
+            Packages that must never be imported:
+              - sun.*, com.sun.*, jdk.internal.* : JDK internals, unsupported and not
+                guaranteed to survive the next JDK upgrade.
+              - org.apache.commons.lang (Commons Lang 2) : end-of-life; lang3 is the one.
+              - junit.framework, org.junit.Assert : JUnit 3/4 APIs leaking into a JUnit 5
+                codebase, where they silently do not participate in Jupiter's lifecycle.
+              - java.util.logging, org.apache.log4j : logging APIs that bypass the SLF4J
+                facade the observability module configures.
+        -->
+        <module name="IllegalImport">
+            <property name="illegalPkgs"
+                      value="sun, com.sun, jdk.internal, org.apache.commons.lang, junit.framework, java.util.logging, org.apache.log4j"/>
+            <property name="illegalClasses" value="org.junit.Assert, org.junit.Test"/>
+        </module>
+
+        <!-- ============================================================================
+             NAMING
+
+             Standard Java naming, which is also what IntelliJ's own inspections expect.
+             A name that breaks convention makes a reader stop and work out what kind of
+             thing they are looking at.
+
+             Type *suffix* conventions (a controller ends in Controller, a repository in
+             Repository) are NOT here: they are structural, they interact with layering,
+             and `architecture-rules` already enforces them against the bytecode.
+             ============================================================================ -->
+
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+        </module>
+        <module name="TypeName"/>
+        <module name="MethodName"/>
+        <module name="MemberName"/>
+        <module name="ParameterName"/>
+        <module name="LambdaParameterName"/>
+        <module name="CatchParameterName">
+            <!-- Allows the conventional `e`, plus `ignored`/`expected` for a deliberately unused one. -->
+            <property name="format" value="^(e|ex|t|cause|ignored|expected|[a-z][a-zA-Z0-9]+)$"/>
+        </module>
+        <module name="LocalVariableName"/>
+        <module name="LocalFinalVariableName"/>
+        <module name="PatternVariableName"/>
+        <module name="RecordComponentName"/>
+        <!--
+            Type parameters are short and capitalized: `T`, `R`, `K`, `V`, and up to three
+            letters so that the domain-carrying ones this repository actually uses (`ID` for
+            an entity identifier, `DTO`) are legal. Checkstyle's default of a single letter
+            would force `BaseRepository<E, I>`, which is less readable, not more.
+        -->
+        <module name="ClassTypeParameterName">
+            <property name="format" value="^[A-Z][A-Z0-9]{0,2}$"/>
+        </module>
+        <module name="InterfaceTypeParameterName">
+            <property name="format" value="^[A-Z][A-Z0-9]{0,2}$"/>
+        </module>
+        <module name="MethodTypeParameterName">
+            <property name="format" value="^[A-Z][A-Z0-9]{0,2}$"/>
+        </module>
+        <module name="RecordTypeParameterName">
+            <property name="format" value="^[A-Z][A-Z0-9]{0,2}$"/>
+        </module>
+
+        <!--
+            Constants are SCREAMING_SNAKE_CASE. `log`/`logger` is exempt: every SLF4J logger
+            field is `private static final`, and `LOG`/`LOGGER` shouting in every third line
+            of a method reads worse than the near-universal lowercase convention (which is
+            also what Lombok's @Slf4j generates, so it cannot be renamed anyway).
+        -->
+        <module name="ConstantName">
+            <property name="format" value="^(log|logger|[A-Z][A-Z0-9]*(_[A-Z0-9]+)*)$"/>
+        </module>
+
+        <module name="StaticVariableName"/>
+
+        <!--
+            No runs of capitals in an identifier: `HTTPSConnection`, `parseXMLToDTO`. Two in
+            a row are fine (`IoException` vs `IOException`, `OData`, `DbId`), four are a
+            name that has to be read twice. allowedAbbreviationLength=2 means at most three
+            consecutive capitals. Class *type* names are checked; overridden methods are
+            not, since their name is fixed by the supertype.
+        -->
+        <module name="AbbreviationAsWordInName">
+            <property name="allowedAbbreviationLength" value="2"/>
+            <property name="ignoreOverriddenMethods" value="true"/>
+            <property name="ignoreStatic" value="false"/>
+            <property name="ignoreFinal" value="false"/>
+            <property name="allowedAbbreviations" value="OK, ID, URL, URI, DTO, API, JSON, XML, SQL, HTTP, JWT, TTL"/>
+            <property name="tokens"
+                      value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, ANNOTATION_DEF, ANNOTATION_FIELD_DEF, PARAMETER_DEF, VARIABLE_DEF, METHOD_DEF, RECORD_DEF"/>
+        </module>
+
+        <!-- ============================================================================
+             WHITESPACE AND WRAPPING  (the IntelliJ mirror)
+
+             Every rule in this block is what IntelliJ IDEA's default Java formatter
+             produces. Reformat Code is therefore always a valid fix for anything reported
+             here, and can never introduce a new violation.
+             ============================================================================ -->
+
+        <!--
+            4-space indent, 8-space continuation indent, `case` indented one level inside
+            `switch`, 8-space `throws` continuation - the IntelliJ defaults, one for one.
+            forceStrictCondition stays false: IntelliJ aligns some wrapped constructs to a
+            parenthesis rather than to a fixed multiple of 8, and strict mode would reject
+            its own output.
+        -->
+        <module name="Indentation">
+            <property name="basicOffset" value="4"/>
+            <property name="braceAdjustment" value="0"/>
+            <property name="caseIndent" value="4"/>
+            <property name="throwsIndent" value="8"/>
+            <property name="arrayInitIndent" value="4"/>
+            <property name="lineWrappingIndentation" value="8"/>
+            <property name="forceStrictCondition" value="false"/>
+        </module>
+
+        <module name="WhitespaceAround">
+            <property name="allowEmptyConstructors" value="true"/>
+            <property name="allowEmptyMethods" value="true"/>
+            <property name="allowEmptyTypes" value="true"/>
+            <property name="allowEmptyLoops" value="true"/>
+            <property name="allowEmptyLambdas" value="true"/>
+            <property name="allowEmptyCatches" value="true"/>
+        </module>
+
+        <module name="WhitespaceAfter">
+            <property name="tokens"
+                      value="COMMA, SEMI, TYPECAST, LITERAL_IF, LITERAL_ELSE, LITERAL_WHILE, LITERAL_DO, LITERAL_FOR, DO_WHILE"/>
+        </module>
+
+        <module name="NoWhitespaceBefore">
+            <property name="tokens" value="COMMA, SEMI, POST_DEC, POST_INC, ELLIPSIS, LABELED_STAT"/>
+        </module>
+
+        <module name="NoWhitespaceAfter">
+            <!-- `!x` not `! x`, `-1` not `- 1`, `arr[0]` not `arr [0]`. ARRAY_INIT is left
+                 out because IntelliJ formats `new int[] { 1, 2 }` with the space. -->
+            <property name="tokens"
+                      value="AT, INC, DEC, UNARY_MINUS, UNARY_PLUS, BNOT, LNOT, DOT, ARRAY_DECLARATOR, INDEX_OP"/>
+            <property name="allowLineBreaks" value="true"/>
+        </module>
+
+        <!-- `foo(a, b)`, never `foo( a, b )`. -->
+        <module name="ParenPad"/>
+        <module name="TypecastParenPad"/>
+
+        <!-- `foo(a)`, never `foo (a)`. -->
+        <module name="MethodParamPad"/>
+
+        <!-- `List&lt;String&gt;`, never `List &lt; String &gt;`. -->
+        <module name="GenericWhitespace"/>
+
+        <module name="EmptyForIteratorPad"/>
+        <module name="EmptyForInitializerPad"/>
+
+        <!--
+            Deliberately absent: OperatorWrap, which would pin whether a wrapped `&&` sits at
+            the end of the broken line or at the start of the next one. IntelliJ's formatter
+            only applies its own answer when it re-wraps a line, and leaves an existing wrap
+            where the author put it - so either setting here would report hundreds of lines
+            that Reformat Code does not fix, which is precisely the kind of rule this
+            configuration refuses to carry. Where the operator goes is taste; nothing breaks
+            either way.
+        -->
+
+        <!--
+            In a wrapped call chain the dot leads the next line (`\n    .map(...)`), which
+            is IntelliJ's default and what makes a builder chain readable. A wrapped
+            argument list keeps the comma on the line it ends.
+        -->
+        <module name="SeparatorWrap">
+            <property name="option" value="nl"/>
+            <property name="tokens" value="DOT, METHOD_REF"/>
+        </module>
+        <module name="SeparatorWrap">
+            <property name="option" value="eol"/>
+            <property name="tokens" value="COMMA, SEMI, ELLIPSIS, ARRAY_DECLARATOR, RBRACK"/>
+        </module>
+
+        <!--
+            A blank line between members, and after the package and import blocks. Fields
+            may sit together without blank lines between them; multiple blank lines are
+            tolerated here because the two-line ceiling is enforced by the regex above.
+        -->
+        <module name="EmptyLineSeparator">
+            <property name="allowNoEmptyLineBetweenFields" value="true"/>
+            <property name="allowMultipleEmptyLines" value="true"/>
+            <property name="allowMultipleEmptyLinesInsideClassMembers" value="true"/>
+            <property name="tokens"
+                      value="PACKAGE_DEF, IMPORT, STATIC_IMPORT, CLASS_DEF, INTERFACE_DEF, ENUM_DEF, STATIC_INIT, INSTANCE_INIT, METHOD_DEF, CTOR_DEF, RECORD_DEF, COMPACT_CTOR_DEF"/>
+        </module>
+
+        <!--
+            Annotations go on their own line above the thing they annotate - IntelliJ wraps
+            them that way, and it keeps a method signature readable when Spring has stacked
+            four of them on it. Parameter and local-variable annotations are exempt, where
+            inline (`@Valid @RequestBody Foo foo`) is the readable form.
+        -->
+        <module name="AnnotationLocation">
+            <property name="allowSamelineMultipleAnnotations" value="false"/>
+            <property name="allowSamelineSingleParameterlessAnnotation" value="false"/>
+            <property name="allowSamelineParameterizedAnnotation" value="false"/>
+            <property name="tokens"
+                      value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF, RECORD_DEF, COMPACT_CTOR_DEF"/>
+        </module>
+
+        <!-- ============================================================================
+             BLOCKS AND BRACES
+             ============================================================================ -->
+
+        <!-- `{` at the end of the line, never on its own. IntelliJ's default brace style. -->
+        <module name="LeftCurly"/>
+
+        <!--
+            `} else {`, `} catch (...) {`, `} finally {`, `} while (...);` on one line -
+            IntelliJ's default ("Else on new line" off). Everything else closes on its own
+            line. `alone_or_singleline` rather than `alone` so that a body written entirely
+            on one line (`default -> { yield 0; }`) is still legal.
+        -->
+        <module name="RightCurly">
+            <property name="option" value="same"/>
+            <property name="tokens" value="LITERAL_TRY, LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, LITERAL_DO"/>
+        </module>
+        <module name="RightCurly">
+            <property name="option" value="alone_or_singleline"/>
+            <property name="tokens"
+                      value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, ANNOTATION_DEF, RECORD_DEF, METHOD_DEF, CTOR_DEF, COMPACT_CTOR_DEF, LITERAL_FOR, LITERAL_WHILE, STATIC_INIT, INSTANCE_INIT"/>
+        </module>
+
+        <!--
+            Always braces, even around a one-line body. This is the single most effective
+            check in the file for someone new: a braceless `if` that later grows a second
+            statement is the textbook way to ship a bug that reads correctly (the infamous
+            `goto fail`), and it is invisible in review because the indentation lies.
+        -->
+        <module name="NeedBraces"/>
+
+        <!--
+            No empty block that silently does nothing. `option=text` means a block with a
+            comment in it passes, so a deliberately empty branch just has to say why.
+        -->
+        <module name="EmptyBlock">
+            <property name="option" value="text"/>
+            <property name="tokens"
+                      value="LITERAL_DO, LITERAL_ELSE, LITERAL_FINALLY, LITERAL_IF, LITERAL_FOR, LITERAL_TRY, LITERAL_WHILE, INSTANCE_INIT, STATIC_INIT, LITERAL_SWITCH, LITERAL_SYNCHRONIZED"/>
+        </module>
+
+        <!--
+            A swallowed exception is the hardest class of production bug to diagnose: the
+            failure happened, and nothing anywhere recorded it. If catching and doing
+            nothing really is correct, name the variable `ignored` or `expected` - which
+            makes the intent explicit to the next reader - or put a comment in the block.
+        -->
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="ignored|expected"/>
+        </module>
+
+        <module name="AvoidNestedBlocks">
+            <property name="allowInSwitchCase" value="true"/>
+        </module>
+
+        <!-- ============================================================================
+             CODING CONVENTIONS
+
+             Mistakes that compile. Each of these is a defect a reviewer would ask to fix.
+             ============================================================================ -->
+
+        <!--
+            `==` on Strings compares identity, not content. It appears to work in tests
+            (literals are interned) and fails in production (values off the wire are not).
+        -->
+        <module name="StringLiteralEquality"/>
+
+        <!--
+            `value.equals(&quot;x&quot;)` NPEs when value is null; `&quot;x&quot;.equals(value)` cannot.
+        -->
+        <module name="EqualsAvoidNull"/>
+
+        <!--
+            equals() without hashCode() (or the reverse) silently breaks every HashMap and
+            HashSet the type is ever put into - including the ones Hibernate keeps.
+        -->
+        <module name="EqualsHashCode"/>
+
+        <!--
+            `equals(MyType other)` does not override `equals(Object)`; it overloads it, so
+            collections keep calling the inherited identity comparison.
+        -->
+        <module name="CovariantEquals"/>
+
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+
+        <!--
+            A switch with no default silently does nothing for an unlisted value. Exhaustive
+            switch *expressions* over an enum (`->` form) are exempt: the compiler proves
+            they are complete, and adding a default there would defeat the compile error you
+            want when a new constant is added.
+        -->
+        <module name="MissingSwitchDefault"/>
+
+        <!-- A `case` falling into the next one is almost always a forgotten `break`. -->
+        <module name="FallThrough"/>
+        <module name="DefaultComesLast"/>
+
+        <!-- `;` on its own line: usually the whole body of a loop that was meant to have one. -->
+        <module name="EmptyStatement"/>
+
+        <!-- Assigning to the loop variable inside the body makes the loop unanalyzable. -->
+        <module name="ModifiedControlVariable"/>
+
+        <!-- One statement per line, one variable per declaration: both keep a diff honest. -->
+        <module name="OneStatementPerLine"/>
+        <module name="MultipleVariableDeclarations"/>
+
+        <!-- `String[] args`, never `String args[]` - the C form hides the type from the reader. -->
+        <module name="ArrayTypeStyle"/>
+
+        <!-- `1L`, never `1l`, which is indistinguishable from `11` in most fonts. -->
+        <module name="UpperEll"/>
+
+        <!-- `public static final`, in the order the JLS lists them - as IntelliJ writes it. -->
+        <module name="ModifierOrder"/>
+
+        <!-- `public` on an interface method, `final` on a private one: noise that says nothing. -->
+        <module name="RedundantModifier"/>
+
+        <!--
+            `private Foo foo = null;` restates a guarantee the JVM already makes, and an
+            explicitly-null field can never become `final`.
+
+            Deliberately narrowed to object references: an explicit `= false` or `= 0` on a
+            primitive is left alone, because in a @ConfigurationProperties class that literal
+            is documentation - it states the property's default next to the fields that
+            default to something else, and deleting it makes the class read as if the author
+            had simply forgotten.
+        -->
+        <module name="ExplicitInitialization">
+            <property name="onlyObjectReferences" value="true"/>
+        </module>
+
+        <!-- A local that is assigned and never read is a leftover, or a bug where the wrong name was used. -->
+        <module name="UnusedLocalVariable"/>
+
+        <module name="UnnecessaryParentheses"/>
+        <module name="UnnecessarySemicolonInEnumeration"/>
+        <module name="UnnecessarySemicolonInTryWithResources"/>
+        <module name="UnnecessarySemicolonAfterTypeMemberDeclaration"/>
+        <module name="UnnecessarySemicolonAfterOuterTypeDeclaration"/>
+
+        <!--
+            `new Boolean(true)` / `new Integer(1)`: deprecated for removal, allocating, and
+            never what you want - `Boolean.valueOf` / `Integer.valueOf` cache and compare
+            correctly. `java.lang.String` is deliberately NOT listed: `new String(bytes,
+            UTF_8)` is the correct way to decode bytes, and this repository decodes Kafka
+            headers that way.
+        -->
+        <module name="IllegalInstantiation">
+            <property name="classes" value="java.lang.Boolean, java.lang.Integer, java.lang.Long"/>
+        </module>
+
+        <!--
+            Catching Throwable or Error catches OutOfMemoryError and StackOverflowError -
+            conditions the JVM cannot continue from - and pretends the operation recovered.
+            `Exception` and `RuntimeException` are deliberately NOT listed: a framework
+            boundary (a scheduler tick, a Kafka listener, an @ControllerAdvice) legitimately
+            has to stop everything the layer below it can throw, and this repository is
+            built out of exactly those boundaries.
+        -->
+        <module name="IllegalCatch">
+            <property name="illegalClassNames" value="java.lang.Throwable, java.lang.Error"/>
+        </module>
+
+        <!-- Same reasoning in the other direction: a caller cannot handle `Throwable`. -->
+        <module name="IllegalThrows">
+            <property name="illegalClassNames" value="java.lang.Throwable, java.lang.Error"/>
+        </module>
+
+        <!-- finalize() has been deprecated for removal since Java 9 and never runs when you need it to. -->
+        <module name="NoFinalizer"/>
+
+        <!-- A clone() that does not call super.clone() produces the wrong runtime type. -->
+        <module name="NoClone"/>
+
+        <!--
+            An unexplained literal in the middle of an expression - `if (attempts > 3)`,
+            `Thread.sleep(30000)` - tells the next reader nothing about where the number
+            came from or whether it may be changed. Name it a constant, or better, make it a
+            configuration property. -1/0/1/2 are exempt, as are field initializers (a named
+            constant IS a field) and annotation values (`@Column(length = 64)`).
+        -->
+        <module name="MagicNumber">
+            <property name="ignoreNumbers" value="-1, 0, 1, 2"/>
+            <property name="ignoreHashCodeMethod" value="true"/>
+            <property name="ignoreAnnotation" value="true"/>
+            <property name="ignoreFieldDeclaration" value="true"/>
+            <property name="ignoreAnnotationElementDefaults" value="true"/>
+        </module>
+
+        <!--
+            A local variable that shadows a field makes every later reference in the method
+            ambiguous: the reader has to scroll to the declaration to know which one a line
+            touches, and a missing `this.` silently writes the wrong one.
+
+            Deliberately narrowed to local variables. Parameters are NOT checked, because a
+            parameter that shadows the field it is about to be assigned to is the universal
+            Java idiom - `this.name = name` in a constructor, and equally `name(String name)`
+            in the fluent setters this repository writes, which Checkstyle's `ignoreSetter`
+            does not recognize because they carry no `set` prefix.
+        -->
+        <module name="HiddenField">
+            <property name="tokens" value="VARIABLE_DEF"/>
+        </module>
+
+        <!-- `if (a) { if (b) { if (c) {` past three levels is a method that wants splitting. -->
+        <module name="NestedIfDepth">
+            <property name="max" value="3"/>
+        </module>
+        <module name="NestedTryDepth">
+            <property name="max" value="2"/>
+        </module>
+
+        <!-- ============================================================================
+             CLASS DESIGN
+             ============================================================================ -->
+
+        <!--
+            Fields are private. A public field is a field with no invariant: anything can
+            write it at any time and the class cannot tell. Lombok's @Getter/@Setter give
+            you the accessor without the boilerplate, which is this repository's rule
+            anyway. `serialVersionUID` and immutable public constants are allowed.
+        -->
+        <module name="VisibilityModifier">
+            <property name="protectedAllowed" value="false"/>
+            <property name="packageAllowed" value="false"/>
+            <property name="allowPublicImmutableFields" value="true"/>
+            <property name="allowPublicFinalFields" value="false"/>
+        </module>
+
+        <!-- A class with only private constructors cannot be extended; say so with `final`. -->
+        <module name="FinalClass"/>
+
+        <!--
+            A class of static helpers still gets a public no-arg constructor unless you hide it,
+            which leaves `new MathUtils()` legal and meaningless.
+
+            Framework entry points are exempt: a @SpringBootApplication class holds only
+            `main`, and so looks exactly like a utility class - but Spring instantiates it as a
+            configuration class, and hiding its constructor breaks the application at startup.
+        -->
+        <module name="HideUtilityClassConstructor">
+            <property name="ignoreAnnotatedBy"
+                      value="SpringBootApplication, SpringBootConfiguration, Configuration, SpringBootTest"/>
+        </module>
+
+        <!-- An interface with only constants is a namespace pretending to be a type; use an enum or a final class. -->
+        <module name="InterfaceIsType"/>
+
+        <!--
+            An exception with mutable state cannot be logged, wrapped or rethrown safely -
+            two threads can be reading and writing the same instance.
+        -->
+        <module name="MutableException"/>
+
+        <!-- One top-level type per file, so a type is always where its name says it is. -->
+        <module name="OneTopLevelClass"/>
+
+        <!-- The file's outer type must match the file name (a compile error for public types, not for others). -->
+        <module name="OuterTypeFilename"/>
+
+        <!-- Overloads of the same method belong together; splitting them hides one from the reader. -->
+        <module name="OverloadMethodsDeclarationOrder"/>
+
+        <!-- ============================================================================
+             SIZE AND COMPLEXITY
+
+             Generous ceilings, set as tripwires rather than targets. Class-level coupling
+             limits (ClassFanOutComplexity, ClassDataAbstractionCoupling) are deliberately
+             absent: `architecture-rules` already bounds collaborators structurally, and
+             running both means two tools reporting one problem with different numbers.
+             ============================================================================ -->
+
+        <!--
+            A method that does not fit on two screens cannot be held in your head, and it is
+            invariably doing more than one thing. Comments and blank lines are not counted.
+        -->
+        <module name="MethodLength">
+            <property name="max" value="100"/>
+            <property name="countEmpty" value="false"/>
+        </module>
+
+        <!--
+            More than eight parameters means the call site is a row of unlabelled values
+            that the compiler will happily let you transpose. Pass an object - or, for a
+            Spring bean, let constructor injection and @RequiredArgsConstructor do it.
+            Overridden methods are exempt: the signature is not this class's decision.
+        -->
+        <module name="ParameterNumber">
+            <property name="max" value="8"/>
+            <property name="ignoreOverriddenMethods" value="true"/>
+            <property name="tokens" value="METHOD_DEF, CTOR_DEF"/>
+        </module>
+
+        <!-- Every independent branch is a path someone has to test. -->
+        <module name="CyclomaticComplexity">
+            <property name="max" value="15"/>
+        </module>
+
+        <!--
+            Deliberately absent: NPathComplexity and BooleanExpressionComplexity. Both count
+            the wrong thing for the code this repository is made of.
+
+            NPath multiplies the branches in a method, so N sequential, non-nested `if`s
+            score 2^N - which means the clearest way to write a dispatch table (a flat run of
+            `if (x instanceof A a) return mapA(a);`, each branch returning immediately, zero
+            nesting) scores in the thousands while being trivial to read, and a genuinely
+            tangled method with three nested conditions scores lower. CyclomaticComplexity
+            counts the branches themselves (how many tests the method needs) and NestedIfDepth
+            catches the nesting that actually makes code hard to follow; between them the real
+            condition is covered without punishing the readable form.
+
+            BooleanExpressionComplexity counts operators, not entanglement: `a || b || c ||
+            d || e || f` - a list of supported types, which is what it looks like in an
+            exception mapper - scores worse than `a &amp;&amp; !b || c &amp;&amp; d`, which is the one a reader
+            cannot evaluate in their head. Condition tangle is a cognitive-complexity measure
+            and belongs to SonarQube, which has one.
+        -->
+
+        <!-- More than three checked exceptions in a signature pushes the design problem onto every caller. -->
+        <module name="ThrowsCount">
+            <property name="max" value="3"/>
+            <property name="ignorePrivateMethods" value="true"/>
+        </module>
+
+        <!-- ============================================================================
+             JAVADOC
+
+             Two tiers, on purpose:
+               - Javadoc CORRECTNESS is always an error. A @param naming a parameter that no
+                 longer exists, or a @return on a void method, actively misleads - it is
+                 worse than silence, and it is the failure mode of documentation that was
+                 written once and never revisited.
+               - Javadoc PRESENCE follows ${docs.severity} (default: warning), so adopting
+                 this configuration does not require writing a backlog of Javadoc first.
+                 Raise it with -Ddocs.severity=error once the public API is covered.
+             ============================================================================ -->
+
+        <!-- Javadoc that is attached to nothing (between annotations, after the signature) documents nothing. -->
+        <module name="InvalidJavadocPosition"/>
+
+        <!--
+            The tags that ARE written must describe the actual signature: no @param naming a
+            parameter that was renamed or removed, no @throws for an exception the method
+            cannot throw, no @return on a void method.
+
+            Deliberately narrowed to what is written rather than what is missing: a missing
+            @param, @return or @throws is not an error, because demanding a tag per parameter
+            is what produces `@param name the name` - a tag that satisfies the tool and tells
+            the reader nothing. Document a parameter when there is something to say about it;
+            the check guarantees that what you did say is still true.
+        -->
+        <module name="JavadocMethod">
+            <property name="accessModifiers" value="public, protected"/>
+            <property name="allowMissingParamTags" value="true"/>
+            <property name="allowMissingReturnTag" value="true"/>
+            <property name="validateThrows" value="false"/>
+        </module>
+
+        <!--
+            Javadoc that renders correctly. The first sentence must end in a period because it
+            is what the tool lifts into the class and package summary tables - one that trails
+            off in a colon is broken everywhere it is quoted - and the HTML must be
+            well-formed, since an unclosed tag swallows the rest of the page.
+        -->
+        <module name="JavadocStyle">
+            <property name="checkFirstSentence" value="true"/>
+            <property name="checkHtml" value="true"/>
+            <property name="checkEmptyJavadoc" value="false"/>
+        </module>
+
+        <!--
+            A Javadoc block that is nothing but tags (`/** @throws Xyz if ... */`) has no
+            summary, so the member shows up blank in every index that lists it. That is a
+            *missing* sentence rather than a wrong one, so it belongs to the documentation
+            tier with the other presence checks.
+        -->
+        <module name="JavadocStyle">
+            <property name="id" value="JavadocSummaryPresent"/>
+            <property name="checkFirstSentence" value="false"/>
+            <property name="checkHtml" value="false"/>
+            <property name="checkEmptyJavadoc" value="true"/>
+            <property name="severity" value="${docs.severity}" default="warning"/>
+        </module>
+
+        <!-- `@param foo` with nothing after it is a tag that satisfies a tool and no reader. -->
+        <module name="NonEmptyAtclauseDescription"/>
+
+        <!-- Block tags in the conventional order, so a long Javadoc is scannable. -->
+        <module name="AtclauseOrder">
+            <property name="tagOrder"
+                      value="@param, @return, @throws, @exception, @see, @since, @deprecated"/>
+        </module>
+
+        <!-- `/** Text` on the same line as the opening, not on the line below it - IntelliJ's own style. -->
+        <module name="JavadocContentLocation"/>
+
+        <!-- A public type with no Javadoc is a published API nobody can use without reading its source. -->
+        <module name="MissingJavadocType">
+            <property name="scope" value="public"/>
+            <property name="severity" value="${docs.severity}" default="warning"/>
+        </module>
+
+        <!--
+            Public methods worth documenting: anything with a real body. One-line delegates
+            and Lombok-style accessors are exempt (minLineCount / allowMissingPropertyJavadoc),
+            as is anything that inherits its contract via @Override.
+        -->
+        <module name="MissingJavadocMethod">
+            <property name="scope" value="public"/>
+            <property name="minLineCount" value="2"/>
+            <property name="allowMissingPropertyJavadoc" value="true"/>
+            <property name="allowedAnnotations" value="Override, Bean, Test, ParameterizedTest, BeforeEach, AfterEach, BeforeAll, AfterAll"/>
+            <property name="severity" value="${docs.severity}" default="warning"/>
+        </module>
+
+    </module>
+</module>

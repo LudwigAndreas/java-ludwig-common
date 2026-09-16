@@ -16,6 +16,10 @@ import ru.ludwigandreas.db.core.metrics.DbCoreMetrics;
  */
 public class SnapshotImmutabilityListener {
 
+    // Hibernate instantiates an entity listener itself, so there is no constructor for Spring
+    // to inject through; the field stays package-private (not private) so the unit test can hand
+    // it a stub without reflection.
+    // SUPPRESS CHECKSTYLE VisibilityModifier - injected by Hibernate/Spring, see above
     @Autowired(required = false)
     DbCoreMetrics metrics;
 

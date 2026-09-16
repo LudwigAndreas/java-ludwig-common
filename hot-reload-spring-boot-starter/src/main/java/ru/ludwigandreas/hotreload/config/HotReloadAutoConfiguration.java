@@ -68,9 +68,10 @@ public class HotReloadAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public EnvironmentPropertySourceBridge hotReloadEnvironmentPropertySourceBridge(ConfigurableEnvironment environment,
-                                                                                      ApplicationEventPublisher eventPublisher,
-                                                                                      SourceReloadCoordinator coordinator) {
+    public EnvironmentPropertySourceBridge hotReloadEnvironmentPropertySourceBridge(
+            ConfigurableEnvironment environment,
+            ApplicationEventPublisher eventPublisher,
+            SourceReloadCoordinator coordinator) {
         EnvironmentPropertySourceBridge bridge = new EnvironmentPropertySourceBridge(environment, eventPublisher);
         coordinator.addListener(bridge);
         return bridge;
@@ -84,7 +85,8 @@ public class HotReloadAutoConfiguration {
                 .filter(file -> file.getPath() != null && !file.getPath().isBlank())
                 .<FileBackedSource>map(file -> new PropertyFileSource(Path.of(file.getPath()), file.getKeyPrefix()))
                 .toList();
-        FileResourceWatcher watcher = new FileResourceWatcher(sources, coordinator, properties.getFileWatch().getDebounce());
+        FileResourceWatcher watcher =
+                new FileResourceWatcher(sources, coordinator, properties.getFileWatch().getDebounce());
         return new ResourceWatcherLifecycle(watcher);
     }
 
@@ -114,7 +116,10 @@ public class HotReloadAutoConfiguration {
         return new MicrometerHotReloadMetrics(registry);
     }
 
-    /** Registered whenever the bean above didn't fire (Micrometer absent/disabled/no registry) - keeps callers null-check-free. */
+    /**
+     * Registered whenever the bean above didn't fire (Micrometer absent/disabled/no registry) - keeps callers
+     * null-check-free.
+     */
     @Bean
     @ConditionalOnMissingBean(HotReloadMetrics.class)
     public HotReloadMetrics noopHotReloadMetrics() {

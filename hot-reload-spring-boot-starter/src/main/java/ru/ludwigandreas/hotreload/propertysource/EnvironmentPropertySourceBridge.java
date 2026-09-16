@@ -18,7 +18,8 @@ public class EnvironmentPropertySourceBridge implements SourceChangeListener {
     private final ConfigurableEnvironment environment;
     private final ApplicationEventPublisher eventPublisher;
 
-    public EnvironmentPropertySourceBridge(ConfigurableEnvironment environment, ApplicationEventPublisher eventPublisher) {
+    public EnvironmentPropertySourceBridge(ConfigurableEnvironment environment,
+                                           ApplicationEventPublisher eventPublisher) {
         this.environment = environment;
         this.eventPublisher = eventPublisher;
     }

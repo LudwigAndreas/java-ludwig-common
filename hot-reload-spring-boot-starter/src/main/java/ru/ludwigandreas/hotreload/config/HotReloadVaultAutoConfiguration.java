@@ -54,7 +54,8 @@ public class HotReloadVaultAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(VaultOperations.class)
-    public VaultTemplate hotReloadVaultTemplate(HotReloadProperties properties, TaskScheduler hotReloadVaultTaskScheduler) {
+    public VaultTemplate hotReloadVaultTemplate(HotReloadProperties properties,
+                                                TaskScheduler hotReloadVaultTaskScheduler) {
         HotReloadProperties.Vault vault = properties.getVault();
         VaultConnectionOptions options = new VaultConnectionOptions(
                 URI.create(vault.getUri()),

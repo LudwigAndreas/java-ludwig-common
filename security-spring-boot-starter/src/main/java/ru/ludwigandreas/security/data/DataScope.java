@@ -36,8 +36,10 @@ public record DataScope(Access access, List<Restriction> alternatives) {
         ALL,
         /** Only rows matching at least one {@link Restriction}. */
         RESTRICTED,
-        /** No row. Emitted as an always-false predicate, so a list endpoint returns an empty page
-         *  rather than an error - the caller learns nothing about what exists. */
+        /**
+         * No row. Emitted as an always-false predicate, so a list endpoint returns an empty page
+         * rather than an error - the caller learns nothing about what exists.
+         */
         NONE
     }
 

@@ -99,7 +99,8 @@ class HotReloadAutoConfigurationTest {
 
         contextRunner
                 .withInitializer(applicationContext ->
-                        new HotReloadEnvironmentPostProcessor().postProcessEnvironment(applicationContext.getEnvironment(), null))
+                        new HotReloadEnvironmentPostProcessor()
+                                .postProcessEnvironment(applicationContext.getEnvironment(), null))
                 .withPropertyValues(
                         "ludwig.hotreload.files[0].path=" + file,
                         "ludwig.hotreload.file-watch.debounce=50ms")

@@ -33,7 +33,8 @@ public class HotReloadEnvironmentPostProcessor implements EnvironmentPostProcess
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        HotReloadProperties properties = Binder.get(environment).bindOrCreate("ludwig.hotreload", HotReloadProperties.class);
+        HotReloadProperties properties =
+                Binder.get(environment).bindOrCreate("ludwig.hotreload", HotReloadProperties.class);
         if (!properties.isEnabled()) {
             return;
         }

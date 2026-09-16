@@ -80,7 +80,8 @@ public final class PredicateBuilder {
                 case EQ -> Expressions.predicate(Ops.IS_NULL, path);
                 case NE -> Expressions.predicate(Ops.IS_NOT_NULL, path);
                 default -> throw new FilterSyntaxException(
-                        "Operator '" + node.operator() + "' cannot be combined with null on '" + node.propertyPath() + "'");
+                        "Operator '" + node.operator() + "' cannot be combined with null on '"
+                                + node.propertyPath() + "'");
             };
         }
         Object value = coerce(node.value(), field.javaType(), node.propertyPath());

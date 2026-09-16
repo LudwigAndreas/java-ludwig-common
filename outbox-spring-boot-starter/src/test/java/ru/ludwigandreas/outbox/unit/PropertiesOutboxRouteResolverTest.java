@@ -58,7 +58,8 @@ class PropertiesOutboxRouteResolverTest {
         properties.setDefaultRoute(route("REST", "https://fallback.example.com"));
         PropertiesOutboxRouteResolver resolver = new PropertiesOutboxRouteResolver(properties);
 
-        assertThat(resolver.resolve(event("Unmatched"))).isEqualTo(new OutboxRoute("REST", "https://fallback.example.com"));
+        assertThat(resolver.resolve(event("Unmatched")))
+                .isEqualTo(new OutboxRoute("REST", "https://fallback.example.com"));
     }
 
     @Test
@@ -76,7 +77,8 @@ class PropertiesOutboxRouteResolverTest {
         PropertiesOutboxRouteResolver resolver = new PropertiesOutboxRouteResolver(properties);
 
         OutboxEvent event = OutboxEvent.builder()
-                .aggregateType("Order").aggregateId("1").eventType("OrderCreated").payload("p").route("missing").build();
+                .aggregateType("Order").aggregateId("1").eventType("OrderCreated")
+                .payload("p").route("missing").build();
 
         assertThatThrownBy(() -> resolver.resolve(event)).isInstanceOf(OutboxRoutingException.class);
     }

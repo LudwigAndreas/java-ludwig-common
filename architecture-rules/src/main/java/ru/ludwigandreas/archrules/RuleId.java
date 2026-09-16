@@ -19,6 +19,17 @@ public record RuleId(RuleGroup group, String name, String qualifier) {
 
     private static final String WILDCARD = "*";
 
+    /**
+     * Specificity ladder returned by {@link #specificityOf(String)}: a more specific selector
+     * wins over a less specific one, and a selector that does not address this rule at all
+     * scores below every match.
+     */
+    private static final int SPECIFICITY_NO_MATCH = -1;
+    private static final int SPECIFICITY_WILDCARD = 0;
+    private static final int SPECIFICITY_GROUP = 1;
+    private static final int SPECIFICITY_BASE_ID = 2;
+    private static final int SPECIFICITY_EXACT = 3;
+
     public RuleId {
         Objects.requireNonNull(group, "group");
         Objects.requireNonNull(name, "name");
@@ -61,18 +72,19 @@ public record RuleId(RuleGroup group, String name, String qualifier) {
     public int specificityOf(String selector) {
         String normalized = Objects.requireNonNull(selector, "selector").trim();
         if (WILDCARD.equals(normalized)) {
-            return 0;
+            return SPECIFICITY_WILDCARD;
         }
-        if (normalized.equals(group.id()) || normalized.equals(group.id() + ".*")) {
-            return 1;
+        String groupWildcard = group.id() + ".*";
+        if (normalized.equals(group.id()) || normalized.equals(groupWildcard)) {
+            return SPECIFICITY_GROUP;
         }
         if (normalized.equals(baseId())) {
-            return 2;
+            return SPECIFICITY_BASE_ID;
         }
         if (normalized.equals(value())) {
-            return 3;
+            return SPECIFICITY_EXACT;
         }
-        return -1;
+        return SPECIFICITY_NO_MATCH;
     }
 
     @Override

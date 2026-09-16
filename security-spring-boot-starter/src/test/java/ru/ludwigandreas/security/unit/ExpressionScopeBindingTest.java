@@ -61,6 +61,7 @@ class ExpressionScopeBindingTest {
 
         record Case(String description, Order order, boolean expected) {
         }
+
         List<Case> cases = List.of(
                 new Case("mentioned", new Order("someone-else", "user-1"), true),
                 new Case("creator", new Order("user-1"), true),

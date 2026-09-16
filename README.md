@@ -42,7 +42,9 @@ Each module has:
 | [`identity-projection-spring-boot-starter`](identity-projection-spring-boot-starter/README.md) ([ru](identity-projection-spring-boot-starter/README.ru.md)) | Local projection of the OIDC provider's Kafka user stream and the database-backed `AuthorityResolver`/`DataScopeProvider`/`PartnerIdentityResolver` that read from it: idempotent, order-tolerant consumption, users/roles/partner registry/time-boxed data grants in Postgres, authority-cache eviction on change |
 | [`web-core-spring-boot-starter`](web-core-spring-boot-starter/README.md) | The REST foundation every service sits on: one localized RFC 9457 `ProblemDetail` pipeline that modules contribute exception mappers and message bundles to instead of each shipping its own `@RestControllerAdvice`, transport-neutral business exceptions, `Accept-Language` locale resolution wired into Bean Validation, and a paged response envelope that doesn't leak Spring Data's JSON shape |
 | [`hot-reload-spring-boot-starter`](hot-reload-spring-boot-starter/README.md) | Enterprise-ready hot reload for Java 17 + Spring Boot: typed/validated configuration, live-reloading property/YAML files and FreeMarker templates, HashiCorp Vault secrets (KV polling, lease-renewed dynamic secrets, Kubernetes auth), environment variables always able to override a reloaded value |
+| [`observability-spring-boot-starter`](observability-spring-boot-starter/README.md) ([ru](observability-spring-boot-starter/README.ru.md)) | The observability foundation every service sits on: distributed tracing over OTLP with a per-request sampling override, one correlation id propagated across HTTP and Kafka and into the MDC, structured JSON logging (ECS/OTel/flat) carrying trace, span and correlation ids with secret masking and truncation, RED metrics with bounded URI cardinality and aggregatable SLO histograms, split liveness/readiness probes and graceful shutdown, and log levels changeable at runtime through the hot-reload module |
 | [`architecture-rules`](architecture-rules/README.md) | Executable architecture conventions: a test-scoped jar of toggleable ArchUnit rule sets (layering, package cycles, REST boundary, JPA persistence and entity inheritance, Kafka messaging and contracts, S3 storage, Spring wiring, exception architecture, API model immutability, REST path versioning, configuration validation, module boundaries, test separation) that a service enables with one annotation - with per-module overrides, warn-instead-of-fail severities, an extension SPI, and a console plus JSON report per run for org-wide drift tracking |
+| [`checkstyle-rules`](checkstyle-rules/README.md) | The shared code style, executable: a Checkstyle configuration whose formatting rules mirror IntelliJ IDEA's defaults one for one (so Reformat Code always produces a build-clean file), plus naming, source-level conventions, i18n bundle consistency and Javadoc correctness - 112 rules, wired into every module at the `validate` phase, with a separate warning tier for missing documentation and three in-code suppression forms that each have to name the rule |
 | [`crud-service-example`](crud-service-example/README.md) | Reference CRUD microservice built on the modules above: three model layers (DTO/domain/entity) wired by MapStruct, Lombok instead of boilerplate, compile-time-checked QueryDSL-JPA queries only, OData search, i18n validation and RFC 7807 errors, transactional outbox events |
 
 [//]: # (| `kafka-tools`  | Kafka-related producers, consumers, and helpers |)
@@ -85,6 +87,26 @@ To use a module (e.g., common-utils) in your Maven project:
     <version>1.0.0</version>
 </dependency>
 ```
+
+## Code style
+
+Style is enforced by [`checkstyle-rules`](checkstyle-rules/README.md) on every module, at the
+`validate` phase - before the compiler, so the feedback arrives in seconds:
+
+```bash
+mvn validate                          # style only
+mvn verify                            # style first, then compile and test
+mvn verify -Dcheckstyle.skip=true     # local escape hatch, never in a pipeline
+```
+
+There is no IDE code style to import. The formatting rules are IntelliJ IDEA's own defaults, so
+`Ctrl+Alt+L` (Reformat Code) and `Ctrl+Alt+O` (Optimize Imports) always produce a file the build
+accepts, and the `.editorconfig` at the repository root carries the few settings that need to travel
+with the project.
+
+Three tools split the work and do not overlap: `architecture-rules` owns structure and dependencies,
+`checkstyle-rules` owns source text, SonarQube owns bugs and security. Each module's README states
+what it deliberately leaves to the other two.
 
 ## Testing
 

@@ -13,7 +13,12 @@ public sealed interface DispatchResult {
         return new Success();
     }
 
-    /** @param retryable false sends the message straight to DEAD_LETTER regardless of remaining attempts (e.g. a 400/422 response) */
+    /**
+     * A dispatch that did not succeed.
+     *
+     * @param retryable false sends the message straight to DEAD_LETTER regardless of remaining
+     *                  attempts (e.g. a 400/422 response)
+     */
     static DispatchResult failure(String reason, boolean retryable) {
         return new Failure(reason, retryable);
     }

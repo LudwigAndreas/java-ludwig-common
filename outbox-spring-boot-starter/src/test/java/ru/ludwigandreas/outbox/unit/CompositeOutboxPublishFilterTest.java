@@ -22,14 +22,16 @@ class CompositeOutboxPublishFilterTest {
 
     @Test
     void rejectsWhenAnyFilterRejects() {
-        CompositeOutboxPublishFilter composite = new CompositeOutboxPublishFilter(List.of(event -> true, event -> false));
+        CompositeOutboxPublishFilter composite =
+                new CompositeOutboxPublishFilter(List.of(event -> true, event -> false));
 
         assertThat(composite.shouldPublish(EVENT)).isFalse();
     }
 
     @Test
     void allowsWhenAllFiltersAllow() {
-        CompositeOutboxPublishFilter composite = new CompositeOutboxPublishFilter(List.of(event -> true, event -> true));
+        CompositeOutboxPublishFilter composite =
+                new CompositeOutboxPublishFilter(List.of(event -> true, event -> true));
 
         assertThat(composite.shouldPublish(EVENT)).isTrue();
     }

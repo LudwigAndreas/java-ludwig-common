@@ -66,10 +66,16 @@ class RetryingCallTest {
         RetryPolicy resultBasedPolicy = new RetryPolicy()
                 .retryOnResult(result1 -> {
                     // Retry if the result is null or an empty string
-                    if (result1 == null) return true;
-                    if (result1 instanceof String && ((String) result1).isEmpty()) return true;
+                    if (result1 == null) {
+                        return true;
+                    }
+                    if (result1 instanceof String && ((String) result1).isEmpty()) {
+                        return true;
+                    }
                     // For numeric results, retry if value is 0 or negative
-                    if (result1 instanceof Number && ((Number) result1).doubleValue() <= 0) return true;
+                    if (result1 instanceof Number && ((Number) result1).doubleValue() <= 0) {
+                        return true;
+                    }
                     return false;
                 })
                 .withMaxRetries(10)

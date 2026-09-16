@@ -25,7 +25,10 @@ public class DbCoreMetricsAutoConfiguration {
         return new MicrometerDbCoreMetrics(registry);
     }
 
-    /** Registered whenever the bean above didn't fire (Micrometer absent/disabled/no registry) - keeps callers null-check-free. */
+    /**
+     * Registered whenever the bean above didn't fire (Micrometer absent/disabled/no registry) - keeps callers
+     * null-check-free.
+     */
     @Bean
     @ConditionalOnMissingBean(DbCoreMetrics.class)
     public DbCoreMetrics noopDbCoreMetrics() {

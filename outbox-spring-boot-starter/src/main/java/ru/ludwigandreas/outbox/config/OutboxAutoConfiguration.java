@@ -132,9 +132,10 @@ public class OutboxAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(OutboxPublisherScheduler.class)
     @ConditionalOnProperty(prefix = "ludwig.outbox.polling", name = "enabled", matchIfMissing = true)
-    public OutboxPublisherScheduler outboxPublisherScheduler(OutboxProcessingService processingService,
-                                                               @Qualifier("outboxTaskScheduler") TaskScheduler taskScheduler,
-                                                               OutboxProperties properties) {
+    public OutboxPublisherScheduler outboxPublisherScheduler(
+            OutboxProcessingService processingService,
+            @Qualifier("outboxTaskScheduler") TaskScheduler taskScheduler,
+            OutboxProperties properties) {
         return new OutboxPublisherScheduler(processingService, taskScheduler,
                 properties.getPolling().getInitialDelay(), properties.getPolling().getFixedDelay());
     }
@@ -142,9 +143,10 @@ public class OutboxAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(OutboxStaleReclaimScheduler.class)
     @ConditionalOnProperty(prefix = "ludwig.outbox.polling", name = "enabled", matchIfMissing = true)
-    public OutboxStaleReclaimScheduler outboxStaleReclaimScheduler(OutboxMessageRepository repository,
-                                                                     @Qualifier("outboxTaskScheduler") TaskScheduler taskScheduler,
-                                                                     OutboxProperties properties) {
+    public OutboxStaleReclaimScheduler outboxStaleReclaimScheduler(
+            OutboxMessageRepository repository,
+            @Qualifier("outboxTaskScheduler") TaskScheduler taskScheduler,
+            OutboxProperties properties) {
         return new OutboxStaleReclaimScheduler(repository, taskScheduler,
                 properties.getProcessing().getStaleTimeout(), properties.getProcessing().getStaleReclaimFixedDelay());
     }
@@ -164,7 +166,8 @@ public class OutboxAutoConfiguration {
      */
     @Configuration(proxyBeanMethods = false)
     @EntityScan(basePackageClasses = OutboxMessage.class)
-    @EnableJpaRepositories(basePackageClasses = OutboxMessageRepository.class, repositoryBaseClass = BaseRepositoryImpl.class)
+    @EnableJpaRepositories(basePackageClasses = OutboxMessageRepository.class,
+            repositoryBaseClass = BaseRepositoryImpl.class)
     static class OutboxJpaConfiguration {
     }
 }

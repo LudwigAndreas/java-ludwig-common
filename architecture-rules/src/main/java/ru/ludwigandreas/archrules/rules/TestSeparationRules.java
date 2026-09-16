@@ -2,7 +2,6 @@ package ru.ludwigandreas.archrules.rules;
 
 import java.util.List;
 
-import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 
 import ru.ludwigandreas.archrules.ArchitectureRule;

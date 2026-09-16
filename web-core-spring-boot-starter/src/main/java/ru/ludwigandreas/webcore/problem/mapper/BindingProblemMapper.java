@@ -30,6 +30,9 @@ import ru.ludwigandreas.webcore.problem.Violation;
  */
 public class BindingProblemMapper implements ExceptionProblemMapper {
 
+    /** Ahead of the generic mapper that would otherwise claim these types - the lower order wins. */
+    private static final int ORDER = DEFAULT_MODULE_ORDER - 100;
+
     @Override
     public boolean supports(Throwable exception) {
         return exception instanceof BindException;
@@ -70,6 +73,6 @@ public class BindingProblemMapper implements ExceptionProblemMapper {
 
     @Override
     public int getOrder() {
-        return DEFAULT_MODULE_ORDER - 100;
+        return ORDER;
     }
 }

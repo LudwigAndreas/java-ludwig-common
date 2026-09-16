@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>observability-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Observability Spring Boot starter</name>
+    <description>
+        Enterprise-ready observability for Java 17 + Spring Boot services: distributed tracing over
+        OTLP, one correlation id propagated across HTTP and Kafka and into the logs, structured JSON
+        logging carrying trace/span/correlation ids and MDC, RED metrics on every HTTP endpoint with
+        bounded tag cardinality, standardized actuator liveness/readiness probes, and log levels
+        changeable at runtime. Plug-and-play: add the dependency and a service is wired the same way
+        as every other service in the estate.
+    </description>
+
+    <!-- Java version, third-party dependency versions and the spring-boot-dependencies BOM import
+         are all centralized in the parent pom - see its <properties>/<dependencyManagement>. That
+         BOM manages micrometer-bom, micrometer-tracing-bom and opentelemetry-bom, so nothing in
+         this module names a version: the tracing bridge, the OTLP exporter and the OpenTelemetry
+         SDK have to agree with each other, and the BOM is what guarantees they do. -->
+
+    <dependencies>
+        <!--
+            The three dependencies below are deliberately NOT optional, unlike most modules in this
+            repository. This is a starter whose entire purpose is that a service gets metrics, logs
+            and traces without assembling them: making the exporter optional would put the assembly
+            back in every service's pom, which is the duplication the module exists to remove. A
+            deployment that exports differently excludes what it does not want - that is one
+            documented exclusion in one place, rather than five correct dependencies in fifty poms.
+        -->
+
+        <!-- Actuator: health/probes/metrics endpoints, plus micrometer-core and
+             micrometer-observation, which everything here is built on. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!--
+            Micrometer Tracing over the OpenTelemetry SDK, and the OTLP span exporter.
+
+            OpenTelemetry rather than Brave: OTLP is the protocol every current collector, vendor
+            agent and service mesh ingests, so the choice of tracing backend stays a URL in the
+            configuration instead of a dependency swap in the build.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
+        <!--
+            The Prometheus scrape endpoint. Included because scraping is what the overwhelming
+            majority of deployments do, and a metrics story that needs a second dependency before it
+            produces anything is not "out of the box". A deployment that pushes OTLP metrics instead
+            excludes this artifact and sets management.otlp.metrics.export.enabled=true.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!--
+            Logback and Jackson: the structured-logging encoder is a Logback Encoder that writes JSON
+            with a Jackson JsonGenerator. Both are already on the classpath of any Spring Boot
+            service (spring-boot-starter-logging, spring-boot-starter-json), but the encoder compiles
+            against them, so they are declared rather than assumed.
+
+            Jackson's streaming generator, not databind: the encoder writes a known field set field
+            by field and never needs to reflect over a type. That keeps log writing off the
+            ObjectMapper the application configures for its API, so a service that sets, say, a
+            global naming strategy cannot accidentally rename trace_id in its logs.
+        -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            From here down everything is optional: these are the integrations, and a service only
+            pays for the ones it actually has. A batch worker with no servlet container must not be
+            given Spring MVC by depending on this starter.
+        -->
+
+        <!-- Optional: the inbound correlation filter and the response headers are servlet-side. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: outbound propagation for RestTemplate / RestClient / WebClient. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: Kafka header propagation and consumer-side MDC. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <version>${spring-kafka.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: web-core's TraceIdProvider. When both starters are present the trace id printed
+            on an RFC 9457 problem document is the same id the span carries, because this module
+            supplies the implementation rather than web-core guessing at an MDC key.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: the hot-reload starter's watcher SPI. With it on the classpath, logging levels
+            follow a watched file or Vault secret, so raising a package to DEBUG in production is a
+            configuration change rather than a restart or an authenticated actuator call.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>hot-reload-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- The tracing autoconfiguration under test needs a real tracer to bridge; this is the
+             in-memory OpenTelemetry SDK the bridge already depends on, exercised directly. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!--
+                        Declared explicitly rather than relying on the processor being discovered on
+                        the classpath. Since JDK 23 javac no longer runs annotation processors it
+                        merely finds there, so on a modern build JDK the configuration processor
+                        silently does not run - and the only symptom is that
+                        META-INF/spring-configuration-metadata.json is missing from the jar, which
+                        costs every consuming service its IDE completion and validation for every
+                        ludwig.observability.* property. Naming the path here makes it run on any JDK.
+                    -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                            <version>${spring-boot.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

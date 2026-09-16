@@ -29,7 +29,6 @@ import ru.ludwigandreas.security.data.DataScopePolicyValidator;
 import ru.ludwigandreas.security.data.DataScopeRegistry;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
 import ru.ludwigandreas.security.web.SecurityProblemMapper;
-import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**

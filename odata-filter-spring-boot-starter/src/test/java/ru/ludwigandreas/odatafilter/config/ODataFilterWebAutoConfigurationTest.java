@@ -9,7 +9,6 @@ import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import ru.ludwigandreas.odatafilter.web.ODataFilterExceptionHandler;
 import ru.ludwigandreas.odatafilter.web.ODataFilterProblemMapper;
-import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**

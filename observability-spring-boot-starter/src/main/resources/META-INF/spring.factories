@@ -1,0 +1,5 @@
+org.springframework.boot.env.EnvironmentPostProcessor=\
+ru.ludwigandreas.observability.config.ObservabilityEnvironmentPostProcessor
+
+org.springframework.context.ApplicationListener=\
+ru.ludwigandreas.observability.logging.JsonLoggingInitializer

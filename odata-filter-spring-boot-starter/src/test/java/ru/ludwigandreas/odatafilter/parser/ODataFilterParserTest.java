@@ -25,7 +25,8 @@ class ODataFilterParserTest {
     @Test
     void parsesSimpleComparison() {
         FilterNode node = parser.parse("Age gt 18");
-        assertThat(node).isEqualTo(new ComparisonNode("Age", ComparisonOperator.GT, new Literal(LiteralKind.INTEGER, "18")));
+        assertThat(node).isEqualTo(
+                new ComparisonNode("Age", ComparisonOperator.GT, new Literal(LiteralKind.INTEGER, "18")));
         assertThat(node.depth()).isEqualTo(1);
     }
 
@@ -57,7 +58,8 @@ class ODataFilterParserTest {
     @Test
     void parsesFunctionsIncludingExtraWhitespace() {
         FilterNode node = parser.parse("contains( Name , 'foo' )");
-        assertThat(node).isEqualTo(new FunctionNode(StringFunction.CONTAINS, "Name", new Literal(LiteralKind.STRING, "foo")));
+        assertThat(node).isEqualTo(
+                new FunctionNode(StringFunction.CONTAINS, "Name", new Literal(LiteralKind.STRING, "foo")));
     }
 
     @Test
@@ -90,7 +92,8 @@ class ODataFilterParserTest {
 
     @Test
     void parsesDateAndDateTimeOffsetLiterals() {
-        assertThat(((ComparisonNode) parser.parse("CreatedAt gt 2024-01-15")).value().kind()).isEqualTo(LiteralKind.DATE);
+        assertThat(((ComparisonNode) parser.parse("CreatedAt gt 2024-01-15")).value().kind())
+                .isEqualTo(LiteralKind.DATE);
         assertThat(((ComparisonNode) parser.parse("CreatedAt gt 2024-01-15T10:30:00Z")).value().kind())
                 .isEqualTo(LiteralKind.DATE_TIME_OFFSET);
     }

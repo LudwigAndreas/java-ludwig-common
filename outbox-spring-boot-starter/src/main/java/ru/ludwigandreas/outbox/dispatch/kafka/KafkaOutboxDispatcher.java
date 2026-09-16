@@ -11,7 +11,9 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-/** {@code destination} is the Kafka topic name; the partition key is the ordering key, falling back to the aggregate id. */
+/**
+ * {@code destination} is the Kafka topic name; the partition key is the ordering key, falling back to the aggregate id.
+ */
 public class KafkaOutboxDispatcher implements OutboxDispatcher {
 
     public static final String TRANSPORT = "KAFKA";

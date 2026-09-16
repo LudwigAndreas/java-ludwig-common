@@ -1,7 +1,6 @@
 package ru.ludwigandreas.security.data;
 
 import com.querydsl.core.types.dsl.BooleanExpression;
-import java.util.Set;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;

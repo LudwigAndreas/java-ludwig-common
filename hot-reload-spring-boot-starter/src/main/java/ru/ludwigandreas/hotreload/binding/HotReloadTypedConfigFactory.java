@@ -11,8 +11,8 @@ import java.util.Set;
  * "typed configuration" that stays current without an application restart.
  *
  * <pre>{@code
- * RefreshableConfig<MyServiceProperties> config = typedConfigFactory.create("myapp.myservice", MyServiceProperties.class);
- * MyServiceProperties current = config.get();
+ * RefreshableConfig<MyServiceProperties> config = typedConfigFactory.create("myapp.myservice",
+ * MyServiceProperties.class); MyServiceProperties current = config.get();
  * }</pre>
  */
 public class HotReloadTypedConfigFactory {

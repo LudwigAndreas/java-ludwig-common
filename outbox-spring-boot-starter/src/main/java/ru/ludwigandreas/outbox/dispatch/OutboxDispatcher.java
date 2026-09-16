@@ -9,7 +9,10 @@ import ru.ludwigandreas.outbox.entity.OutboxMessage;
  */
 public interface OutboxDispatcher {
 
-    /** Matched case-insensitively against {@code OutboxMessage.transport} (and {@code ludwig.outbox.routes.*.transport}). */
+    /**
+     * Matched case-insensitively against {@code OutboxMessage.transport} (and {@code
+     * ludwig.outbox.routes.*.transport}).
+     */
     String transport();
 
     DispatchResult dispatch(OutboxMessage message);

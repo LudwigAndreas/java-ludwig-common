@@ -13,6 +13,12 @@ import java.util.Deque;
  */
 final class JsonWriter {
 
+    /** Spare capacity for the escape sequences a typical value needs, so the builder rarely grows. */
+    private static final int ESCAPE_HEADROOM = 8;
+
+    /** Everything below the space character is a control character and has to be escaped numerically. */
+    private static final char FIRST_PRINTABLE_CHAR = 0x20;
+
     private final StringBuilder out = new StringBuilder();
     private final Deque<boolean[]> scopes = new ArrayDeque<>();
     private boolean pendingName;
@@ -128,7 +134,7 @@ final class JsonWriter {
     }
 
     static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length() + 8);
+        StringBuilder escaped = new StringBuilder(value.length() + ESCAPE_HEADROOM);
         for (int i = 0; i < value.length(); i++) {
             char character = value.charAt(i);
             switch (character) {
@@ -140,7 +146,7 @@ final class JsonWriter {
                 case '\b' -> escaped.append("\\b");
                 case '\f' -> escaped.append("\\f");
                 default -> {
-                    if (character < 0x20) {
+                    if (character < FIRST_PRINTABLE_CHAR) {
                         escaped.append(String.format("\\u%04x", (int) character));
                     } else {
                         escaped.append(character);

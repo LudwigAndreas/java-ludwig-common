@@ -58,6 +58,12 @@ public enum ProblemStatus {
     /** An upstream dependency did not answer in time. */
     GATEWAY_TIMEOUT(504);
 
+    /** Lowest status code in the 4xx range: below it, nothing is an error at all. */
+    private static final int FIRST_CLIENT_ERROR_CODE = 400;
+
+    /** Lowest status code in the 5xx range: at or above it, the failure is ours. */
+    private static final int FIRST_SERVER_ERROR_CODE = 500;
+
     private final int code;
 
     ProblemStatus(int code) {
@@ -81,7 +87,7 @@ public enum ProblemStatus {
                 return status;
             }
         }
-        return code >= 500 || code < 400 ? INTERNAL : INVALID;
+        return code >= FIRST_SERVER_ERROR_CODE || code < FIRST_CLIENT_ERROR_CODE ? INTERNAL : INVALID;
     }
 
     /**
@@ -91,6 +97,6 @@ public enum ProblemStatus {
      * normal answer and logging a stack trace for it only buries the 500s.
      */
     public boolean isServerError() {
-        return code >= 500;
+        return code >= FIRST_SERVER_ERROR_CODE;
     }
 }

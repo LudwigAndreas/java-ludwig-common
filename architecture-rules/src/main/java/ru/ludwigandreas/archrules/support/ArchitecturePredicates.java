@@ -57,7 +57,8 @@ public final class ArchitecturePredicates {
     }
 
     /** Classes or members carrying any of the given annotations, meta-annotations included. */
-    public static <T extends CanBeAnnotated> DescribedPredicate<T> annotatedWithAny(Collection<String> annotationNames) {
+    public static <T extends CanBeAnnotated> DescribedPredicate<T> annotatedWithAny(
+            Collection<String> annotationNames) {
         List<String> names = copy(annotationNames);
         if (names.isEmpty()) {
             return DescribedPredicate.<T>alwaysFalse().as("annotated with no annotation (none configured)");

@@ -31,7 +31,8 @@ class EnvironmentPropertySourceBridgeTest {
         assertThat(event.getSourceId()).isEqualTo("file:/etc/app.properties");
         assertThat(event.getChangedKeys()).containsExactly("a");
 
-        bridge.onChange(new SourceChangeEvent("file:/etc/app.properties", Map.of("a", "2"), Map.of("a", "1"), Set.of("a")));
+        bridge.onChange(new SourceChangeEvent(
+                "file:/etc/app.properties", Map.of("a", "2"), Map.of("a", "1"), Set.of("a")));
 
         assertThat(environment.getProperty("a")).isEqualTo("2");
         assertThat(published).hasSize(2);

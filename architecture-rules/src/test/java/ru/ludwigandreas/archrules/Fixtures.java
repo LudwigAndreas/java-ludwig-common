@@ -5,7 +5,6 @@ import java.util.Set;
 
 import com.tngtech.archunit.core.importer.ImportOption;
 
-import ru.ludwigandreas.archrules.TypeRole;
 
 /**
  * Builds configurations against the fixture services and reports which rules they break.

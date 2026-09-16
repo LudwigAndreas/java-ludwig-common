@@ -43,7 +43,8 @@ public final class FieldAccessValidator {
     public static void validateOrderBy(EntityFilterPolicy policy, List<OrderByTerm> terms, Set<String> callerRoles) {
         for (OrderByTerm term : terms) {
             FilterFieldPolicy field = policy.field(term.propertyPath())
-                    .orElseThrow(() -> new UnfilterableFieldException(term.propertyPath(), "unknown or not filterable"));
+                    .orElseThrow(() ->
+                            new UnfilterableFieldException(term.propertyPath(), "unknown or not filterable"));
             if (!field.sortable()) {
                 throw new UnfilterableFieldException(term.propertyPath(), "not sortable");
             }
@@ -53,7 +54,8 @@ public final class FieldAccessValidator {
         }
     }
 
-    private static void checkField(EntityFilterPolicy policy, String path, FilterOperator operator, Set<String> callerRoles) {
+    private static void checkField(EntityFilterPolicy policy, String path, FilterOperator operator,
+                                   Set<String> callerRoles) {
         FilterFieldPolicy field = policy.field(path)
                 .orElseThrow(() -> new UnfilterableFieldException(path, "unknown or not filterable"));
         if (!field.permitsOperator(operator)) {

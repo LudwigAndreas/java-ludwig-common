@@ -32,6 +32,8 @@ import ru.ludwigandreas.archrules.ResolvedRule;
  */
 public final class ArchitectureRuleRunner {
 
+    private static final long NANOS_PER_MILLI = 1_000_000L;
+
     private static final Pattern SOURCE_LOCATION = Pattern.compile("\\(([^()\\s]+\\.(?:java|kt)):(\\d+)\\)");
     private static final Pattern FIRST_TYPE_NAME = Pattern.compile("<([\\p{L}_$][\\p{L}\\p{N}_$.]*)");
 
@@ -166,6 +168,6 @@ public final class ArchitectureRuleRunner {
     }
 
     private static long millisSince(long startedAtNanos) {
-        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
+        return (System.nanoTime() - startedAtNanos) / NANOS_PER_MILLI;
     }
 }

@@ -16,7 +16,8 @@ public record FilterAppliedEvent(
         Set<String> callerRoles,
         Instant timestamp) {
 
-    public FilterAppliedEvent(Class<?> entityType, String rawFilter, String resolvedPredicate, Set<String> callerRoles) {
+    public FilterAppliedEvent(Class<?> entityType, String rawFilter, String resolvedPredicate,
+                              Set<String> callerRoles) {
         this(entityType, rawFilter, resolvedPredicate, callerRoles, Instant.now());
     }
 }

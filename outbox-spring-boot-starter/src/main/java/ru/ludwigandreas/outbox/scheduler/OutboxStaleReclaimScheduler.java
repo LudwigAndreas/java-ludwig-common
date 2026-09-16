@@ -38,7 +38,8 @@ public class OutboxStaleReclaimScheduler implements SmartLifecycle {
 
     @Override
     public void start() {
-        scheduledFuture = taskScheduler.scheduleWithFixedDelay(this::reclaim, Instant.now().plus(fixedDelay), fixedDelay);
+        scheduledFuture =
+                taskScheduler.scheduleWithFixedDelay(this::reclaim, Instant.now().plus(fixedDelay), fixedDelay);
     }
 
     @Override

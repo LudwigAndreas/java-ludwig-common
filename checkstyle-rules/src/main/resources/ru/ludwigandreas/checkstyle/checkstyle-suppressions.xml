@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<!--
+    File-scoped suppressions for the ludwig-common Checkstyle configuration.
+
+    Two kinds of entry are allowed here, and nothing else:
+
+      1. GENERATED SOURCES. Code this project did not write and cannot edit. Suppressing a
+         generated file is not a relaxation of the rule - the rule simply has no addressee.
+      2. TEST SOURCES, for the specific checks whose *reason for existing* does not hold in
+         a test. Each one below says which reason. Tests are otherwise held to the same
+         standard as main code: they are read far more often than they are written.
+
+    A suppression for production code does NOT belong here. Suppress it at the line it
+    happens on, where the reason is visible to the reviewer:
+        @SuppressWarnings("checkstyle:MagicNumber")
+        // CHECKSTYLE.OFF: MagicNumber - protocol constant fixed by RFC 7807
+        // SUPPRESS CHECKSTYLE MagicNumber - protocol constant fixed by RFC 7807
+-->
+<suppressions>
+
+    <!-- ====================================================================
+         GENERATED SOURCES
+         ==================================================================== -->
+
+    <!--
+        Belt and braces: the Maven plugin is already pointed at src/main/java and
+        src/test/java rather than at the compile source roots, so annotation-processor
+        output under target/generated-sources is out of scope to begin with. These patterns
+        keep that true if someone later points the plugin at the source roots instead.
+    -->
+    <suppress files="[\\/]target[\\/]" checks=".*"/>
+    <suppress files="[\\/]generated-sources[\\/]" checks=".*"/>
+    <suppress files="[\\/]generated-test-sources[\\/]" checks=".*"/>
+
+    <!-- QueryDSL Q-types (QOutboxMessage, ...) and MapStruct implementations (FooMapperImpl). -->
+    <suppress files="[\\/]Q[A-Z][^\\/]*\.java$" checks=".*"/>
+    <suppress files="[A-Za-z0-9]+MapperImpl\.java$" checks=".*"/>
+
+    <!-- ====================================================================
+         TEST SOURCES
+         ==================================================================== -->
+
+    <!--
+        Javadoc. A test's name is its documentation, and this project names tests in full
+        sentences (`rejectsATokenThatExpiredBeforeTheClockSkewWindow`). Requiring a Javadoc
+        block that repeats the method name adds nothing a reader would read.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]"
+              checks="MissingJavadocMethod|MissingJavadocType|JavadocPackage"/>
+
+    <!--
+        Magic numbers. In a test the literal IS the specification - `assertThat(page.size())
+        .isEqualTo(3)` is clearer than a constant named THREE declared six lines up.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" checks="MagicNumber"/>
+
+    <!--
+        Non-ASCII text. The rule exists so that user-facing text lives in an i18n bundle
+        rather than in Java source - but a test that asserts the Russian rendering of a
+        localized message has to spell out the Russian string it expects. That assertion is
+        the only place in the build where the translation is actually verified.
+
+        Addressed by `id` rather than by `checks`: the rule is an instance of
+        RegexpSinglelineJava, and `checks` matches the check's class name - which would
+        switch off every other regex rule in the file along with this one.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" id="NonAsciiSourceText"/>
+
+    <!--
+        Console output. A test that exists to demonstrate an API (common-utils' retry
+        examples) prints its trace on purpose: the printout IS the documentation, and it goes
+        to a build log nobody ships. In main code the rule stands - see checkstyle.xml.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" id="ConsoleOutput"/>
+
+    <!--
+        Method naming. `parses_whenTheFilterIsMalformed` and the given_when_then family are a
+        long-standing test convention: the underscore separates the sections of a sentence
+        that would otherwise be one unreadable run of camelCase. Production method names stay
+        strictly camelCase.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" checks="MethodName"/>
+
+    <!--
+        Method length and complexity. An integration test that arranges a scenario, drives a
+        request and asserts on the whole response is long by nature, and splitting it into
+        helpers usually makes the scenario harder to follow, not easier.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]"
+              checks="MethodLength|AnonInnerLength|CyclomaticComplexity|NPathComplexity"/>
+
+    <!--
+        Field visibility. JUnit's own extension model hands you package-private or protected
+        fields (@Mock, @InjectMocks, @Autowired on a test class, @RegisterExtension - which
+        JUnit requires to be non-private to discover it).
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" checks="VisibilityModifier"/>
+
+    <!--
+        Test fixtures and hand-rolled stubs legitimately declare a nested helper type or a
+        second top-level class next to the test that uses it.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" checks="HideUtilityClassConstructor|FinalClass"/>
+
+    <!--
+        Some tests exist precisely to prove that a boundary swallows nothing and rethrows
+        correctly, which means catching or throwing the types the rules forbid elsewhere.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" checks="IllegalCatch|IllegalThrows"/>
+
+    <!-- ====================================================================
+         TEST RESOURCES
+         ==================================================================== -->
+
+    <!--
+        The i18n bundle checks are aimed at the bundles a service actually ships. A test
+        fixture bundle is frequently INCOMPLETE ON PURPOSE - the tests for locale fallback
+        work by leaving a key out of the `_ru` file and asserting that the default bundle
+        answers instead - so running Translation over src/test/resources would report the
+        fixtures' whole reason for existing as a defect.
+    -->
+    <suppress files="[\\/]src[\\/]test[\\/]resources[\\/]" checks="Translation"/>
+
+</suppressions>

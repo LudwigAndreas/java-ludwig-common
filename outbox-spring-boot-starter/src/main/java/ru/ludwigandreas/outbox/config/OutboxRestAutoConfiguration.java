@@ -27,7 +27,8 @@ public class OutboxRestAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "restOutboxDispatcher")
-    public OutboxDispatcher restOutboxDispatcher(@Qualifier("outboxRestClient") RestClient restClient, OutboxProperties properties) {
+    public OutboxDispatcher restOutboxDispatcher(@Qualifier("outboxRestClient") RestClient restClient,
+                                                 OutboxProperties properties) {
         return new RestOutboxDispatcher(restClient, properties.getRest().getEndpoints());
     }
 }

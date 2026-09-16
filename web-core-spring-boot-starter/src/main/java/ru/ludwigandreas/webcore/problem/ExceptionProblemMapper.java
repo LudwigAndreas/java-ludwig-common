@@ -40,7 +40,7 @@ public interface ExceptionProblemMapper extends Ordered {
 
     /**
      * A mapper for one exception type and its subtypes, which is what almost every contribution
-     * needs:
+     * needs.
      *
      * <pre>{@code
      * ExceptionProblemMapper.forType(

@@ -80,8 +80,9 @@ public final class WebRules implements ArchitectureRuleSet {
                             + " serving both makes every column rename a breaking API change."));
             if (context.hasPackagesFor(PackageRole.EVENT_PAYLOAD)) {
                 rules.add(ArchitectureRule.of(DTOS_ARE_NOT_EVENT_PAYLOADS, dtosAreNotEventPayloads(context),
-                    "Give the topic its own payload class. A class shared between the REST API and Kafka"
-                            + " couples two sets of consumers that are versioned and released separately."));
+                        "Give the topic its own payload class. A class shared between the REST API and"
+                                + " Kafka couples two sets of consumers that are versioned and released"
+                                + " separately."));
             }
         }
         return List.copyOf(rules);

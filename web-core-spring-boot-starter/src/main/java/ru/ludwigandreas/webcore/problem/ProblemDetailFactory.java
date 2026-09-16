@@ -28,8 +28,10 @@ import ru.ludwigandreas.webcore.trace.TraceIdProvider;
  * <ul>
  *   <li>{@code type} - {@code ludwig.web.problem.type-prefix} + the code, so it is stable and
  *       dereferenceable if the prefix points at documentation;
- *   <li>{@code title} - the {@code <code>.title} bundle key, falling back to the HTTP reason phrase;
- *   <li>{@code detail} - the {@code <code>} bundle key, formatted with the definition's arguments;
+ *   <li>{@code title} - the {@code &lt;code&gt;.title} bundle key, falling back to the HTTP reason
+ *       phrase;
+ *   <li>{@code detail} - the {@code &lt;code&gt;} bundle key, formatted with the definition's
+ *       arguments;
  *   <li>{@code status} - from {@link ProblemStatus};
  *   <li>{@code instance} - the request URI, when configured;
  *   <li>{@code code} - the machine-readable key a client branches on;

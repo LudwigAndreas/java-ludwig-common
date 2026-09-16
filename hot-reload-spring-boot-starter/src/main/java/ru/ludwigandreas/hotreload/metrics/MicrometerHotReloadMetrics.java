@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class MicrometerHotReloadMetrics implements HotReloadMetrics {
 
+    private static final double MILLIS_PER_SECOND = 1000.0;
+
     private static final String PREFIX = "ludwig.hotreload.";
 
     private final MeterRegistry registry;
@@ -35,7 +37,7 @@ public class MicrometerHotReloadMetrics implements HotReloadMetrics {
         return lastSuccessEpochMillis.computeIfAbsent(sourceId, id -> {
             AtomicLong lastSuccessAt = new AtomicLong(System.currentTimeMillis());
             Gauge.builder(PREFIX + "reload.seconds.since.last.success", lastSuccessAt,
-                            value -> (System.currentTimeMillis() - value.get()) / 1000.0)
+                            value -> (System.currentTimeMillis() - value.get()) / MILLIS_PER_SECOND)
                     .tag("source", id)
                     .register(registry);
             return lastSuccessAt;

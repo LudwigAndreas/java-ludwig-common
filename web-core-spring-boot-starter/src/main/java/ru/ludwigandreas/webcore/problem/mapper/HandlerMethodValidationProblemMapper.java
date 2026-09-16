@@ -27,6 +27,9 @@ import ru.ludwigandreas.webcore.problem.Violation;
  */
 public class HandlerMethodValidationProblemMapper implements ExceptionProblemMapper {
 
+    /** Ahead of SpringWebProblemMapper, which would otherwise claim this as a plain ErrorResponse. */
+    private static final int ORDER = DEFAULT_MODULE_ORDER - 100;
+
     @Override
     public boolean supports(Throwable exception) {
         return exception instanceof HandlerMethodValidationException;
@@ -75,7 +78,6 @@ public class HandlerMethodValidationProblemMapper implements ExceptionProblemMap
 
     @Override
     public int getOrder() {
-        // Ahead of SpringWebProblemMapper, which would otherwise claim this as a plain ErrorResponse.
-        return DEFAULT_MODULE_ORDER - 100;
+        return ORDER;
     }
 }

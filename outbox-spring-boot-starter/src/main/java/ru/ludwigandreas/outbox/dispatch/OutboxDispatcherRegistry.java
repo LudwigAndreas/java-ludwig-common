@@ -13,7 +13,8 @@ public class OutboxDispatcherRegistry {
 
     public OutboxDispatcherRegistry(List<OutboxDispatcher> dispatchers) {
         this.dispatchersByTransport = dispatchers.stream()
-                .collect(Collectors.toUnmodifiableMap(d -> d.transport().toUpperCase(Locale.ROOT), Function.identity()));
+                .collect(Collectors.toUnmodifiableMap(
+                        d -> d.transport().toUpperCase(Locale.ROOT), Function.identity()));
     }
 
     public Optional<OutboxDispatcher> find(String transport) {

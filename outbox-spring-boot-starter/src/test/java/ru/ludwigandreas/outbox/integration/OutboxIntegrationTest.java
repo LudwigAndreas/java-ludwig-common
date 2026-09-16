@@ -141,8 +141,10 @@ class OutboxIntegrationTest {
 
     @Test
     void republishingSameIdempotencyKeyReturnsExistingRow() {
-        Optional<OutboxMessage> first = publishHelper.publish(event("1", "OrderCreated").idempotencyKey("idem-1").build());
-        Optional<OutboxMessage> second = publishHelper.publish(event("1", "OrderCreated").idempotencyKey("idem-1").build());
+        Optional<OutboxMessage> first =
+                publishHelper.publish(event("1", "OrderCreated").idempotencyKey("idem-1").build());
+        Optional<OutboxMessage> second =
+                publishHelper.publish(event("1", "OrderCreated").idempotencyKey("idem-1").build());
 
         assertThat(first).isPresent();
         assertThat(second).isPresent();

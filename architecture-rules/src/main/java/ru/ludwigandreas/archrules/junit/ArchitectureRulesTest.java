@@ -107,7 +107,7 @@ public abstract class ArchitectureRulesTest {
 
     /**
      * Hook for the settings an annotation cannot express - a custom rule set, a module
-     * customization, a convention of the service's own:
+     * customization, a convention of the service's own.
      *
      * <pre>{@code
      * protected void customize(ArchitectureRulesConfiguration.Builder builder) {

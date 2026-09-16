@@ -50,11 +50,13 @@ class DefaultOutboxEventPublisherTest {
     }
 
     private DefaultOutboxEventPublisher publisher(OutboxPublishFilter filter) {
-        return new DefaultOutboxEventPublisher(repository, serializer, filter, routeResolver, properties, auditLogger, new NoopOutboxMetrics());
+        return new DefaultOutboxEventPublisher(repository, serializer, filter, routeResolver,
+                properties, auditLogger, new NoopOutboxMetrics());
     }
 
     private static OutboxEvent.OutboxEventBuilder eventBuilder() {
-        return OutboxEvent.builder().aggregateType("Order").aggregateId("1").eventType("OrderCreated").payload(Map.of("id", "1"));
+        return OutboxEvent.builder()
+                .aggregateType("Order").aggregateId("1").eventType("OrderCreated").payload(Map.of("id", "1"));
     }
 
     @Test

@@ -12,10 +12,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Requires {@code @EnableJpaRepositories(repositoryBaseClass = ru.ludwigandreas.db.core.repository.BaseRepositoryImpl.class)}
- * on the consuming application (same requirement {@code db-core} already imposes on every
- * {@link BaseRepository} subinterface), scanning {@code ru.ludwigandreas.outbox.repository} alongside
- * the application's own repository packages.
+ * Requires {@code @EnableJpaRepositories(repositoryBaseClass =
+ * ru.ludwigandreas.db.core.repository.BaseRepositoryImpl.class)} on the consuming application (same requirement {@code
+ * db-core} already imposes on every {@link BaseRepository} subinterface), scanning {@code
+ * ru.ludwigandreas.outbox.repository} alongside the application's own repository packages.
  */
 public interface OutboxMessageRepository extends BaseRepository<OutboxMessage, UUID> {
 
@@ -59,7 +59,9 @@ public interface OutboxMessageRepository extends BaseRepository<OutboxMessage, U
             )
             RETURNING *
             """, nativeQuery = true)
-    List<OutboxMessage> pollBatch(@Param("batchSize") int batchSize, @Param("now") Instant now, @Param("lockOwner") String lockOwner);
+    List<OutboxMessage> pollBatch(@Param("batchSize") int batchSize,
+                                  @Param("now") Instant now,
+                                  @Param("lockOwner") String lockOwner);
 
     /**
      * Crash recovery: a poller instance that claimed rows (flipped them to {@code PROCESSING}) and
