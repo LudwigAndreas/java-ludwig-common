@@ -97,7 +97,13 @@ public final class ObservabilityMeterFilters {
         return new MeterFilter() {
             @Override
             public DistributionStatisticConfig configure(Meter.Id id, DistributionStatisticConfig config) {
-                if (!id.getName().startsWith(HTTP_SERVER_REQUESTS)) {
+                // Exact name, not a prefix. Spring's observation instrumentation also registers a
+                // LongTaskTimer called "http.server.requests.active" for in-flight requests, which a
+                // prefix match catches - and a LongTaskTimer's default minimum expected value is two
+                // minutes, so forcing a thirty-second maximum onto it makes the merged configuration
+                // invalid and Micrometer rejects it. The symptom is an exception on the first HTTP
+                // request the service ever serves, thrown from inside a metrics filter.
+                if (!HTTP_SERVER_REQUESTS.equals(id.getName())) {
                     return config;
                 }
                 return DistributionStatisticConfig.builder()

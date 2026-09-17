@@ -92,9 +92,20 @@ public class WebCoreProblemAutoConfiguration {
         return new LocalizedExceptionProblemMapper();
     }
 
+    /**
+     * The generic rendering of a Spring Security failure, for services that use Spring Security
+     * without this repository's security starter.
+     *
+     * <p>Named {@code ludwigWebSecurityProblemMapper} rather than {@code ludwigSecurityProblemMapper}
+     * so it cannot collide with the bean {@code security-spring-boot-starter} registers. Both are
+     * meant to coexist - see {@link SecurityProblemMapper}, which is registered at
+     * {@code DEFAULT_MODULE_ORDER} precisely so that a security module contributing a lower-ordered
+     * mapper wins - but a shared bean <em>name</em> makes Spring reject the second registration
+     * before any of that ordering can apply, and an application with both starters fails to start.
+     */
     @Bean
     @ConditionalOnClass(name = "org.springframework.security.access.AccessDeniedException")
-    public ExceptionProblemMapper ludwigSecurityProblemMapper() {
+    public ExceptionProblemMapper ludwigWebSecurityProblemMapper() {
         return new SecurityProblemMapper();
     }
 

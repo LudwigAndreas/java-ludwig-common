@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="notification-010-recipient-profile" author="ludwig-notification">
+        <comment>
+            Where to reach one user, in what language, and when not to.
+
+            This table exists because the identity projection cannot supply it and should not:
+            security_user stores a subject, a display name, a tenant, a status and a role set, and its
+            own documentation gives the reason - it is directory data replicated into every service
+            that uses the module, so every extra field is another copy of personal data. An address, a
+            chat handle and a home timezone are not authorization inputs and have no business being
+            copied estate-wide. The notification service needs them anyway, because preferences and
+            quiet hours hang off them, so it owns the contact record.
+        </comment>
+        <createTable tableName="notification_recipient_profile">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_recipient_profile"/>
+            </column>
+            <column name="user_id" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="email_address" type="varchar(320)"/>
+            <column name="chat_address" type="varchar(255)"/>
+            <column name="webhook_url" type="varchar(1024)"/>
+            <column name="locale" type="varchar(35)"/>
+            <column name="timezone" type="varchar(64)"/>
+            <column name="quiet_hours_start" type="time"/>
+            <column name="quiet_hours_end" type="time"/>
+            <column name="tenant_id" type="varchar(128)"/>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="updated_by" type="varchar(255)"/>
+        </createTable>
+        <addUniqueConstraint tableName="notification_recipient_profile" columnNames="user_id"
+                             constraintName="uk_notification_profile_user"/>
+    </changeSet>
+
+    <changeSet id="notification-011-recipient-preference" author="ludwig-notification">
+        <comment>
+            Opt-outs and explicit opt-ins. Absence means allowed: opting out is the exception, so the
+            table stays small and the default is the one that does not silently swallow notifications.
+        </comment>
+        <createTable tableName="notification_recipient_preference">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_recipient_preference"/>
+            </column>
+            <column name="user_id" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- '*' means every category the recipient may decline. -->
+            <column name="category" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- NULL means every channel. -->
+            <column name="channel" type="varchar(16)"/>
+            <column name="allowed" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="updated_by" type="varchar(255)"/>
+        </createTable>
+
+        <!--
+            Two partial unique indexes rather than one constraint, because channel is nullable and
+            SQL treats NULLs as distinct: a plain UNIQUE (user_id, category, channel) would happily
+            admit five "all channels" rows for one category, and the precedence rule would then be
+            arbitrating between duplicates rather than between genuinely different preferences.
+        -->
+        <sql>
+            CREATE UNIQUE INDEX ux_notification_preference_channel
+                ON notification_recipient_preference (user_id, category, channel)
+                WHERE channel IS NOT NULL;
+        </sql>
+        <rollback>DROP INDEX ux_notification_preference_channel;</rollback>
+        <sql>
+            CREATE UNIQUE INDEX ux_notification_preference_all_channels
+                ON notification_recipient_preference (user_id, category)
+                WHERE channel IS NULL;
+        </sql>
+        <rollback>DROP INDEX ux_notification_preference_all_channels;</rollback>
+
+        <!-- The fan-out lookup: four candidate rows per decision, always by subject. -->
+        <createIndex tableName="notification_recipient_preference"
+                     indexName="ix_notification_preference_user">
+            <column name="user_id"/>
+            <column name="category"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="notification-012-suppression" author="ludwig-notification">
+        <comment>
+            Destinations this service will not write to, whatever any preference says. A suppression
+            is a fact about the address rather than a wish of its owner, which is why even a
+            transactional notification honours it.
+        </comment>
+        <createTable tableName="notification_suppression">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_suppression"/>
+            </column>
+            <column name="channel" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Normalized (trimmed, lower-cased) by the service before it is written, so the lookup
+                 is an equality match on this index rather than a function scan. -->
+            <column name="address" type="varchar(512)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="detail" type="text"/>
+            <!-- NULL is permanent: a spam complaint does not stop being true. -->
+            <column name="expires_at" type="timestamp with time zone"/>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="updated_by" type="varchar(255)"/>
+        </createTable>
+        <addUniqueConstraint tableName="notification_suppression" columnNames="channel, address"
+                             constraintName="uk_notification_suppression_address"/>
+        <!-- The compaction job selects on expiry alone. -->
+        <createIndex tableName="notification_suppression" indexName="ix_notification_suppression_expiry">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

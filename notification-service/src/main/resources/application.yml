@@ -1,0 +1,392 @@
+spring:
+  application:
+    name: notification-service
+
+  datasource:
+    url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification}
+    username: ${NOTIFICATION_DB_USER:notification}
+    password: ${NOTIFICATION_DB_PASSWORD:notification}
+    hikari:
+      # Sized for the queue, not for the web tier. Every poll cycle holds at most one connection at a
+      # time (the claim, then each outcome), and the dispatch itself deliberately holds none - so the
+      # pool is governed by the ingress and the scheduled jobs rather than by the batch size.
+      maximum-pool-size: 20
+      # Fail fast on a saturated pool instead of piling requests up behind it. Hikari's own settings
+      # are plain milliseconds, not Spring Durations.
+      connection-timeout: 3000
+      # Longer than the longest statement here (the retention purge), shorter than anything that
+      # would look like a hang to an operator.
+      leak-detection-threshold: 60000
+
+  jpa:
+    # The schema is owned by Liquibase; Hibernate only checks that the mappings match it and refuses
+    # to start if they have drifted apart.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      # Offsets are committed by the listener container after the listener returns - see
+      # NotificationMessagingConfig for why auto-commit would silently lose requests.
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:25}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:false}
+          starttls:
+            enable: ${SMTP_STARTTLS:true}
+          # Finite and short, and load-bearing. JavaMail's own default is "wait forever": a relay that
+          # accepts the connection and never answers would take the dispatch thread with it, the lease
+          # would expire, the sweeper would re-queue the delivery, and the next attempt would hang the
+          # same way - until the queue stopped entirely without one error being logged.
+          # NotificationConfigurationValidator reads these back and refuses to start if the delivery
+          # lease could not outlast a full batch of them.
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 10000
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER_URI:https://login.example.internal/realms/corp}
+
+  autoconfigure:
+    exclude:
+      # This service renders messages, not MVC views. Boot's FreeMarker autoconfiguration exists to
+      # serve views from classpath:/templates/ and contributes a second, differently-configured
+      # freemarker.template.Configuration - ambiguous to inject, and the wrong one of the two, since
+      # it has none of the strictness that makes a missing variable fail loudly here. There is no
+      # spring.freemarker.enabled flag in Boot 3.x, so the exclusion is by name.
+      # See NotificationTemplateConfig.
+      - org.springframework.boot.autoconfigure.freemarker.FreeMarkerAutoConfiguration
+
+  jackson:
+    default-property-inclusion: non_null
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    whitelabel:
+      enabled: false
+  # Lets in-flight requests finish. The delivery poller drains separately, through its own
+  # SmartLifecycle - see DeliveryPollerScheduler.
+  shutdown: graceful
+
+# --- this service ---------------------------------------------------------------------------------
+ludwig:
+  notification:
+    ingress:
+      kafka-enabled: ${NOTIFICATION_KAFKA_ENABLED:true}
+      topic: ${NOTIFICATION_TOPIC:platform.notifications.requests}
+      group-id: notification-service
+      concurrency: 2
+
+    idempotency:
+      enabled: true
+      # Must comfortably exceed the longest redelivery a broker or a caller will perform: a
+      # consumer-group rebalance, an offset reset, and a client's own retry budget all fit in a day.
+      ttl: 24h
+
+    templates:
+      # Unset here: templates load from the classpath by default, which is what a local run and the
+      # tests want. A deployment mounts a ConfigMap and sets this, and the hot-reload module then
+      # watches the directory so a wording change is a config rollout rather than a release.
+      directory: ${NOTIFICATION_TEMPLATE_DIR:}
+      classpath-prefix: templates
+      default-locale: en
+      record-revisions: true
+      store-rendered-body: true
+
+    queue:
+      poller-enabled: ${NOTIFICATION_POLLER_ENABLED:true}
+      initial-delay: 5s
+      poll-interval: 2s
+      # 25 x the 10s SMTP timeout below is a 250s worst-case cycle, which the 10m lease covers with
+      # margin. Raising this means raising the lease, and the lease is also how long a SIGKILLed
+      # pod's deliveries stay stranded - so the two are traded against each other deliberately.
+      batch-size: 25
+      # Must be smaller than batch-size, or the general pass never claims anything and NORMAL and
+      # BULK traffic stops. Checked at startup.
+      high-priority-reserve: 10
+      # Must outlast the worst-case cycle (batch-size x the slowest channel timeout) with margin, or
+      # the stale sweeper reclaims deliveries a healthy pod is still sending and they go out twice.
+      # Checked at startup against the configured channel timeouts.
+      lease-timeout: 10m
+      reclaim-interval: 1m
+      metrics-interval: 15s
+      readiness-max-pending-age: 15m
+
+    retry:
+      max-attempts: 8
+      initial-interval: 30s
+      multiplier: 2.0
+      max-interval: 2h
+      # Without jitter a provider outage schedules every failed delivery's retry for the same instant,
+      # and the recovering provider is hit by the whole backlog in one synchronised burst.
+      jitter: 0.25
+
+    channels:
+      rate-limit-window: 10s
+      email:
+        enabled: ${NOTIFICATION_EMAIL_ENABLED:true}
+        from-address: ${NOTIFICATION_FROM_ADDRESS:no-reply@example.internal}
+        from-display-name: Notifications
+        list-unsubscribe-url: ${NOTIFICATION_UNSUBSCRIBE_URL:}
+        # 0 is unlimited. Set this to whatever the relay's contract actually allows - it is honoured
+        # across every replica, so the number here is the number that reaches the provider.
+        max-per-window: ${NOTIFICATION_EMAIL_RATE:0}
+      chat:
+        enabled: ${NOTIFICATION_CHAT_ENABLED:false}
+        base-url: ${CHAT_BASE_URL:}
+        # From Vault through the hot-reload module in a deployment, never from this file.
+        api-token: ${CHAT_API_TOKEN:}
+        connect-timeout: 3s
+        read-timeout: 10s
+        max-per-window: ${NOTIFICATION_CHAT_RATE:0}
+      webhook:
+        enabled: ${NOTIFICATION_WEBHOOK_ENABLED:false}
+        signing-secret: ${WEBHOOK_SIGNING_SECRET:}
+        connect-timeout: 3s
+        read-timeout: 10s
+        max-per-window: ${NOTIFICATION_WEBHOOK_RATE:0}
+
+    preferences:
+      default-locale: en
+      # UTC rather than the server's zone, so quiet hours do not change meaning when the deployment
+      # moves region.
+      default-timezone: UTC
+      quiet-hours-enabled: true
+      # Defer rather than drop: the caller was told the request was accepted, so something has to
+      # arrive.
+      quiet-hours-defer: true
+
+    digest:
+      enabled: ${NOTIFICATION_DIGEST_ENABLED:false}
+      run-interval: 5m
+      max-groups-per-run: 200
+      template-key-suffix: -digest
+      # Per category, because "three people commented on your post" is worth collapsing over an hour
+      # and an invoice is not worth collapsing at all. A transactional category never digests
+      # whatever is written here.
+      categories: {}
+
+    retention:
+      enabled: true
+      run-interval: 1h
+      # The four windows widen outwards, and the order is checked at startup. See the retention
+      # policy in the README for what each one covers and why they differ.
+      content-ttl: 7d
+      recipient-data-ttl: 7d
+      delivery-ttl: 90d
+      history-ttl: 180d
+      batch-size: 1000
+
+    locks:
+      lease: 2m
+      # Must be at least 3x shorter than the lease, or one slow renewal hands the lock to another
+      # replica mid-job. Checked at startup.
+      heartbeat: 30s
+
+    receipts:
+      enabled: ${NOTIFICATION_RECEIPTS_ENABLED:true}
+      signing-secret: ${RECEIPT_SIGNING_SECRET:}
+      # Bounds how long a captured, correctly-signed receipt stays replayable. Without it a bounce
+      # observed once could be replayed months later to suppress that address at will.
+      timestamp-tolerance: 5m
+      soft-bounce-suppression: 24h
+
+    events:
+      enabled: true
+      route: notification-events
+
+    # The hot-reloadable overlay: channel on/off and rate limits, changeable during an incident
+    # without a redeploy. Every value is an override - absent means "whatever the block above says".
+    runtime:
+      channels: {}
+
+  # --- web-core ----------------------------------------------------------------------------------
+  web:
+    problem:
+      type-prefix: "urn:notification:error:"
+    i18n:
+      # The two languages this service has complete bundles for. A caller asking for anything else
+      # gets English in full rather than a half-translated response.
+      supported-locales: en,ru
+      default-locale: en
+
+  # --- db-core -----------------------------------------------------------------------------------
+  db:
+    auditing-enabled: true
+    default-page-size: 25
+    max-page-size: 200
+
+  # --- outbox: OUTBOUND LIFECYCLE EVENTS ONLY ----------------------------------------------------
+  # The delivery queue is not an outbox and does not use this. See the README.
+  outbox:
+    liquibase:
+      # The changelog is included by this service's own master changelog, so the module must not also
+      # apply it as a second, standalone SpringLiquibase.
+      enabled: false
+    polling:
+      enabled: ${OUTBOX_POLLING_ENABLED:true}
+      fixed-delay: 5s
+      batch-size: 100
+    retry:
+      max-attempts: 10
+      initial-interval: 1s
+      multiplier: 2.0
+      max-interval: 5m
+    default-route:
+      transport: KAFKA
+      destination: platform.notifications.events
+    routes:
+      notification-events:
+        transport: KAFKA
+        destination: platform.notifications.events
+        event-types: NotificationDelivered,NotificationFailed,NotificationSuppressed
+
+  # --- security ----------------------------------------------------------------------------------
+  security:
+    jwt:
+      # Audience is what makes a token service-specific: without it, any token the same issuer minted
+      # for any other service in the mesh is accepted here.
+      audiences: notification-service
+      tenant-claim: tenant_id
+    # The receipt endpoint is authenticated by an HMAC rather than by a token, because a provider has
+    # no account here and cannot hold one. See DeliveryReceiptController for why that is safe.
+    public-paths:
+      - /actuator/health/**
+      - /actuator/info
+      - /api/v1/notifications/receipts
+      - /v3/api-docs/**
+      - /swagger-ui/**
+    authorities:
+      # Fail startup rather than silently running on the no-op resolver, where nobody has any role.
+      require-resolver: true
+      cache:
+        ttl: 60s
+    data:
+      # Anything without a policy below is denied. The only safe default.
+      default-access: NONE
+      policies:
+        notification-delivery:
+          read:
+            ROLE_NOTIFICATION_ADMIN: ALL
+            # Support sees its own tenant's delivery history and nothing else.
+            ROLE_NOTIFICATION_SUPPORT: TENANT
+          write:
+            ROLE_NOTIFICATION_ADMIN: ALL
+            ROLE_NOTIFICATION_SUPPORT: TENANT
+
+  # --- identity projection -----------------------------------------------------------------------
+  identity:
+    liquibase:
+      enabled: false
+    kafka:
+      enabled: ${IDENTITY_PROJECTION_ENABLED:true}
+      topic: ${OIDC_USER_TOPIC:corp.identity.users}
+      group-id: notification-service-identity-projection
+    # Peer services calling this one, keyed by workload identity. In configuration rather than in a
+    # table because which service may ask for a notification is part of the deployment topology.
+    service-roles:
+      "[spiffe://mesh/ns/orders/sa/orders]":
+        - ROLE_NOTIFICATION_SENDER
+      "[spiffe://mesh/ns/identity/sa/identity]":
+        - ROLE_NOTIFICATION_SENDER
+        - ROLE_NOTIFICATION_RECIPIENT_WRITER
+
+  # --- hot reload --------------------------------------------------------------------------------
+  # Two settings are deliberately NOT declared here, because both are conditional on the property
+  # merely existing and an empty placeholder would satisfy that:
+  #
+  #   ludwig.hotreload.files[0].path            - the watched runtime-override file
+  #   ludwig.hotreload.freemarker.template-directory  - the watched template directory
+  #
+  # Written as ${VAR:} they would be present-but-empty, which activates the module against a
+  # directory that is not there. A deployment sets them for real (see deploy/k8s); a local run and
+  # the tests leave them unset and templates load from the classpath instead. See the README.
+  hotreload:
+    enabled: true
+
+  # --- observability -----------------------------------------------------------------------------
+  observability:
+    logging:
+      json:
+        # The recipient's address and the rendered body never reach the MDC - they are masked at the
+        # call site by Pii. These keys are the backstop for everything else.
+        masked-keys:
+          - password
+          - secret
+          - token
+          - credential
+          - authorization
+          - apikey
+          - api-key
+          - signing-secret
+
+# --- odata-filter ---------------------------------------------------------------------------------
+odata:
+  filter:
+    max-depth: 4
+    max-page-size: 200
+    default-page-size: 25
+    max-nested-property-depth: 1
+    max-expression-length: 2048
+    # A $top above the maximum is capped rather than rejected - a client asking for too much still
+    # gets a useful answer.
+    page-size-exceeded-strategy: CLAMP
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+      group:
+        # Liveness deliberately excludes the queue and the database: a service that has lost its
+        # provider or its database is unready, not dead, and restarting it cannot fix either.
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState, db, notificationQueue
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    ru.ludwigandreas.notification: INFO

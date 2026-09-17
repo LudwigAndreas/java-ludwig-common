@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        The two capabilities the platform does not have yet, plus the cluster-wide rate limiter.
+        Kept in their own changeset file because all three are candidates to move into a shared
+        starter - see "Promotion candidates" in the README - and a promotion should be able to lift
+        this file rather than pick rows out of a larger one.
+    -->
+
+    <changeSet id="notification-020-idempotency" author="ludwig-notification">
+        <comment>
+            Consumer-side idempotency. Without it this service double-sends the moment it runs at more
+            than one replica: the Kafka consumer is at-least-once by construction, and REST callers
+            retry on timeouts that were often successful writes.
+        </comment>
+        <createTable tableName="notification_idempotency">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_idempotency"/>
+            </column>
+            <!-- Scoped by ingress: a Kafka record key and an HTTP Idempotency-Key come from different
+                 namespaces, and a collision between them would silently drop a genuine request. -->
+            <column name="scope" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="request_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!--
+            THE constraint. Everything else about idempotency here is convenience; this is what makes
+            it correct. Two replicas processing the same at-least-once record both run the same
+            INSERT ... ON CONFLICT DO UPDATE, the second blocks on the first's row lock, and when it
+            proceeds it reads the committed winner instead of inserting a second claim.
+        -->
+        <addUniqueConstraint tableName="notification_idempotency" columnNames="scope, idempotency_key"
+                             constraintName="uk_notification_idempotency_key"/>
+        <createIndex tableName="notification_idempotency" indexName="ix_notification_idempotency_expiry">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="notification-021-lock" author="ludwig-notification">
+        <comment>
+            A leased, cluster-wide mutex for the maintenance jobs. The delivery poller does not use it -
+            SKIP LOCKED already partitions the queue - but the digest collapse and the retention purge
+            are defined over sets of rows rather than over each row independently, and running them on
+            three replicas produces three digests for one recipient.
+
+            A table rather than pg_try_advisory_lock: an advisory lock is held by the session, and with
+            a connection pool the session goes back to the pool when the statement finishes. A row with
+            an explicit lease is inspectable, survives the connection, and fails over on a configured
+            timeout rather than an accidental one.
+        </comment>
+        <createTable tableName="notification_lock">
+            <!-- The id IS the lock's name, so acquisition is one upsert on the primary key. -->
+            <column name="id" type="varchar(255)">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_lock"/>
+            </column>
+            <column name="owner" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="acquired_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="notification-022-rate-limit-window" author="ludwig-notification">
+        <comment>
+            Cluster-wide throughput counters, one row per channel per window.
+
+            An in-process token bucket would be wrong at more than one replica and wrong in the
+            direction nobody notices: three pods each holding a 100-per-minute bucket send 300 per
+            minute, so the number in the configuration file would mean nothing and would change
+            meaning every time the deployment scaled.
+        </comment>
+        <createTable tableName="notification_rate_limit_window">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_rate_limit_window"/>
+            </column>
+            <column name="channel" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="window_start" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="permits_used" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!-- The conflict target of the reservation upsert, and what makes one window one row. -->
+        <addUniqueConstraint tableName="notification_rate_limit_window" columnNames="channel, window_start"
+                             constraintName="uk_notification_rate_limit_window"/>
+    </changeSet>
+
+    <changeSet id="notification-023-template-revision" author="ludwig-notification">
+        <comment>
+            Which template text produced which message. Templates are files and are hot-reloaded, so
+            the directory is not a historical record - by the time somebody asks what wording a
+            customer received in March, the file has been edited twice. Every render hashes its source
+            and records the hash on the delivery; this table maps a hash back to readable text.
+        </comment>
+        <createTable tableName="notification_template_revision">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_template_revision"/>
+            </column>
+            <column name="template_name" type="varchar(512)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_hash" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Human-readable numbering, computed as max+1 and therefore best-effort under a race.
+                 The hash is what identifies the text and it is unique by construction. -->
+            <column name="revision" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="first_seen_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_seen_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint tableName="notification_template_revision"
+                             columnNames="template_name, content_hash"
+                             constraintName="uk_notification_template_revision"/>
+    </changeSet>
+</databaseChangeLog>

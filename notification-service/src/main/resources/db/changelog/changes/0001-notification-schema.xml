@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Layout follows outbox-spring-boot-starter's changelog: namespaced changeset ids
+        ("notification-NNN"/"ludwig-notification") so they cannot collide with another module's rows
+        in the shared DATABASECHANGELOG table, one concern per changeset, and every raw <sql> paired
+        with an explicit <rollback>.
+
+        Column types follow what db-core's base entities map to, because the application starts with
+        hibernate.ddl-auto=validate: uuid ids, bigint versions, and timestamptz for every instant
+        (Hibernate 6 maps java.time.Instant to TIMESTAMP WITH TIME ZONE).
+    -->
+
+    <changeSet id="notification-001-request" author="ludwig-notification">
+        <comment>
+            What one caller asked for. Deliberately inert: no attempt counter, no lastError, no retry
+            schedule - all of that belongs to notification_delivery, because a request to three
+            recipients where one bounces has no single status.
+        </comment>
+        <createTable tableName="notification_request">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_request"/>
+            </column>
+            <column name="idempotency_key" type="varchar(255)"/>
+            <column name="source" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="template_key" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category_kind" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- An orderable integer weight, not the enum name: the claim query orders by it, and
+                 'NORMAL' sorts after 'HIGH' alphabetically, which would invert the lanes silently. -->
+            <column name="priority" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="variables" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="requested_recipients" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="scheduled_at" type="timestamp with time zone"/>
+            <column name="tenant_id" type="varchar(128)"/>
+            <column name="correlation_id" type="varchar(128)"/>
+            <column name="trace_id" type="varchar(64)"/>
+            <column name="rejection_reason" type="varchar(512)"/>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="updated_by" type="varchar(255)"/>
+        </createTable>
+        <createIndex tableName="notification_request" indexName="ix_notification_request_created_at">
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="notification-002-delivery" author="ludwig-notification">
+        <comment>
+            The work queue. One row per recipient per channel, and the only place retry state exists.
+        </comment>
+        <createTable tableName="notification_delivery">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_delivery"/>
+            </column>
+            <!--
+                ON DELETE CASCADE so the retention purge of a request needs no second statement.
+                The FK takes FOR KEY SHARE on the request row, which does not conflict with the
+                FOR NO KEY UPDATE that the ACCEPTED -> FANNED_OUT transition takes on it - so the
+                hot fan-out path never blocks on the parent.
+            -->
+            <column name="request_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="channel" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="recipient_user_id" type="varchar(255)"/>
+            <!-- Nullable: a delivery that never resolved has no destination, and a purged one has
+                 had its destination removed. Both are real states. -->
+            <column name="recipient_address" type="varchar(512)"/>
+            <column name="variables" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="recipient_locale" type="varchar(35)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="recipient_timezone" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="template_key" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="template_version" type="varchar(64)"/>
+            <column name="category" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category_kind" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="priority" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="digest_group" type="varchar(255)"/>
+            <column name="collapsed_into_id" type="uuid"/>
+            <column name="attempts" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_attempts" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_attempt_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="scheduled_at" type="timestamp with time zone"/>
+            <column name="claimed_at" type="timestamp with time zone"/>
+            <column name="claimed_by" type="varchar(255)"/>
+            <column name="last_error" type="text"/>
+            <column name="last_failure_kind" type="varchar(16)"/>
+            <column name="suppression_reason" type="varchar(128)"/>
+            <column name="provider_message_id" type="varchar(255)"/>
+            <column name="sent_at" type="timestamp with time zone"/>
+            <column name="delivered_at" type="timestamp with time zone"/>
+            <column name="settled_at" type="timestamp with time zone"/>
+            <column name="correlation_id" type="varchar(128)"/>
+            <column name="tenant_id" type="varchar(128)"/>
+            <column name="dedup_key" type="varchar(512)"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableName="notification_delivery" baseColumnNames="request_id"
+                referencedTableName="notification_request" referencedColumnNames="id"
+                constraintName="fk_notification_delivery_request" onDelete="CASCADE"/>
+    </changeSet>
+
+    <changeSet id="notification-003-delivery-indexes" author="ludwig-notification">
+        <comment>
+            Indexes that serve the claim query and the two SLO gauges. Every one of them is partial,
+            which is the whole point: the vast majority of rows in this table are settled and will
+            never be claimed again, so an index covering them would be mostly dead weight - larger to
+            scan, slower to maintain on every insert, and no use to the only query that is hot.
+        </comment>
+
+        <!--
+            The claim query's index, and the column order is the query's:
+
+              WHERE status IN ('PENDING','FAILED')   -> the partial predicate
+                AND channel = ?                      -> leading equality
+                AND priority >= ?                    -> range, and the ORDER BY's first key
+                AND next_attempt_at <= ?             -> range, and the ORDER BY's second key
+              ORDER BY priority DESC, next_attempt_at, id
+              LIMIT ? FOR UPDATE SKIP LOCKED
+
+            Channel leads because it is the only equality predicate, so it is what makes the scan a
+            range rather than a filter. priority DESC and next_attempt_at follow in ORDER BY order,
+            which lets Postgres stop after LIMIT rows instead of sorting the whole backlog - the
+            difference between a claim that is constant-time in the queue depth and one that is not.
+            id is the tie-break, and including it makes the ordering total: without it two rows with
+            the same priority and timestamp could be returned in different orders by different
+            replicas, which is not wrong but makes a concurrency bug impossible to reproduce.
+        -->
+        <sql>
+            CREATE INDEX ix_notification_delivery_claim
+                ON notification_delivery (channel, priority DESC, next_attempt_at, id)
+                WHERE status IN ('PENDING', 'FAILED');
+        </sql>
+        <rollback>DROP INDEX ix_notification_delivery_claim;</rollback>
+
+        <!--
+            Oldest-pending age, the SLO signal worth alerting on. A separate index rather than reusing
+            the claim one: min(created_at) over the claimable set cannot be answered from an index
+            whose leading column is the channel without scanning every channel's range.
+        -->
+        <sql>
+            CREATE INDEX ix_notification_delivery_pending_age
+                ON notification_delivery (created_at)
+                WHERE status IN ('PENDING', 'FAILED');
+        </sql>
+        <rollback>DROP INDEX ix_notification_delivery_pending_age;</rollback>
+
+        <!-- The stale sweeper runs every minute and must not scan the table to find nothing. -->
+        <sql>
+            CREATE INDEX ix_notification_delivery_stale
+                ON notification_delivery (claimed_at)
+                WHERE status = 'CLAIMED';
+        </sql>
+        <rollback>DROP INDEX ix_notification_delivery_stale;</rollback>
+
+        <!-- The digest job scans only what is actually batched. -->
+        <sql>
+            CREATE INDEX ix_notification_delivery_digest
+                ON notification_delivery (digest_group, next_attempt_at)
+                WHERE status = 'BATCHED' AND digest_group IS NOT NULL;
+        </sql>
+        <rollback>DROP INDEX ix_notification_delivery_digest;</rollback>
+
+        <!--
+            The last line of defence against a double send: even if two replicas both got past the
+            request-level idempotency claim, the second fan-out cannot create a second row for the
+            same recipient-channel pair.
+        -->
+        <sql>
+            CREATE UNIQUE INDEX ux_notification_delivery_dedup_key
+                ON notification_delivery (dedup_key)
+                WHERE dedup_key IS NOT NULL;
+        </sql>
+        <rollback>DROP INDEX ux_notification_delivery_dedup_key;</rollback>
+
+        <!-- How an inbound provider receipt finds the delivery it is about. -->
+        <sql>
+            CREATE INDEX ix_notification_delivery_provider_message
+                ON notification_delivery (channel, provider_message_id)
+                WHERE provider_message_id IS NOT NULL;
+        </sql>
+        <rollback>DROP INDEX ix_notification_delivery_provider_message;</rollback>
+
+        <!-- The retention purge and the scrub both select on settled_at. -->
+        <sql>
+            CREATE INDEX ix_notification_delivery_settled
+                ON notification_delivery (settled_at)
+                WHERE settled_at IS NOT NULL;
+        </sql>
+        <rollback>DROP INDEX ix_notification_delivery_settled;</rollback>
+
+        <createIndex tableName="notification_delivery" indexName="ix_notification_delivery_request">
+            <column name="request_id"/>
+        </createIndex>
+
+        <!-- Every scoped admin search ANDs the caller's tenant into its WHERE clause. -->
+        <createIndex tableName="notification_delivery" indexName="ix_notification_delivery_tenant">
+            <column name="tenant_id"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="notification-004-delivery-status-history" author="ludwig-notification">
+        <comment>
+            The append-only status trail, mirroring outbox_status_history. Deliberately carries no
+            foreign key to notification_delivery: an FK would take a FOR KEY SHARE lock on the
+            delivery row on every history insert, and that row is the hottest in the service. The
+            retention purge deletes history by age rather than relying on a cascade.
+        </comment>
+        <createTable tableName="notification_delivery_status_history">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_delivery_status_history"/>
+            </column>
+            <column name="delivery_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="from_status" type="varchar(16)"/>
+            <column name="to_status" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempt_number" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="detail" type="text"/>
+        </createTable>
+        <createIndex tableName="notification_delivery_status_history"
+                     indexName="ix_notification_history_delivery">
+            <column name="delivery_id"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <!-- The purge selects on age alone; without this it would scan the largest table here. -->
+        <createIndex tableName="notification_delivery_status_history"
+                     indexName="ix_notification_history_occurred_at">
+            <column name="occurred_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="notification-005-delivery-content" author="ludwig-notification">
+        <comment>
+            Rendered bodies, in their own table rather than as columns on notification_delivery. The
+            delivery row is claimed and updated thousands of times a minute and wants to stay narrow,
+            and rendered content is the most sensitive thing this service holds - so giving it its own
+            table gives the retention purge a single cheap target on a much shorter schedule. Its
+            primary key IS the delivery id, which makes the one-to-one structural.
+        </comment>
+        <createTable tableName="notification_delivery_content">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_notification_delivery_content"/>
+            </column>
+            <column name="subject" type="varchar(998)"/>
+            <column name="body_html" type="text"/>
+            <column name="body_text" type="text"/>
+            <column name="rendered_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="purge_after" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableName="notification_delivery_content" baseColumnNames="id"
+                referencedTableName="notification_delivery" referencedColumnNames="id"
+                constraintName="fk_notification_content_delivery" onDelete="CASCADE"/>
+        <createIndex tableName="notification_delivery_content" indexName="ix_notification_content_purge">
+            <column name="purge_after"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

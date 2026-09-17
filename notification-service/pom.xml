@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>notification-service</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Notification service</name>
+    <description>
+        The platform's single notification service: every other service asks this one to notify
+        somebody instead of talking to a mail server itself. Kafka and REST ingress converge on one
+        application service, requests fan out into per-recipient-per-channel deliveries held in a
+        Postgres work queue, and a poller renders a FreeMarker template and dispatches it through an
+        SPI channel (SMTP, internal chat, signed webhook), recording every transition.
+    </description>
+
+    <!-- Java version, third-party dependency versions and the spring-boot-dependencies BOM import
+         are all centralized in the parent pom - see its <properties>/<dependencyManagement>. -->
+
+    <dependencies>
+        <!-- Base entities, BaseRepository/BaseRepositoryImpl, Predicates, PageableUtils. Brings
+             spring-boot-starter-data-jpa, querydsl-jpa and the Postgres driver transitively. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- The admin/history search endpoint's $filter/$orderby/$top/$skip. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>odata-filter-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- OUTBOUND LIFECYCLE EVENTS ONLY - never the delivery queue. See README section
+             "The delivery queue is not the outbox". -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbox-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- All error handling: LocalizedException, ExceptionProblemMapper, PageResponse. This
+             service ships no @RestControllerAdvice of its own. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Authn/authz on the REST API, plus DataScope tenant isolation of delivery history. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Existence, display name, tenant and active-status of a recipient given a user id. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>identity-projection-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- FreeMarker template hot reload, Vault-backed SMTP credentials, and the runtime
+             channel-enable/rate-limit view (RefreshableConfig). -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>hot-reload-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Tracing, JSON logging with masking, correlation id across HTTP and Kafka, split probes,
+             graceful shutdown. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>observability-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- RetryingCall/RetryPolicy for the in-attempt retry inside a single channel send. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>common-utils</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Backs the security module's authority cache. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- The SMTP channel. JavaMailSender, multipart MIME, and the transport itself. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- hot-reload declares freemarker optional; template rendering is this service's core. -->
+        <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+            <version>${freemarker.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <!-- Schema migrations, including the outbox and identity changelogs shipped in their jars. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+        </dependency>
+        <!-- Primary ingress, and the transport the outbox dispatches lifecycle events over. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <version>${spring-kafka.version}</version>
+        </dependency>
+        <!-- OpenAPI, sharing the ProblemDetail schema web-core already produces. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <version>${spring-kafka.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Waiting for a broker to deliver a record is inherently asynchronous; Awaitility makes the
+             wait an explicit, bounded condition instead of a sleep chosen by guesswork. -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- A real SMTP server in-process, so the email channel is tested against SMTP rather than
+             against a mock of JavaMailSender. -->
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail-junit5</artifactId>
+            <version>${greenmail.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <parameters>true</parameters>
+                    <!--
+                        Four processors, one compilation: Lombok (accessors/builders), QueryDSL
+                        (the Q-types every query here is written against), MapStruct (the three
+                        model layers), and Spring Boot's configuration processor (metadata for
+                        ludwig.notification.*). lombok-mapstruct-binding is what makes MapStruct
+                        see Lombok-generated accessors.
+                    -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok-mapstruct-binding</artifactId>
+                            <version>${lombok-mapstruct-binding.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                        <path>
+                            <groupId>com.querydsl</groupId>
+                            <artifactId>querydsl-apt</artifactId>
+                            <classifier>jakarta</classifier>
+                            <version>${querydsl.version}</version>
+                        </path>
+                        <path>
+                            <groupId>jakarta.persistence</groupId>
+                            <artifactId>jakarta.persistence-api</artifactId>
+                            <version>3.1.0</version>
+                        </path>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                            <version>${spring-boot.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>org.mapstruct.ap.MappingProcessor</annotationProcessor>
+                        <annotationProcessor>org.springframework.boot.configurationprocessor.ConfigurationMetadataAnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                    <compilerArgs>
+                        <compilerArg>-Amapstruct.unmappedTargetPolicy=ERROR</compilerArg>
+                        <compilerArg>-Amapstruct.defaultComponentModel=spring</compilerArg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

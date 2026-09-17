@@ -12,8 +12,11 @@ import java.util.concurrent.ScheduledFuture;
 
 /**
  * Crash recovery for poller instances that claimed rows (flipped to PROCESSING) and died before
- * recording an outcome. {@link OutboxMessageRepository#reclaimStale} is a plain repository call, already
- * transactional via Spring Data's own repository proxy - no extra {@code @Transactional} needed here.
+ * recording an outcome. {@link OutboxMessageRepository#reclaimStale} carries its own {@code @Transactional}: a
+ * {@code @Modifying} query declared on a repository interface is NOT transactional by default - only
+ * the CRUD methods {@code SimpleJpaRepository} implements inherit its attributes - so the annotation
+ * is on the repository method rather than here, where a {@code @Transactional} on a plain bean that
+ * is not proxied for transactions would do nothing at all.
  */
 public class OutboxStaleReclaimScheduler implements SmartLifecycle {
 

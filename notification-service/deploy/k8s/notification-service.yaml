@@ -1,0 +1,234 @@
+# Kubernetes manifests for notification-service.
+#
+# Every image reference here - the application and the migration job alike - is pinned by name,
+# version AND sha256 digest. A tag can be re-pointed at different content, so a tag-only reference
+# means the cluster runs whatever the registry serves at the moment the kubelet happens to pull,
+# which differs between the three replicas of one rollout.
+#
+# Replace the registry host and the application digest at release time; the digest below is a
+# placeholder and is marked as one rather than being a plausible-looking invention.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notification-service
+  labels:
+    app.kubernetes.io/name: notification-service
+automountServiceAccountToken: false  # The service calls no Kubernetes API.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  labels:
+    app.kubernetes.io/name: notification-service
+spec:
+  selector:
+    app.kubernetes.io/name: notification-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# The template library. Mounted rather than baked into the image, which is the whole point of the
+# hot-reload module here: a wording change is a ConfigMap update and a rollout of this object, not a
+# rebuild and a redeploy of the service. The mounted directory is watched, so a change is picked up
+# without a restart - see ludwig.hotreload.freemarker.template-directory below.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-templates
+  labels:
+    app.kubernetes.io/name: notification-service
+data:
+  # One key per template file; the subPath-free mount reproduces the directory tree.
+  # Shipped defaults live in the image under classpath:/templates and are used when this is absent.
+  "password-reset__email__en__subject.ftl": |
+    Reset your password
+---
+# The runtime overlay: what an operator may change during an incident without a redeploy. Bound by
+# the hot-reload module and re-read when this file changes, so switching a channel off or lowering a
+# rate limit is a ConfigMap edit. A malformed edit leaves the previousValid value in place rather
+# than taking the channel down a second way.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-runtime
+  labels:
+    app.kubernetes.io/name: notification-service
+data:
+  runtime.properties: |
+    # ludwig.notification.runtime.channels.<CHANNEL>.enabled
+    # ludwig.notification.runtime.channels.<CHANNEL>.max-per-window
+    #
+    # Absent means "whatever the deployed configuration says". Example, during an SMTP incident:
+    #   ludwig.notification.runtime.channels.EMAIL.enabled=false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  labels:
+    app.kubernetes.io/name: notification-service
+spec:
+  # Three, and the service is built for it: SKIP LOCKED partitions the delivery queue between them,
+  # the rate limiter's counter is shared so the three together honour one limit, and the maintenance
+  # jobs take a leased lock so exactly one replica runs each. See "Behaviour at three replicas" in
+  # the README.
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notification-service
+      annotations:
+        # Rolls the pods when either ConfigMap changes. The template and runtime files are watched and
+        # do not need a restart, but a change to anything else in them should still reach the pods.
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: notification-service
+      # Long enough for the delivery poller to finish its cycle and hand back its leases. The poller's
+      # own drain timeout is half the lease (five minutes at the shipped configuration), so this has
+      # to exceed that or the pod is killed mid-drain and the leases wait for the stale sweeper.
+      terminationGracePeriodSeconds: 420
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: notification-service
+          # PLACEHOLDER DIGEST - replace at release time with the digest of the image actually built.
+          # Deliberately not a plausible-looking invented value: a wrong-but-real-looking digest is
+          # worse than an obvious placeholder, because it looks deployable and is not.
+          image: registry.example.internal/platform/notification-service:1.0.0@sha256:REPLACE_WITH_RELEASE_DIGEST
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: NOTIFICATION_DB_URL
+              valueFrom:
+                secretKeyRef: { name: notification-db, key: url }
+            - name: NOTIFICATION_DB_USER
+              valueFrom:
+                secretKeyRef: { name: notification-db, key: username }
+            - name: NOTIFICATION_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: notification-db, key: password }
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka.platform.svc.cluster.local:9092
+            - name: OIDC_ISSUER_URI
+              value: https://login.example.internal/realms/corp
+            - name: SMTP_HOST
+              value: smtp-relay.platform.svc.cluster.local
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_AUTH
+              value: "true"
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef: { name: notification-smtp, key: username }
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: notification-smtp, key: password }
+            - name: RECEIPT_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef: { name: notification-signing, key: receipt-secret }
+            - name: NOTIFICATION_FROM_ADDRESS
+              value: no-reply@example.com
+            - name: NOTIFICATION_UNSUBSCRIBE_URL
+              value: https://example.com/notifications/unsubscribe
+            # The pod name, so a stranded delivery lease or a held lock names a pod that still exists
+            # rather than a hostname plus a random suffix that vanished with the process.
+            - name: LUDWIG_NOTIFICATION_INSTANCE_ID
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+            # Declared here rather than in application.yml: both are conditional on the property
+            # merely existing, so an empty placeholder in the yaml would activate them against a
+            # directory that is not there. See the note in application.yml.
+            - name: LUDWIG_HOTRELOAD_FREEMARKER_TEMPLATEDIRECTORY
+              value: /etc/notification/templates
+            - name: LUDWIG_HOTRELOAD_FILES_0_PATH
+              value: /etc/notification/runtime/runtime.properties
+            - name: NOTIFICATION_TEMPLATE_DIR
+              value: /etc/notification/templates
+            - name: MANAGEMENT_OTLP_TRACING_ENDPOINT
+              value: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
+          volumeMounts:
+            - name: templates
+              mountPath: /etc/notification/templates
+              readOnly: true
+            - name: runtime
+              mountPath: /etc/notification/runtime
+              readOnly: true
+            # readOnlyRootFilesystem is on, and the JVM still needs somewhere to write: heap dumps on
+            # OOM, and whatever the temp directory is used for.
+            - name: tmp
+              mountPath: /tmp
+          # Liveness and readiness are genuinely different questions here, and conflating them is
+          # expensive. A queue that has backed up because a provider is down describes a service that
+          # is perfectly alive - restarting it cannot fix the provider, and doing so on all three
+          # replicas turns a partner's outage into ours. So liveness asks only whether the process is
+          # up, and readiness reflects the database and the queue's oldest-pending age.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 5
+            # Generous: Liquibase runs the migrations on first start, and a long migration must not be
+            # mistaken for a failed boot.
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              # No CPU limit on purpose: throttling a JVM mid-GC is how a healthy service starts
+              # failing its own probes. The memory limit is what MaxRAMPercentage sizes the heap from.
+              memory: 1Gi
+      volumes:
+        - name: templates
+          configMap:
+            name: notification-templates
+        - name: runtime
+          configMap:
+            name: notification-runtime
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service
+spec:
+  # At least two must stay up: one replica alone still works, but a single pod holding the digest and
+  # retention locks means those jobs stop entirely while it is being drained.
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service

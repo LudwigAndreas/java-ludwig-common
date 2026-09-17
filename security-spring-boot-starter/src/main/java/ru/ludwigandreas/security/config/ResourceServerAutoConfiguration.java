@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -55,7 +56,20 @@ import ru.ludwigandreas.security.web.SecurityMdcFilter;
  * the beans above are still available and can be wired in by hand.
  */
 @lombok.extern.slf4j.Slf4j
-@AutoConfiguration(after = OAuth2ResourceServerAutoConfiguration.class)
+/*
+ * before, not after. Both SecurityAutoConfiguration and OAuth2ResourceServerAutoConfiguration
+ * register a default SecurityFilterChain guarded by @ConditionalOnDefaultWebSecurity, which is
+ * @ConditionalOnMissingBean(SecurityFilterChain.class) - so whichever is processed first wins.
+ * Declared "after", this module's chain lost that race every single time, and a service configured
+ * with an issuer-uri silently ran on Boot's default chain instead: no public paths, CSRF on (which
+ * rejects every non-GET API call from a non-browser client), the default empty-bodied 401/403
+ * instead of the localized problem documents, no mTLS filter and no identity-header stripping. The
+ * module looked configured and did nothing.
+ *
+ * Nothing here depends on those autoconfigurations having run: the JwtDecoder is injected as an
+ * ObjectProvider and resolved when the chain is built, not when it is defined.
+ */
+@AutoConfiguration(before = {SecurityAutoConfiguration.class, OAuth2ResourceServerAutoConfiguration.class})
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(SecurityFilterChain.class)
 @ConditionalOnProperty(prefix = "ludwig.security", name = "enabled", matchIfMissing = true)
