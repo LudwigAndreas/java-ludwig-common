@@ -6,12 +6,43 @@
 
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>common</artifactId>
-    <version>1.0.0</version>
+    <!--
+        ${revision} is defined once, in .mvn/maven.config, and nowhere else in this repository.
+
+        It is a user property rather than a <properties> entry on purpose: ludwig-service-parent's
+        parent is spring-boot-starter-parent, so it inherits nothing from this file and could not
+        see a property declared here. A value in .mvn/maven.config reaches every module regardless
+        of its parent chain, and `-Drevision=1.2.0` on the command line overrides it for a release.
+
+        flatten-maven-plugin (below) rewrites this into a literal in every POM that is installed or
+        deployed - a published POM still containing the text "${revision}" is not consumable.
+    -->
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
     <name>Ludwig common framework</name>
+    <description>
+        Reactor root for the Ludwig platform. This POM aggregates the build and is the parent of the
+        library modules; it is no longer the registry of dependency versions (that is ludwig-bom) and
+        it is not what a microservice inherits (that is ludwig-service-parent).
+    </description>
+
+    <url>https://github.com/ludwigandreas/common</url>
+
+    <scm>
+        <connection>scm:git:https://github.com/ludwigandreas/common.git</connection>
+        <developerConnection>scm:git:git@github.com:ludwigandreas/common.git</developerConnection>
+        <url>https://github.com/ludwigandreas/common</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <modules>
+        <!-- The published platform: a version registry and a build-configuration parent. Built
+             first because every other module resolves ludwig-bom. -->
+        <module>ludwig-bom</module>
+        <module>ludwig-service-parent</module>
+
+        <!-- Library modules: parented by this POM, consumed as jars. -->
         <module>common-utils</module>
         <module>odata-filter-spring-boot-starter</module>
         <module>db-core</module>
@@ -23,6 +54,8 @@
         <module>observability-spring-boot-starter</module>
         <module>architecture-rules</module>
         <module>checkstyle-rules</module>
+
+        <!-- Services: parented by ludwig-service-parent, consumed as container images. -->
         <module>crud-service-example</module>
         <module>notification-service</module>
     </modules>
@@ -34,42 +67,48 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!--
-            Single source of truth for every third-party dependency version shared across modules.
-            Child modules reference these via ${...} instead of redeclaring the literal version, so
-            bumping one here can't leave another module silently behind.
+            The platform's Spring Boot baseline, used by the dependencyManagement import below and
+            inherited by ludwig-bom, which imports the same BOM for its consumers.
+
+            ludwig-service-parent carries this same number as a literal in its <parent> element,
+            because Maven does not interpolate arbitrary properties there. The two must be moved
+            together - see the comment on that file's <parent>.
         -->
         <spring-boot.version>3.3.5</spring-boot.version>
-        <!-- 1.18.34 fails on current JDK 17 patch releases with
-             "ExceptionInInitializerError: com.sun.tools.javac.code.TypeTag :: UNKNOWN" - Lombok reaches
-             into javac internals and needs a build that knows the compiler it is running under. -->
-        <lombok.version>1.18.38</lombok.version>
-        <querydsl.version>5.1.0</querydsl.version>
-        <testcontainers.version>1.21.4</testcontainers.version>
-        <resilience4j.version>2.2.0</resilience4j.version>
-        <spring-kafka.version>3.2.4</spring-kafka.version>
-        <spring-vault.version>3.1.2</spring-vault.version>
-        <freemarker.version>2.3.32</freemarker.version>
-        <olingo.version>4.10.0</olingo.version>
-        <mapstruct.version>1.6.3</mapstruct.version>
-        <archunit.version>1.5.0</archunit.version>
-        <springdoc.version>2.6.0</springdoc.version>
-        <greenmail.version>2.1.3</greenmail.version>
-        <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
 
         <!--
-            Code style. maven-checkstyle-plugin ships with an old Checkstyle engine bundled, so
-            the engine is pinned separately from the plugin and overridden in the plugin's own
-            <dependencies> below - a Checkstyle that does not understand records, sealed types
-            or switch expressions reports parse errors as violations.
+            Default mode for the inherited flatten execution: resolve ${revision} and change nothing
+            else. ludwig-bom overrides this single property to `bom`, which is what lets it be
+            published as a standalone, parentless POM without declaring a <build> section.
+        -->
+        <flatten.mode>resolveCiFriendliesOnly</flatten.mode>
+
+        <!--
+            THIRD-PARTY VERSIONS NO LONGER LIVE HERE. QueryDSL, MapStruct, Olingo, Resilience4j,
+            Testcontainers, Vault, FreeMarker, ArchUnit, springdoc, GreenMail and Lombok moved to
+            ludwig-bom/pom.xml, which every module in this repository imports and which a downstream
+            service can import too. They were unreachable from outside this reactor while they were
+            properties of this file, which is the problem the BOM exists to solve.
+
+            What remains here is configuration of the build itself, not of what the build depends on.
+        -->
+
+        <!--
+            Code style. maven-checkstyle-plugin ships with an old Checkstyle engine bundled, so the
+            engine is pinned separately from the plugin and overridden in the plugin's own
+            <dependencies> below - a Checkstyle that does not understand records, sealed types or
+            switch expressions reports parse errors as violations.
         -->
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
         <checkstyle.version>10.21.4</checkstyle.version>
-        <!--
-            maven.multiModuleProjectDirectory is the repository root, resolved by Maven from the
-            .mvn directory beside this pom, so the path below is correct no matter which module
-            the build was started from (`mvn test` inside db-core included).
-        -->
-        <checkstyle.config.dir>${maven.multiModuleProjectDirectory}/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle</checkstyle.config.dir>
+        <!-- 3.13.0+ is required for annotationProcessorPathsUseDepMgmt, which is what lets the
+             modules below name their annotation processors without repeating a version. -->
+        <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
+        <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+        <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
+        <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <!--
             Javadoc *presence* (a public type or method with no Javadoc at all) reports as a
             warning so that adopting the configuration does not require writing a documentation
@@ -85,11 +124,36 @@
             `warning` or `error` to turn it on.
         -->
         <checkstyle.package.info.severity>ignore</checkstyle.package.info.severity>
-        <!-- JUnit (jupiter + platform) is deliberately NOT pinned here: it comes from the imported
-             spring-boot-dependencies BOM below, which keeps the whole JUnit 5 stack internally
-             consistent. Pinning it independently caused a Jupiter/Platform version-skew bug - see
-             common-utils/pom.xml. -->
+        <!-- JUnit (jupiter + platform) is deliberately NOT pinned, here or in ludwig-bom: it comes
+             from the imported spring-boot-dependencies BOM, which keeps the whole JUnit 5 stack
+             internally consistent. Pinning it independently caused a Jupiter/Platform version-skew
+             bug - see common-utils/pom.xml. -->
+
+        <!--
+            Where this platform publishes. Both are properties so the same POM works against Nexus,
+            Artifactory or GitHub Packages: override -Dludwig.repo.releases.url=... (and the
+            snapshot URL), or set them in a settings.xml profile, without editing this file. The
+            <id>s below are what a settings.xml <server> entry must match to supply credentials -
+            which is the only place credentials ever appear.
+        -->
+        <ludwig.repo.releases.id>ludwig-releases</ludwig.repo.releases.id>
+        <ludwig.repo.releases.url>https://nexus.example.internal/repository/maven-releases/</ludwig.repo.releases.url>
+        <ludwig.repo.snapshots.id>ludwig-snapshots</ludwig.repo.snapshots.id>
+        <ludwig.repo.snapshots.url>https://nexus.example.internal/repository/maven-snapshots/</ludwig.repo.snapshots.url>
     </properties>
+
+    <distributionManagement>
+        <repository>
+            <id>${ludwig.repo.releases.id}</id>
+            <name>Ludwig releases</name>
+            <url>${ludwig.repo.releases.url}</url>
+        </repository>
+        <snapshotRepository>
+            <id>${ludwig.repo.snapshots.id}</id>
+            <name>Ludwig snapshots</name>
+            <url>${ludwig.repo.snapshots.url}</url>
+        </snapshotRepository>
+    </distributionManagement>
 
     <!--
         Imported once here rather than per-module: every child inherits this dependencyManagement
@@ -97,6 +161,16 @@
         resolve the same version of every Spring Boot-managed transitive dependency (Micrometer,
         Jackson, Hibernate Validator, SnakeYAML, ...) instead of each module's own import potentially
         drifting from the others.
+
+        The library modules keep getting their Boot line from HERE rather than from
+        ludwig-service-parent, and that is the point: a library compiled against
+        spring-boot-starter-parent would bake one Boot baseline into itself, and these jars have to
+        stay usable by a service running a different one.
+
+        Note what is NOT here: ludwig-bom is not imported into this file. It cannot be - this POM is
+        the BOM's parent, and importing a child's POM to build the parent's model is circular. Each
+        module imports ludwig-bom itself instead; it is six lines and it keeps the direction of
+        resolution obvious.
     -->
     <dependencyManagement>
         <dependencies>
@@ -129,6 +203,19 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
             </plugin>
+            <!--
+                Inherited by every library module and by ludwig-bom, because all of them carry
+                ${revision} in their <parent> block and an installed POM that still says
+                "${revision}" cannot be resolved by anyone.
+
+                ludwig-bom switches the mode of THIS execution to `bom` with a single property
+                (flatten.mode) - which is how it manages to be flattened into a standalone,
+                parentless POM while containing no <build> section of its own.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+            </plugin>
         </plugins>
 
         <pluginManagement>
@@ -141,7 +228,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.9.0</version>
+                    <version>${maven-compiler-plugin.version}</version>
                     <configuration>
                         <release>${maven.compiler.release}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
@@ -151,17 +238,71 @@
                             annotation, and a parameter-level constraint violation can only name the
                             parameter it rejected if they are present - without this, a 400 reports
                             the offending input as "arg0". Spring Boot's own parent pom sets this
-                            flag for the same reasons; this repository does not inherit from it.
+                            flag for the same reasons; the library modules do not inherit from it
+                            (ludwig-service-parent does, and services get it from there).
                         -->
                         <compilerArgs>
                             <arg>-parameters</arg>
                         </compilerArgs>
+                        <!--
+                            Annotation-processor versions come from the imported ludwig-bom rather
+                            than from a <version> on every <path> in every module. Before this flag
+                            existed, each module repeated ${lombok.version} and ${querydsl.version}
+                            in its processor paths, which is how the Lombok used to COMPILE a module
+                            drifts from the Lombok whose processor GENERATES its code.
+                        -->
+                        <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
                     </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.3</version>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven-enforcer-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven-source-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>flatten-maven-plugin</artifactId>
+                    <version>${flatten-maven-plugin.version}</version>
+                    <configuration>
+                        <!-- Replace the POM that gets installed/deployed with the flattened one. -->
+                        <updatePomFile>true</updatePomFile>
+                        <!--
+                            resolveCiFriendliesOnly: resolve ${revision} in this project's version
+                            and in its <parent> version, and change NOTHING else. The published POM
+                            of a library must keep its parent, its dependencies and its
+                            dependencyManagement exactly as written - a consumer of db-core still
+                            needs to inherit the Boot line from ru.ludwigandreas:common.
+
+                            ludwig-bom overrides this to `bom` via the flatten.mode property.
+                        -->
+                        <flattenMode>${flatten.mode}</flattenMode>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>flatten</id>
+                            <phase>process-resources</phase>
+                            <goals>
+                                <goal>flatten</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>flatten-clean</id>
+                            <phase>clean</phase>
+                            <goals>
+                                <goal>clean</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -176,8 +317,29 @@
                         </dependency>
                     </dependencies>
                     <configuration>
-                        <configLocation>${checkstyle.config.dir}/checkstyle.xml</configLocation>
-                        <suppressionsLocation>${checkstyle.config.dir}/checkstyle-suppressions.xml</suppressionsLocation>
+                        <!--
+                            The reactor reads the configuration straight off checkstyle-rules'
+                            source tree, not off its jar. Maven resolves plugin dependencies from
+                            the local repository and not from the reactor, so a jar-based reference
+                            would make a clean clone fail until someone had installed that module
+                            first. A downstream service, where the artifact is published, uses the
+                            jar - ludwig-service-parent is configured that way.
+                        -->
+                        <!--
+                            maven.multiModuleProjectDirectory is the repository root, resolved by
+                            Maven from the .mvn directory beside this pom, so these paths are
+                            correct no matter which module the build was started from (`mvn test`
+                            inside db-core included).
+
+                            Written out here rather than built from a property on purpose. As a
+                            <properties> entry it interpolated to an absolute path on the building
+                            machine, and flatten-maven-plugin - which resolves properties when it
+                            writes ludwig-bom's published POM - copied "/Users/<someone>/..." into a
+                            deployed artifact. A path inside a plugin <configuration> is resolved at
+                            execution time and never reaches a published file.
+                        -->
+                        <configLocation>${maven.multiModuleProjectDirectory}/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle.xml</configLocation>
+                        <suppressionsLocation>${maven.multiModuleProjectDirectory}/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle-suppressions.xml</suppressionsLocation>
                         <!--
                             Passes the severity tier into the Checkstyle configuration, which
                             declares its own fallback, so the config also works when it is run
@@ -245,7 +407,7 @@
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>0.8.12</version>
+                    <version>${jacoco-maven-plugin.version}</version>
                     <executions>
                         <execution>
                             <id>default-prepare-agent</id>
@@ -266,6 +428,12 @@
                                 <goal>check</goal>
                             </goals>
                             <configuration>
+                                <!--
+                                    No threshold for the library modules: coverage here is reported,
+                                    not gated. The enforced gate lives in ludwig-service-parent and
+                                    applies to services, whose coverage is a delivery decision -
+                                    see the jacoco block there.
+                                -->
                                 <rules>
                                 </rules>
                             </configuration>
@@ -275,4 +443,80 @@
             </plugins>
         </pluginManagement>
     </build>
+
+    <profiles>
+        <!--
+            CI. Activated explicitly with -Pci and never from an environment marker: a build that
+            behaves differently depending on whether env.JENKINS_URL happens to be set is a
+            debugging hazard, and the flag is greppable in the Jenkinsfile.
+
+            For the library modules this profile only attaches sources jars, so that what Jenkins
+            publishes is debuggable. The image push it triggers for SERVICES is defined in the
+            `ci` profile of ludwig-service-parent - services do not inherit this file, and Maven
+            activates the profile of that id in whichever POM each module actually inherits.
+        -->
+        <profile>
+            <id>ci</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+            Release. Invoked as:  mvn -Drevision=1.2.0 -Prelease -Pci deploy
+
+            The version is passed on the command line rather than set here. A profile CANNOT
+            override ${revision}: it arrives as a user property from .mvn/maven.config, and user
+            properties beat POM properties in every profile. Rather than pretend otherwise, this
+            profile enforces the invariant - requireReleaseVersion fails the build if -Prelease was
+            used without a concrete -Drevision, which is the mistake the "set it in the profile"
+            arrangement was meant to prevent.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>enforce-release-rules</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireReleaseVersion>
+                                            <message>-Prelease requires a concrete version: pass -Drevision=X.Y.Z</message>
+                                        </requireReleaseVersion>
+                                        <!-- A released library must not depend on a SNAPSHOT: the
+                                             thing it was tested against can be replaced afterwards. -->
+                                        <requireReleaseDeps>
+                                            <message>A release must not depend on a SNAPSHOT.</message>
+                                        </requireReleaseDeps>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

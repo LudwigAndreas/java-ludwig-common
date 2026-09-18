@@ -1,0 +1,833 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        spring-boot-starter-parent, not the reactor root.
+
+        Two consequences, both intended:
+          - a service inheriting this file gets Boot's own pluginManagement (repackage wiring,
+            failsafe already bound to integration-test/verify, resource filtering with @...@
+            delimiters, -parameters on the compiler) without this file restating any of it;
+          - THIS is where the platform's Spring Boot baseline is decided. Moving a service to a new
+            Boot line means releasing a new ludwig-service-parent, which is exactly the review gate
+            you want on that change.
+
+        The version below is a literal because Maven does not interpolate arbitrary properties in a
+        <parent> block. It must be moved together with ${spring-boot.version} in the reactor root,
+        which is what ludwig-bom imports. Those two numbers being equal is the platform's definition
+        of "one Boot line"; the enforcer cannot check it, so it is stated here instead.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>ru.ludwigandreas</groupId>
+    <artifactId>ludwig-service-parent</artifactId>
+    <version>${revision}</version>
+    <packaging>pom</packaging>
+
+    <name>Ludwig service parent</name>
+    <description>
+        The parent POM for microservices built on the Ludwig platform. One &lt;parent&gt; element gives a
+        service the platform's dependency management (ludwig-bom, imported below), the compiler and
+        annotation-processor wiring, surefire/failsafe, jacoco with enforced thresholds, the enforcer
+        gate, Checkstyle, and a fully configured jib that never runs unless it is asked to.
+    </description>
+
+    <!--
+        NOT inherited by the library modules in this repository. db-core, web-core, odata-filter and
+        the rest keep ru.ludwigandreas:common as their parent and import ludwig-bom directly. That
+        looks like an oversight and is not:
+
+          - a library must stay usable by a service on a DIFFERENT Boot line, and a library built
+            against spring-boot-starter-parent bakes this parent's Boot baseline into its own build;
+          - a library has no image, no repackaged jar and no service-shaped test layout, so most of
+            what this file configures would be dead weight on it.
+
+        The rule: anything that ships as a container inherits this file; anything that ships as a jar
+        for someone else to depend on does not.
+    -->
+
+    <properties>
+        <!--
+            EVERYTHING IN THIS BLOCK IS OVERRIDABLE. Redeclare any of these in a service's own
+            <properties> and the service's value wins - inheritance resolves child-first. No service
+            ever needs to fork this file to move a version or switch a plugin off. See README,
+            "Consuming the platform".
+        -->
+
+        <java.version>17</java.version>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!--
+            The platform version, used for artifacts this file has to name outside of
+            dependencyManagement (a plugin's own <dependencies> are not dependency-managed).
+            ${project.parent.version} is this file's version as seen from the inheriting service,
+            so a service on ludwig-service-parent:1.2.0 gets checkstyle-rules:1.2.0 with no
+            coordination. A service that inserts its own intermediate parent must set this
+            explicitly.
+
+            Evaluated inside THIS file it is the Spring Boot version, not the platform version -
+            ${project.parent.version} means spring-boot-starter-parent here. That is harmless
+            because nothing in this file uses it: its only consumer is the checkstyle plugin
+            dependency, which only ever resolves in an inheriting service.
+        -->
+        <ludwig.platform.version>${project.parent.version}</ludwig.platform.version>
+
+        <!-- ==== Plugin versions ==== -->
+        <!-- 3.13.0+ is required for annotationProcessorPathsUseDepMgmt below. -->
+        <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
+        <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+        <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
+        <jib-maven-plugin.version>3.5.2</jib-maven-plugin.version>
+        <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+
+        <!--
+            maven-checkstyle-plugin ships with an old Checkstyle engine bundled, so the engine is
+            pinned separately and overridden in the plugin's own <dependencies> - a Checkstyle that
+            does not understand records, sealed types or switch expressions reports parse errors as
+            violations.
+        -->
+        <checkstyle.version>10.21.4</checkstyle.version>
+        <!--
+            A service reads the shared configuration off the checkstyle-rules JAR on the plugin's
+            classpath, not off a path in someone's checkout. Unlike this repository's own modules -
+            see checkstyle-rules/pom.xml, which explains why the reactor points at src/main/resources
+            instead - a downstream service resolves the artifact from the repository like any other.
+        -->
+        <checkstyle.config.location>ru/ludwigandreas/checkstyle/checkstyle.xml</checkstyle.config.location>
+        <checkstyle.suppressions.location>ru/ludwigandreas/checkstyle/checkstyle-suppressions.xml</checkstyle.suppressions.location>
+        <!--
+            Javadoc *presence* reports as a warning so that adopting the configuration does not
+            require writing a documentation backlog first; Javadoc that is present but wrong is
+            always an error. Raise to `error` once a module's public API is covered, or `ignore` to
+            switch the tier off.
+        -->
+        <checkstyle.docs.severity>warning</checkstyle.docs.severity>
+        <!--
+            Whether every package must carry a package-info.java. Off by default: adopting it means
+            adding one file per package in a single sweep, which is a decision to take deliberately.
+        -->
+        <checkstyle.package.info.severity>ignore</checkstyle.package.info.severity>
+
+        <!-- ==== Coverage gate ==== -->
+        <!--
+            Real numbers, enforced at `verify` over unit AND integration coverage merged together.
+            A service that cannot meet them yet lowers them here rather than deleting the gate, so
+            the number it actually holds is visible in its POM and can be ratcheted up.
+        -->
+        <jacoco.instruction.coverage.minimum>0.70</jacoco.instruction.coverage.minimum>
+        <jacoco.branch.coverage.minimum>0.60</jacoco.branch.coverage.minimum>
+
+        <!-- ==== Enforcer gate ==== -->
+        <enforcer.maven.version>[3.9.0,)</enforcer.maven.version>
+        <enforcer.java.version>[17,)</enforcer.java.version>
+
+        <!-- ==== Container image ==== -->
+        <!--
+            THE base image for every service on this platform, pinned by name, version AND digest.
+            A bare tag is not acceptable: `21-jre` is republished, so a tag-only reference silently
+            changes what ships between two builds of the same commit. The digest below is what
+            eclipse-temurin:21.0.12_8-jre resolved to; the tag is kept alongside it because a digest
+            on its own tells a reader nothing about what they are running.
+
+            Services run release-17 bytecode on a 21 JRE. That is deliberate - the runtime moves
+            ahead of the compile baseline so security updates land without a source-level migration.
+
+            Override in a service that needs a different runtime (a JDK rather than a JRE, an
+            Alpine variant, a mirrored copy) - but override it with a digest.
+        -->
+        <ludwig.image.base>eclipse-temurin:21.0.12_8-jre@sha256:6cbdfc89c9657478bc5abea638030310f6c0267404e98a5808097bb1925932f1</ludwig.image.base>
+        <!--
+            Registry host and namespace. NOT a hardcoded repository path anywhere in this file: the
+            target image is derived from these plus ${project.artifactId}, so a service never names
+            a repository and the same POM pushes to Nexus, Artifactory, ECR or GHCR by changing one
+            property - on the command line, in a profile, or in the service's own <properties>.
+        -->
+        <ludwig.image.registry>registry.example.internal</ludwig.image.registry>
+        <ludwig.image.namespace>ludwig</ludwig.image.namespace>
+        <ludwig.image.name>${ludwig.image.registry}/${ludwig.image.namespace}/${project.artifactId}</ludwig.image.name>
+        <ludwig.image.tag>${project.version}</ludwig.image.tag>
+        <!--
+            Container-aware heap sizing. A fixed -Xmx is wrong in Kubernetes: the JVM would keep its
+            own number while the cgroup limit moves underneath it, and the pod gets OOM-killed by
+            the kernel rather than throwing OutOfMemoryError where you can see it. MaxRAMPercentage
+            makes the heap track whatever limit the container is actually given.
+            ExitOnOutOfMemoryError turns an OOM into a restart the orchestrator can see, instead of
+            a process that stays up serving errors.
+        -->
+        <ludwig.image.jvm.flags>-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError</ludwig.image.jvm.flags>
+        <!-- Non-root. The temurin images ship no non-root user, so this is a raw uid:gid; it matches
+             the runAsUser/runAsGroup a restricted PodSecurity policy expects. -->
+        <ludwig.image.user>1000:1000</ludwig.image.user>
+        <ludwig.image.source>https://github.com/ludwigandreas/common</ludwig.image.source>
+        <!--
+            NOTE: git.commit.id is deliberately NOT given a default here, and that is not an
+            oversight - a default actively breaks the label.
+
+            Maven interpolates ${...} inside a plugin <configuration> at MODEL BUILD time whenever
+            the property exists in the model. Declaring <git.commit.id>unknown</git.commit.id> makes
+            the jib label resolve to "unknown" then and there, before git-commit-id-maven-plugin has
+            run, so the image ships with no usable commit. Left undeclared, the expression survives
+            into execution time, where it resolves from the project properties the plugin populated
+            at `initialize`.
+
+            For a build with no git checkout - a source tarball, or a scratch project - pass the
+            value in instead:  -Dgit.commit.id=&lt;sha&gt;
+        -->
+    </properties>
+
+    <!--
+        One <parent> gives a service both build configuration and dependency management: the BOM is
+        imported here so a service does not have to import it a second time. A service that wants a
+        newer BOM than this parent shipped with can still import ludwig-bom explicitly in its own
+        dependencyManagement - a nearer import wins - which is the whole reason the BOM and the
+        parent are separate artifacts. See README, "Two artifacts, one release train".
+
+        The version below is ${revision} and NOT ${project.version}, which looks like a pointless
+        distinction and is not. A parent's dependencyManagement is INHERITED, so it is interpolated
+        in the inheriting project's context: ${project.version} in this block would mean the
+        SERVICE's version, and a service versioned 0.0.1 would look for ludwig-bom:0.0.1 and fail
+        with a thoroughly misleading "Non-resolvable import POM". ${revision} avoids that because
+        flatten-maven-plugin's ci-friendly pass rewrites it to a literal here, before this file is
+        ever published.
+
+        (ludwig-bom itself can and does use ${project.version} freely: an IMPORTED BOM is
+        interpolated in its own context, not the consumer's. Inherited and imported are genuinely
+        different mechanisms, and this is where the difference bites.)
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${revision}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                        <encoding>${project.build.sourceEncoding}</encoding>
+                        <!--
+                            Keeps method parameter names in the bytecode. Spring reads them to bind a
+                            @RequestParam/@PathVariable without the name being repeated in the
+                            annotation, and a parameter-level constraint violation can only name the
+                            parameter it rejected if they are present - without this, a 400 reports
+                            the offending input as "arg0". spring-boot-starter-parent sets this too;
+                            it is repeated here so the reason survives a change of parent.
+                        -->
+                        <parameters>true</parameters>
+                        <compilerArgs>
+                            <arg>-parameters</arg>
+                            <!-- Unmapped target properties and unknown @Mapping targets fail the
+                                 build instead of silently producing a half-filled object. -->
+                            <arg>-Amapstruct.unmappedTargetPolicy=ERROR</arg>
+                            <arg>-Amapstruct.defaultComponentModel=spring</arg>
+                        </compilerArgs>
+                        <!--
+                            Processor versions come from ludwig-bom instead of being repeated here.
+                            Without this flag every <path> below would need its own <version>, and
+                            the Lombok used to COMPILE a service could drift from the Lombok whose
+                            processor GENERATES its code - which is how the javac-internals breakage
+                            that pinned Lombok 1.18.38 becomes hard to diagnose.
+                        -->
+                        <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
+                        <!--
+                            ORDER IS LOAD-BEARING. Three processors, one compilation:
+                              - Lombok generates the entity accessors/constructors,
+                              - QueryDSL's JPAAnnotationProcessor generates the Q-types every query
+                                is written against (that is what makes the queries compile-time
+                                checked),
+                              - MapStruct generates the layer-to-layer mappers.
+                            lombok-mapstruct-binding must sit BETWEEN Lombok and mapstruct-processor:
+                            it is what makes MapStruct see Lombok-generated accessors. Without it, in
+                            this position, MapStruct runs before Lombok and maps nothing.
+                        -->
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </path>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok-mapstruct-binding</artifactId>
+                            </path>
+                            <path>
+                                <groupId>org.mapstruct</groupId>
+                                <artifactId>mapstruct-processor</artifactId>
+                            </path>
+                            <path>
+                                <groupId>com.querydsl</groupId>
+                                <artifactId>querydsl-apt</artifactId>
+                                <classifier>jakarta</classifier>
+                            </path>
+                            <path>
+                                <groupId>jakarta.persistence</groupId>
+                                <artifactId>jakarta.persistence-api</artifactId>
+                            </path>
+                            <path>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-configuration-processor</artifactId>
+                            </path>
+                        </annotationProcessorPaths>
+                        <annotationProcessors>
+                            <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                            <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                            <annotationProcessor>org.mapstruct.ap.MappingProcessor</annotationProcessor>
+                            <annotationProcessor>org.springframework.boot.configurationprocessor.ConfigurationMetadataAnnotationProcessor</annotationProcessor>
+                        </annotationProcessors>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                    <configuration>
+                        <!--
+                            Unit tests only. Anything named *IT or *IntegrationTest is handed to
+                            failsafe below so that it runs at `verify`, after the artifact is
+                            packaged, and so that a failing integration test does not stop the build
+                            before the package exists. *IntegrationTest is excluded by name because
+                            this platform's services already use that convention - renaming their
+                            test classes is not a precondition for getting the phase right.
+                        -->
+                        <excludes>
+                            <exclude>**/*IT.java</exclude>
+                            <exclude>**/*IntegrationTest.java</exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe-plugin.version}</version>
+                    <configuration>
+                        <includes>
+                            <include>**/*IT.java</include>
+                            <include>**/*IntegrationTest.java</include>
+                        </includes>
+                        <!--
+                            spring-boot-starter-parent already sets classesDirectory to the classes
+                            directory rather than the artifact; that matters here because the
+                            artifact is a repackaged Boot jar, which is not a usable test classpath
+                            entry. Inherited, not repeated - see the Boot parent's pluginManagement.
+                        -->
+                    </configuration>
+                    <!--
+                        The integration-test/verify goal bindings come from spring-boot-starter-parent.
+                        Failsafe reports failures at `verify` rather than throwing at
+                        `integration-test`, so post-integration-test teardown always runs.
+                    -->
+                </plugin>
+
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco-maven-plugin.version}</version>
+                    <executions>
+                        <!-- Unit-test coverage. -->
+                        <execution>
+                            <id>default-prepare-agent</id>
+                            <goals>
+                                <goal>prepare-agent</goal>
+                            </goals>
+                        </execution>
+                        <!--
+                            Integration-test coverage, written to a second exec file. Without this,
+                            moving the integration tests to failsafe would have LOWERED measured
+                            coverage - the gate below would then be measuring the unit tests only.
+                        -->
+                        <execution>
+                            <id>prepare-agent-integration</id>
+                            <goals>
+                                <goal>prepare-agent-integration</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>merge-coverage</id>
+                            <phase>post-integration-test</phase>
+                            <goals>
+                                <goal>merge</goal>
+                            </goals>
+                            <configuration>
+                                <fileSets>
+                                    <fileSet>
+                                        <directory>${project.build.directory}</directory>
+                                        <includes>
+                                            <include>jacoco.exec</include>
+                                            <include>jacoco-it.exec</include>
+                                        </includes>
+                                    </fileSet>
+                                </fileSets>
+                                <destFile>${project.build.directory}/jacoco-merged.exec</destFile>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>report-merged</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                            <configuration>
+                                <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                <outputDirectory>${project.build.directory}/site/jacoco-merged</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <!--
+                            The gate. Runs at `verify`, after the merge, so it sees unit and
+                            integration coverage together. Switch off for a throwaway run with
+                            -Djacoco.skip=true; lower the bar permanently by overriding the two
+                            properties, which keeps the number a service actually holds visible.
+                        -->
+                        <execution>
+                            <id>check-coverage</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                            <configuration>
+                                <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                <rules>
+                                    <rule>
+                                        <element>BUNDLE</element>
+                                        <limits>
+                                            <limit>
+                                                <counter>INSTRUCTION</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>${jacoco.instruction.coverage.minimum}</minimum>
+                                            </limit>
+                                            <limit>
+                                                <counter>BRANCH</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>${jacoco.branch.coverage.minimum}</minimum>
+                                            </limit>
+                                        </limits>
+                                    </rule>
+                                </rules>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven-enforcer-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <id>enforce-platform-rules</id>
+                            <!-- validate: a wrong JDK or a split dependency version is reported in
+                                 seconds, before the compiler and the test suite have spent minutes
+                                 on a build that was never going to be accepted. -->
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>enforce</goal>
+                            </goals>
+                            <configuration>
+                                <rules>
+                                    <requireMavenVersion>
+                                        <version>${enforcer.maven.version}</version>
+                                    </requireMavenVersion>
+                                    <requireJavaVersion>
+                                        <version>${enforcer.java.version}</version>
+                                    </requireJavaVersion>
+                                    <!--
+                                        Two versions of the same artifact reaching the classpath by
+                                        different paths is the single most common cause of a
+                                        NoSuchMethodError that only appears in production. Resolve
+                                        it with an entry in ludwig-bom, not by muting the rule.
+                                    -->
+                                    <dependencyConvergence/>
+                                    <!-- The same groupId:artifactId listed twice in one POM: the
+                                         second silently wins and the first is a lie. -->
+                                    <banDuplicatePomDependencyVersions/>
+                                </rules>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${maven-checkstyle-plugin.version}</version>
+                    <dependencies>
+                        <!-- Replaces the engine bundled with the plugin; see ${checkstyle.version}. -->
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${checkstyle.version}</version>
+                        </dependency>
+                        <!-- The shared configuration, read off the plugin classpath. A plugin's own
+                             dependencies are not dependency-managed, so this one carries a version. -->
+                        <dependency>
+                            <groupId>ru.ludwigandreas</groupId>
+                            <artifactId>checkstyle-rules</artifactId>
+                            <version>${ludwig.platform.version}</version>
+                        </dependency>
+                    </dependencies>
+                    <configuration>
+                        <configLocation>${checkstyle.config.location}</configLocation>
+                        <suppressionsLocation>${checkstyle.suppressions.location}</suppressionsLocation>
+                        <!--
+                            Passes the severity tier into the Checkstyle configuration, which
+                            declares its own fallback, so the config also works when it is run
+                            straight from an IDE plugin with no Maven properties in sight.
+                        -->
+                        <propertyExpansion>
+                            docs.severity=${checkstyle.docs.severity}
+                            package.info.severity=${checkstyle.package.info.severity}
+                        </propertyExpansion>
+                        <!--
+                            Explicit source directories rather than the compile source roots: the
+                            roots include target/generated-sources, where QueryDSL's Q-types and
+                            MapStruct's mapper implementations live. Those are machine-written and
+                            unfixable, so the only sane thing is not to look at them.
+                        -->
+                        <sourceDirectories>
+                            <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                        </sourceDirectories>
+                        <testSourceDirectories>
+                            <testSourceDirectory>${project.basedir}/src/test/java</testSourceDirectory>
+                        </testSourceDirectories>
+                        <!-- Tests are production code for the purposes of style. -->
+                        <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                        <!--
+                            Resources are scanned for the i18n bundle checks (duplicate keys, and a
+                            locale bundle whose key set has drifted from the default one).
+                        -->
+                        <includeResources>true</includeResources>
+                        <includeTestResources>true</includeTestResources>
+                        <resourceIncludes>**/*.properties</resourceIncludes>
+                        <!--
+                            failsOnError: a malformed configuration or an unparseable file fails the
+                            build instead of being silently reported as zero violations.
+                            violationSeverity=error: the warning tier is reported but does not break
+                            the build.
+                        -->
+                        <failOnViolation>true</failOnViolation>
+                        <failsOnError>true</failsOnError>
+                        <violationSeverity>error</violationSeverity>
+                        <consoleOutput>true</consoleOutput>
+                        <logViolationsToConsole>true</logViolationsToConsole>
+                        <!-- No xref report is generated in this build, so don't link to one. -->
+                        <linkXRef>false</linkXRef>
+                        <cacheFile>${project.build.directory}/checkstyle-cachefile</cacheFile>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>checkstyle-validate</id>
+                            <!-- validate, not verify: style feedback arrives in seconds, before the
+                                 compiler and the test suite have spent minutes on code that is going
+                                 to be sent back anyway. Skippable with -Dcheckstyle.skip=true. -->
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <!--
+                    ============================ JIB ============================
+
+                    Fully configured here, and DELIBERATELY NOT BOUND TO ANY LIFECYCLE PHASE.
+
+                    There is no <executions> block below, and jib does not appear in the active
+                    <plugins> section further down. That is the whole point: `mvn clean install` on a
+                    developer's machine must not talk to a registry, must not need a Docker daemon,
+                    and must not spend time building an image nobody asked for. The goal is invoked
+                    explicitly instead:
+
+                      mvn jib:dockerBuild   - local, into the developer's own Docker daemon
+                      mvn jib:build         - straight to the registry, no daemon involved; this is
+                                              what a CI agent runs, and why an agent needs no Docker
+                      mvn -Pci deploy       - the Jenkins path; see the `ci` profile in the root POM
+
+                    There is no automatic activation from env.JENKINS_URL or any similar marker. A
+                    build that behaves differently depending on an environment variable nobody
+                    remembers setting is a debugging hazard - the -Pci flag is explicit, greppable,
+                    and written down in the Jenkinsfile.
+
+                    CREDENTIALS ARE NEVER IN THIS FILE, or in any POM. jib reads them from, in order:
+                      1. a <server> entry in ~/.m2/settings.xml whose <id> equals the registry host
+                         (${ludwig.image.registry}) - the Jenkins agent gets this from the Maven
+                         Config File Provider, populated from a Jenkins credential;
+                      2. the JIB_TARGET_USERNAME / JIB_TARGET_PASSWORD environment variables, which
+                         is what `withCredentials` in the Jenkinsfile binds;
+                      3. the local Docker credential helpers, for a developer already logged in.
+                    See README, "Consuming the platform".
+                -->
+                <plugin>
+                    <groupId>com.google.cloud.tools</groupId>
+                    <artifactId>jib-maven-plugin</artifactId>
+                    <version>${jib-maven-plugin.version}</version>
+                    <configuration>
+                        <from>
+                            <!-- Pinned by name, version and digest - see ${ludwig.image.base}. -->
+                            <image>${ludwig.image.base}</image>
+                        </from>
+                        <to>
+                            <!-- Derived, never hardcoded: a service sets no repository path at all. -->
+                            <image>${ludwig.image.name}</image>
+                            <tags>
+                                <tag>${ludwig.image.tag}</tag>
+                            </tags>
+                        </to>
+                        <container>
+                            <user>${ludwig.image.user}</user>
+                            <jvmFlags>
+                                <jvmFlag>-XX:MaxRAMPercentage=75.0</jvmFlag>
+                                <jvmFlag>-XX:InitialRAMPercentage=50.0</jvmFlag>
+                                <jvmFlag>-XX:+ExitOnOutOfMemoryError</jvmFlag>
+                            </jvmFlags>
+                            <ports>
+                                <!-- Application. -->
+                                <port>8080</port>
+                                <!-- Actuator, when the service separates the management port. -->
+                                <port>8081</port>
+                            </ports>
+                            <labels>
+                                <org.opencontainers.image.title>${project.artifactId}</org.opencontainers.image.title>
+                                <org.opencontainers.image.description>${project.name}</org.opencontainers.image.description>
+                                <org.opencontainers.image.version>${project.version}</org.opencontainers.image.version>
+                                <!-- The commit this image was built from: the only reliable way back
+                                     from a running pod to the source. git-commit-id-maven-plugin
+                                     supplies it; see the default in <properties>. -->
+                                <org.opencontainers.image.revision>${git.commit.id}</org.opencontainers.image.revision>
+                                <org.opencontainers.image.source>${ludwig.image.source}</org.opencontainers.image.source>
+                                <org.opencontainers.image.base.name>${ludwig.image.base}</org.opencontainers.image.base.name>
+                            </labels>
+                            <!--
+                                jib's defaults are left alone on purpose: creationTime and
+                                filesModificationTime both stay at the epoch, so building the same
+                                commit twice produces byte-identical layers and an identical image
+                                digest. That is what makes "this digest is that commit" checkable.
+                                Setting creationTime=USE_CURRENT_TIMESTAMP would give a friendlier
+                                `docker images` listing and destroy that property.
+                            -->
+                        </container>
+                    </configuration>
+                </plugin>
+
+                <!--
+                    Configured here in full so that a service which uses ci-friendly versions
+                    (${revision}) can switch it on with a four-line <plugin> stanza and no
+                    configuration of its own. A service carrying a literal version has nothing to
+                    resolve and does not need it.
+
+                    Without it, such a service installs a POM whose <parent> version is still the
+                    text "${revision}" - which nothing can resolve.
+                -->
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>flatten-maven-plugin</artifactId>
+                    <version>${flatten-maven-plugin.version}</version>
+                    <configuration>
+                        <updatePomFile>true</updatePomFile>
+                        <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>flatten</id>
+                            <phase>process-resources</phase>
+                            <goals>
+                                <goal>flatten</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>flatten-clean</id>
+                            <phase>clean</phase>
+                            <goals>
+                                <goal>clean</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <plugins>
+            <!--
+                Active for every service. Each of these is switchable with its own standard skip
+                property (-Djacoco.skip, -Denforcer.skip, -Dmaven.test.skip), so a service never has
+                to fork this file to silence one.
+
+                Checkstyle is deliberately NOT in this list - it is configured in pluginManagement
+                above and a service opts in with a four-line <plugin> stanza (see README). The
+                reason is mechanical: maven-checkstyle-plugin carries checkstyle-rules on its own
+                plugin classpath, and Maven resolves a plugin's dependencies in order to load the
+                mojo even when the mojo is then skipped. Activating it here would make THIS
+                pom-packaging file, which has no sources to check, demand an artifact that does not
+                exist yet at this point in the platform's own reactor.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+            <!--
+                Supplies ${git.commit.id} for the image label, and drops a git.properties into the
+                jar that Boot's actuator serves from /actuator/info. failOnNoGitDirectory=false so
+                that a build from an exported tarball - or from the scratch project used to check
+                this parent resolves standalone - still works; the labels then read "unknown".
+            -->
+            <plugin>
+                <groupId>io.github.git-commit-id</groupId>
+                <artifactId>git-commit-id-maven-plugin</artifactId>
+                <configuration>
+                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                    <failOnUnableToExtractRepoInfo>false</failOnUnableToExtractRepoInfo>
+                </configuration>
+            </plugin>
+            <!--
+                Boot's repackage step. spring-boot-starter-parent configures it but does not switch
+                it on, so it is activated here and every service gets an executable jar without
+                declaring anything.
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <!-- Lombok is compile-time only. Shipping it inside the fat jar adds weight
+                             and puts an annotation processor on the runtime classpath. -->
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!--
+                inherited=false: this rewrites THIS file's own ${revision} into a literal before it
+                is installed. A service inheriting it is not flattened - a service normally carries
+                a literal version of its own and has nothing to resolve. A service that adopts
+                ci-friendly versions itself declares this plugin in its own build; the version and
+                configuration are already managed above.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <inherited>false</inherited>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!--
+            CI. The ONLY place jib is bound to a lifecycle phase, and it is reached only by passing
+            -Pci explicitly. Never activated from env.JENKINS_URL or any similar marker: a build
+            that behaves differently depending on an environment variable nobody remembers setting
+            is a debugging hazard, and an explicit flag is greppable in the Jenkinsfile.
+
+                mvn -Pci deploy     - deploys the jar to the repository AND pushes the image
+
+            The goal is jib:build, not jib:dockerBuild: it assembles the image and streams the
+            layers straight to the registry over HTTPS, so a CI agent needs no Docker daemon, no
+            privileged container and no daemon socket mounted into the build.
+
+            Credentials come from the agent, never from a POM - see the jib block in
+            pluginManagement above.
+        -->
+        <profile>
+            <id>ci</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.google.cloud.tools</groupId>
+                        <artifactId>jib-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>push-image</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>build</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+            Release-only gate. Activated by -Prelease alongside the release invocation described in
+            the README; kept here rather than in the reactor root because it is about what a SERVICE
+            is allowed to release, and services do not inherit the root.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>enforce-release-rules</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <!-- A release that depends on a SNAPSHOT is not
+                                             reproducible: the thing it was tested against can be
+                                             replaced afterwards. -->
+                                        <requireReleaseDeps>
+                                            <message>A release must not depend on a SNAPSHOT.</message>
+                                        </requireReleaseDeps>
+                                        <!-- And the artifact itself must not be one. This is the
+                                             check that catches `-Prelease` without `-Drevision=`. -->
+                                        <requireReleaseVersion>
+                                            <message>-Prelease requires a concrete version: pass -Drevision=X.Y.Z</message>
+                                        </requireReleaseVersion>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

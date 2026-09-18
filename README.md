@@ -12,18 +12,34 @@ Each module provides a focused set of utilities or functionality and can be reus
 ```text
 ludwig-common/
 │
-├── pom.xml # Root POM – aggregates all modules
-├── common-utils/ # common java utils
+├── .mvn/maven.config        # -Drevision=… — the ONLY place the version is declared
+├── pom.xml                  # Reactor root: modules, build config, scm, distributionManagement.
+│                            #   Parent of the LIBRARY modules only.
+├── Jenkinsfile              # How the platform ships: build, verify, deploy, push images
+│
+├── ludwig-bom/              # Published: every version, and nothing else
+│ └── pom.xml
+├── ludwig-service-parent/   # Published: every build decision. What a microservice inherits
 │ └── pom.xml
 │
-├── <module-2>/
+├── common-utils/            # Library modules — parented by the reactor root,
+│ └── pom.xml                #   each importing ludwig-bom for versions
+├── db-core/
+│ └── pom.xml
+├── <other starters>/
 │ └── pom.xml
 │
-├── <module-n>/
+├── crud-service-example/    # Services — parented by ludwig-service-parent,
+│ └── pom.xml                #   shipped as container images
+├── notification-service/
 │ └── pom.xml
 │
 └── README.md
 ```
+
+The split matters: a **library** keeps the reactor root as its parent so it stays usable by a
+service running a different Spring Boot line, while a **service** inherits `ludwig-service-parent`
+and with it a fixed Boot baseline. See [Consuming the platform](#consuming-the-platform).
 
 Each module has:
 - Its own `pom.xml` and dependencies
@@ -34,6 +50,8 @@ Each module has:
 
 | Module Name    | Description                                     |
 |----------------|-------------------------------------------------|
+| [`ludwig-bom`](ludwig-bom/pom.xml) | The platform's version registry: every `ru.ludwigandreas` module plus every third-party version pinned on top of Spring Boot. Import it (`type=pom`, `scope=import`) and name no versions. Published with no parent, so a consumer never has to resolve anything else to use it |
+| [`ludwig-service-parent`](ludwig-service-parent/pom.xml) | The POM every microservice inherits: Spring Boot's build wiring, the compiler and its annotation processors in the order Lombok/MapStruct/QueryDSL require, surefire + failsafe, an enforced coverage gate, the enforcer gate, Checkstyle, and a fully configured jib that never runs unless asked. Imports `ludwig-bom`, so one `<parent>` covers versions too |
 | `common-utils` | General-purpose helper functions and utilities  |
 | [`odata-filter-spring-boot-starter`](odata-filter-spring-boot-starter/README.md) | Enterprise-ready OData `$filter`/`$top`/`$skip`/`$orderby` support for Spring Boot + Spring Data JPA REST APIs |
 | [`db-core`](db-core/README.md) | Base entity classes, auditing, soft delete, exceptions and QueryDSL/Spring Data JPA utilities for Java 17 + Postgres + Spring Boot services |
@@ -79,15 +97,248 @@ This will compile and install all modules into your local Maven repository.
 
 ### Using a Module in Your Project
 
-To use a module (e.g., common-utils) in your Maven project:
+See **[Consuming the platform](#consuming-the-platform)** below - a service should not name module
+versions at all.
+
+## Consuming the platform
+
+The build publishes three artifacts that a consumer cares about:
+
+| Artifact | Packaging | What it gives you |
+|---|---|---|
+| `ludwig-bom` | `pom` | Every version. Each `ru.ludwigandreas` module, plus every third-party dependency the platform pins on top of Spring Boot (QueryDSL, MapStruct, Olingo, Resilience4j, Testcontainers, Vault, FreeMarker, ArchUnit, springdoc, ...). Nothing else - no plugins, no build configuration. |
+| `ludwig-service-parent` | `pom` | Every build decision. Compiler + annotation processors in the right order, surefire/failsafe, the coverage gate, the enforcer gate, Checkstyle, and a fully configured jib. Imports `ludwig-bom`, so this one `<parent>` covers versions too. |
+| `common` | `pom` | The reactor root. Parent of the **library** modules only; a service never inherits it. |
+
+### The usual case: a microservice
+
+One `<parent>`, and no version anywhere else:
 
 ```xml
-<dependency>
+<parent>
     <groupId>ru.ludwigandreas</groupId>
-    <artifactId>common-utils</artifactId>
-    <version>1.0.0</version>
-</dependency>
+    <artifactId>ludwig-service-parent</artifactId>
+    <version>1.1.0</version>
+    <relativePath/>
+</parent>
+
+<groupId>com.example</groupId>
+<artifactId>my-service</artifactId>
+<version>0.1.0</version>
+
+<dependencies>
+    <dependency>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>db-core</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>web-core-spring-boot-starter</artifactId>
+    </dependency>
+</dependencies>
 ```
+
+`<relativePath/>` must be **present and empty**. Omit it and Maven looks for `../pom.xml`, which in a
+standalone service does not exist (or, worse, is an unrelated POM), and the build fails with a
+confusing *non-resolvable parent*.
+
+Checkstyle is the one thing a service opts into, because activating it in the parent would make that
+POM resolve `checkstyle-rules` for sources it does not have:
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-checkstyle-plugin</artifactId>
+        </plugin>
+    </plugins>
+</build>
+```
+
+### The other case: a library, or a service that cannot change its parent
+
+Import the BOM instead. `ludwig-bom` is published with no parent of its own, so this works without
+access to any `ru.ludwigandreas` POM other than the BOM:
+
+```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>ludwig-bom</artifactId>
+            <version>1.1.0</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+You get all the versions and none of the build configuration. This is exactly what the library
+modules in this repository do - see the next section for why.
+
+### Two artifacts, one release train
+
+The BOM and the parent are separate artifacts on purpose. They pull in opposite directions:
+*"all versions in one place"* wants a single BOM everyone tracks, while *"one parent for every
+service"* means a change as small as a jib label forces a parent bump that every service eventually
+has to adopt. Keeping them separate lets a service take a **new BOM without new build config**, or
+the reverse:
+
+```xml
+<!-- Inherit build config from 1.1.0, but take library versions from 1.3.0. -->
+<parent>
+    <groupId>ru.ludwigandreas</groupId>
+    <artifactId>ludwig-service-parent</artifactId>
+    <version>1.1.0</version>
+    <relativePath/>
+</parent>
+
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>ludwig-bom</artifactId>
+            <version>1.3.0</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+A nearer import wins, so the explicit one overrides the one the parent brought in.
+
+Be honest about the limit, though: both artifacts are built in **this** reactor from one
+`${revision}`, so `ludwig-bom:1.2.0` and `ludwig-service-parent:1.2.0` are always released together.
+The independence above is real on the *consuming* side only. Genuinely independent cadence would
+mean moving the parent into its own repository with its own version line.
+
+### Overriding a managed version
+
+Redeclare the property **and** the dependency. The property alone is not enough: an imported BOM's
+entries are already interpolated by the time your POM is read, so a property in a consumer cannot
+reach back into them.
+
+```xml
+<properties>
+    <mapstruct.version>1.6.4</mapstruct.version>
+</properties>
+
+<dependencies>
+    <dependency>
+        <groupId>org.mapstruct</groupId>
+        <artifactId>mapstruct</artifactId>
+        <version>${mapstruct.version}</version>
+    </dependency>
+</dependencies>
+```
+
+A *plugin* version, a coverage threshold or an enforcer rule works the simpler way - those come from
+the parent by inheritance, where a child property does win on its own:
+
+```xml
+<properties>
+    <jib-maven-plugin.version>3.5.0</jib-maven-plugin.version>
+    <jacoco.instruction.coverage.minimum>0.80</jacoco.instruction.coverage.minimum>
+    <enforcer.java.version>[21,)</enforcer.java.version>
+</properties>
+```
+
+Switching a non-essential plugin off needs no fork either - each honours its standard skip property:
+`-Dcheckstyle.skip`, `-Djacoco.skip`, `-Denforcer.skip`, `-Dmaven.test.skip`.
+
+### Overriding the base image
+
+Every image reference in this repository is pinned by **name, version and digest**. A bare tag is
+not acceptable: `21-jre` gets republished, so a tag-only reference silently changes what ships
+between two builds of the same commit.
+
+```xml
+<properties>
+    <!-- Keep the tag next to the digest: a digest alone tells a reader nothing. -->
+    <ludwig.image.base>eclipse-temurin:21.0.12_8-jre@sha256:6cbdfc89c9657478bc5abea638030310f6c0267404e98a5808097bb1925932f1</ludwig.image.base>
+</properties>
+```
+
+The target image is derived, never hardcoded - a service names no repository path:
+
+```xml
+<properties>
+    <ludwig.image.registry>registry.example.internal</ludwig.image.registry>
+    <ludwig.image.namespace>ludwig</ludwig.image.namespace>
+    <!-- => ${ludwig.image.registry}/${ludwig.image.namespace}/${project.artifactId}:${project.version} -->
+</properties>
+```
+
+Other image knobs, all overridable: `ludwig.image.user` (default `1000:1000`, non-root),
+`ludwig.image.jvm.flags` (heap as a percentage of the cgroup limit, never a fixed `-Xmx`),
+`ludwig.image.source` and `ludwig.image.tag`.
+
+### Building images: local vs Jenkins
+
+**jib never runs during `mvn clean install`.** It is configured in `ludwig-service-parent` but bound
+to no lifecycle phase in the default build, so a local build needs no Docker daemon and never
+contacts a registry.
+
+| Goal | Command | Needs a daemon? |
+|---|---|---|
+| Local image, into your own Docker | `mvn package jib:dockerBuild` | yes |
+| Push to the registry | `mvn -Pci deploy` | **no** |
+| Push, without the full deploy | `mvn -Pci jib:build` | **no** |
+
+`jib:build` streams layers straight to the registry over HTTPS, which is why a CI agent needs no
+Docker daemon, no privileged container and no mounted daemon socket.
+
+Use `mvn package jib:dockerBuild`, not a bare `jib:dockerBuild`: the bare goal skips the lifecycle,
+so `git-commit-id-maven-plugin` never runs and the image ships without its
+`org.opencontainers.image.revision` label. Outside a git checkout entirely, pass the value in with
+`-Dgit.commit.id=<sha>`.
+
+`-Pci` is never activated automatically - not from `env.JENKINS_URL`, not from anything else. A
+build that behaves differently depending on an environment variable nobody remembers setting cannot
+be reproduced on a laptop, which is precisely when you need to.
+
+### Credentials
+
+**No credential appears in any POM**, and none should be added. jib resolves them, in order, from:
+
+1. a `<server>` entry in `~/.m2/settings.xml` whose `<id>` equals the registry host
+   (`${ludwig.image.registry}`) - on Jenkins this comes from the Maven Config File Provider,
+   populated from a Jenkins credential;
+2. the `JIB_TARGET_USERNAME` / `JIB_TARGET_PASSWORD` environment variables - what the `Jenkinsfile`
+   binds with `withCredentials`;
+3. the local Docker credential helpers, for a developer already logged in.
+
+Maven repository credentials work the same way: `<server>` entries matching
+`${ludwig.repo.releases.id}` / `${ludwig.repo.snapshots.id}`. The repository URLs are properties too,
+so the same POM deploys to Nexus, Artifactory or GitHub Packages:
+
+```bash
+mvn -Pci -Dludwig.repo.snapshots.url=https://maven.pkg.github.com/acme/repo deploy
+```
+
+### Versions and releasing
+
+The repository version is declared **once**, in `.mvn/maven.config`:
+
+```
+-Drevision=1.1.0-SNAPSHOT
+```
+
+Every POM says `<version>${revision}</version>`; `flatten-maven-plugin` rewrites it to a literal in
+every POM that is installed or deployed, so nothing unresolvable is ever published. A release passes
+a concrete value on the command line:
+
+```bash
+mvn -Drevision=1.2.0 -Prelease -Pci deploy
+```
+
+`-Prelease` does not *set* the version - it cannot, because `${revision}` arrives as a user property
+and user properties beat any profile's `<properties>`. Instead it enforces the invariant:
+`requireReleaseVersion` fails the build if you used `-Prelease` without `-Drevision`, and
+`requireReleaseDeps` fails it if anything being released depends on a SNAPSHOT.
 
 ## Code style
 

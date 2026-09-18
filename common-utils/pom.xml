@@ -6,7 +6,7 @@
     <parent>
         <groupId>ru.ludwigandreas</groupId>
         <artifactId>common</artifactId>
-        <version>1.0.0</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>common-utils</artifactId>
@@ -21,6 +21,25 @@
          compatible - pinning junit-jupiter independently while junit-platform-launcher stayed
          BOM-managed previously mixed Jupiter 5.12.2 with Platform 1.10.5 and broke test discovery
          with a NoSuchMethodError. -->
+    <!--
+        ludwig-bom is imported, not inherited: this module's parent stays ru.ludwigandreas:common so
+        that it keeps getting its Spring Boot line from there and remains usable by a service on a
+        different one. The BOM supplies everything Boot does not manage - QueryDSL, MapStruct,
+        Olingo, Testcontainers and the rest - and every sibling module's version, which is why no
+        <version> appears on any of them below.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!-- Optional: RetryingCall.withMetrics(...) instrumentation. common-utils stays framework-free
              for everyone who doesn't call it - Micrometer is never required to just use retries. -->

@@ -6,7 +6,7 @@
     <parent>
         <groupId>ru.ludwigandreas</groupId>
         <artifactId>common</artifactId>
-        <version>1.0.0</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>security-spring-boot-starter</artifactId>
@@ -23,8 +23,29 @@
         for single-object reads.
     </description>
 
-    <!-- Java version, third-party dependency versions and the spring-boot-dependencies BOM import
-         are all centralized in the parent pom - see its <properties>/<dependencyManagement>. -->
+    <!--
+        The JDK baseline and the spring-boot-dependencies import are inherited from the parent pom,
+        ru.ludwigandreas:common. Third-party versions are NOT: they moved to ludwig-bom, imported
+        below, so that a downstream service can get exactly the same set by importing one artifact
+        instead of copying a properties block it cannot see.
+
+        ludwig-bom is imported rather than inherited on purpose. Keeping ru.ludwigandreas:common as
+        the parent is what keeps this module usable by a service running a DIFFERENT Spring Boot
+        line - a library built against a fixed spring-boot-starter-parent bakes that line into
+        itself. For the same reason this module does not inherit ludwig-service-parent; see the
+        note in that file.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Core Spring Security: SecurityContext, method security, PermissionEvaluator. -->
@@ -85,7 +106,6 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
 
@@ -97,7 +117,6 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>web-core-spring-boot-starter</artifactId>
-            <version>${project.version}</version>
             <optional>true</optional>
         </dependency>
 
@@ -123,7 +142,6 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
                     <annotationProcessors>

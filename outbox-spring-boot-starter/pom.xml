@@ -6,7 +6,7 @@
     <parent>
         <groupId>ru.ludwigandreas</groupId>
         <artifactId>common</artifactId>
-        <version>1.0.0</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>outbox-spring-boot-starter</artifactId>
@@ -22,15 +22,35 @@
         dependency, include the shipped Liquibase changelog, and start publishing events.
     </description>
 
-    <!-- Java version, third-party dependency versions and the spring-boot-dependencies BOM import
-         are all centralized in the parent pom - see its <properties>/<dependencyManagement>. -->
+    <!--
+        The JDK baseline and the spring-boot-dependencies import are inherited from the parent pom,
+        ru.ludwigandreas:common. Third-party versions are NOT: they moved to ludwig-bom, imported
+        below, so that a downstream service can get exactly the same set by importing one artifact
+        instead of copying a properties block it cannot see.
+
+        ludwig-bom is imported rather than inherited on purpose. Keeping ru.ludwigandreas:common as
+        the parent is what keeps this module usable by a service running a DIFFERENT Spring Boot
+        line - a library built against a fixed spring-boot-starter-parent bakes that line into
+        itself. For the same reason this module does not inherit ludwig-service-parent; see the
+        note in that file.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- db-core: BaseRepository/GeneratedEntity/AuditedEntity/auditing infrastructure -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>db-core</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- Hibernate + Spring Data JPA + jakarta.persistence-api -->
@@ -65,7 +85,6 @@
             <groupId>com.querydsl</groupId>
             <artifactId>querydsl-jpa</artifactId>
             <classifier>jakarta</classifier>
-            <version>${querydsl.version}</version>
         </dependency>
 
         <!-- Payload/header JSON (de)serialization -->
@@ -82,7 +101,6 @@
         <dependency>
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-core</artifactId>
-            <version>${resilience4j.version}</version>
         </dependency>
 
         <!-- Plug-and-play with Postgres, ships transitively to consumers -->
@@ -103,7 +121,6 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
-            <version>${spring-kafka.version}</version>
             <optional>true</optional>
         </dependency>
 
@@ -124,7 +141,6 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
 
@@ -136,7 +152,6 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka-test</artifactId>
-            <version>${spring-kafka.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -147,13 +162,11 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -168,18 +181,15 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
                         </path>
                         <path>
                             <groupId>com.querydsl</groupId>
                             <artifactId>querydsl-apt</artifactId>
                             <classifier>jakarta</classifier>
-                            <version>${querydsl.version}</version>
                         </path>
                         <path>
                             <groupId>jakarta.persistence</groupId>
                             <artifactId>jakarta.persistence-api</artifactId>
-                            <version>3.1.0</version>
                         </path>
                     </annotationProcessorPaths>
                     <annotationProcessors>

@@ -6,7 +6,7 @@
     <parent>
         <groupId>ru.ludwigandreas</groupId>
         <artifactId>common</artifactId>
-        <version>1.0.0</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>architecture-rules</artifactId>
@@ -22,6 +22,25 @@
 
     <!-- Java version and third-party dependency versions are centralized in the parent pom. -->
 
+    <!--
+        ludwig-bom is imported, not inherited: this module's parent stays ru.ludwigandreas:common so
+        that it keeps getting its Spring Boot line from there and remains usable by a service on a
+        different one. The BOM supplies everything Boot does not manage - QueryDSL, MapStruct,
+        Olingo, Testcontainers and the rest - and every sibling module's version, which is why no
+        <version> appears on any of them below.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!--
             The only hard dependency. Deliberately archunit (core) rather than archunit-junit5: the
@@ -32,7 +51,6 @@
         <dependency>
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit</artifactId>
-            <version>${archunit.version}</version>
         </dependency>
 
         <!--
@@ -57,7 +75,6 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
 
@@ -99,7 +116,6 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
