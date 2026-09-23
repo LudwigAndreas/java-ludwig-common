@@ -1,0 +1,9 @@
+# The auto-configurations @LudwigRestClientTest boots. Deliberately the whole starter and nothing
+# else: a slice that left out, say, the auth auto-configuration would pass tests that production
+# fails, which is worse than having no slice.
+org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientAuthAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientObservabilityAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientInterfaceAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientWebCoreAutoConfiguration

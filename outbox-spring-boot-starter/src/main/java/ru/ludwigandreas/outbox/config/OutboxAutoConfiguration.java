@@ -22,7 +22,7 @@ import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
 import ru.ludwigandreas.outbox.audit.PersistingOutboxAuditLogger;
 import ru.ludwigandreas.outbox.audit.Slf4jOutboxAuditLogger;
-import ru.ludwigandreas.outbox.backoff.OutboxBackoffCalculator;
+import ru.ludwigandreas.job.core.backoff.BackoffCalculator;
 import ru.ludwigandreas.outbox.dispatch.OutboxDispatcher;
 import ru.ludwigandreas.outbox.dispatch.OutboxDispatcherRegistry;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
@@ -89,9 +89,9 @@ public class OutboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(OutboxBackoffCalculator.class)
-    public OutboxBackoffCalculator outboxBackoffCalculator(OutboxProperties properties) {
-        return new OutboxBackoffCalculator(properties.getRetry());
+    @ConditionalOnMissingBean(BackoffCalculator.class)
+    public BackoffCalculator outboxBackoffCalculator(OutboxProperties properties) {
+        return new BackoffCalculator(properties.getRetry().toBackoffPolicy());
     }
 
     @Bean
@@ -103,7 +103,7 @@ public class OutboxAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(OutboxOutcomeRecorder.class)
     public OutboxOutcomeRecorder outboxOutcomeRecorder(OutboxMessageRepository repository,
-                                                         OutboxBackoffCalculator backoffCalculator,
+                                                         BackoffCalculator backoffCalculator,
                                                          OutboxAuditLogger auditLogger,
                                                          OutboxMetrics metrics,
                                                          OutboxProperties properties) {
@@ -137,7 +137,8 @@ public class OutboxAutoConfiguration {
             @Qualifier("outboxTaskScheduler") TaskScheduler taskScheduler,
             OutboxProperties properties) {
         return new OutboxPublisherScheduler(processingService, taskScheduler,
-                properties.getPolling().getInitialDelay(), properties.getPolling().getFixedDelay());
+                properties.getPolling().getInitialDelay(), properties.getPolling().getFixedDelay(),
+                properties.getProcessing().getDrainTimeout());
     }
 
     @Bean
@@ -148,7 +149,8 @@ public class OutboxAutoConfiguration {
             @Qualifier("outboxTaskScheduler") TaskScheduler taskScheduler,
             OutboxProperties properties) {
         return new OutboxStaleReclaimScheduler(repository, taskScheduler,
-                properties.getProcessing().getStaleTimeout(), properties.getProcessing().getStaleReclaimFixedDelay());
+                properties.getProcessing().getStaleTimeout(), properties.getProcessing().getStaleReclaimFixedDelay(),
+                properties.getProcessing().getDrainTimeout());
     }
 
     private static ObjectMapper defaultObjectMapper() {

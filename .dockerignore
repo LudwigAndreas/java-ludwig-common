@@ -1,0 +1,12 @@
+# Keeps the build context to source and poms. Without this, every module's target/ directory - and
+# the .git history - is uploaded to the daemon on every build, which is slow and puts build output
+# from the host into a build that is supposed to be hermetic.
+**/target/
+.git/
+.idea/
+.mvn/
+**/*.iml
+**/.classpath
+**/.project
+**/.settings/
+**/.factorypath

@@ -14,9 +14,7 @@ import ru.ludwigandreas.notification.service.model.DeliveryView;
 import ru.ludwigandreas.notification.service.model.IngressSource;
 import ru.ludwigandreas.notification.service.model.NotificationCommand;
 import ru.ludwigandreas.notification.service.model.NotificationRequestView;
-import ru.ludwigandreas.notification.service.model.PreferenceSetting;
 import ru.ludwigandreas.notification.service.model.RecipientKind;
-import ru.ludwigandreas.notification.service.model.RecipientProfileView;
 import ru.ludwigandreas.notification.service.model.RecipientRef;
 import ru.ludwigandreas.notification.service.model.RenderRequest;
 import ru.ludwigandreas.notification.service.model.RenderedPreview;
@@ -25,9 +23,7 @@ import ru.ludwigandreas.notification.web.dto.DeliveryContentResponse;
 import ru.ludwigandreas.notification.web.dto.DeliveryResponse;
 import ru.ludwigandreas.notification.web.dto.DeliveryTransitionResponse;
 import ru.ludwigandreas.notification.web.dto.NotificationRequestResponse;
-import ru.ludwigandreas.notification.web.dto.PreferenceResponse;
 import ru.ludwigandreas.notification.web.dto.RecipientDto;
-import ru.ludwigandreas.notification.web.dto.RecipientProfileResponse;
 import ru.ludwigandreas.notification.web.dto.RenderPreviewRequest;
 import ru.ludwigandreas.notification.web.dto.RenderPreviewResponse;
 import ru.ludwigandreas.notification.web.dto.SendNotificationRequest;
@@ -117,8 +113,6 @@ public interface NotificationDtoMapper {
 
     RenderPreviewResponse toResponse(RenderedPreview preview);
 
-    PreferenceResponse toResponse(PreferenceSetting setting);
-
     /**
      * Addresses are masked: enough to recognise, not enough to use or to harvest.
      *
@@ -126,11 +120,6 @@ public interface NotificationDtoMapper {
      * see the note on {@link #toLocale(String)} for why a {@code String -> String} helper here would
      * be applied to every String property in the mapper.
      */
-    @Mapping(target = "emailAddress", expression = "java(Pii.maskedOrNull(view.emailAddress()))")
-    @Mapping(target = "chatAddress", expression = "java(Pii.maskedOrNull(view.chatAddress()))")
-    @Mapping(target = "webhookUrl", expression = "java(Pii.maskedOrNull(view.webhookUrl()))")
-    RecipientProfileResponse toResponse(RecipientProfileView view);
-
     @Mapping(target = "address", expression = "java(Pii.maskedOrNull(view.address()))")
     SuppressionResponse toResponse(SuppressionView view);
 
@@ -139,8 +128,6 @@ public interface NotificationDtoMapper {
     List<DeliveryResponse> toDeliveryResponses(List<DeliveryView> views);
 
     List<DeliveryTransitionResponse> toTransitionResponses(List<DeliveryTransition> transitions);
-
-    List<PreferenceResponse> toPreferenceResponses(List<PreferenceSetting> settings);
 
     List<SuppressionResponse> toSuppressionResponses(List<SuppressionView> views);
 

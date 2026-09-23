@@ -46,14 +46,19 @@
         <module>common-utils</module>
         <module>odata-filter-spring-boot-starter</module>
         <module>db-core</module>
+        <module>job-core</module>
         <module>outbox-spring-boot-starter</module>
+        <module>reconciliation-spring-boot-starter</module>
         <module>security-spring-boot-starter</module>
         <module>identity-projection-spring-boot-starter</module>
         <module>hot-reload-spring-boot-starter</module>
         <module>web-core-spring-boot-starter</module>
         <module>observability-spring-boot-starter</module>
+        <module>rest-client-spring-boot-starter</module>
+        <module>user-settings-spring-boot-starter</module>
         <module>architecture-rules</module>
         <module>checkstyle-rules</module>
+        <module>jira-client</module>
 
         <!-- Services: parented by ludwig-service-parent, consumed as container images. -->
         <module>crud-service-example</module>

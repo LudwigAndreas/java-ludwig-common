@@ -33,8 +33,9 @@ import ru.ludwigandreas.webcore.web.PageResponse;
  * end up enforced on one endpoint and forgotten on the next.
  *
  * <p>The search endpoint takes the OData options as plain request parameters and passes them down
- * unparsed. The starter's {@code ODataQuery<T>} argument resolver could bind them into a predicate
- * here, but only by naming the JPA entity in the controller signature - and an entity in a controller
+ * unparsed, to be turned into a predicate by the layer that owns the entity. The starter's
+ * deprecated {@code ODataQuery<T>} argument resolver would bind them into a predicate here, but
+ * only by naming the JPA entity in the controller signature - and an entity in a controller
  * signature is the thing the layering rules exist to prevent.
  */
 @Tag(name = "Delivery administration", description = "Inspect delivery history, retry and cancel")

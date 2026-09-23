@@ -55,8 +55,10 @@ public class IdentityProjectionAutoConfiguration {
     @ConditionalOnMissingBean(IdentityProjectionService.class)
     public IdentityProjectionService identityProjectionService(SecurityUserRepository users,
                                                                 OidcUserEventMapper mapper,
-                                                                AuthorityCache authorityCache) {
-        return new IdentityProjectionService(users, mapper, authorityCache);
+                                                                AuthorityCache authorityCache,
+                                                                IdentityProjectionProperties properties) {
+        return new IdentityProjectionService(users, mapper, authorityCache,
+                properties.getContact().isEnabled());
     }
 
     @Bean

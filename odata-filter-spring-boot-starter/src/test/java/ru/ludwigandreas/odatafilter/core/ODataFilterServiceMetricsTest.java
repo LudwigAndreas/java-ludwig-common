@@ -56,7 +56,7 @@ class ODataFilterServiceMetricsTest {
     void recordsAppliedAndDurationOnSuccess() {
         RecordingMetrics metrics = new RecordingMetrics();
 
-        service(metrics).parse(Employee.class, "name eq 'Alice'", null, null, null, null);
+        service(metrics).parse(Employee.class, "name eq 'Alice'", null, null, null);
 
         assertThat(metrics.applied).containsExactly("Employee");
         assertThat(metrics.rejectedReasons).isEmpty();
@@ -68,7 +68,7 @@ class ODataFilterServiceMetricsTest {
         RecordingMetrics metrics = new RecordingMetrics();
 
         assertThatThrownBy(() -> service(metrics)
-                .parse(Employee.class, "secretNotes eq 'x'", null, null, null, null))
+                .parse(Employee.class, "secretNotes eq 'x'", null, null, null))
                 .isInstanceOf(UnfilterableFieldException.class);
 
         assertThat(metrics.applied).isEmpty();
@@ -80,7 +80,7 @@ class ODataFilterServiceMetricsTest {
     void recordsRejectedWhenPageSizeIsExceeded() {
         RecordingMetrics metrics = new RecordingMetrics();
 
-        assertThatThrownBy(() -> service(metrics).parse(Employee.class, null, 1000, null, null, null))
+        assertThatThrownBy(() -> service(metrics).parse(Employee.class, null, 1000, null, null))
                 .isInstanceOf(PageSizeExceededException.class);
 
         assertThat(metrics.rejectedReasons).containsExactly("PageSizeExceededException");

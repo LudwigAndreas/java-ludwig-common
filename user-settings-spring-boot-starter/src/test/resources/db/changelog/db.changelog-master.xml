@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Deliberately empty: this stands in for the consuming application's own changelog, which the
+      integration tests do not have because this module is a library.
+
+      It is present rather than switched off (spring.liquibase.enabled=false) because Spring Boot's
+      LiquibaseAutoConfiguration is what makes the EntityManagerFactory depend on every SpringLiquibase
+      bean - including this module's own. Turning it off would take that ordering with it, and
+      Hibernate's schema validation would then race the migrations that create the schema it validates.
+
+      So the module's own changelog is applied by its own bean, exactly as it is in a real service,
+      and this file only exists to keep the ordering in place.
+    -->
+
+</databaseChangeLog>

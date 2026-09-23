@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for user-settings-spring-boot-starter. Changeset ids and author are namespaced
+      ("usrset-NNN", "ludwig-user-settings") so they never collide with a consuming application's own
+      changesets in the shared DATABASECHANGELOG table - see UserSettingsLiquibaseAutoConfiguration,
+      which registers this changelog as a second, independent SpringLiquibase bean.
+
+      The same three tables serve owner mode and projection mode. A projection is a replica, not a
+      different shape, and giving it its own schema would mean two sets of migrations that have to be
+      kept in step forever - and a bug fixed in one of them.
+    -->
+
+    <changeSet id="usrset-001-create-user-setting-value" author="ludwig-user-settings">
+        <comment>
+            One stored value at one scope. The natural key is (tenant, scope type, scope id, setting
+            key); the surrogate id exists only because the platform's entity base classes assume one.
+        </comment>
+        <createTable tableName="user_setting_value">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)"/>
+            <column name="updated_by" type="VARCHAR(255)"/>
+            <!-- Never nullable. A nullable tenant would mean "every tenant", and every scoped query
+                 would then have to be written as `tenant = ? OR tenant IS NULL` - one forgotten
+                 clause away from a cross-tenant read. The deployment-wide layer is configuration. -->
+            <column name="tenant_id" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="scope_type" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="scope_id" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="setting_key" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Opaque. Nothing joins, filters or reports on this column, which is the condition that
+                 makes storing a typed value as text acceptable instead of an EAV schema. There is
+                 deliberately no index on it. -->
+            <column name="value_text" type="TEXT"/>
+            <column name="value_type" type="VARCHAR(32)"/>
+            <!-- A tombstone: the value was reset, and this row records when. Deleting the row would
+                 be tidier and is not order-tolerant - a projection told "removed at 12:05" before
+                 "set at 12:00" would have nothing to compare the late event against. -->
+            <column name="removed" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <!-- When the change happened at the OWNER, which in a projection is not when this row was
+                 written. Comparing against this is what lets a replayed or out-of-order event be
+                 dropped instead of resurrecting a value the user has already changed. -->
+            <column name="changed_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint tableName="user_setting_value"
+                             columnNames="tenant_id, scope_type, scope_id, setting_key"
+                             constraintName="uq_user_setting_value_scope"/>
+        <!-- Exactly the predicate loadForScopes issues, in column order: one IN per layer, served
+             directly by this index. -->
+        <createIndex tableName="user_setting_value" indexName="idx_user_setting_value_lookup">
+            <column name="tenant_id"/>
+            <column name="scope_type"/>
+            <column name="scope_id"/>
+        </createIndex>
+        <!-- For the administrative question "who has overridden this setting", which is by key
+             rather than by scope. -->
+        <createIndex tableName="user_setting_value" indexName="idx_user_setting_value_key">
+            <column name="tenant_id"/>
+            <column name="setting_key"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="usrset-002-user-setting-value-scope-check" author="ludwig-user-settings">
+        <comment>
+            Only three layers are ever stored. PLATFORM comes from configuration so it can be
+            hot-reloaded, and DEFAULT is declared in code - a row claiming either would be resolved
+            ahead of layers that are real, and nothing in the application would report it.
+        </comment>
+        <sql>
+            ALTER TABLE user_setting_value
+                ADD CONSTRAINT ck_user_setting_value_scope_type
+                CHECK (scope_type IN ('USER', 'ROLE', 'TENANT'));
+            -- A live row always has a value and an encoding; a tombstone never does. Without this,
+            -- "removed" and "set to null" would both be representable and would resolve differently
+            -- depending on which check a reader happened to apply.
+            ALTER TABLE user_setting_value
+                ADD CONSTRAINT ck_user_setting_value_tombstone
+                CHECK ((removed AND value_text IS NULL AND value_type IS NULL)
+                    OR (NOT removed AND value_text IS NOT NULL AND value_type IS NOT NULL));
+        </sql>
+        <rollback>
+            ALTER TABLE user_setting_value DROP CONSTRAINT ck_user_setting_value_tombstone;
+            ALTER TABLE user_setting_value DROP CONSTRAINT ck_user_setting_value_scope_type;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="usrset-003-create-user-setting-audit" author="ludwig-user-settings">
+        <comment>
+            Who changed what, when, from what to what, and at which layer - plus the correlation id
+            that joins the row to the logs and traces of the same request. Values of PII-flagged
+            settings are stored redacted; `redacted` says so, so a reader is never guessing what a
+            marker means.
+        </comment>
+        <createTable tableName="user_setting_audit">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="tenant_id" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="subject" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="action" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="setting_key" type="VARCHAR(128)"/>
+            <column name="category" type="VARCHAR(64)"/>
+            <column name="scope_type" type="VARCHAR(32)"/>
+            <column name="scope_id" type="VARCHAR(255)"/>
+            <column name="old_value" type="TEXT"/>
+            <column name="new_value" type="TEXT"/>
+            <column name="redacted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="correlation_id" type="VARCHAR(128)"/>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="user_setting_audit" indexName="idx_user_setting_audit_subject">
+            <column name="tenant_id"/>
+            <column name="subject"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <!-- The retention purge scans by age alone, across every tenant. -->
+        <createIndex tableName="user_setting_audit" indexName="idx_user_setting_audit_occurred">
+            <column name="occurred_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="usrset-004-create-user-consent" author="ludwig-user-settings">
+        <comment>
+            The consent ledger: append-only, one row per decision. `text_version` is what makes the
+            record worth keeping - "did they accept?" is answerable without it and "what did they
+            accept?" is not. Revocation is a new row with decision = REVOKED, never an update.
+
+            The primary key is assigned by the owner and reused verbatim by every projection, so a
+            redelivered event collides on the key instead of appending a second copy of the same
+            decision.
+        </comment>
+        <createTable tableName="user_consent">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <!-- Provenance, from db-core's ExternalEntity. `source_system` records which deployment
+                 witnessed the decision: `self` in owner mode, the upstream topic in a projection. -->
+            <column name="imported_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_system" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_version" type="VARCHAR(64)"/>
+            <column name="source_timestamp" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="tenant_id" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="subject" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="consent_key" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="text_version" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="decision" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="locale" type="VARCHAR(35)"/>
+            <!-- When the person decided, as opposed to when this row was written. The two differ in
+                 a projection, and this is the one with legal meaning. -->
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="evidence_ip" type="VARCHAR(64)"/>
+            <column name="evidence_user_agent" type="VARCHAR(512)"/>
+            <column name="correlation_id" type="VARCHAR(128)"/>
+        </createTable>
+        <createIndex tableName="user_consent" indexName="idx_user_consent_subject">
+            <column name="tenant_id"/>
+            <column name="subject"/>
+            <column name="consent_key"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <createIndex tableName="user_consent" indexName="idx_user_consent_occurred">
+            <column name="occurred_at"/>
+        </createIndex>
+        <sql>
+            ALTER TABLE user_consent
+                ADD CONSTRAINT ck_user_consent_decision CHECK (decision IN ('GRANTED', 'REVOKED'))
+        </sql>
+        <rollback>
+            ALTER TABLE user_consent DROP CONSTRAINT ck_user_consent_decision
+        </rollback>
+    </changeSet>
+
+    <changeSet id="usrset-005-user-consent-update-guard" author="ludwig-user-settings">
+        <comment>
+            Belt and braces over db-core's SnapshotImmutabilityListener. The listener stops the
+            application from updating a consent row; this stops everything else - a migration script,
+            a support engineer with psql, an ORM in some future service that maps the table without
+            the listener. Append-only is a claim this module makes to auditors, and a claim enforced
+            only in one application's object model is not one worth making.
+
+            UPDATE only, deliberately not DELETE: the retention job has to be able to remove rows
+            once their statutory period has passed, and a guard that blocked that would simply be
+            dropped when someone needed it.
+        </comment>
+        <sql splitStatements="false">
+            CREATE OR REPLACE FUNCTION user_consent_reject_update() RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'user_consent is append-only: record a new decision instead of updating %', OLD.id;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            CREATE TRIGGER trg_user_consent_no_update
+                BEFORE UPDATE ON user_consent
+                FOR EACH ROW EXECUTE FUNCTION user_consent_reject_update();
+        </sql>
+        <rollback>
+            DROP TRIGGER IF EXISTS trg_user_consent_no_update ON user_consent;
+            DROP FUNCTION IF EXISTS user_consent_reject_update();
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

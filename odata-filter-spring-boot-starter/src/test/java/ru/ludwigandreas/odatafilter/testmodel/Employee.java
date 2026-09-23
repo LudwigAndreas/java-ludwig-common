@@ -14,7 +14,8 @@ import ru.ludwigandreas.odatafilter.annotation.Filterable;
 
 @Entity
 @Table(name = "employees")
-@FilterPolicy(maxDepth = 4, maxPageSize = 50, defaultPageSize = 10, maxNestedPropertyDepth = 2)
+@FilterPolicy(maxDepth = 4, maxPageSize = 50, defaultPageSize = 10, maxNestedPropertyDepth = 2,
+        defaultOrderBy = "id asc")
 public class Employee {
 
     @Id
@@ -37,9 +38,22 @@ public class Employee {
     /** Deliberately not @Filterable - must stay unreachable regardless of $filter content. */
     private String secretNotes;
 
+    /** Annotated so that Department's own @Filterable fields are reachable as "department/name". */
+    @Filterable
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id")
     private Department department;
+
+    /** Deliberately unannotated: an association is a wall unless @Filterable opts it in. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shadow_department_id")
+    private Department shadowDepartment;
+
+    /** The role on the association gates every path through it, whatever Department itself allows. */
+    @Filterable(roles = "ROLE_HR")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "previous_department_id")
+    private Department previousDepartment;
 
     protected Employee() {
     }

@@ -1,5 +1,7 @@
 # architecture-rules
 
+***English** · [Русский](README.ru.md)*
+
 Executable architecture conventions for Spring Boot services: a test-scoped jar of pre-built
 [ArchUnit](https://www.archunit.org) rule sets - layering, package cycles, REST boundary, JPA
 persistence, Kafka messaging and contracts, S3 storage, Spring wiring, exception architecture, API

@@ -32,11 +32,9 @@ import ru.ludwigandreas.notification.repository.DeliveryStatusHistoryRepository;
 import ru.ludwigandreas.notification.repository.IdempotencyRecordRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.NotificationRequestRepository;
-import ru.ludwigandreas.notification.repository.RecipientProfileRepository;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatus;
 import ru.ludwigandreas.notification.repository.entity.NotificationRequestEntity;
 import ru.ludwigandreas.notification.repository.entity.NotificationSource;
-import ru.ludwigandreas.notification.repository.entity.RecipientProfileEntity;
 import ru.ludwigandreas.notification.service.queue.DeliveryDispatchService;
 
 /**
@@ -54,11 +52,14 @@ import ru.ludwigandreas.notification.service.queue.DeliveryDispatchService;
  */
 @Testcontainers
 @SpringBootTest
-@Import(TestSecurityConfiguration.class)
+@Import({TestSecurityConfiguration.class, RecipientFixtures.class})
 @TestPropertySource(properties = {
         "ludwig.notification.queue.poller-enabled=false",
         "ludwig.notification.retention.enabled=false",
         "ludwig.identity.kafka.enabled=false",
+        // The settings replica is fed by the fixtures, not by a second consumer on the same broker.
+        "ludwig.user-settings.projection.enabled=true",
+        "ludwig.notification.preferences.declinable-categories=campaigns,marketing",
         "ludwig.outbox.polling.enabled=false",
         "ludwig.notification.receipts.signing-secret=test-receipt-secret",
         // The consumer is the subject of this class, so unlike the other integration tests it is on.
@@ -140,7 +141,7 @@ class KafkaIngressIntegrationTest {
     private DeliveryStatusHistoryRepository history;
 
     @Autowired
-    private RecipientProfileRepository profiles;
+    private RecipientFixtures recipients;
 
     @Autowired
     private IdempotencyRecordRepository idempotencyRecords;
@@ -154,15 +155,9 @@ class KafkaIngressIntegrationTest {
         deliveries.deleteAll();
         requests.deleteAll();
         idempotencyRecords.deleteAll();
-        profiles.deleteAll();
+        recipients.reset();
 
-        RecipientProfileEntity profile = RecipientProfileEntity.builder()
-                .userId(RECIPIENT_ID)
-                .emailAddress(RECIPIENT_EMAIL)
-                .locale("en")
-                .timezone("UTC")
-                .build();
-        profiles.saveAndFlush(profile);
+        recipients.givenUser(RECIPIENT_ID, RECIPIENT_EMAIL);
     }
 
     @Test

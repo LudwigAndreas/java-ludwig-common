@@ -1,5 +1,7 @@
 # web-core-spring-boot-starter
 
+***English** · [Русский](README.ru.md)*
+
 The REST foundation every service in this repository sits on: one localized
 [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) (formerly RFC 7807) `ProblemDetail` pipeline that
 every module *contributes to* instead of shipping its own `@RestControllerAdvice`, transport-neutral

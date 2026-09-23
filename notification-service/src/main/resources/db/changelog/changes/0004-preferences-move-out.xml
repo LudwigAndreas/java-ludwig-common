@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      Preferences move out of this service.
+
+      This service used to own two tables that were never really its own: notification_recipient_profile
+      (address, locale, timezone, quiet hours) and notification_recipient_preference (per-category,
+      per-channel opt-outs). Both described the USER, not the delivery, and keeping them here meant two
+      competing stores for the same facts the moment any other service needed them.
+
+      They are replaced by two replicas this service keeps but does not own:
+        - contact data comes from the identity projection, populated because this deployment sets
+          ludwig.identity.contact.enabled - the OIDC provider verifies addresses and is the single
+          source of truth for them;
+        - preferences come from user-settings-spring-boot-starter in projection mode, fed by the
+          account service's change stream, so no call leaves this process on the dispatch path.
+
+      The suppression list is untouched and stays here. A hard bounce is delivery state derived from
+      provider feedback only this service receives; the user never chose it.
+    -->
+
+    <changeSet id="0004-1-record-quiet-hours-deferral" author="notification-service">
+        <comment>
+            The fan-out's preference decision, snapshotted on the delivery.
+
+            A retry three hours later must not silently behave differently because a preference changed
+            in between, and "why did this arrive at seven in the morning" has to be answerable from the
+            row rather than from a time-travel query against settings history. The locale, timezone and
+            address were already snapshotted; this is the decision they fed.
+        </comment>
+        <addColumn tableName="notification_delivery">
+            <column name="quiet_hours_deferred" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="0004-2-drop-recipient-preference" author="notification-service">
+        <comment>
+            Opt-outs now live in the account service and reach this one as projected settings.
+
+            Dropped rather than left behind: two stores for one fact is the thing this change exists to
+            remove, and a table nothing writes to is a table somebody eventually reads. Operators
+            migrating an existing deployment export these rows into the account service's settings
+            before running this changeset - see the README.
+        </comment>
+        <dropTable tableName="notification_recipient_preference"/>
+        <rollback>
+            <!-- Structure only. The rows are gone; they exist in the account service now, and
+                 recreating an empty table is the honest rollback rather than a silent data promise. -->
+            <createTable tableName="notification_recipient_preference">
+                <column name="id" type="UUID">
+                    <constraints primaryKey="true" primaryKeyName="pk_notification_recipient_preference"/>
+                </column>
+                <column name="user_id" type="VARCHAR(255)">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="category" type="VARCHAR(128)">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="channel" type="VARCHAR(16)"/>
+                <column name="allowed" type="BOOLEAN">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="source" type="VARCHAR(64)">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="version" type="BIGINT" defaultValueNumeric="0">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="created_by" type="VARCHAR(255)"/>
+                <column name="updated_by" type="VARCHAR(255)"/>
+            </createTable>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0004-3-drop-recipient-profile" author="notification-service">
+        <comment>
+            Addresses now come from the identity projection and locale/timezone/quiet hours from the
+            settings replica, so nothing in this table has an owner here any more.
+
+            One capability genuinely goes: a per-user webhook URL. A webhook is a machine destination
+            rather than a person's contact point, and a request that wants one names it literally as an
+            ADDRESS recipient - which it could always do.
+        </comment>
+        <dropTable tableName="notification_recipient_profile"/>
+        <rollback>
+            <createTable tableName="notification_recipient_profile">
+                <column name="id" type="UUID">
+                    <constraints primaryKey="true" primaryKeyName="pk_notification_recipient_profile"/>
+                </column>
+                <column name="user_id" type="VARCHAR(255)">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="email_address" type="VARCHAR(320)"/>
+                <column name="chat_address" type="VARCHAR(255)"/>
+                <column name="webhook_url" type="VARCHAR(1024)"/>
+                <column name="locale" type="VARCHAR(35)"/>
+                <column name="timezone" type="VARCHAR(64)"/>
+                <column name="quiet_hours_start" type="TIME"/>
+                <column name="quiet_hours_end" type="TIME"/>
+                <column name="tenant_id" type="VARCHAR(128)"/>
+                <column name="version" type="BIGINT" defaultValueNumeric="0">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="created_by" type="VARCHAR(255)"/>
+                <column name="updated_by" type="VARCHAR(255)"/>
+            </createTable>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

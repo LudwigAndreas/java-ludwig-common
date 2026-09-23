@@ -1,23 +1,25 @@
 package ru.ludwigandreas.notification.service.preference;
 
 import java.time.Instant;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import ru.ludwigandreas.notification.settings.NotificationProperties;
-import ru.ludwigandreas.notification.repository.RecipientPreferenceRepository;
-import ru.ludwigandreas.notification.repository.entity.ChannelKind;
-import ru.ludwigandreas.notification.repository.entity.RecipientPreferenceEntity;
 import ru.ludwigandreas.notification.service.model.CategoryClass;
-import ru.ludwigandreas.notification.service.recipient.QuietHours;
-import ru.ludwigandreas.notification.service.recipient.ResolvedRecipient;
+import ru.ludwigandreas.notification.service.model.ChannelType;
+import ru.ludwigandreas.notification.settings.NotificationProperties;
 
 /**
  * Decides whether a resolved recipient wants this notification, now.
+ *
+ * <p>Reads nothing, and knows nothing about addresses. Every input is a {@link RecipientPreferences}
+ * resolved once for the whole fan-out of that recipient, plus the channel, the category and the
+ * clock - which makes this a pure function, testable without a database and without a resolved
+ * recipient to build. It used to query a preference table per delivery; the preferences now live in
+ * the account service and reach this process through a local replica the settings module keeps.
+ *
+ * <p>Taking the preferences rather than the resolved recipient is also what keeps the dependency
+ * one-way: recipient resolution produces preferences, and preferences know nothing about who is
+ * being written to or where.
  *
  * <h2>The bypass, and why it is a category property rather than a flag on the request</h2>
  *
@@ -30,62 +32,42 @@ import ru.ludwigandreas.notification.service.recipient.ResolvedRecipient;
  *
  * <p>The suppression list is checked separately and has no bypass at all - see
  * {@link SuppressionService}. That is the one rule a transactional notification cannot override,
- * because a hard bounce is a fact about the address rather than a wish of its owner.
+ * because a hard bounce is a fact about the address rather than a wish of its owner. It is also the
+ * one preference-shaped thing this service still owns: a bounce is delivery state derived from
+ * provider feedback only this service receives, and the user never chose it.
  *
  * <h2>Precedence</h2>
  *
- * <p>Four rows can bear on one decision: the exact {@code (category, channel)} pair, the category on
- * every channel, the wildcard category on this channel, and the wildcard on everything. The most
- * specific one wins, which is what lets a recipient say "nothing at all, except order updates by
- * email" - two rows, no deletion, and the record of what they originally asked for survives.
+ * <p>Two settings can bear on one opt-out decision: the exact {@code (category, channel)} pair and
+ * the blanket opt-out for the channel. The specific one wins whichever way it points, which is what
+ * lets a recipient say "nothing at all, except order updates by email" without either setting having
+ * to be deleted. See {@link RecipientPreferences#optedOut}.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PreferenceEvaluator {
 
-    /** The category value meaning "everything I am allowed to decline". */
-    public static final String WILDCARD_CATEGORY = "*";
-
-    /**
-     * Specificity score of one preference row: an exact category and an exact channel beat a
-     * wildcard on either axis, and a row naming both beats a row naming one.
-     */
-    private static final Comparator<RecipientPreferenceEntity> BY_SPECIFICITY = Comparator
-            .comparingInt((RecipientPreferenceEntity row) ->
-                    WILDCARD_CATEGORY.equals(row.getCategory()) ? 0 : 2)
-            .thenComparingInt(row -> row.getChannel() == null ? 0 : 1)
-            // A deterministic tie-break, so two equally specific contradictory rows always resolve
-            // the same way rather than differing between replicas.
-            .thenComparing(RecipientPreferenceEntity::getId);
-
-    private final RecipientPreferenceRepository preferenceRepository;
     private final NotificationProperties properties;
 
     /**
+     * @param preferences   resolved once per recipient, before the fan-out reached any channel
+     * @param channel       the channel this delivery would go out on
      * @param category      the business category, e.g. {@code order-updates}
      * @param categoryClass whether the recipient may decline it at all
      * @param now           evaluated against the recipient's quiet window in their own zone
      */
-    @Transactional(readOnly = true)
-    public DispatchDecision evaluate(ResolvedRecipient recipient, String category,
-                                     CategoryClass categoryClass, Instant now) {
+    public DispatchDecision evaluate(RecipientPreferences preferences, ChannelType channel,
+                                     String category, CategoryClass categoryClass, Instant now) {
         if (categoryClass == CategoryClass.TRANSACTIONAL) {
             return DispatchDecision.allowed();
         }
-        if (recipient.userId() != null && isOptedOut(recipient, category)) {
+        // A recipient with no account has no preferences to consult, and none() answers "not opted
+        // out" for every question - so there is no separate guard for the literal-address case.
+        if (preferences.optedOut(category, channel)) {
             return DispatchDecision.suppressed(DispatchDecision.Reasons.OPT_OUT);
         }
-        return quietHoursDecision(recipient.quietHours(), now);
-    }
-
-    private boolean isOptedOut(ResolvedRecipient recipient, String category) {
-        List<RecipientPreferenceEntity> applicable = preferenceRepository.findApplicable(
-                recipient.userId(), category, ChannelKind.valueOf(recipient.channel().name()));
-        Optional<RecipientPreferenceEntity> winner = applicable.stream().max(BY_SPECIFICITY);
-        // No row at all means allowed. Opting out is the exception, so absence is the permissive
-        // answer - the alternative would make a service with an empty preference table silent.
-        return winner.isPresent() && !winner.get().isAllowed();
+        return quietHoursDecision(preferences.quietHours(), now);
     }
 
     private DispatchDecision quietHoursDecision(QuietHours quietHours, Instant now) {

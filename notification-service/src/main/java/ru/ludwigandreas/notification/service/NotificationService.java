@@ -1,5 +1,6 @@
 package ru.ludwigandreas.notification.service;
 
+import java.util.UUID;
 import ru.ludwigandreas.notification.service.model.NotificationCommand;
 import ru.ludwigandreas.notification.service.model.NotificationRequestView;
 import ru.ludwigandreas.notification.service.model.RenderRequest;
@@ -24,6 +25,24 @@ public interface NotificationService {
      * first one's result, marked as a duplicate, and creates nothing.
      */
     NotificationRequestView submit(NotificationCommand command);
+
+    /**
+     * The request behind an id, with the deliveries it fanned out into.
+     *
+     * <p>The other half of an asynchronous ingress. {@code submit} answers 202 and a location, which
+     * is only a useful answer if that location resolves - and a caller whose HTTP call timed out
+     * after the request was written has no other way to find out what happened to it. Without this,
+     * the idempotency key is the only handle a caller has, and re-submitting to read a status is a
+     * poor way to ask a question.
+     *
+     * <p>Scoped like the delivery history it exposes: a caller sees requests in its own tenant unless
+     * its role says otherwise. See {@code SecurityConfig} for the mapping and
+     * {@code ludwig.security.data.policies} for who gets what.
+     *
+     * @throws ru.ludwigandreas.notification.service.exception.RequestNotFoundException if no such
+     *         request exists
+     */
+    NotificationRequestView get(UUID id);
 
     /**
      * Renders a template without sending anything.

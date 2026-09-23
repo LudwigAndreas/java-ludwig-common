@@ -100,10 +100,27 @@ server:
 ludwig:
   notification:
     ingress:
-      kafka-enabled: ${NOTIFICATION_KAFKA_ENABLED:true}
+      # OFF. This platform has no broker yet, so REST is the ingress every caller uses: POST
+      # /api/v1/notifications for one notification, POST /api/v1/notifications/batch for a caller
+      # replacing a topic producer, GET /api/v1/notifications/{id} for the status afterwards.
+      #
+      # Turning this on when a broker exists is one flag and no code: both ingresses converge on the
+      # same application service, and neither decides anything the other does not. The three settings
+      # below are read only when it is on, and are kept here so that turning it on does not also mean
+      # inventing a topic name under time pressure.
+      kafka-enabled: ${NOTIFICATION_KAFKA_ENABLED:false}
       topic: ${NOTIFICATION_TOPIC:platform.notifications.requests}
       group-id: notification-service
       concurrency: 2
+      rest:
+        # Each item is its own transaction and fans out into a delivery per recipient per channel, so
+        # a batch is a unit of work held on one HTTP thread. 100 x 500 recipients is already the
+        # largest thing this service does in one request.
+        max-batch-size: ${NOTIFICATION_MAX_BATCH_SIZE:100}
+        # One bad item must not discard the good ones - that is the whole reason to offer a batch
+        # rather than telling callers to loop. A caller who wants all-or-nothing wants one request
+        # with many recipients, which is atomic by construction.
+        fail-fast: false
 
     idempotency:
       enabled: true
@@ -175,6 +192,20 @@ ludwig:
         max-per-window: ${NOTIFICATION_WEBHOOK_RATE:0}
 
     preferences:
+      # Where a recipient's stored preferences come from. AUTO uses
+      # user-settings-spring-boot-starter when it is on the classpath and has a mode enabled, and the
+      # defaults below otherwise - so the whole migration is a POM scope and the block at the bottom
+      # of this file. Switch to USER_SETTINGS once opt-outs are load-bearing: it makes the silent
+      # fallback a startup failure instead, which is the only way a deployment that lost its
+      # preference store finds out before a recipient does.
+      #
+      # TODAY THIS SERVICE RUNS ON THE DEFAULTS BELOW. Per-recipient opt-outs, quiet windows and
+      # digest cadence read as unset; the suppression list (bounces, complaints) is this service's
+      # own data and is unaffected. See RecipientPreferenceSource.
+      source: ${NOTIFICATION_PREFERENCE_SOURCE:AUTO}
+      # The fallbacks for a recipient with no stored preferences - which, until the account service
+      # publishes them, is everybody. A caller that already knows a recipient's locale or timezone
+      # can pass them on the request itself, and that wins over these.
       default-locale: en
       # UTC rather than the server's zone, so quiet hours do not change meaning when the deployment
       # moves region.
@@ -183,6 +214,21 @@ ludwig:
       # Defer rather than drop: the caller was told the request was accepted, so something has to
       # arrive.
       quiet-hours-defer: true
+      # Categories a recipient may decline individually. Each becomes a setting definition per
+      # channel, validated at startup. The ACCOUNT SERVICE must declare the same list: it is the one
+      # that stores the values, and a key this service reads but that one never writes resolves to
+      # "not opted out".
+      #
+      # A category not listed here can still be declined through the blanket per-channel opt-out.
+      declinable-categories:
+        - marketing
+        - product-updates
+        - digest-summary
+
+    recipients:
+      # Refuse to write to an address the OIDC provider has not marked verified. A provider that says
+      # nothing at all is not treated as a refusal - see the property's Javadoc.
+      require-verified-contact: ${NOTIFICATION_REQUIRE_VERIFIED_CONTACT:true}
 
     digest:
       enabled: ${NOTIFICATION_DIGEST_ENABLED:false}
@@ -220,7 +266,16 @@ ludwig:
       soft-bounce-suppression: 24h
 
     events:
-      enabled: true
+      # OFF until there is somewhere to send them. Lifecycle events (delivered, failed, suppressed)
+      # are published through the outbox, and the outbox's default route below is KAFKA - which this
+      # deployment does not have. Left on, every delivery would write an outbox row that the
+      # dispatcher could never send, and the table would grow until somebody noticed.
+      #
+      # Two ways to turn it on. With a broker: set this and leave the route as it is. Without one:
+      # set this, change ludwig.outbox.default-route.transport to REST, and give
+      # ludwig.outbox.rest.endpoints a URL for the destination - the outbox module ships a REST
+      # dispatcher precisely so an event stream does not require a broker.
+      enabled: ${NOTIFICATION_EVENTS_ENABLED:false}
       route: notification-events
 
     # The hot-reloadable overlay: channel on/off and rate limits, changeable during an incident
@@ -301,13 +356,38 @@ ludwig:
           write:
             ROLE_NOTIFICATION_ADMIN: ALL
             ROLE_NOTIFICATION_SUPPORT: TENANT
+        # The request a caller submitted, readable through GET /api/v1/notifications/{id} - the
+        # resource the 202 points at. Without this policy the default above denies it, and the
+        # location header would be a promise nobody could follow.
+        notification-request:
+          read:
+            ROLE_NOTIFICATION_ADMIN: ALL
+            ROLE_NOTIFICATION_SUPPORT: TENANT
+            # A sending service reads back only what it submitted itself. Narrower than TENANT on
+            # purpose: a peer service polling its own request has no business seeing what other
+            # services in the same tenant are sending, and the request body names recipients.
+            ROLE_NOTIFICATION_SENDER: OWN
 
   # --- identity projection -----------------------------------------------------------------------
   identity:
     liquibase:
       enabled: false
+    contact:
+      # The one deployment in the estate that turns this on. The OIDC provider verifies a person's
+      # email and phone, so it is the single source of truth for them; this service is the one that
+      # writes to people, so it is the one that projects them. Every other service leaves the flag off
+      # and its security_user rows stay contact-free.
+      enabled: true
     kafka:
-      enabled: ${IDENTITY_PROJECTION_ENABLED:true}
+      # OFF, like every other consumer here, because there is no broker. The projection's TABLES are
+      # still created and still read: recipient resolution looks a user up in security_user whatever
+      # fed it. What is missing is the feed.
+      #
+      # So until this is on, a request naming a userId resolves to an address only if something else
+      # has written that row. A caller that cannot rely on that names the address literally instead -
+      # RecipientDto accepts either - and every delivery path, preference and suppression rule works
+      # identically for both.
+      enabled: ${IDENTITY_PROJECTION_ENABLED:false}
       topic: ${OIDC_USER_TOPIC:corp.identity.users}
       group-id: notification-service-identity-projection
     # Peer services calling this one, keyed by workload identity. In configuration rather than in a
@@ -316,8 +396,41 @@ ludwig:
       "[spiffe://mesh/ns/orders/sa/orders]":
         - ROLE_NOTIFICATION_SENDER
       "[spiffe://mesh/ns/identity/sa/identity]":
+        # No recipient-writer role any more: contact data is the OIDC provider's and preferences are
+        # the account service's, so there is nothing here for the identity service to write.
         - ROLE_NOTIFICATION_SENDER
-        - ROLE_NOTIFICATION_RECIPIENT_WRITER
+
+  # --- user settings: NOT DEPLOYED --------------------------------------------------------------
+  # The whole block is inert today and is kept as the switch-on instructions rather than as dead
+  # configuration. user-settings-spring-boot-starter is a `provided` dependency (see pom.xml), so it
+  # is not in the packaged application at all and none of the keys below are read.
+  #
+  # TO TURN IT ON, once the account service publishes its settings change stream:
+  #   1. remove <scope>provided</scope> from the dependency in pom.xml
+  #   2. uncomment this block
+  #   3. optionally set ludwig.notification.preferences.source=USER_SETTINGS, which turns a silent
+  #      fallback to configured defaults into a refusal to start
+  #
+  # Nothing else changes. Recipient resolution already goes through RecipientPreferenceSource, and
+  # the adapter behind it is wired by UserSettingsPreferenceConfig the moment the class is present.
+  #
+  # Note there is deliberately no owner.enabled here, and there should not be: enabling both modes is
+  # a startup failure, and a service that owns nothing must not be one edit away from writing into a
+  # replica. Note also that ludwig.user-settings.liquibase.enabled is NOT set to false, unlike the
+  # other modules' - this service's master changelog cannot include a changelog that ships in a jar
+  # it may not have, so the module applies its own. See db.changelog-master.xml.
+  #
+  # user-settings:
+  #   projection:
+  #     enabled: true
+  #     topic: ${USER_SETTINGS_TOPIC:platform.account.settings}
+  #     group-id: notification-service-user-settings-projection
+  #     source-system: account-service
+  #   cache:
+  #     # Longer than the module's default because nothing here is a security window and a fan-out
+  #     # reads the same recipients repeatedly; eviction on projected events is what keeps it fresh.
+  #     ttl: 10m
+  #     maximum-size: 50000
 
   # --- hot reload --------------------------------------------------------------------------------
   # Two settings are deliberately NOT declared here, because both are conditional on the property

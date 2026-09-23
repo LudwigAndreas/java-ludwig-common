@@ -1,0 +1,65 @@
+{
+  "hints": [
+    {
+      "name": "ludwig.rest-client.clients.keys",
+      "providers": [
+        {
+          "name": "any"
+        }
+      ]
+    },
+    {
+      "name": "ludwig.rest-client.clients.values.auth.type",
+      "values": [
+        { "value": "none", "description": "No credentials." },
+        { "value": "basic", "description": "HTTP Basic from auth.username and auth.password." },
+        { "value": "bearer", "description": "A static auth.token, or a TokenSupplier bean named by auth.token-supplier." },
+        { "value": "api-key", "description": "A key in auth.header-name, or in auth.query-param-name." },
+        { "value": "oauth2-client-credentials", "description": "Client credentials against the ClientRegistration named by auth.registration-id; cached with early refresh and single-flight." },
+        { "value": "oauth2-token-relay", "description": "Propagate the inbound user's access token. Requires auth.relay-enabled on this client and fails closed when no token is present." },
+        { "value": "custom", "description": "Delegate to the ClientAuthenticator bean named by auth.authenticator." }
+      ],
+      "providers": [
+        {
+          "name": "any"
+        }
+      ]
+    },
+    {
+      "name": "ludwig.rest-client.defaults.auth.type",
+      "values": [
+        { "value": "none" },
+        { "value": "basic" },
+        { "value": "bearer" },
+        { "value": "api-key" },
+        { "value": "oauth2-client-credentials" },
+        { "value": "custom" }
+      ]
+    },
+    {
+      "name": "ludwig.rest-client.clients.values.resilience.circuit-breaker.sliding-window-type",
+      "values": [
+        { "value": "COUNT_BASED", "description": "The window holds the last N calls." },
+        { "value": "TIME_BASED", "description": "The window holds the calls of the last N seconds." }
+      ]
+    },
+    {
+      "name": "ludwig.rest-client.defaults.resilience.circuit-breaker.sliding-window-type",
+      "values": [
+        { "value": "COUNT_BASED" },
+        { "value": "TIME_BASED" }
+      ]
+    },
+    {
+      "name": "ludwig.rest-client.clients.values.serialization.property-naming-strategy",
+      "values": [
+        { "value": "SNAKE_CASE" },
+        { "value": "LOWER_CAMEL_CASE" },
+        { "value": "UPPER_CAMEL_CASE" },
+        { "value": "KEBAB_CASE" },
+        { "value": "LOWER_CASE" },
+        { "value": "LOWER_DOT_CASE" }
+      ]
+    }
+  ]
+}

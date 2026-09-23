@@ -1,0 +1,5 @@
+ru.ludwigandreas.restclient.config.RestClientAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientAuthAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientObservabilityAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientInterfaceAutoConfiguration
+ru.ludwigandreas.restclient.config.RestClientWebCoreAutoConfiguration

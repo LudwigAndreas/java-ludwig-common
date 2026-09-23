@@ -36,3 +36,8 @@ build/
 
 ### Mac OS ###
 .DS_Store
+### Maven ###
+# Written by flatten-maven-plugin at process-resources and removed again by `mvn clean`.
+# It is the POM that actually gets installed/deployed (with ${revision} resolved), a build
+# output rather than a source file.
+.flattened-pom.xml

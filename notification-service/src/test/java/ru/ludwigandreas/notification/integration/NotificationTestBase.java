@@ -23,7 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @Testcontainers
 @SpringBootTest
-@Import(TestSecurityConfiguration.class)
+@Import({TestSecurityConfiguration.class, RecipientFixtures.class})
 @TestPropertySource(properties = {
         // Driven directly by the tests; see the class comment.
         "ludwig.notification.queue.poller-enabled=false",
@@ -32,6 +32,19 @@ import org.testcontainers.junit.jupiter.Testcontainers;
         // test class, so starting a broker for every case would multiply the suite's runtime.
         "ludwig.notification.ingress.kafka-enabled=false",
         "ludwig.identity.kafka.enabled=false",
+        // The user-settings module is a `provided` dependency and is excluded from the packaged
+        // application, so production runs without it and preferences come from configuration. It is
+        // on the TEST classpath, which is exactly what that scope is for: the adapter and the wired
+        // behaviour stay covered here, so the path that will be switched on later cannot rot
+        // unnoticed. The store-less path has its own coverage in RecipientPreferenceSourceTest.
+        //
+        // The replica is fed directly by the fixtures rather than from a broker; the consumer has its
+        // own test in the settings module, and starting one for every case would multiply this
+        // suite's runtime to prove something already proven there.
+        "ludwig.user-settings.projection.enabled=true",
+        "spring.kafka.listener.auto-startup=false",
+        // The test's own category has to be declinable, exactly as a real deployment declares its own.
+        "ludwig.notification.preferences.declinable-categories=campaigns,marketing",
         "ludwig.outbox.polling.enabled=false",
         // GreenMail, started by the test that needs it, on its standard test-offset port.
         "spring.mail.host=127.0.0.1",

@@ -49,9 +49,6 @@ class ProductQueryRepositoryImpl implements ProductQueryRepository {
     private static final PathBuilder<ProductEntity> ROOT =
             new PathBuilder<>(ProductEntity.class, PRODUCT.getMetadata().getName());
 
-    /** Stable tie-breaker so paging can't return the same row on two pages. */
-    private static final OrderSpecifier<?> DEFAULT_ORDER = PRODUCT.createdAt.desc();
-
     private final JPAQueryFactory queryFactory;
     private final ODataFilterService filterService;
     private final DataAccessGuard dataAccessGuard;
@@ -91,8 +88,7 @@ class ProductQueryRepositoryImpl implements ProductQueryRepository {
     @Override
     public Page<ProductEntity> search(ProductSearchCriteria criteria) {
         ODataQuery<ProductEntity> query = filterService.parse(
-                ProductEntity.class, criteria.filter(), criteria.top(), criteria.skip(),
-                criteria.orderBy(), false);
+                ProductEntity.class, criteria.filter(), criteria.top(), criteria.skip(), criteria.orderBy());
         Pageable pageable = query.pageable();
         Predicate scoped = dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ)
                 .and(query.predicate());
@@ -118,10 +114,12 @@ class ProductQueryRepositoryImpl implements ProductQueryRepository {
         return total == null ? 0L : total;
     }
 
+    /**
+     * The sort always carries the entity's {@code @FilterPolicy(defaultOrderBy = ...)} tie-breaker,
+     * appended by the filter service after whatever the caller asked for, so there is no unordered
+     * case to fall back on here.
+     */
     private OrderSpecifier<?>[] orderSpecifiers(Sort sort) {
-        if (sort.isUnsorted()) {
-            return new OrderSpecifier<?>[] {DEFAULT_ORDER};
-        }
         return sort.stream()
                 .map(order -> orderSpecifier(order.getProperty(), order.isAscending()))
                 .toArray(OrderSpecifier<?>[]::new);

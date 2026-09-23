@@ -3,7 +3,9 @@ package ru.ludwigandreas.notification.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntity;
+import ru.ludwigandreas.notification.repository.entity.NotificationRequestEntity;
 import ru.ludwigandreas.notification.repository.entity.QNotificationDeliveryEntity;
+import ru.ludwigandreas.notification.repository.entity.QNotificationRequestEntity;
 import ru.ludwigandreas.security.data.DataScopeMapping;
 
 /**
@@ -26,6 +28,9 @@ public class SecurityConfig {
     /** The name the delivery's policies and scope mapping are registered under. */
     public static final String DELIVERY_RESOURCE = "notification-delivery";
 
+    /** The name the request's policies and scope mapping are registered under. */
+    public static final String REQUEST_RESOURCE = "notification-request";
+
     /**
      * Two dimensions, one path and one accessor each.
      *
@@ -38,13 +43,35 @@ public class SecurityConfig {
      * principal at fan-out and never from a request body. {@code createdBy} is deliberately absent:
      * a delivery is written by the fan-out rather than by a caller, so the owner dimension would
      * always be this service's own background identity and would scope nothing. The accountable
-     * principal is on the request, and the request is not directly readable.
+     * principal is on the request, which has its own mapping below.
      */
     @Bean
     public DataScopeMapping<NotificationDeliveryEntity> deliveryDataScopeMapping() {
         QNotificationDeliveryEntity delivery = QNotificationDeliveryEntity.notificationDeliveryEntity;
         return DataScopeMapping.forResource(DELIVERY_RESOURCE, NotificationDeliveryEntity.class)
                 .tenant(delivery.tenantId, NotificationDeliveryEntity::getTenantId)
+                .build();
+    }
+
+    /**
+     * The same two dimensions for the request a caller submitted.
+     *
+     * <p>Needed because the request became readable: the REST ingress answers 202 with a location,
+     * and a location nobody may follow is not an answer. A load by id does not pass through a scoped
+     * query, so without this mapping a caller holding an id - its own, from a log, or guessed - could
+     * read the template key, the category and the recipient list of any tenant's request.
+     *
+     * <p>Unlike a delivery, a request <em>does</em> have a meaningful owner: it was submitted by a
+     * caller, and {@code createdBy} is that caller. It is mapped so a policy can express "a service
+     * may read the requests it submitted and no others", which is the narrowest useful grant for a
+     * peer service polling the status of what it sent.
+     */
+    @Bean
+    public DataScopeMapping<NotificationRequestEntity> requestDataScopeMapping() {
+        QNotificationRequestEntity request = QNotificationRequestEntity.notificationRequestEntity;
+        return DataScopeMapping.forResource(REQUEST_RESOURCE, NotificationRequestEntity.class)
+                .tenant(request.tenantId, NotificationRequestEntity::getTenantId)
+                .owner(request.createdBy, NotificationRequestEntity::getCreatedBy)
                 .build();
     }
 }

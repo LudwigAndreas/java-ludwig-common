@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for job-core. Changeset ids/author are namespaced ("job-core-NNN", "ludwig-job-core") so they
+      never collide with a consuming application's own changesets in the shared DATABASECHANGELOG table -
+      see JobCoreLiquibaseAutoConfiguration, which registers this changelog as an independent
+      SpringLiquibase bean. Postgres-only.
+    -->
+
+    <changeSet id="job-core-001-create-run-lock" author="ludwig-job-core">
+        <createTable tableName="job_run_lock">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <!--
+              The lock name is the real identity of the row; the surrogate id exists only because the
+              SKIP LOCKED claim helper addresses rows by `id`. The unique constraint is what makes the
+              "create it if it is not there" insert an ON CONFLICT no-op rather than a second row that
+              would let two instances each hold "the" lease.
+            -->
+            <column name="lock_name" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="ux_job_run_lock_name"/>
+            </column>
+            <!-- Null while the lease is free. Never used alone to decide whether it is held: expires_at is. -->
+            <column name="owner" type="VARCHAR(255)"/>
+            <column name="run_id" type="UUID"/>
+            <column name="acquired_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="heartbeat_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <!--
+              The single source of truth for "is this lease held". A holder that stops renewing stops
+              being the holder, with no participation from the holder required - which is the only way
+              a lease survives the process holding it being killed.
+            -->
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>

@@ -2,6 +2,7 @@ package ru.ludwigandreas.outbox.scheduler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.ludwigandreas.job.core.claim.ClaimOwner;
 import ru.ludwigandreas.outbox.config.OutboxProperties;
 import ru.ludwigandreas.outbox.dispatch.DispatchResult;
 import ru.ludwigandreas.outbox.dispatch.OutboxDispatcher;
@@ -10,13 +11,10 @@ import ru.ludwigandreas.outbox.entity.OutboxMessage;
 import ru.ludwigandreas.outbox.metrics.OutboxMetrics;
 import ru.ludwigandreas.outbox.repository.OutboxMessageRepository;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Owns the claim -> dispatch -> record-outcome lifecycle for one poll cycle.
@@ -30,13 +28,6 @@ import java.util.UUID;
  * </ol>
  */
 public class OutboxProcessingService {
-
-    /**
-     * Characters of a random UUID appended to the hostname to tell two instances on the same host
-     * apart: enough to make a collision between concurrent pollers effectively impossible, short
-     * enough to keep the owner readable in the lock column.
-     */
-    private static final int LOCK_OWNER_SUFFIX_LENGTH = 8;
 
     private static final Logger log = LoggerFactory.getLogger(OutboxProcessingService.class);
 
@@ -57,7 +48,7 @@ public class OutboxProcessingService {
         this.outcomeRecorder = outcomeRecorder;
         this.metrics = metrics;
         this.properties = properties;
-        this.lockOwner = resolveLockOwner(properties.getPolling().getLockOwner());
+        this.lockOwner = ClaimOwner.resolve(properties.getPolling().getLockOwner());
     }
 
     /** @return how many messages were claimed (and thus attempted) this cycle */
@@ -94,18 +85,5 @@ public class OutboxProcessingService {
         } else if (result instanceof DispatchResult.Failure failure) {
             outcomeRecorder.recordFailure(message.getId(), failure.reason(), failure.retryable());
         }
-    }
-
-    private static String resolveLockOwner(String configured) {
-        if (configured != null && !configured.isBlank()) {
-            return configured;
-        }
-        String host;
-        try {
-            host = InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException e) {
-            host = "unknown-host";
-        }
-        return host + "-" + UUID.randomUUID().toString().substring(0, LOCK_OWNER_SUFFIX_LENGTH);
     }
 }

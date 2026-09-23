@@ -102,6 +102,39 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>identity-projection-spring-boot-starter</artifactId>
         </dependency>
+        <!--
+            OPTIONAL, AND COMPILE-TIME ONLY. READ THIS BEFORE CHANGING THE SCOPE.
+
+            The user's preferences - locale, timezone, quiet hours, digest, per-category opt-outs -
+            belong to the user, not to this service, and on this platform the account service owns
+            them and publishes them over Kafka. Until that stream exists, this service resolves
+            preferences from configuration instead and delivers perfectly well without the module.
+
+            'provided' is the scope because <optional>true</optional> would not do it. Optional only
+            stops a dependency reaching downstream consumers, and an application has none - the jar
+            would still be on this service's own runtime classpath, every @ConditionalOnClass
+            guarding it would match, and the module would be "optional" in name only. 'provided'
+            keeps the types available to javac and to the test classpath, so the adapter in
+            service.preference.usersettings compiles and stays covered by tests, while nothing that
+            runs depends on it.
+
+            The scope alone is still not sufficient, because spring-boot-maven-plugin:repackage
+            packages provided-scope dependencies on purpose. See the matching <excludes> in the build
+            section below - the two together are what make @ConditionalOnClass genuinely answer false
+            at runtime.
+
+            TO TURN IT ON, once the account service publishes its change stream: delete the <scope>
+            line below AND the exclusion below, uncomment ludwig.user-settings.* in application.yml,
+            and let the module apply its own Liquibase changelog
+            (ludwig.user-settings.liquibase.enabled defaults true - this service's master changelog
+            deliberately does not include it). Nothing on the dispatch path changes: see
+            RecipientPreferenceSource for the seam, and UserSettingsPreferenceConfig for the wiring.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>user-settings-spring-boot-starter</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- FreeMarker template hot reload, Vault-backed SMTP credentials, and the runtime
              channel-enable/rate-limit view (RefreshableConfig). -->
         <dependency>
@@ -261,6 +294,33 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
+            </plugin>
+            <!--
+                Keeps the optional user-settings module out of the executable jar.
+
+                This exclusion is what makes the `provided` scope above mean what it says. Scope
+                alone is not enough: spring-boot-maven-plugin:repackage deliberately packages
+                provided-scope dependencies, because for a servlet deployment they are exactly the
+                things the container would have supplied. That is the right default and the wrong one
+                here - it would put the starter back on the runtime classpath, every
+                @ConditionalOnClass guarding it would match, and the optional dependency would be
+                optional only at the level of the POM.
+
+                So the scope keeps it off this module's own compile-time dependents, and this keeps it
+                out of what actually runs. Remove BOTH to switch the module on - see the dependency's
+                comment above.
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>ru.ludwigandreas</groupId>
+                            <artifactId>user-settings-spring-boot-starter</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
             </plugin>
         </plugins>
     </build>

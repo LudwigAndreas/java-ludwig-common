@@ -1,5 +1,7 @@
 # outbox-spring-boot-starter
 
+***English** · [Русский](README.ru.md)*
+
 Enterprise-ready transactional outbox for Java 17 + PostgreSQL + Spring Boot services. Add the
 dependency, include the shipped Liquibase changelog, call `OutboxEventPublisher.publish(...)` inside
 your existing `@Transactional` business methods, and events reach Kafka/REST/your own custom transport
@@ -66,12 +68,34 @@ success moves it to `PUBLISHED`; failure schedules a retry with exponential back
 | JSON serialization | `serialization` (Jackson by default, pluggable) |
 | Multi-destination routing | `routing` (config-driven, or an explicit `OutboxEvent.route()` override) |
 | Kafka / REST dispatch, custom transports | `dispatch`, `dispatch.kafka`, `dispatch.rest` |
-| Retry backoff, dead-letter handling | `backoff`, `scheduler` (`OutboxOutcomeRecorder`) |
+| Retry backoff, dead-letter handling | `job-core`'s `BackoffCalculator`, `scheduler` (`OutboxOutcomeRecorder`) |
 | Ordering, idempotency | schema/query-level (`entity`, `repository` - no separate package) |
 | Scheduled publisher, stale-claim recovery | `scheduler` |
 | Audit trail | `audit` (structured logs by default, optional persisted history) |
 | Metrics | `metrics` (Micrometer, optional) |
 | Configuration | `config` (`OutboxProperties`, `ludwig.outbox.*`) |
+
+## What this module shares with the rest of the platform
+
+The backoff curve, the self-scheduling lifecycle the poller and the stale-claim reclaimer are built
+on, the `FOR UPDATE SKIP LOCKED` claim statement and the instance identity written to `locked_by` all
+live in [`job-core`](../job-core), shared with
+[`reconciliation-spring-boot-starter`](../reconciliation-spring-boot-starter). They were extracted
+rather than copied for a specific reason: two divergent implementations of a retry curve is a bug
+that only shows up as "the other service recovers from a partner outage differently from this one",
+months later, with nothing to point at.
+
+Two things changed for this module in that extraction, both visible in configuration:
+
+- **`ludwig.outbox.retry.jitter` (default `0.2`).** Backoff intervals are now randomized by a fifth
+  either way. Without it, every message that failed during one destination's brief outage came due
+  again at exactly the same instant, on every instance at once, and the destination that had just
+  recovered was knocked over by its own backlog. Set it to `0` for a deterministic schedule.
+- **`ludwig.outbox.processing.drain-timeout` (default `20s`).** Shutdown now waits for a poll cycle
+  that is already running instead of cancelling it. Previously those rows stayed `PROCESSING`, owned
+  by a process that no longer existed, until the stale reclaimer noticed them up to
+  `stale-timeout + stale-reclaim-fixed-delay` later - so every rolling deploy delayed whatever was
+  in flight by minutes. Keep it comfortably below the container runtime's termination grace period.
 
 ## Multi-destination routing
 
@@ -150,10 +174,12 @@ consuming application.
 | `ludwig.outbox.polling.lock-owner` | hostname + random suffix | Value written to `locked_by` |
 | `ludwig.outbox.processing.stale-timeout` | `5m` | A `PROCESSING` row older than this is reclaimed to `PENDING` |
 | `ludwig.outbox.processing.stale-reclaim-fixed-delay` | `1m` | How often the stale-reclaim task runs |
+| `ludwig.outbox.processing.drain-timeout` | `20s` | How long shutdown waits for an in-flight poll cycle rather than abandoning its claimed rows |
 | `ludwig.outbox.retry.max-attempts` | `10` | Attempts before dead-lettering |
 | `ludwig.outbox.retry.initial-interval` | `1s` | First backoff interval |
 | `ludwig.outbox.retry.multiplier` | `2.0` | Backoff growth factor |
 | `ludwig.outbox.retry.max-interval` | `5m` | Backoff cap |
+| `ludwig.outbox.retry.jitter` | `0.2` | Fraction each interval is randomized by, so messages that failed together do not all come due at the same instant |
 | `ludwig.outbox.ordering.enabled` | `true` | Honor `OutboxEvent.orderingKey` |
 | `ludwig.outbox.idempotency.enabled` | `true` | Honor `OutboxEvent.idempotencyKey` |
 | `ludwig.outbox.dead-letter.enabled` | `true` | Move exhausted messages to `DEAD_LETTER` (else they stay `FAILED`) |

@@ -48,6 +48,15 @@ public class IdentityProjectionService {
     private final OidcUserEventMapper mapper;
     private final AuthorityCache authorityCache;
 
+    /**
+     * Whether the projection keeps the user's contact data.
+     *
+     * <p>Cleared rather than never mapped, because the mapper is generated and mapping by name is what
+     * makes a new field on either side a build failure rather than a silent omission. Dropping the
+     * values here instead keeps that property and puts the decision in one visible place.
+     */
+    private final boolean storeContactData;
+
     @Transactional
     public void apply(OidcUserEvent event) {
         if (event == null || event.subject() == null || event.subject().isBlank()) {
@@ -71,6 +80,9 @@ public class IdentityProjectionService {
             mapper.update(event, entity);
         }
         entity.setStatus(statusFor(event));
+        if (!storeContactData) {
+            clearContactData(entity);
+        }
         repository.save(entity);
 
         evictAfterCommit(event.subject());
@@ -84,6 +96,23 @@ public class IdentityProjectionService {
         Instant incoming = event.occurredAt();
         Instant current = stored.getSourceTimestamp();
         return incoming != null && current != null && !incoming.isAfter(current);
+    }
+
+    /**
+     * Removes contact data from a row this deployment has not opted into keeping.
+     *
+     * <p>Cleared on every apply rather than only on insert, so switching the flag off actually removes
+     * what an earlier configuration stored - the next event for each user scrubs their row. A flag that
+     * only stopped new writes would leave the old values sitting there indefinitely, which is the
+     * failure mode that matters for personal data.
+     */
+    private void clearContactData(SecurityUserEntity entity) {
+        entity.setEmail(null);
+        entity.setAlternateEmail(null);
+        entity.setPhoneNumber(null);
+        entity.setChatHandle(null);
+        entity.setEmailVerified(null);
+        entity.setPhoneVerified(null);
     }
 
     private UserStatus statusFor(OidcUserEvent event) {

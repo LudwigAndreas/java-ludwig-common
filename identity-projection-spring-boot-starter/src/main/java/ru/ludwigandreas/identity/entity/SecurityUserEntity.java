@@ -26,10 +26,24 @@ import ru.ludwigandreas.db.core.entity.ExternalEntity;
  * {@code sourceTimestamp} come from the event, which is what lets the projection reject events that
  * arrive out of order.
  *
- * <p>Only what authorization actually needs is stored. This is a copy of directory data living in a
- * service database, replicated to every service that uses this module, so every field is another place a
- * personal-data request has to reach - {@code displayName} for audit readability and nothing else by
- * default.
+ * <p>Only what authorization actually needs is stored <em>by default</em>. This is a copy of directory
+ * data living in a service database, replicated to every service that uses this module, so every field is
+ * another place a personal-data request has to reach - {@code displayName} for audit readability and
+ * nothing else unless a service asks for more.
+ *
+ * <h2>Contact data</h2>
+ *
+ * <p>The contact columns below are populated only when {@code ludwig.identity.contact.enabled} is set,
+ * and it is <b>off by default</b>. They exist because the OIDC provider is the single source of truth for
+ * a person's verified addresses - it is where verification happens - and a service that needs to write to
+ * a person should read the address from the directory rather than keep its own copy that nothing keeps in
+ * step. But they are personal data of exactly the kind the paragraph above is about, so a service that
+ * does not send messages to people does not store them: the notification service turns the flag on, and
+ * nothing else does.
+ *
+ * <p>None of them is indexed, deliberately. Every lookup here is by subject, so an index would buy
+ * nothing and would turn the table into an answer to "which user has this address" - a question a
+ * projection of directory data should not make cheap.
  */
 @Getter
 @Setter
@@ -48,6 +62,36 @@ public class SecurityUserEntity extends ExternalEntity<String> {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private UserStatus status = UserStatus.ACTIVE;
+
+    /** Primary address, as the provider verified it. Null unless contact projection is switched on. */
+    @Column(name = "email", length = 320)
+    private String email;
+
+    /** Secondary address - an external one where {@link #email} is internal, say. */
+    @Column(name = "alternate_email", length = 320)
+    private String alternateEmail;
+
+    /** E.164 phone number. */
+    @Column(name = "phone_number", length = 32)
+    private String phoneNumber;
+
+    /** Handle on the organization's chat system. */
+    @Column(name = "chat_handle", length = 255)
+    private String chatHandle;
+
+    /**
+     * Whether the provider has verified {@link #email}.
+     *
+     * <p>{@code Boolean}, not {@code boolean}: null means the provider did not say, which is a
+     * different fact from "it said no". A consumer deciding whether it may write to an address needs
+     * to be able to tell them apart - treating silence as unverified would stop every message the
+     * moment an older producer omitted the field.
+     */
+    @Column(name = "email_verified")
+    private Boolean emailVerified;
+
+    @Column(name = "phone_verified")
+    private Boolean phoneVerified;
 
     /**
      * Role codes as the provider names them; normalization to the {@code ROLE_} prefix happens on read,

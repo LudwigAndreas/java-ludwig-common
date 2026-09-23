@@ -7,6 +7,8 @@ import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.ConfigurableEnvironment;
 import ru.ludwigandreas.notification.service.model.ChannelType;
+import ru.ludwigandreas.notification.service.preference.ConfiguredPreferenceSource;
+import ru.ludwigandreas.notification.service.preference.RecipientPreferenceSource;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
 
 /**
@@ -40,11 +42,14 @@ public class NotificationConfigurationValidator {
 
     private final NotificationProperties properties;
     private final ConfigurableEnvironment environment;
+    private final RecipientPreferenceSource preferenceSource;
 
     public NotificationConfigurationValidator(NotificationProperties properties,
-                                              ConfigurableEnvironment environment) {
+                                              ConfigurableEnvironment environment,
+                                              RecipientPreferenceSource preferenceSource) {
         this.properties = properties;
         this.environment = environment;
+        this.preferenceSource = preferenceSource;
     }
 
     /** @throws IllegalStateException listing every problem found, rather than only the first */
@@ -59,14 +64,16 @@ public class NotificationConfigurationValidator {
         checkChatBaseUrl(problems);
         checkDigestCategories(problems);
         checkRetentionOrdering(problems);
+        checkPreferenceSource(problems);
 
         if (!problems.isEmpty()) {
             throw new IllegalStateException("ludwig.notification configuration is unsafe:\n  - "
                     + String.join("\n  - ", problems));
         }
-        log.info("Notification configuration validated: batch {}, lease {}, poll every {}",
+        log.info("Notification configuration validated: batch {}, lease {}, poll every {}; "
+                        + "recipient preferences from {}",
                 properties.getQueue().getBatchSize(), properties.getQueue().getLeaseTimeout(),
-                properties.getQueue().getPollInterval());
+                properties.getQueue().getPollInterval(), preferenceSource.describe());
     }
 
     /**
@@ -163,6 +170,35 @@ public class NotificationConfigurationValidator {
         NotificationProperties.Chat chat = properties.getChannels().getChat();
         if (chat.isEnabled() && isBlank(chat.getBaseUrl())) {
             problems.add("channels.chat is enabled but channels.chat.base-url is empty.");
+        }
+    }
+
+    /**
+     * A deployment that declared stored preferences load-bearing must actually have them.
+     *
+     * <p>{@code AUTO} deliberately falls back in silence, because that is the state this service ships
+     * in and the state a migration passes through. {@code USER_SETTINGS} is the operator saying the
+     * fallback is no longer acceptable here, and the failure it prevents is the quiet one: every
+     * per-recipient opt-out reads as "has not opted out", so a campaign goes to people who declined
+     * it and nothing in the logs says why. A pod that will not start is a far cheaper way to find out.
+     *
+     * <p>The test is which implementation won the {@code @Primary} contest rather than whether the
+     * module is on the classpath, because the failure mode being guarded against is the module being
+     * present and not started - see {@code UserSettingsPreferenceConfig}. It is written against
+     * {@link ConfiguredPreferenceSource}, a class this service always has, so the check itself does
+     * not reintroduce the optional dependency it exists to police.
+     */
+    private void checkPreferenceSource(List<String> problems) {
+        if (properties.getPreferences().getSource()
+                != NotificationProperties.Preferences.Source.USER_SETTINGS) {
+            return;
+        }
+        if (preferenceSource instanceof ConfiguredPreferenceSource) {
+            problems.add("preferences.source is USER_SETTINGS but preferences are resolving from "
+                    + "configuration, so every per-recipient opt-out and quiet-hours window would read "
+                    + "as unset. Add user-settings-spring-boot-starter and enable a mode "
+                    + "(ludwig.user-settings.projection.enabled or .owner.enabled), or set "
+                    + "preferences.source to AUTO to accept configured defaults.");
         }
     }
 

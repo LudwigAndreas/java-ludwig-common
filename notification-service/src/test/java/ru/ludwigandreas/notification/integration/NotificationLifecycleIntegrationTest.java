@@ -3,7 +3,6 @@ package ru.ludwigandreas.notification.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,6 +11,8 @@ import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.ServerSetupTest;
 import jakarta.mail.internet.MimeMessage;
 import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,13 +30,13 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import ru.ludwigandreas.notification.repository.DeliveryStatusHistoryRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.NotificationRequestRepository;
-import ru.ludwigandreas.notification.repository.RecipientPreferenceRepository;
-import ru.ludwigandreas.notification.repository.RecipientProfileRepository;
 import ru.ludwigandreas.notification.repository.SuppressionRepository;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatus;
 import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntity;
 import ru.ludwigandreas.notification.service.channel.HmacSigner;
+import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.notification.service.preference.DispatchDecision;
+import ru.ludwigandreas.notification.service.preference.usersettings.NotificationSettings;
 import ru.ludwigandreas.notification.service.queue.DeliveryDispatchService;
 import ru.ludwigandreas.notification.web.dto.CategoryClassDto;
 import ru.ludwigandreas.notification.web.dto.ChannelTypeDto;
@@ -90,10 +91,7 @@ class NotificationLifecycleIntegrationTest extends NotificationTestBase {
     private DeliveryStatusHistoryRepository history;
 
     @Autowired
-    private RecipientProfileRepository profiles;
-
-    @Autowired
-    private RecipientPreferenceRepository preferences;
+    private RecipientFixtures recipients;
 
     @Autowired
     private SuppressionRepository suppressions;
@@ -106,12 +104,11 @@ class NotificationLifecycleIntegrationTest extends NotificationTestBase {
         history.deleteAll();
         deliveries.deleteAll();
         requests.deleteAll();
-        preferences.deleteAll();
         suppressions.deleteAll();
-        profiles.deleteAll();
         outbox.deleteAll();
+        recipients.reset();
 
-        givenProfile(RECIPIENT_ID, RECIPIENT_EMAIL, "en", "UTC");
+        recipients.givenUser(RECIPIENT_ID, RECIPIENT_EMAIL);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -167,8 +164,8 @@ class NotificationLifecycleIntegrationTest extends NotificationTestBase {
     @Test
     @DisplayName("one request to several recipients becomes one delivery each")
     void fansOutPerRecipient() throws Exception {
-        givenProfile("user-2", "grace@example.com", "en", "UTC");
-        givenProfile("user-3", "alan@example.com", "en", "UTC");
+        recipients.givenUser("user-2", "grace@example.com");
+        recipients.givenUser("user-3", "alan@example.com");
 
         UUID requestId = submit(new SendNotificationRequest("password-reset", "security",
                 CategoryClassDto.TRANSACTIONAL, PriorityDto.HIGH, Set.of(ChannelTypeDto.EMAIL),
@@ -188,7 +185,7 @@ class NotificationLifecycleIntegrationTest extends NotificationTestBase {
     @Test
     @DisplayName("an unreachable recipient is one DEAD delivery, not a failed request")
     void partialFailureIsRepresentable() throws Exception {
-        givenProfile("user-2", "grace@example.com", "en", "UTC");
+        recipients.givenUser("user-2", "grace@example.com");
         // No profile at all for user-missing, so it resolves to nothing.
 
         UUID requestId = submit(new SendNotificationRequest("password-reset", "security",
@@ -257,7 +254,7 @@ class NotificationLifecycleIntegrationTest extends NotificationTestBase {
     @Test
     @DisplayName("a marketing opt-out suppresses at fan-out, so nothing enters the queue")
     void optOutSuppressesBeforeTheQueue() throws Exception {
-        optOut(RECIPIENT_ID, "campaigns");
+        recipients.givenOptOut(RECIPIENT_ID, "campaigns", ChannelType.EMAIL);
 
         UUID requestId = submit(campaign(RECIPIENT_ID), "key-optout", 202);
 
@@ -272,9 +269,62 @@ class NotificationLifecycleIntegrationTest extends NotificationTestBase {
      * everything must still get their password reset.
      */
     @Test
+    @DisplayName("a blanket opt-out is overridden by an explicit opt-in for one category")
+    void explicitOptInBeatsTheBlanketOptOut() throws Exception {
+        // "Nothing at all, except order updates by email" - two settings, no deletion, and the record
+        // of the blanket refusal survives. It is the reason the evaluator distinguishes "not set" from
+        // "set to false" rather than reading a plain boolean.
+        recipients.givenOptOut(RECIPIENT_ID, NotificationSettings.ALL_CATEGORIES, ChannelType.EMAIL);
+        recipients.givenOptIn(RECIPIENT_ID, "campaigns", ChannelType.EMAIL);
+
+        UUID requestId = submit(campaign(RECIPIENT_ID), "key-optin", 202);
+
+        assertThat(deliveries.findByRequestId(requestId).get(0).getStatus())
+                .isEqualTo(DeliveryStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("quiet hours defer the delivery and the delivery records that they did")
+    void quietHoursDeferralIsRecordedOnTheDelivery() throws Exception {
+        // The window is computed around now so the case does not depend on what time the suite runs.
+        LocalTime nowUtc = LocalTime.now(ZoneOffset.UTC);
+        recipients.givenTimezone(RECIPIENT_ID, "UTC");
+        recipients.givenQuietHours(RECIPIENT_ID,
+                nowUtc.minusHours(1).withNano(0).toString(), nowUtc.plusHours(1).withNano(0).toString());
+
+        UUID requestId = submit(campaign(RECIPIENT_ID), "key-quiet", 202);
+
+        NotificationDeliveryEntity delivery = deliveries.findByRequestId(requestId).get(0);
+        assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PENDING);
+        assertThat(delivery.getNextAttemptAt()).isAfter(Instant.now());
+        // The outcome, on the row. "Why did this arrive at seven in the morning" has to be answerable
+        // months later, after the preference it came from has changed.
+        assertThat(delivery.isQuietHoursDeferred()).isTrue();
+        assertThat(dispatchService.processCycle()).isZero();
+    }
+
+    @Test
+    @DisplayName("a preference changed after fan-out does not alter a delivery already created")
+    void preferencesAreSnapshottedAtFanOut() throws Exception {
+        UUID requestId = submit(passwordReset(RECIPIENT_ID), "key-snapshot", 202);
+        NotificationDeliveryEntity before = deliveries.findByRequestId(requestId).get(0);
+        assertThat(before.getRecipientLocale()).isEqualTo("en");
+
+        // The account service publishes a change; the replica applies it. A retry must not pick it up.
+        recipients.givenLocale(RECIPIENT_ID, "ru-RU");
+        recipients.givenTimezone(RECIPIENT_ID, "Europe/Moscow");
+        assertThat(dispatchService.processCycle()).isEqualTo(1);
+
+        NotificationDeliveryEntity after = deliveries.findById(before.getId()).orElseThrow();
+        assertThat(after.getRecipientLocale()).isEqualTo("en");
+        assertThat(after.getRecipientTimezone()).isEqualTo("UTC");
+        assertThat(after.getRecipientAddress()).isEqualTo(RECIPIENT_EMAIL);
+    }
+
+    @Test
     @DisplayName("a transactional notification goes out despite a total opt-out")
     void transactionalIgnoresOptOut() throws Exception {
-        optOut(RECIPIENT_ID, "*");
+        recipients.givenOptOut(RECIPIENT_ID, NotificationSettings.ALL_CATEGORIES, ChannelType.EMAIL);
 
         UUID requestId = submit(passwordReset(RECIPIENT_ID), "key-transactional", 202);
 
@@ -707,17 +757,6 @@ class NotificationLifecycleIntegrationTest extends NotificationTestBase {
                 .header("X-Provider-Timestamp", Long.toString(timestamp))
                 .header("X-Provider-Signature", HmacSigner.sign(RECEIPT_SECRET, timestamp, body))
                 .content(body));
-    }
-
-    private void givenProfile(String userId, String email, String locale, String timezone)
-            throws Exception {
-        writeAs(TestPrincipals.admin(), put("/api/v1/notifications/recipients/{id}", userId),
-                Map.of("emailAddress", email, "locale", locale, "timezone", timezone));
-    }
-
-    private void optOut(String userId, String category) throws Exception {
-        writeAs(TestPrincipals.admin(), put("/api/v1/notifications/recipients/{id}/preferences", userId),
-                Map.of("category", category, "allowed", false, "source", "self-service"));
     }
 
     private void suppress(String address, String reason) throws Exception {

@@ -1,12 +1,15 @@
 package ru.ludwigandreas.notification.settings;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
@@ -58,6 +61,9 @@ public class NotificationProperties {
     private final Preferences preferences = new Preferences();
 
     @Valid
+    private final Recipients recipients = new Recipients();
+
+    @Valid
     private final Digest digest = new Digest();
 
     @Valid
@@ -77,8 +83,20 @@ public class NotificationProperties {
     @Setter
     public static class Ingress {
 
-        /** Off on a laptop and in tests that drive the REST path only. */
-        private boolean kafkaEnabled = true;
+        /**
+         * Whether the Kafka listener runs.
+         *
+         * <p>Off by default, because the REST ingress is the one every deployment has and the broker
+         * is the one some do not. A service with no broker that defaulted to consuming would fail to
+         * start on a missing container factory, which is a confusing way to learn that a topic was
+         * never provisioned; a service with a broker turns this on in one line.
+         *
+         * <p>Both ingresses may run at once, and on a platform that has Kafka they normally should:
+         * REST for anything a human is waiting on, the topic for fire-and-forget fan-out. They
+         * converge on the same application service and neither decides anything the other does not -
+         * see {@code NotificationService}.
+         */
+        private boolean kafkaEnabled = false;
 
         @NotBlank
         private String topic = "platform.notifications.requests";
@@ -96,6 +114,46 @@ public class NotificationProperties {
          */
         @Positive
         private int concurrency = 2;
+
+        @NotNull
+        @Valid
+        private Rest rest = new Rest();
+    }
+
+    /**
+     * The synchronous ingress, and the only one a deployment without a broker has.
+     *
+     * <p>Peer services call it directly. That makes it the primary ingress on this platform today,
+     * which is why it carries a batch endpoint at all: a caller that used to produce a hundred
+     * records to a topic should not have to open a hundred connections to replace it.
+     */
+    @Getter
+    @Setter
+    public static class Rest {
+
+        /**
+         * Requests accepted in one batch call.
+         *
+         * <p>Bounded, and the bound matters more here than on most collection endpoints. Each item is
+         * submitted in its own transaction and fans out into a delivery per recipient per channel, so
+         * an unbounded batch is an unbounded unit of work holding an HTTP thread and a connection for
+         * as long as it takes. A caller with more than this is asking for a queue, and should page.
+         */
+        @Positive
+        @Max(500)
+        private int maxBatchSize = 100;
+
+        /**
+         * Whether one failed item fails the whole batch.
+         *
+         * <p>False, and this is the decision that makes a batch endpoint worth having. A hundred
+         * password resets where one names a template that does not exist should produce
+         * ninety-nine sent notifications and one reported failure, not zero of either. A caller that
+         * genuinely needs all-or-nothing does not want a batch endpoint - it wants one request whose
+         * recipients are the batch, which this API already supports and which is atomic by
+         * construction.
+         */
+        private boolean failFast = false;
     }
 
     /** The consumer-side dedup window - one of the two capabilities the platform does not ship. */
@@ -408,13 +466,70 @@ public class NotificationProperties {
         private Duration readTimeout = Duration.ofSeconds(10);
     }
 
-    /** Defaults applied when a recipient's own profile does not say. */
+    /** How a recipient's address is found, now that this service no longer stores one. */
+    @Getter
+    @Setter
+    public static class Recipients {
+
+        /**
+         * Refuse to write to an address the OIDC provider has not marked verified.
+         *
+         * <p>On by default. Verification is the provider's job and this service does not second-guess
+         * it; what this decides is whether to send to an address nobody has confirmed belongs to the
+         * person, which is how a typo in a self-service profile becomes mail to a stranger.
+         *
+         * <p>"Not verified" means the provider said so. A provider that says nothing at all - an older
+         * producer that does not publish the flag - is not treated as a refusal, because that would
+         * stop every message in the estate on the day the field was introduced.
+         */
+        private boolean requireVerifiedContact = true;
+    }
+
+    /**
+     * Fallbacks for a recipient whose preferences this service does not have.
+     *
+     * <p>Not "the defaults for everybody": a recipient's own locale, timezone, quiet hours and digest
+     * choice are settings owned by the account service and reach this one through a replica. These
+     * apply to a literal address with no account behind it, and to a subject whose settings have not
+     * arrived yet - a missing preference must not silence a person.
+     */
     @Getter
     @Setter
     public static class Preferences {
 
+        /**
+         * Where a recipient's stored preferences are read from.
+         *
+         * <p>{@code AUTO}, the default, uses {@code user-settings-spring-boot-starter} when it is on
+         * the classpath and has a mode enabled, and configured defaults otherwise - so adding the
+         * dependency is the whole migration.
+         *
+         * <p>{@code USER_SETTINGS} is the same, except that the service refuses to start if the
+         * module is not there and working. Use it once stored preferences are load-bearing: at that
+         * point a deployment that silently fell back to defaults would be sending marketing to people
+         * who opted out, which is the sort of failure that must not be discovered from a complaint.
+         *
+         * <p>{@code NONE} pins resolution to configured defaults even where the module is present.
+         */
+        @NotNull
+        private Source source = Source.AUTO;
+
         @NotBlank
         private String defaultLocale = "en";
+
+        /**
+         * Categories a recipient may decline individually.
+         *
+         * <p>Each becomes a setting definition per channel, declared at startup. A category that is
+         * not listed can still be declined through the blanket per-channel opt-out - a marketing
+         * category nobody has declared is one nobody has thought about, and the honest behaviour is
+         * that "stop sending me things" still covers it.
+         *
+         * <p>The account service that owns the settings must declare the same categories. That is a
+         * contract in code on both sides rather than a string in a table on one, and a key this
+         * service reads but the owner never stores simply resolves to its default.
+         */
+        private List<String> declinableCategories = new ArrayList<>();
 
         /**
          * Zone quiet hours are evaluated in when a recipient has no timezone of their own.
@@ -435,6 +550,25 @@ public class NotificationProperties {
          * was accepted, and nothing ever arrives.
          */
         private boolean quietHoursDefer = true;
+
+        /**
+         * The three ways a deployment can answer "where do preferences come from".
+         *
+         * <p>Named rather than a boolean because there are genuinely three answers and the third one
+         * - "work it out from what is deployed" - is the one almost every environment wants, while
+         * production eventually wants the strictness of the second.
+         */
+        public enum Source {
+
+            /** Use the user-settings module if it is deployed and working; configured defaults if not. */
+            AUTO,
+
+            /** The same, but refuse to start when the module is absent or has no mode enabled. */
+            USER_SETTINGS,
+
+            /** Configured defaults only, even where the module is present. */
+            NONE
+        }
     }
 
     /** Collapsing many notifications for one recipient into one send. */

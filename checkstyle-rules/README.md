@@ -1,5 +1,7 @@
 # checkstyle-rules
 
+***English** · [Русский](README.ru.md)*
+
 > The shared Checkstyle configuration: formatting that mirrors IntelliJ IDEA's defaults, plus the
 > naming, source-level and Javadoc conventions that make unfamiliar code read like the rest of the
 > repository. Runs on every module at `validate`, before the compiler.

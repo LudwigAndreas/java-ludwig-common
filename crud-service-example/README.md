@@ -1,5 +1,7 @@
 # crud-service-example
 
+***English** · [Русский](README.ru.md)*
+
 A production-shaped CRUD microservice - a product catalog - assembled from this repository's own
 modules. It exists to show how [`db-core`](../db-core/README.md),
 [`odata-filter-spring-boot-starter`](../odata-filter-spring-boot-starter/README.md),

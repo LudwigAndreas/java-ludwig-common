@@ -38,9 +38,9 @@ import ru.ludwigandreas.example.catalog.web.mapper.ProductDtoMapper;
  * controller annotation is the usual way they end up enforced on one endpoint and forgotten on the next.
  *
  * <p>The search endpoint takes the OData options as plain request parameters and hands them to the
- * service unparsed. The starter's {@code ODataQuery<T>} argument resolver could bind them straight
- * into a predicate here, but only by naming the JPA entity in the controller signature; passing the
- * raw options down keeps the entity where it belongs.
+ * service unparsed. The starter's deprecated {@code ODataQuery<T>} argument resolver would bind
+ * them straight into a predicate here, but only by naming the JPA entity in the controller
+ * signature; passing the raw options down keeps the entity - and the query - where they belong.
  */
 @RestController
 @RequestMapping("/api/v1/products")

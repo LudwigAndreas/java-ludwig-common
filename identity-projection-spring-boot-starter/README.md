@@ -50,6 +50,12 @@ A projection gives you a local join. "Every agent in this tenant", "which users 
   "displayName": "Anna Schmidt",
   "tenantId":  "tenant-a",
   "roles":     ["CATALOG_ADMIN", "ORDER_AGENT"],
+  "email":     "anna.schmidt@example.com",
+  "emailVerified": true,
+  "alternateEmail": "anna@personal.example",
+  "phoneNumber": "+49301234567",
+  "phoneVerified": true,
+  "chatHandle": "@anna",
   "sourceVersion": "7",
   "occurredAt": "2026-03-01T10:00:00Z"
 }
@@ -73,6 +79,29 @@ a new field turns an upstream release into an outage in every service on the top
 `type` is `UPSERT`, `DISABLE` or `DELETE`. `DELETE` is projected as a status change, never as a row
 deletion: audit records and `created_by` references pointing at that subject have to keep resolving, and a
 re-created account must not inherit the old one's history.
+
+### Contact data is opt-in, and off by default
+
+The contact fields are stored **only** when `ludwig.identity.contact.enabled` is set. They are absent
+from the projection otherwise, and cleared from rows an earlier configuration wrote — switching the
+flag off scrubs each user's row on their next event, rather than freezing what was already there.
+
+The reasoning cuts both ways and both halves matter. The OIDC provider is where verification happens,
+so it is the single source of truth for a person's addresses, and a service that writes to people
+should read the address from the directory rather than keep a copy nothing keeps in step. But this
+projection is replicated into *every* service that uses the module, and a contact column that was
+always populated would put a person's address in every service database in the estate — including the
+ones with no reason to have it, each another place a deletion request has to reach.
+
+So the flag: the service that actually sends messages to people turns it on, and nothing else does.
+There is no index on any of these columns, deliberately — every lookup here is by subject, so an index
+would buy nothing and would make *"which user has this address"* a cheap question against a replica of
+directory data.
+
+`emailVerified` and `phoneVerified` are nullable on purpose. Null means the provider did not say,
+which is a different fact from "it said no": a consumer deciding whether it may write to an address
+has to be able to tell them apart, and treating silence as unverified would stop every message the
+moment an older producer omitted the field.
 
 ---
 
@@ -104,9 +133,10 @@ own master changelog (`ludwig.identity.liquibase.enabled=false` — see the exam
 
 `security_user` extends db-core's `ExternalEntity` because that is exactly what it is — a record whose id
 and lifecycle belong to another system — and its `source_version`/`source_timestamp` columns are what the
-ordering guard compares. Only what authorization needs is stored: this is directory data replicated into
-every service that uses the module, so every extra column is another place a personal-data request has to
-reach.
+ordering guard compares. Only what authorization needs is stored *by default*: this is directory data
+replicated into every service that uses the module, so every extra column is another place a
+personal-data request has to reach. The contact columns are the one exception and they are opt-in — see
+[Contact data is opt-in](#contact-data-is-opt-in-and-off-by-default).
 
 `security_partner` and `security_grant` are `AuditedEntity` instead, because nothing projects them: they
 are granted, by someone, and *who granted what and when* is the first question an auditor asks.
@@ -183,6 +213,8 @@ ludwig:
       group-id: my-service-identity-projection
     liquibase:
       enabled: true                   # false when you include the changelog from your own master
+    contact:
+      enabled: false                  # project the provider's verified contact data; see above
     service-roles: {}
 ```
 

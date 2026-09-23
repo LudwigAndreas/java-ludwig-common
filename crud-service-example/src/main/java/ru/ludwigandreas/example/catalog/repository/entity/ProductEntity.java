@@ -37,7 +37,8 @@ import ru.ludwigandreas.odatafilter.annotation.Filterable;
  */
 @Entity
 @Table(name = "product")
-@FilterPolicy(maxDepth = 4, maxPageSize = 100, defaultPageSize = 20, maxNestedPropertyDepth = 2)
+@FilterPolicy(maxDepth = 4, maxPageSize = 100, defaultPageSize = 20, maxNestedPropertyDepth = 2,
+        defaultOrderBy = "createdAt desc, id asc")
 @Getter
 @Setter
 @Builder
@@ -81,6 +82,12 @@ public class ProductEntity extends AuditedEntity<UUID> {
     @Column(name = "stock_quantity", nullable = false)
     private int stockQuantity;
 
+    /**
+     * Annotated so that {@code $filter=category/code eq 'TOOLS'} resolves: traversal into an
+     * association is opt-in, and this is where the catalog decides that a product's category is
+     * part of its published filter surface.
+     */
+    @Filterable
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "category_id", nullable = false)
     private CategoryEntity category;

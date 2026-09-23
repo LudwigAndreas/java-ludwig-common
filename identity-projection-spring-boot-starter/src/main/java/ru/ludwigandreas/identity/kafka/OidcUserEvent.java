@@ -17,6 +17,15 @@ import java.util.Set;
  * @param displayName  human-readable label, stored for audit readability
  * @param tenantId     owning organization, in a multi-tenant deployment
  * @param roles        the user's <em>complete</em> role set, not a delta
+ * @param email        the user's verified primary address, when the provider publishes contact data
+ * @param alternateEmail a secondary address - an external one where {@code email} is internal, say
+ * @param phoneNumber  the user's phone number in E.164 form
+ * @param chatHandle   the user's handle on the organization's chat system
+ * @param emailVerified whether the provider has verified {@code email}. {@code Boolean} rather than
+ *                     {@code boolean} so that "the provider did not say" stays distinguishable from
+ *                     "the provider said no" - a consumer that treated silence as unverified would
+ *                     stop mailing everybody the moment an older producer omitted the field
+ * @param phoneVerified whether the provider has verified {@code phoneNumber}
  * @param sourceVersion the directory's own version of the record, when it publishes one
  * @param occurredAt   when the change happened upstream - the ordering key the projection compares on,
  *                     because Kafka only orders within a partition and a user's events can be
@@ -30,6 +39,12 @@ public record OidcUserEvent(
         String displayName,
         String tenantId,
         Set<String> roles,
+        String email,
+        String alternateEmail,
+        String phoneNumber,
+        String chatHandle,
+        Boolean emailVerified,
+        Boolean phoneVerified,
         String sourceVersion,
         Instant occurredAt) {
 }

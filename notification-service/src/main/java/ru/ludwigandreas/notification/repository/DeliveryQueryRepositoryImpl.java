@@ -63,9 +63,6 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
     private static final PathBuilder<NotificationDeliveryEntity> ROOT =
             new PathBuilder<>(NotificationDeliveryEntity.class, DELIVERY.getMetadata().getName());
 
-    /** Stable tie-breaker so paging cannot return the same row on two pages. */
-    private static final OrderSpecifier<?>[] DEFAULT_ORDER = {DELIVERY.createdAt.desc(), DELIVERY.id.asc()};
-
     /** The two states the claim query considers, and therefore what "waiting" means for the gauges. */
     private static final List<DeliveryStatus> CLAIMABLE =
             List.of(DeliveryStatus.PENDING, DeliveryStatus.FAILED);
@@ -96,7 +93,7 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
     public Page<NotificationDeliveryEntity> search(DeliverySearchCriteria criteria) {
         ODataQuery<NotificationDeliveryEntity> query = filterService.parse(
                 NotificationDeliveryEntity.class, criteria.filter(), criteria.top(), criteria.skip(),
-                criteria.orderBy(), false);
+                criteria.orderBy());
         Pageable pageable = query.pageable();
         Predicate scoped = dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ).and(query.predicate());
 
@@ -263,10 +260,12 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
         return total == null ? 0L : total;
     }
 
+    /**
+     * The sort always carries the entity's {@code @FilterPolicy(defaultOrderBy = ...)} tie-breaker,
+     * appended by the filter service after whatever the caller asked for, so there is no unordered
+     * case to fall back on here.
+     */
     private OrderSpecifier<?>[] orderSpecifiers(Sort sort) {
-        if (sort.isUnsorted()) {
-            return DEFAULT_ORDER;
-        }
         return sort.stream()
                 .map(order -> orderSpecifier(order.getProperty(), order.isAscending()))
                 .toArray(OrderSpecifier<?>[]::new);

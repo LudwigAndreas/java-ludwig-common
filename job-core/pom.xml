@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>job-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Ludwig job core</name>
+    <description>
+        The mechanics every scheduled, database-backed worker in this platform is built from, in one
+        place so that there is one of each rather than one per module: exponential backoff with jitter
+        and a cap, a SmartLifecycle scheduling base that owns its own TaskScheduler and drains on
+        shutdown instead of abandoning claimed rows, the FOR UPDATE SKIP LOCKED claim statement, a
+        stable instance identity for lock-owner columns, and a leased run lock that survives the death
+        of the process holding it. Consumed by outbox-spring-boot-starter and
+        reconciliation-spring-boot-starter.
+    </description>
+
+    <!--
+        Same arrangement as every other library module here: the JDK baseline and the
+        spring-boot-dependencies import come from the parent, third-party versions come from
+        ludwig-bom imported below, and the parent is deliberately NOT ludwig-service-parent - a
+        library that inherits spring-boot-starter-parent bakes one Boot line into itself and stops
+        being usable by a service running a different one.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- SmartLifecycle, TaskScheduler, CronTrigger -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery for the RunLock bean -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            EntityManager, for the JPA-flavoured overload of the claim helper. Compile-scope API only:
+            this module maps no entities of its own and imposes no entity scanning on a consumer.
+        -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+
+        <!-- Interval arithmetic for the backoff calculator only - see BackoffCalculator. -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- Optional: the shipped changelog is only applied if the consumer uses Liquibase. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

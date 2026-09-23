@@ -14,12 +14,28 @@ import ru.ludwigandreas.odatafilter.exception.FilterSyntaxException;
 
 /**
  * Resolves a controller method parameter declared as {@code ODataQuery<Employee>} straight from
- * the request's {@code $filter}/{@code $top}/{@code $skip}/{@code $orderby}/{@code $count} query
- * parameters, using {@code Employee} (read off the parameter's generic signature) to select that
- * entity's policy. Reads the non-{@code $}-prefixed aliases too unless
- * {@code odata.filter.web.dollar-prefixed-parameters-only=true}, since many HTTP clients and API
- * gateways mangle or reject leading {@code $} in query parameter names.
+ * the request's {@code $filter}/{@code $top}/{@code $skip}/{@code $orderby} query parameters,
+ * using {@code Employee} (read off the parameter's generic signature) to select that entity's
+ * policy.
+ *
+ * @deprecated it cannot be used without breaking the layering this platform enforces elsewhere.
+ *     {@code ODataQuery<Employee>} names a JPA entity in a controller signature, which
+ *     {@code web.controllers-do-not-expose-entities} rejects (the rule inspects type arguments), and
+ *     the resulting QueryDSL {@code Predicate} is a persistence artifact produced in the web layer,
+ *     which only the repository can execute - so the controller must either hold a repository
+ *     itself, breaking {@code layering.controllers-do-not-access-persistence} and running the query
+ *     outside any transaction, or hand the predicate down and make the entity part of the service
+ *     API. Two further costs come with it: springdoc cannot describe the parameter, so
+ *     {@code $filter} and friends vanish from the OpenAPI document, and argument resolution runs
+ *     before the handler's {@code @PreAuthorize}, so a caller with no access to the endpoint can
+ *     still learn from a 403 which fields are filterable.
+ *
+ *     <p>Take the options as {@code @RequestParam} strings instead, pass them down unparsed, and
+ *     call {@link ODataFilterService#parse} in the repository, which is the layer that owns the
+ *     entity. Disabled by default; set {@code odata.filter.web.argument-resolver-enabled=true} to
+ *     keep using it.
  */
+@Deprecated(since = "1.1.0")
 public class ODataQueryArgumentResolver implements HandlerMethodArgumentResolver {
 
     private final ODataFilterService filterService;
@@ -47,11 +63,15 @@ public class ODataQueryArgumentResolver implements HandlerMethodArgumentResolver
         String orderBy = param(webRequest, "$orderby", "orderby");
         Integer top = parseInt(param(webRequest, "$top", "top"), "$top");
         Integer skip = parseInt(param(webRequest, "$skip", "skip"), "$skip");
-        Boolean count = parseBoolean(param(webRequest, "$count", "count"));
 
-        return filterService.parse(entityType, filter, top, skip, orderBy, count);
+        return filterService.parse(entityType, filter, top, skip, orderBy);
     }
 
+    /**
+     * Reads the non-{@code $}-prefixed aliases too unless
+     * {@code odata.filter.web.dollar-prefixed-parameters-only=true}, since many HTTP clients and
+     * API gateways mangle or reject leading {@code $} in query parameter names.
+     */
     private String param(NativeWebRequest request, String dollarName, String plainName) {
         String value = request.getParameter(dollarName);
         if (value != null || properties.getWeb().isDollarPrefixedParametersOnly()) {
@@ -69,10 +89,6 @@ public class ODataQueryArgumentResolver implements HandlerMethodArgumentResolver
         } catch (NumberFormatException e) {
             throw new FilterSyntaxException(paramName + " must be an integer, got '" + value + "'", e);
         }
-    }
-
-    private Boolean parseBoolean(String value) {
-        return value == null || value.isBlank() ? null : Boolean.parseBoolean(value.trim());
     }
 
     private Class<?> resolveEntityType(MethodParameter parameter) {

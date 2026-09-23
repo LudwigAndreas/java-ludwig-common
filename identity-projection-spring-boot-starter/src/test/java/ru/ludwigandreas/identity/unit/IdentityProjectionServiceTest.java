@@ -42,11 +42,13 @@ class IdentityProjectionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new IdentityProjectionService(repository, new OidcUserEventMapperImpl(), authorityCache);
+        service = new IdentityProjectionService(
+                repository, new OidcUserEventMapperImpl(), authorityCache, true);
     }
 
     private OidcUserEvent event(OidcUserEventType type, Instant occurredAt, Set<String> roles) {
-        return new OidcUserEvent("evt-1", type, SUBJECT, "Anna Schmidt", "tenant-a", roles, "7", occurredAt);
+        return new OidcUserEvent("evt-1", type, SUBJECT, "Anna Schmidt", "tenant-a", roles,
+                "anna@example.com", null, null, "@anna", Boolean.TRUE, null, "7", occurredAt);
     }
 
     @Test
@@ -110,8 +112,40 @@ class IdentityProjectionServiceTest {
     @Test
     void discardsAnEventWithNoSubject() {
         service.apply(new OidcUserEvent("evt-2", OidcUserEventType.UPSERT, "  ", null, null, Set.of(),
-                null, NOW));
+                null, null, null, null, null, null, null, NOW));
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("contact data is projected when the deployment opted into it")
+    void projectsContactDataWhenEnabled() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
+
+        service.apply(event(OidcUserEventType.UPSERT, NOW, Set.of()));
+
+        ArgumentCaptor<SecurityUserEntity> saved = ArgumentCaptor.forClass(SecurityUserEntity.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getEmail()).isEqualTo("anna@example.com");
+        assertThat(saved.getValue().getEmailVerified()).isTrue();
+        assertThat(saved.getValue().getChatHandle()).isEqualTo("@anna");
+    }
+
+    @Test
+    @DisplayName("contact data is scrubbed when the deployment did not opt in")
+    void scrubsContactDataWhenDisabled() {
+        // Cleared on every apply, not only on insert: switching the flag off has to actually remove
+        // what an earlier configuration stored, rather than freezing it in place forever.
+        IdentityProjectionService withoutContact = new IdentityProjectionService(
+                repository, new OidcUserEventMapperImpl(), authorityCache, false);
+        when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
+
+        withoutContact.apply(event(OidcUserEventType.UPSERT, NOW, Set.of()));
+
+        ArgumentCaptor<SecurityUserEntity> saved = ArgumentCaptor.forClass(SecurityUserEntity.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getEmail()).isNull();
+        assertThat(saved.getValue().getEmailVerified()).isNull();
+        assertThat(saved.getValue().getChatHandle()).isNull();
     }
 }

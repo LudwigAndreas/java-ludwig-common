@@ -9,6 +9,7 @@ import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import ru.ludwigandreas.odatafilter.web.ODataFilterExceptionHandler;
 import ru.ludwigandreas.odatafilter.web.ODataFilterProblemMapper;
+import ru.ludwigandreas.odatafilter.web.ODataQueryArgumentResolver;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
@@ -43,6 +44,21 @@ class ODataFilterWebAutoConfigurationTest {
                 .run(context -> assertThat(context)
                         .hasNotFailed()
                         .hasSingleBean(ODataFilterExceptionHandler.class));
+    }
+
+    @Test
+    @DisplayName("the deprecated argument resolver is not registered unless it is asked for")
+    @SuppressWarnings("deprecation")
+    void argumentResolverIsOffByDefault() {
+        runner.run(context -> assertThat(context).doesNotHaveBean(ODataQueryArgumentResolver.class));
+    }
+
+    @Test
+    @DisplayName("a service that still wants the argument resolver can switch it back on")
+    @SuppressWarnings("deprecation")
+    void argumentResolverCanBeOptedBackIn() {
+        runner.withPropertyValues("odata.filter.web.argument-resolver-enabled=true")
+                .run(context -> assertThat(context).hasSingleBean(ODataQueryArgumentResolver.class));
     }
 
     @Test

@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>rest-client-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>REST client Spring Boot starter</name>
+    <description>
+        Configuration-driven outbound HTTP for Java 17 + Spring Boot services. A service declares N
+        independent named clients in application.yaml - each with its own connection pool, timeouts,
+        authentication, Resilience4j policy, interceptors, serialization, logging, metrics and audit -
+        and consumes them as declarative HTTP interfaces, as injectable RestClient/WebClient beans, or
+        through a registry lookup. No @Configuration class in the consuming service, and every default
+        overridable by publishing a bean.
+    </description>
+
+    <!--
+        Same shape as every other library module here: ru.ludwigandreas:common stays the parent (so
+        this jar remains usable by a service on a different Spring Boot line) and ludwig-bom is
+        imported for the versions Boot does not manage - Resilience4j above all.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            spring-web is NOT optional here, unlike in observability: RestClient, the request
+            factories and the whole execution pipeline are spring-web types. A module that cannot
+            see spring-web cannot use a single class in this starter.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Micrometer core + observation. Not optional for the same reason: the metric names, the
+            client span and the Observation-carried URI template are part of what this module is,
+            not an add-on. A registry is still chosen by the service (observability-spring-boot-starter
+            supplies one); with no registry on the context the meters are simply no-ops.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-observation</artifactId>
+        </dependency>
+
+        <!--
+            Resilience4j, module by module rather than resilience4j-spring-boot3. The Boot starter
+            brings its own auto-configuration, its own @ConfigurationProperties tree and its own
+            AOP aspects, none of which this module uses: the policies here are built per named
+            client from ludwig.rest-client.*, and adding a second, differently-shaped configuration
+            surface for the same library would be the exact duplication the platform avoids. What
+            we do reuse is its registries, bound to Micrometer below, so the metrics land where the
+            rest of the estate's Resilience4j metrics already are.
+        -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-retry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-bulkhead</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-ratelimiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-timelimiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-micrometer</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            Everything below is optional: it is an engine or an integration, and a service pays for
+            the ones it actually configures. The starter reports a clear startup error naming the
+            missing artifact when a client selects an engine that is not on the classpath - see
+            TransportEngine and RestClientConfigurationValidator.
+        -->
+
+        <!-- Optional: transport `apache`, and the only engine with a configurable connection pool. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: mode `async` - WebClient over Reactor Netty. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty-http</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: auth types oauth2-client-credentials and oauth2-token-relay. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-client</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-resource-server</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: the platform's correlation id. With observability-spring-boot-starter present
+            the outbound call carries the same id this service logs under, via that module's own
+            interceptor rather than a second implementation of it here.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>observability-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: web-core's problem model. When present, a partner's RFC 9457 document is
+            translated into the same ProblemDefinition the service's own errors use, so an upstream
+            failure and a local one render identically to the caller.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: the @LudwigRestClientTest slice in ru.ludwigandreas.restclient.test. It ships
+            in the main jar rather than a separate test-jar so a consuming service gets it with the
+            starter; these three dependencies are what it compiles against and are never needed at
+            runtime by production code.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test-autoconfigure</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            MockWebServer rather than WireMock: it is okhttp's, it starts in milliseconds, and it is
+            already resolvable through the Boot-managed okhttp line. The integration tests need a
+            server that can be told to stall, to reset the connection and to answer differently on
+            each attempt - which is precisely its dispatcher API.
+        -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>mockwebserver</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- Named explicitly: since JDK 23 javac no longer runs a processor it merely
+                         finds on the classpath, and the only symptom is a jar with no
+                         spring-configuration-metadata.json - i.e. no IDE completion for any of the
+                         ludwig.rest-client.* keys, which is a large part of this module's value. -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

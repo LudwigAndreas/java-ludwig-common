@@ -1,6 +1,7 @@
 package ru.ludwigandreas.outbox.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import ru.ludwigandreas.job.core.backoff.BackoffPolicy;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -156,6 +157,27 @@ public class OutboxProperties {
         private Duration staleTimeout = Duration.ofMinutes(5);
         private Duration staleReclaimFixedDelay = Duration.ofMinutes(1);
 
+        /**
+         * How long shutdown waits for a poll cycle that is already running.
+         *
+         * <p>Interrupting instead would leave that cycle's rows marked PROCESSING and owned by a
+         * process that no longer exists, recoverable only once {@link #staleTimeout} elapses - so a
+         * rolling deploy would delay every in-flight message by minutes for no reason. Must stay
+         * comfortably below the container runtime's termination grace period, or the pod is killed
+         * mid-drain and nothing is gained.
+         */
+        private Duration drainTimeout = Duration.ofSeconds(20);
+
+        /** How long shutdown waits for an in-flight poll cycle. */
+        public Duration getDrainTimeout() {
+            return drainTimeout;
+        }
+
+        /** Sets how long shutdown waits for an in-flight poll cycle. */
+        public void setDrainTimeout(Duration drainTimeout) {
+            this.drainTimeout = drainTimeout;
+        }
+
         public Duration getStaleTimeout() {
             return staleTimeout;
         }
@@ -173,12 +195,43 @@ public class OutboxProperties {
         }
     }
 
+    /**
+     * Retry budget and backoff curve for a message whose dispatch failed. Converted to
+     * {@code job-core}'s {@link BackoffPolicy} by {@link #toBackoffPolicy()}; the shape of the curve
+     * itself lives there, shared with every other job-shaped module in the platform.
+     */
     public static class Retry {
 
         private int maxAttempts = 10;
         private Duration initialInterval = Duration.ofSeconds(1);
         private double multiplier = 2.0;
         private Duration maxInterval = Duration.ofMinutes(5);
+
+        /**
+         * Fraction of each computed interval to randomize by, in {@code [0, 1]}.
+         *
+         * <p>Non-zero by default, and that default matters: without it, every message that failed
+         * because one destination was briefly down comes due again at exactly the same instant, on
+         * every instance at once, and the destination that has just recovered is knocked over by its
+         * own backlog. Set it to {@code 0} only when a deterministic retry schedule is worth more
+         * than that protection - a test asserting exact due times, for instance.
+         */
+        private double jitter = 0.2;
+
+        /** This budget's backoff curve, in the form {@code job-core} consumes. */
+        public BackoffPolicy toBackoffPolicy() {
+            return new BackoffPolicy(initialInterval, multiplier, maxInterval, jitter);
+        }
+
+        /** The jitter fraction. */
+        public double getJitter() {
+            return jitter;
+        }
+
+        /** Sets the jitter fraction. */
+        public void setJitter(double jitter) {
+            this.jitter = jitter;
+        }
 
         public int getMaxAttempts() {
             return maxAttempts;

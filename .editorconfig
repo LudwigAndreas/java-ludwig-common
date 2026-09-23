@@ -1,0 +1,47 @@
+# Project-wide editor settings.
+#
+# This file exists so that the Checkstyle configuration in checkstyle-rules and the IDE never
+# disagree. Everything below is already IntelliJ IDEA's default for Java - it is written down
+# so that the settings travel with the repository instead of depending on each developer's
+# global IDE configuration, and so that VS Code and Eclipse land in the same place.
+#
+# IntelliJ reads this file natively (Settings | Editor | Code Style | "Enable EditorConfig
+# support", on by default); the ij_* keys below are its own extensions to the format.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.java]
+indent_style = space
+indent_size = 4
+continuation_indent_size = 8
+max_line_length = 120
+
+# The one place where IntelliJ's factory default and the code style genuinely disagree.
+# Out of the box the IDE collapses imports into an on-demand (star) import once five classes
+# come from one package - and Checkstyle's AvoidStarImport then rejects the file the IDE just
+# produced. Raising both thresholds out of reach keeps every import explicit without anyone
+# having to change a global IDE setting.
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_static_import_on_demand = 999
+
+[*.xml]
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_style = space
+indent_size = 2
+
+[*.properties]
+indent_style = space
+insert_final_newline = true
+
+# Markdown gives meaning to two trailing spaces (a hard line break), so they must survive.
+[*.md]
+trim_trailing_whitespace = false

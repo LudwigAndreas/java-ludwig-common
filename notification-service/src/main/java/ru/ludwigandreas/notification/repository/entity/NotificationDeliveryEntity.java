@@ -53,7 +53,8 @@ import ru.ludwigandreas.odatafilter.annotation.Filterable;
 @Entity
 @Table(name = "notification_delivery")
 @EntityListeners(AuditingEntityListener.class)
-@FilterPolicy(maxDepth = 4, maxPageSize = 200, defaultPageSize = 25, maxNestedPropertyDepth = 1)
+@FilterPolicy(maxDepth = 4, maxPageSize = 200, defaultPageSize = 25, maxNestedPropertyDepth = 1,
+        defaultOrderBy = "createdAt desc, id asc")
 @Getter
 @Setter
 @Builder
@@ -125,13 +126,42 @@ public class NotificationDeliveryEntity extends GeneratedEntity<UUID> {
     @Column(name = "variables", nullable = false, columnDefinition = "jsonb")
     private String variables;
 
-    /** Resolved at fan-out; decides which locale variant of the template renders. */
+    /**
+     * Resolved at fan-out; decides which locale variant of the template renders.
+     *
+     * <p>{@code updatable = false}, like the address and the zone beside it, and that is the whole
+     * point of the three of them. The preferences they come from live in another service and this one
+     * keeps a replica that changes underneath it; re-resolving on a retry three hours later would let
+     * a preference changed in between silently alter what goes out, and nothing on the delivery would
+     * record that it had. Snapshotting also means "why did this arrive in English" is answered by the
+     * row rather than by a time-travel query against settings history.
+     */
     @Column(name = "recipient_locale", nullable = false, updatable = false, length = 35)
     private String recipientLocale;
 
-    /** IANA zone id. Quiet hours are evaluated in it, never in the server's zone. */
+    /** IANA zone id. Quiet hours are evaluated in it, never in the server's zone. Snapshotted. */
     @Column(name = "recipient_timezone", nullable = false, updatable = false, length = 64)
     private String recipientTimezone;
+
+    /**
+     * Whether the recipient's quiet hours held this delivery back at fan-out.
+     *
+     * <p>The outcome, not the window. Storing the window would invite somebody to re-evaluate it
+     * later against a clock that has moved; storing the decision answers the question that actually
+     * gets asked - "why did this arrive at seven in the morning" - directly, months later, after the
+     * preference it came from has changed.
+     *
+     * <p>Updatable, unlike the three snapshot columns above, and the difference is not an oversight.
+     * Those are set while the row is being built; this one is decided in {@code settle}, after the
+     * row has been flushed so the status-history entry can reference a real id. With
+     * {@code updatable = false} Hibernate would silently drop the write and the column would read
+     * false for every delivery quiet hours ever held back - which is exactly what it did before this
+     * comment existed. It is still written once, during fan-out, in the same transaction that creates
+     * the row; nothing on the retry path touches it.
+     */
+    @Filterable(ops = {FilterOperator.EQ, FilterOperator.NE})
+    @Column(name = "quiet_hours_deferred", nullable = false)
+    private boolean quietHoursDeferred;
 
     @Filterable(ops = {FilterOperator.EQ, FilterOperator.NE, FilterOperator.IN,
             FilterOperator.STARTSWITH})

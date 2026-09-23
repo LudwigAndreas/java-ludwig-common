@@ -5,11 +5,17 @@
 The platform's notification service: every other service asks this one to notify somebody instead of
 talking to a mail server itself.
 
-Two ingresses converge on one application service — a Kafka consumer for fire-and-forget traffic and
-a REST API for synchronous and operator-initiated sends. A request fans out into one delivery per
-recipient per channel, held in a Postgres work queue; a poller claims due deliveries with
-`FOR UPDATE SKIP LOCKED`, renders a FreeMarker template in the recipient's language, and hands the
-result to a channel — SMTP, the internal chat API, or a signed webhook.
+Two ingresses converge on one application service — a REST API, and a Kafka consumer for
+fire-and-forget traffic where a broker exists. **This deployment has no broker, so REST is the
+ingress**: one endpoint for a single notification, one for a batch, one to read a submitted request
+back. Both ingresses call the same application service and neither decides anything the other does
+not; turning the consumer on later is a flag, not a change. See
+[Running without a broker](#running-without-a-broker).
+
+A request fans out into one delivery per recipient per channel, held in a Postgres work queue; a
+poller claims due deliveries with `FOR UPDATE SKIP LOCKED`, renders a FreeMarker template in the
+recipient's language, and hands the result to a channel — SMTP, the internal chat API, or a signed
+webhook.
 
 It is built from this repository's own modules and adds the two things none of them provide yet:
 consumer-side idempotency and a distributed lock.
@@ -43,10 +49,12 @@ Location: /api/v1/notifications/0f8a…
 - [The delivery queue is not the outbox](#the-delivery-queue-is-not-the-outbox)
 - [Promotion candidates: the two platform gaps](#promotion-candidates-the-two-platform-gaps)
 - [The request contract](#the-request-contract)
+- [Running without a broker](#running-without-a-broker)
 - [The Kafka topic](#the-kafka-topic)
 - [How to author a template](#how-to-author-a-template)
 - [How to add a channel](#how-to-add-a-channel)
 - [Preferences, quiet hours and suppression](#preferences-quiet-hours-and-suppression)
+- [Where preferences come from](#where-preferences-come-from)
 - [Priority lanes and rate limits](#priority-lanes-and-rate-limits)
 - [Behaviour at three replicas](#behaviour-at-three-replicas)
 - [PII discipline and the retention policy](#pii-discipline-and-the-retention-policy)
@@ -273,15 +281,119 @@ across every calling service.
 decided minutes later by a provider this service does not control. A duplicate answers **200** with
 the original request, so a caller retrying after a timeout can tell whether their retry did the work.
 
-Other endpoints: `POST /preview` (render without sending), `GET /deliveries` (OData search),
+### Reading a request back
+
+`GET /api/v1/notifications/{id}` — roles `NOTIFICATION_SENDER`, `NOTIFICATION_SUPPORT` or
+`NOTIFICATION_ADMIN` — answers the request and every delivery it fanned out into. This is the
+resource the `Location` header of the 202 points at: an asynchronous accept is only a useful answer
+if the location resolves, and a caller whose HTTP call timed out *after* the request was written has
+no other way to find out what happened to it.
+
+It is scoped as well as role-gated, through the same `DataAccessGuard` the delivery history uses. A
+request names recipients, so a sender holding an id must not be able to read another caller's — the
+shipped policy gives `NOTIFICATION_SENDER` the `OWN` scope, `NOTIFICATION_SUPPORT` its tenant, and
+`NOTIFICATION_ADMIN` everything.
+
+### Submitting a batch
+
+`POST /api/v1/notifications/batch` — same roles as a single submit.
+
+```json
+{ "items": [
+    { "reference": "order-4711", "idempotencyKey": "shipped-4711",
+      "request": { "templateKey": "order-shipped", "…": "…" } },
+    { "reference": "order-4712", "idempotencyKey": "shipped-4712",
+      "request": { "templateKey": "order-shipped", "…": "…" } } ] }
+```
+
+It exists because there is no broker: a caller that would have produced a hundred records to a topic
+should not have to open a hundred connections to replace it. It is a transport optimisation and
+nothing more — each item goes through the same application service, the same validation and the same
+idempotency, and an item submitted here is indistinguishable afterwards from one submitted alone.
+The dedup key moves into the body because one header cannot carry a value per item.
+
+**This is not "one request with many recipients".** That is *one* notification — one template, one
+category, one key — delivered to several people, and it is atomic. A batch is several unrelated
+notifications travelling together, and each succeeds or fails on its own. A caller that wants
+all-or-nothing wants the first shape, which the single endpoint already provides.
+
+**Always 200**, whatever the items did, with per-item results:
+
+```json
+{ "accepted": 1, "rejected": 1, "results": [
+    { "index": 0, "reference": "order-4711", "request": { "id": "0f8a…", "state": "FANNED_OUT" } },
+    { "index": 1, "reference": "order-4712",
+      "problem": { "type": "urn:notification:error:…", "status": 404, "code": "…" } } ] }
+```
+
+There is no status code that describes a mixed outcome: 202 would claim every item was accepted and
+a 4xx would claim none was. The status answers "was the batch understood", the body answers "what
+happened to each item". A failure is a `ProblemDetail` — the same object, from the same pipeline,
+that the single endpoint would have returned for the same input, so a caller writes one error
+handler rather than two.
+
+Each item is **its own transaction**. One bad item leaves the ones before it committed and delivered,
+which is the whole reason to offer a batch rather than telling callers to loop. `ingress.rest.fail-fast`
+turns that off for a caller that wants the first failure to stop the rest; it ships off. A batch
+above `ingress.rest.max-batch-size` (100) is refused with **413** carrying both numbers, so a client
+can resize itself rather than read prose.
+
+### Everything else
+
+`POST /preview` (render without sending), `GET /deliveries` (OData search),
 `GET /deliveries/{id}` + `/history` + `/content`, `POST /deliveries/{id}/retry|cancel`,
-`PUT /recipients/{userId}` + `/preferences`, `GET|POST|DELETE /suppressions`, and
-`POST /receipts` for provider callbacks. Full schemas at `/swagger-ui.html`.
+`GET|POST|DELETE /suppressions`, and `POST /receipts` for provider callbacks. Full schemas at
+`/swagger-ui.html`.
+
+There are no recipient or preference endpoints. A recipient's address is the OIDC provider's to
+change and their preferences are the account service's; this service having written to either would
+have been the second store the whole design exists to avoid.
+
+## Running without a broker
+
+This platform has no Kafka yet, and the service is configured for that rather than half-configured
+for the topology it will eventually have. Four things that would otherwise need a broker are off by
+default, each with the same switch-on note in `application.yml`:
+
+| Off | What it costs today | Turning it on |
+|---|---|---|
+| `ingress.kafka-enabled` | nothing — REST carries the same traffic through the same service | one flag once a topic exists |
+| `identity.kafka.enabled` | nothing *feeds* `security_user`, so a `userId` resolves to an address only if something else wrote that row | one flag, plus the OIDC stream |
+| `notification.events.enabled` | no outbound lifecycle events | one flag **and** a transport — see below |
+| the user-settings module | per-recipient opt-outs, quiet windows and digest cadence read as unset | a POM change and a config block — see [Where preferences come from](#where-preferences-come-from) |
+
+Two of those deserve more than a row.
+
+**Addresses.** With nothing feeding the identity projection, a request naming a `userId` finds no
+row and produces a terminal delivery rather than a send. A caller that cannot rely on the projection
+names the destination literally instead — `recipients: [{"address": "ada@example.com"}]` — and every
+other rule applies identically: suppression, rate limits, templates, retries, receipts. The tables
+are still created and still read, so the day the stream arrives nothing changes but the data.
+
+**Lifecycle events.** They are published through the outbox, whose default route is `KAFKA`. Left
+enabled with no broker, every delivery would write an outbox row the dispatcher could never send and
+the table would grow until somebody noticed — so they ship **off**. The outbox module also has a REST
+dispatcher, which is the way to have an event stream without a broker:
+
+```yaml
+ludwig:
+  notification:
+    events: { enabled: true }
+  outbox:
+    default-route: { transport: REST, destination: notification-events }
+    rest:
+      endpoints:
+        notification-events: https://subscriber.internal/hooks/notifications
+```
+
+Nothing here is a permanent shape. Each of the four is one flag away from the brokered topology, and
+the code paths behind them are the ones that already ship — not alternatives maintained in parallel.
 
 ## The Kafka topic
 
-Default `platform.notifications.requests`, group `notification-service`, dead letters to
-`platform.notifications.requests.dlt`.
+**Off by default** (`ludwig.notification.ingress.kafka-enabled`); this section describes the ingress
+as it behaves once a broker exists. Default topic `platform.notifications.requests`, group
+`notification-service`, dead letters to `platform.notifications.requests.dlt`.
 
 ```json
 {
@@ -427,11 +539,16 @@ Three mechanisms, checked in this order, and the order matters.
    provider for every other recipient. Checked at fan-out *and* again immediately before dispatch,
    because a delivery can sit behind a backoff for hours and a recipient can unsubscribe in that
    window.
-2. **Preferences** — per recipient, per category, per channel. Absence means allowed. Four rows can
-   bear on one decision (exact pair, category on all channels, wildcard category on this channel,
-   total wildcard) and the **most specific wins**, which is what lets somebody say *"nothing at all,
-   except order updates by email"* as two rows without the record of their original request being
-   deleted. A `TRANSACTIONAL` category bypasses this entirely.
+2. **Preferences** — per recipient, per category, per channel. **This service does not own them**,
+   and today does not have them: they are the user's settings, they belong to the account service,
+   and until it publishes them every recipient resolves to the configured defaults (see
+   [Where preferences come from](#where-preferences-come-from)). Absence means allowed — a
+   preference that has not arrived must not silence a person.
+   Two settings bear on one decision — the opt-out for the exact category and channel, and the
+   blanket opt-out for the channel — and the **specific one wins whichever way it points**, which is
+   what lets somebody say *"nothing at all, except order updates by email"* as two settings without
+   the record of their original request being deleted. A `TRANSACTIONAL` category bypasses this
+   entirely.
 3. **Quiet hours** — evaluated in the *recipient's* timezone, never the server's, and handling a window
    that wraps midnight (22:00→07:00), which is what people actually configure. A marketing
    notification arriving inside the window is **deferred** to the end of it, not dropped: the caller
@@ -442,6 +559,173 @@ request flag every calling service would set it, and every one would set it to t
 one service its own notification always looks important. As a category property the decision is made
 once, by whoever owns the notification catalogue, and a service wanting its campaign exempted has to
 argue for it.
+
+Only the **suppression list** stayed here when the preferences left, and the line between them is the
+point: a bounce or a complaint is *delivery state*, derived from provider feedback that only this
+service receives, and the user never chose it. Everything the user did choose lives with their other
+settings.
+
+## Where preferences come from
+
+Locale, timezone, quiet hours, the digest choice and the per-category opt-outs are a **user's**
+preferences, not a notification system's. On this platform the account service owns them. This
+service therefore stores none of them — and, crucially, does not require them to work.
+
+Everything on the dispatch path asks one interface:
+
+```java
+public interface RecipientPreferenceSource {
+    StoredPreferences lookup(String userId, String tenantId);   // never null, never throws
+    String describe();                                          // named in the startup log
+}
+```
+
+Two implementations sit behind it, and nothing downstream can tell which answered — the types they
+return (`OptOutMatrix`, `DigestMode`, `QuietHoursWindow`) are this service's own.
+
+| | Source | What a recipient gets |
+|---|---|---|
+| **Today** | `ConfiguredPreferenceSource` | the configured defaults, plus whatever the request itself names; nothing opted out |
+| **Later** | `UserSettingsPreferenceSource` | their stored preferences, read locally out of [`user-settings-spring-boot-starter`](../user-settings-spring-boot-starter/README.md) |
+
+### Today: no preference store
+
+The module is a **`provided`** dependency and is excluded from the executable jar, so it is genuinely
+absent at runtime and `@ConditionalOnClass` genuinely answers false. Every recipient resolves to
+`ludwig.notification.preferences.default-locale` / `default-timezone`, to no quiet window of their
+own, and to "has declined nothing".
+
+That last one is a deliberate direction rather than an oversight. A missing preference must not
+silence a person: the failure mode of "assume opted out" is notifications nobody receives and nobody
+can explain, and the failure mode of "assume not opted out" is visible to the recipient and fixable
+the day the store arrives.
+
+What still works without it is more than it looks:
+
+- **the request's own hints.** A caller that already knows the recipient's language or zone passes
+  them on the recipient — and they win over stored preferences anyway, because a locale taken from
+  the interaction that triggered the notification is fresher than a profile setting last touched a
+  year ago;
+- **platform-wide quiet hours**, from `ludwig.notification.preferences.quiet-hours-*`;
+- **the suppression list.** Bounces and complaints are this service's own data and are unaffected — a
+  hard bounce is a fact about an address rather than a wish of its owner, which is why it is the one
+  preference-shaped thing this service does own.
+
+What does not work is the three statements a person actually made: per-recipient opt-outs, their own
+quiet window, and their digest cadence.
+
+### Later: switching the store on
+
+Three edits, none of them on the dispatch path:
+
+1. remove `<scope>provided</scope>` **and** the `spring-boot-maven-plugin` exclusion from `pom.xml`;
+2. uncomment the `ludwig.user-settings` block in `application.yml`;
+3. optionally set `ludwig.notification.preferences.source: USER_SETTINGS`.
+
+`source` is the third switch and the one worth understanding. `AUTO`, the default, uses the module
+when it is present *and* has a mode enabled, and falls back silently otherwise — which is right for a
+migration, where the dependency lands in one release and the store is switched on in the next.
+`USER_SETTINGS` makes that same fallback a **startup failure**. Set it once opt-outs are
+load-bearing: at that point a deployment that quietly fell back would be mailing people who opted
+out, with nothing in the logs saying why, and a pod that will not start is a far cheaper way to find
+out. `NONE` pins resolution to configuration even where the module is present.
+
+Whichever wins, the startup line says so:
+
+```
+Notification configuration validated: batch 25, lease PT10M, poll every PT2S;
+  recipient preferences from configuration defaults (no preference store wired in)
+```
+
+### With the store: how it reads
+
+The module runs in **projection mode**: it consumes the account service's change stream into a local
+read-only replica and reads it there. It does **not** call the account service at dispatch — a queue
+worker must not acquire a hot-path dependency on another service's availability, or an
+account-service incident becomes a notification outage for notifications that have nothing to do with
+accounts.
+
+The keys are declared as typed constants on both sides. This service declares what it *reads*
+(`NotificationSettings`), built from the platform's well-known definitions plus one opt-out per
+declinable category per channel; the account service declares the same keys because it is the one
+that *stores* them. A key this service reads and that one never writes resolves to its default, which
+is the safe direction.
+
+```yaml
+ludwig:
+  notification:
+    preferences:
+      source: USER_SETTINGS
+      declinable-categories: [marketing, product-updates, digest-summary]
+  user-settings:
+    projection:
+      enabled: true
+      topic: platform.account.settings
+```
+
+Note what is *not* set there: `ludwig.user-settings.liquibase.enabled`. Unlike the outbox and
+identity schemas, the settings changelog is **not** included by this service's master changelog — an
+`<include>` naming a file inside a jar this deployment may not have would fail every migration, and
+therefore every startup, rather than degrade. The module applies its own instead. The trade is a
+second `DATABASECHANGELOG` history for three tables, which is cheaper than coupling the ability to
+migrate to the presence of an optional jar.
+
+### Opt-outs are a three-state answer, not a boolean
+
+`UNSET`, `OPTED_IN`, `OPTED_OUT` — and the third state is what makes "nothing at all, except order
+updates by email" expressible:
+
+```
+(all,           EMAIL) = OPTED_OUT     ← the blanket refusal, kept on record
+(order-updates, EMAIL) = OPTED_IN      ← the one exception
+```
+
+Resolution asks the exact pair first and falls through to the blanket answer only when the specific
+one is `UNSET`. Collapse the three into a boolean and the explicit opt-in becomes indistinguishable
+from never having answered — so it falls through, and the one category the recipient asked to keep is
+the one they stop getting. It is a silent failure with a satisfied user on the other end of it, which
+is why the distinction is carried all the way from the store to `RecipientPreferences.optedOut`.
+
+A category that is not listed in `declinable-categories` has no per-category key at all. It reads as
+`UNSET` and can still be declined through the blanket opt-out — a category nobody declared is one
+nobody has thought about, and "stop sending me things" honestly covers it.
+
+### Resolved once, snapshotted onto the delivery
+
+Preferences are resolved **once per recipient**, not once per setting and not once per channel, and
+the resolved locale, timezone, address and quiet-hours decision are written onto every delivery row
+the fan-out produced. Two reasons, both operational:
+
+- a retry three hours later must not silently behave differently because a preference changed in
+  between — the columns are snapshots and nothing on the retry path re-resolves them;
+- when somebody asks why a message went out in the wrong language or at the wrong hour, the delivery
+  row answers it, without a time-travel query against settings history.
+
+The suppression list is the deliberate exception and *is* re-checked at every attempt, because a
+bounce recorded between attempts has to stop the next one.
+
+### Seeding the replica for the first time
+
+A key nobody has ever written resolving to its default is safe, as above. A key somebody *did* write,
+resolving to its default because the write never reached this replica, is not — and that is exactly the
+state a fresh projection is in.
+
+The projection is fed by a change stream, so on the day the module is first enabled its replica is
+empty and the stream carries only what changes from now on. Somebody who opted out of marketing two years
+ago and never touched the setting again produces no event, ever; this service reads a default, concludes
+they never opted out, and mails them.
+
+Fix it before the first fan-out, not after. Ask the account service to republish its stored state:
+
+```
+POST /admin/settings/backfill
+{ "includeConsents": true }
+```
+
+Safe to run at any time and safe to repeat — every republished event carries the owner's original
+timestamp, so a replica that is already current drops all of it. The same call is the recovery when this
+service has been down longer than the topic's retention. See
+[the backfill section](../user-settings-spring-boot-starter/README.md#seeding-a-new-projection-the-backfill).
 
 ## Priority lanes and rate limits
 
@@ -627,7 +911,9 @@ nobody can attribute weeks later — so `NotificationConfigurationValidator` ref
 - an enabled webhook channel or receipt endpoint with no signing secret;
 - an enabled chat channel with no base URL;
 - a non-positive digest window;
-- retention windows that do not widen outwards.
+- retention windows that do not widen outwards;
+- `preferences.source: USER_SETTINGS` with no preference store actually wired in — the check that
+  turns a silent fallback to configured defaults into a refusal to start.
 
 Every problem is reported at once rather than one per deploy.
 
@@ -640,17 +926,49 @@ that is not there. The deployment sets them as environment variables; see `deplo
 
 Stated plainly rather than buried.
 
-1. **The identity projection cannot supply contact details, and should not.**
-   `identity-projection-spring-boot-starter` stores a subject, display name, tenant, status and roles —
-   its own documentation gives the reason: it is directory data replicated into *every* service using
-   the module, so each extra field is another copy of personal data. An email address, a chat handle
-   and a home timezone are not authorization inputs.
-   So the split is: the projection answers *does this user exist, are they active, what do we call
-   them, whose tenant are they in*; `notification_recipient_profile` answers *where do we send it and
-   when not to*. This service needs the second half anyway — preferences and quiet hours hang off it.
-   A user unknown to the projection is **not** a failure: the notification still goes out, without the
-   enrichment, because the projection is fed by a Kafka stream and a new user can be addressable
-   before their record arrives.
+0. **This deployment runs without a broker and without a preference store**, and both are stated in
+   configuration rather than worked around in code. The REST ingress carries the traffic a topic
+   would have; per-recipient opt-outs, quiet windows and digest cadence read as unset. Neither is a
+   fork of the design: the seams (`RecipientPreferenceSource`, `ingress.kafka-enabled`) are the same
+   ones the brokered topology uses, and the code behind them ships and is tested either way. See
+   [Running without a broker](#running-without-a-broker) and
+   [Where preferences come from](#where-preferences-come-from).
+
+   The honest cost, said once: **a recipient who opted out of marketing has no way to express it
+   here today.** A `MARKETING` category still honours platform-wide quiet hours and the suppression
+   list, but the individual opt-out is a statement that has nowhere to be stored, and this service
+   deliberately does not keep a second copy of it. Deployments sending marketing before the account
+   service publishes its settings should either not send it, or set
+   `ludwig.notification.preferences.source: USER_SETTINGS` so the pod refuses to start until the
+   store is there.
+
+1. **Contact data belongs to the OIDC provider, and reaches this service through the identity
+   projection.** This was decided explicitly rather than left ambiguous, because a half-owned address
+   is the specific failure that produces two stores nobody can reconcile.
+
+   The provider verifies a person's email and phone, so it is the single source of truth for them.
+   `identity-projection-spring-boot-starter` carries them on `security_user` — but only where a
+   deployment asks for it (`ludwig.identity.contact.enabled`), and this service is the only one in the
+   estate that does. That answers the objection the projection's own documentation raises, which was
+   right about the general case: directory data replicated into *every* service means every extra
+   field is another copy of personal data in another place a deletion request has to reach. Gating it
+   means the estate-wide copy never happens and there is still exactly one place an address is
+   correct.
+
+   An **unverified** address is treated as no address at all
+   (`ludwig.notification.recipients.require-verified-contact`, on by default). A provider that says
+   nothing at all is not treated as a refusal — that would have stopped every message on the day the
+   field was introduced.
+
+   A user unknown to the projection is **not** a failure: the notification still goes out for a
+   literal address, because the projection is fed by a Kafka stream and a new user can be addressable
+   before their record arrives. A user with no usable address is a **terminal delivery**, not a
+   rejected request — a request naming five people where one is unreachable produces four sends and
+   one explicable failure.
+
+   What genuinely went away is the per-user **webhook URL**. A webhook is a machine destination rather
+   than a person's contact point, and a request that wants one names it literally as an `ADDRESS`
+   recipient — which it could always do.
 
 2. **`BATCHED` and `COLLAPSED` were added to the specified lifecycle.** Without them, collapsing is
    unrepresentable. See [the state machine](#the-delivery-state-machine).
@@ -698,9 +1016,15 @@ mvn -pl notification-service test -Dtest='*Test'   # unit + integration + archit
 docker build -f notification-service/Dockerfile -t notification-service:1.0.0 .   # context = repo root
 ```
 
-181 tests: unit coverage of rendering strictness, backoff and jitter, preference precedence, quiet
-hours across midnight and timezones, failure classification per channel and PII masking;
-Testcontainers integration coverage of the full path ingress → queue → dispatch against real
-PostgreSQL and a real SMTP server (GreenMail), concurrent claim disjointness at three simulated
-replicas, stale reclaim, idempotent redelivery over a real Kafka broker, retry to `DEAD`, suppression
-before and after enqueueing, receipts, data scoping, and the 47 architecture rules.
+208 tests: unit coverage of rendering strictness, backoff and jitter, opt-out precedence in all
+three states, both preference sources and the degradation between them, batch isolation, quiet hours
+across midnight and timezones, failure classification per channel and PII masking; Testcontainers
+integration coverage of the full path ingress → queue → dispatch against real PostgreSQL and a real
+SMTP server (GreenMail), the REST batch and read-back endpoints and their scoping, concurrent claim
+disjointness at three simulated replicas, stale reclaim, idempotent redelivery over a real Kafka
+broker, retry to `DEAD`, suppression before and after enqueueing, receipts, data scoping, and the 47
+architecture rules.
+
+The user-settings adapter is covered although the module is excluded from the packaged application —
+that is what the `provided` scope buys: the types are on the test classpath and out of what runs, so
+the path that will be switched on later does not rot in the meantime.

@@ -30,6 +30,7 @@ import ru.ludwigandreas.notification.service.model.NotificationCommand;
 import ru.ludwigandreas.notification.service.model.RecipientRef;
 import ru.ludwigandreas.notification.service.preference.DispatchDecision;
 import ru.ludwigandreas.notification.service.preference.PreferenceEvaluator;
+import ru.ludwigandreas.notification.service.preference.RecipientPreferences;
 import ru.ludwigandreas.notification.service.preference.SuppressionService;
 import ru.ludwigandreas.notification.service.recipient.RecipientResolver;
 import ru.ludwigandreas.notification.service.recipient.ResolvedRecipient;
@@ -91,6 +92,12 @@ public class DeliveryFanOutService {
         List<NotificationDeliveryEntity> created = new ArrayList<>();
 
         for (RecipientRef recipient : command.recipients()) {
+            // Once per recipient, not once per recipient per channel. The settings replica is local
+            // and cached, so the difference is small today; the reason it is outside the channel loop
+            // is that every delivery for this person must be settled against the SAME preferences -
+            // one lookup, one answer, snapshotted onto every row it produced.
+            RecipientPreferences preferences = recipientResolver.preferences(recipient);
+
             for (ChannelType channel : command.channels()) {
                 if (channelRegistry.find(channel).isEmpty()) {
                     // No bean claims this transport in this deployment. Creating a row that can never
@@ -99,7 +106,7 @@ public class DeliveryFanOutService {
                             request.getId(), channel);
                     continue;
                 }
-                created.add(create(request, command, recipient, channel, now));
+                created.add(create(request, command, recipient, channel, preferences, now));
             }
         }
         return created;
@@ -109,8 +116,10 @@ public class DeliveryFanOutService {
                                               NotificationCommand command,
                                               RecipientRef recipient,
                                               ChannelType channel,
+                                              RecipientPreferences preferences,
                                               Instant now) {
-        Optional<ResolvedRecipient> resolved = recipientResolver.resolve(recipient, channel);
+        Optional<ResolvedRecipient> resolved =
+                recipientResolver.resolve(recipient, channel, preferences);
 
         NotificationDeliveryEntity delivery = resolved
                 .map(target -> newDelivery(request, command, recipient, channel, target, now))
@@ -150,8 +159,8 @@ public class DeliveryFanOutService {
             return;
         }
 
-        DispatchDecision decision = preferenceEvaluator.evaluate(
-                recipient, command.category(), command.categoryClass(), now);
+        DispatchDecision decision = preferenceEvaluator.evaluate(recipient.preferences(),
+                recipient.channel(), command.category(), command.categoryClass(), now);
 
         if (decision instanceof DispatchDecision.Suppressed suppressed) {
             delivery.setSuppressionReason(suppressed.reason());
@@ -162,6 +171,11 @@ public class DeliveryFanOutService {
         if (decision instanceof DispatchDecision.Deferred deferred) {
             // Deferral moves the due time, not the state: the delivery is a perfectly ordinary
             // PENDING row that the claim query will not consider until its window opens.
+            //
+            // Recorded on the row as well, because "why did this arrive at seven in the morning" has
+            // to be answerable from the delivery months later, without a time-travel query against
+            // the settings history of a preference that has since changed.
+            delivery.setQuietHoursDeferred(true);
             delivery.setNextAttemptAt(deferred.notBefore());
             statusRecorder.transition(delivery, DeliveryStatus.PENDING,
                     "deferred to " + deferred.notBefore() + " (" + deferred.reason() + ")");

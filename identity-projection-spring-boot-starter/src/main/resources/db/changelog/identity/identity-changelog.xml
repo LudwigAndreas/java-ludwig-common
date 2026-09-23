@@ -190,4 +190,28 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="identity-007-security-user-contact" author="ludwig-identity">
+        <comment>
+            Verified contact data, projected only when ludwig.identity.contact.enabled is set - which it
+            is not by default. The OIDC provider is where verification happens and is therefore the
+            single source of truth for a person's addresses; the alternative, each service keeping its
+            own contact table, produces as many half-correct copies as there are services and no answer
+            to which one is right.
+
+            Deliberately not indexed. Every lookup is by subject, so an index would buy nothing and would
+            make "which user has this address" a cheap question against a replica of directory data.
+        </comment>
+        <addColumn tableName="security_user">
+            <column name="email" type="VARCHAR(320)"/>
+            <column name="alternate_email" type="VARCHAR(320)"/>
+            <column name="phone_number" type="VARCHAR(32)"/>
+            <column name="chat_handle" type="VARCHAR(255)"/>
+            <!-- Nullable on purpose: null means the provider did not say, which is a different fact
+                 from "it said no", and a consumer deciding whether it may write to an address has to
+                 be able to tell them apart. -->
+            <column name="email_verified" type="BOOLEAN"/>
+            <column name="phone_verified" type="BOOLEAN"/>
+        </addColumn>
+    </changeSet>
+
 </databaseChangeLog>

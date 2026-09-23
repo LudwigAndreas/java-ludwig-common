@@ -17,11 +17,13 @@ import ru.ludwigandreas.db.core.entity.AuditedEntity;
 /**
  * An address this service will not write to again, whatever any preference says.
  *
- * <p>A suppression is a fact about the destination, not a wish of its owner, which is why it sits
- * apart from {@link RecipientPreferenceEntity} and why even a
- * {@link CategoryKind#TRANSACTIONAL} notification honours it. Continuing to send to an address that
- * hard-bounced or that filed a spam complaint damages the sending domain's reputation for every
- * other recipient, so this list is the one rule with no bypass.
+ * <p>A suppression is a fact about the destination, not a wish of its owner, and that is exactly why
+ * it stayed here when the preferences left. A recipient's opt-outs, quiet hours and digest choice are
+ * theirs and live with their other settings in the account service; a hard bounce or a spam complaint
+ * is delivery state derived from provider feedback that only this service receives, and the user
+ * never chose it. Even a {@link CategoryKind#TRANSACTIONAL} notification honours this list, because
+ * continuing to send to an address that hard-bounced damages the sending domain's reputation for
+ * every other recipient - so it is the one rule with no bypass.
  *
  * <p>Fed by the receipt webhook (bounce, complaint) and by operators. Checked twice: at fan-out, so
  * a suppressed delivery never enters the queue, and again immediately before dispatch, because a

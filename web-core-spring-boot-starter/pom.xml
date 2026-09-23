@@ -152,6 +152,25 @@
 
     <build>
         <plugins>
+            <!--
+                Lombok is used here (@Getter, @Slf4j) and must be named as an annotation processor
+                explicitly, exactly as db-core and security-spring-boot-starter do. Relying on javac
+                discovering it from the compile classpath is what broke this module: the processor
+                silently does not run, no `log` field is generated, and the compiler reports the
+                symptom ("cannot find symbol: variable log") rather than the cause.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>

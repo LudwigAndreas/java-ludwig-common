@@ -40,6 +40,7 @@ import ru.ludwigandreas.notification.service.retention.RetentionService;
 import ru.ludwigandreas.notification.service.template.TemplateRenderer;
 import ru.ludwigandreas.notification.service.template.TemplateRevisionService;
 import ru.ludwigandreas.observability.correlation.CorrelationContext;
+import ru.ludwigandreas.notification.service.preference.RecipientPreferenceSource;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
 import ru.ludwigandreas.notification.settings.NotificationRuntimeProperties;
 
@@ -247,10 +248,17 @@ public class NotificationQueueConfig {
      * later. Failing the pod is the cheapest possible way to find out.
      *
      * <p>{@link ObjectProvider} for the environment so this bean has no ordering requirement on it.
+     *
+     * <p>The preference source is injected by type and not through a provider, because one of the
+     * checks is about <em>which</em> source won and there is always exactly one primary - see
+     * {@code PreferenceSourceConfig}. Taking it here also means the startup line names the source,
+     * which is the first thing anybody asks when a recipient's quiet hours look ignored.
      */
     @Bean
     public NotificationConfigurationValidator notificationConfigurationValidator(
-            NotificationProperties properties, ObjectProvider<ConfigurableEnvironment> environment) {
-        return new NotificationConfigurationValidator(properties, environment.getIfAvailable());
+            NotificationProperties properties, ObjectProvider<ConfigurableEnvironment> environment,
+            RecipientPreferenceSource preferenceSource) {
+        return new NotificationConfigurationValidator(
+                properties, environment.getIfAvailable(), preferenceSource);
     }
 }

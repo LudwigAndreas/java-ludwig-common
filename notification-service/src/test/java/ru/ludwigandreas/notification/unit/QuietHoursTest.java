@@ -8,7 +8,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import ru.ludwigandreas.notification.service.recipient.QuietHours;
+import ru.ludwigandreas.notification.service.preference.QuietHours;
 
 /**
  * Quiet hours are evaluated in the recipient's own zone, and the window that people actually

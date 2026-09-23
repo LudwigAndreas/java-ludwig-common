@@ -1,0 +1,28 @@
+# The configuration from the module's specification, verbatim, so that a change which breaks it
+# breaks a test rather than a README. The two clients differ in every dimension that matters:
+# socket timeout, authentication, and which resilience policies they use at all.
+ludwig:
+  rest-client:
+    defaults:                 # inherited by every client; per-client keys override, they never merge blindly
+      connect-timeout: 2s
+      read-timeout: 10s
+      resilience:
+        retry: { max-attempts: 3, wait-duration: 200ms, exponential-backoff-multiplier: 2.0, randomized-wait-factor: 0.5 }
+        circuit-breaker: { failure-rate-threshold: 50, sliding-window-size: 100, wait-duration-in-open-state: 30s }
+    clients:
+      billing:                # long socket timeout + OAuth2 client credentials
+        base-url: https://billing.internal/api/v1
+        read-timeout: 120s
+        auth:
+          type: bearer
+          token: billing-service-token
+        resilience:
+          bulkhead: { max-concurrent-calls: 20 }
+      pricing:                # short timeout + static bearer from a secret
+        base-url: https://pricing.internal
+        read-timeout: 800ms
+        auth:
+          type: bearer
+          token: pricing-token
+        resilience:
+          retry: { max-attempts: 1 }

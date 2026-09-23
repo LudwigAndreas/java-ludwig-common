@@ -1,5 +1,7 @@
 # db-core
 
+***English** · [Русский](README.ru.md)*
+
 Enterprise-ready base entity classes, auditing, soft delete, exceptions and QueryDSL/Spring Data JPA
 utilities for Java 17 + PostgreSQL + Spring Boot services. Add the dependency, extend a base entity,
 done - no boilerplate id/version/audit columns, no manual `AuditorAware` wiring.

@@ -9,6 +9,7 @@
     <include file="classpath:db/changelog/changes/0001-notification-schema.xml" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/changes/0002-notification-recipients.xml" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/changes/0003-notification-platform-gaps.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0004-preferences-move-out.xml" relativeToChangelogFile="false"/>
 
     <!--
         The outbox module ships its own changelog inside its jar. Including it here - rather than
@@ -20,7 +21,26 @@
 
     <!--
         Same arrangement for the identity projection's tables (security_user, security_partner,
-        security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false.
+        security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false. This
+        service sets ludwig.identity.contact.enabled, so its security_user rows carry the verified
+        contact data recipient resolution reads.
     -->
     <include file="classpath:db/changelog/identity/identity-changelog.xml" relativeToChangelogFile="false"/>
+
+    <!--
+        The settings replica (user_setting_value, user_setting_audit, user_consent) is deliberately
+        NOT included here, unlike the two above, and the difference is that this dependency is
+        optional.
+
+        An <include> is resolved when the master changelog is parsed, so naming a file that ships
+        inside a jar this deployment does not have would fail every migration - and therefore every
+        startup - rather than degrade. Since the module can apply its own changelog as a second
+        SpringLiquibase whenever a mode is enabled, and does so by default
+        (ludwig.user-settings.liquibase.enabled), the schema arrives exactly when the module does and
+        this file stays valid whether or not it is deployed.
+
+        That is a real trade: the three tables land in their own DATABASECHANGELOG history rather
+        than this service's single one. Worth it, because the alternative couples the ability to
+        migrate to the presence of an optional jar.
+    -->
 </databaseChangeLog>

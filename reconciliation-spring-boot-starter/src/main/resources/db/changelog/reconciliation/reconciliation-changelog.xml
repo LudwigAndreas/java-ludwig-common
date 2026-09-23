@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for reconciliation-spring-boot-starter. Changeset ids/author are namespaced
+      ("reconciliation-NNN", "ludwig-reconciliation") so they never collide with a consuming
+      application's own changesets in the shared DATABASECHANGELOG table - see
+      ReconciliationLiquibaseAutoConfiguration, which registers this changelog as an independent
+      SpringLiquibase bean. Postgres-only: JSONB columns and partial indexes throughout.
+    -->
+
+    <changeSet id="reconciliation-001-create-inbox-record" author="ludwig-reconciliation">
+        <createTable tableName="sync_inbox_record">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="task_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="kind" type="VARCHAR(20)" defaultValue="RECORD">
+                <constraints nullable="false"/>
+            </column>
+            <column name="correlation_key" type="VARCHAR(512)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Nullable: a NOT FOUND outcome under mark-missing stages a row with no payload. -->
+            <column name="payload" type="JSONB"/>
+            <column name="external_version" type="VARCHAR(255)"/>
+            <column name="external_timestamp" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="payload_hash" type="VARCHAR(64)"/>
+            <column name="received_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)" defaultValue="STAGED">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_attempts" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_attempt_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_error" type="TEXT"/>
+            <column name="locked_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="locked_by" type="VARCHAR(255)"/>
+            <column name="run_id" type="UUID"/>
+            <column name="job_id" type="UUID"/>
+            <column name="correlation_id" type="VARCHAR(128)"/>
+            <column name="settled_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="reconciliation-002-index-inbox-claim" author="ludwig-reconciliation">
+        <!--
+          The apply pass's claim predicate, exactly. Partial on the two claimable statuses so the
+          index stays proportional to the backlog rather than to the history: on a task that has
+          applied ten million records and has forty waiting, a full index would be four orders of
+          magnitude larger than the thing being searched.
+        -->
+        <sql>
+            CREATE INDEX idx_sync_inbox_claim
+                ON sync_inbox_record (task_name, kind, next_attempt_at, received_at, id)
+                WHERE status IN ('STAGED', 'FAILED', 'DEFERRED');
+        </sql>
+        <rollback>DROP INDEX idx_sync_inbox_claim;</rollback>
+    </changeSet>
+
+    <changeSet id="reconciliation-003-index-inbox-key-history" author="ludwig-reconciliation">
+        <!--
+          Serves both guard rails on the apply path: "what is the newest state already applied for
+          this key" (stale-write protection) and "was this exact payload already applied"
+          (idempotency). Restricted to settled-successfully rows, which is the only history either
+          question is about.
+        -->
+        <sql>
+            CREATE INDEX idx_sync_inbox_applied_history
+                ON sync_inbox_record (task_name, correlation_key, settled_at DESC)
+                WHERE status IN ('APPLIED', 'UNCHANGED');
+        </sql>
+        <rollback>DROP INDEX idx_sync_inbox_applied_history;</rollback>
+    </changeSet>
+
+    <changeSet id="reconciliation-004-index-inbox-stale-and-ops" author="ludwig-reconciliation">
+        <!-- Stale-claim recovery: rows left PROCESSING by an instance that died. -->
+        <sql>
+            CREATE INDEX idx_sync_inbox_stale
+                ON sync_inbox_record (locked_at)
+                WHERE status = 'PROCESSING';
+        </sql>
+        <!-- The actuator's quarantine listing and requeue, and the quarantined-backlog gauge. -->
+        <sql>
+            CREATE INDEX idx_sync_inbox_quarantined
+                ON sync_inbox_record (task_name, settled_at)
+                WHERE status = 'QUARANTINED';
+        </sql>
+        <!-- Requeueing the demand an expired or failed remote job covered. -->
+        <sql>
+            CREATE INDEX idx_sync_inbox_job
+                ON sync_inbox_record (job_id)
+                WHERE job_id IS NOT NULL;
+        </sql>
+        <rollback>
+            DROP INDEX idx_sync_inbox_stale;
+            DROP INDEX idx_sync_inbox_quarantined;
+            DROP INDEX idx_sync_inbox_job;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="reconciliation-004b-index-inbox-fetch-suppression" author="ludwig-reconciliation">
+        <!--
+          The fetch pass's "which keys should I skip this run" lookup: keys with a failure that is not
+          due yet, and keys whose failure budget is spent. Both are read once per run and are tiny
+          compared to the table, so the index is partial on exactly those rows.
+        -->
+        <sql>
+            CREATE INDEX idx_sync_inbox_fetch_failure
+                ON sync_inbox_record (task_name, correlation_key, next_attempt_at)
+                WHERE kind = 'FETCH_FAILURE' AND status IN ('FAILED', 'QUARANTINED');
+        </sql>
+        <rollback>DROP INDEX idx_sync_inbox_fetch_failure;</rollback>
+    </changeSet>
+
+    <changeSet id="reconciliation-005-create-task-state" author="ludwig-reconciliation">
+        <createTable tableName="sync_task_state">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="task_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="tier" type="VARCHAR(10)" defaultValue="HOT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cursor" type="TEXT"/>
+            <column name="watermark" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="sweep_started_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_run_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_run_id" type="UUID"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!--
+          One row per task and tier, enforced rather than assumed: a second row for the same pair
+          would give two cursors for one sweep, and whichever one a given instance happened to read
+          would decide where that instance resumed.
+        -->
+        <addUniqueConstraint tableName="sync_task_state" columnNames="task_name, tier"
+                             constraintName="ux_sync_task_state_task_tier"/>
+    </changeSet>
+
+    <changeSet id="reconciliation-006-create-remote-job" author="ludwig-reconciliation">
+        <createTable tableName="sync_remote_job">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="task_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="external_handle" type="VARCHAR(512)"/>
+            <column name="state" type="VARCHAR(20)" defaultValue="PENDING_SUBMIT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="demand_keys" type="JSONB"/>
+            <column name="submitted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_polled_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="poll_attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_poll_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="collect_cursor" type="TEXT"/>
+            <column name="quota_lease_id" type="UUID"/>
+            <column name="owner_instance" type="VARCHAR(255)"/>
+            <column name="last_error" type="TEXT"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="settled_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!--
+          The idempotency key is committed before the submit call and is how an ambiguous submit is
+          matched against the partner's listing of active jobs. Two rows sharing one would make that
+          match ambiguous in exactly the situation it exists to disambiguate.
+        -->
+        <addUniqueConstraint tableName="sync_remote_job" columnNames="idempotency_key"
+                             constraintName="ux_sync_remote_job_idempotency_key"/>
+    </changeSet>
+
+    <changeSet id="reconciliation-007-index-remote-job" author="ludwig-reconciliation">
+        <!-- The poll scheduler's claim: in-flight jobs whose next probe is due. -->
+        <sql>
+            CREATE INDEX idx_sync_remote_job_poll
+                ON sync_remote_job (task_name, next_poll_at, id)
+                WHERE state IN ('SUBMITTED', 'RUNNING');
+        </sql>
+        <!-- The collect scheduler's claim, and the resume-after-restart path. -->
+        <sql>
+            CREATE INDEX idx_sync_remote_job_collect
+                ON sync_remote_job (task_name, id)
+                WHERE state IN ('SUCCEEDED', 'COLLECTING');
+        </sql>
+        <!-- Adoption on startup, expiry sweeping, and the in-flight listing in the actuator. -->
+        <sql>
+            CREATE INDEX idx_sync_remote_job_active
+                ON sync_remote_job (task_name, expires_at)
+                WHERE state IN ('PENDING_SUBMIT', 'SUBMITTED', 'RUNNING', 'SUCCEEDED', 'COLLECTING', 'ORPHANED');
+        </sql>
+        <rollback>
+            DROP INDEX idx_sync_remote_job_poll;
+            DROP INDEX idx_sync_remote_job_collect;
+            DROP INDEX idx_sync_remote_job_active;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="reconciliation-008-create-quota-lease" author="ludwig-reconciliation">
+        <createTable tableName="sync_quota_lease">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="quota_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="task_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="owner_instance" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="job_id" type="UUID"/>
+            <column name="acquired_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="heartbeat_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_lifetime_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!--
+          Counting live slots is the hottest question asked of this table - once per acquisition
+          attempt per task per tick - and it is always "for this quota, how many have not expired".
+        -->
+        <createIndex tableName="sync_quota_lease" indexName="idx_sync_quota_lease_live">
+            <column name="quota_name"/>
+            <column name="expires_at"/>
+        </createIndex>
+        <createIndex tableName="sync_quota_lease" indexName="idx_sync_quota_lease_job">
+            <column name="job_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="reconciliation-009-create-quota-waiter" author="ludwig-reconciliation">
+        <createTable tableName="sync_quota_waiter">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="quota_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="task_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="owner_instance" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enqueued_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="heartbeat_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!--
+          One queue entry per (quota, task, instance). Without the constraint, a task that fails to
+          acquire on every tick would add a row per tick and crowd out every other task in the
+          arrival order it is supposed to be waiting in.
+        -->
+        <addUniqueConstraint tableName="sync_quota_waiter"
+                             columnNames="quota_name, task_name, owner_instance"
+                             constraintName="ux_sync_quota_waiter_identity"/>
+        <createIndex tableName="sync_quota_waiter" indexName="idx_sync_quota_waiter_queue">
+            <column name="quota_name"/>
+            <column name="enqueued_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="reconciliation-010-create-audit-record" author="ludwig-reconciliation">
+        <createTable tableName="sync_audit_record">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="task_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="subject" type="VARCHAR(512)"/>
+            <column name="from_state" type="VARCHAR(32)"/>
+            <column name="to_state" type="VARCHAR(32)"/>
+            <column name="detail" type="TEXT"/>
+            <column name="principal" type="VARCHAR(255)"/>
+            <column name="run_id" type="UUID"/>
+            <column name="correlation_id" type="VARCHAR(128)"/>
+            <column name="instance" type="VARCHAR(255)"/>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="sync_audit_record" indexName="idx_sync_audit_task_time">
+            <column name="task_name"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <createIndex tableName="sync_audit_record" indexName="idx_sync_audit_subject">
+            <column name="subject"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

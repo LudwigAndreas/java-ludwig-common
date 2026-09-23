@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 import ru.ludwigandreas.notification.config.NotificationConfigurationValidator;
+import ru.ludwigandreas.notification.service.preference.ConfiguredPreferenceSource;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
 
 /**
@@ -195,7 +196,7 @@ class NotificationConfigurationValidatorTest {
         properties.getQueue().setLeaseTimeout(Duration.ofMinutes(5));
 
         assertThatThrownBy(() -> new NotificationConfigurationValidator(properties,
-                new MockEnvironment()).validate())
+                new MockEnvironment(), new ConfiguredPreferenceSource()).validate())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("lease-timeout");
     }
@@ -203,7 +204,8 @@ class NotificationConfigurationValidatorTest {
     private static NotificationConfigurationValidator validator(NotificationProperties properties) {
         MockEnvironment environment = new MockEnvironment();
         environment.setProperty("spring.mail.properties.mail.smtp.timeout", "10000");
-        return new NotificationConfigurationValidator(properties, environment);
+        return new NotificationConfigurationValidator(
+                properties, environment, new ConfiguredPreferenceSource());
     }
 
     /** The shipped defaults, with the two secrets a deployment must supply. */

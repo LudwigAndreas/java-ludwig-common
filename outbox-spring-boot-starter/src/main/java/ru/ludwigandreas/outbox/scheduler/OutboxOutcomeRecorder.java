@@ -2,7 +2,7 @@ package ru.ludwigandreas.outbox.scheduler;
 
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
-import ru.ludwigandreas.outbox.backoff.OutboxBackoffCalculator;
+import ru.ludwigandreas.job.core.backoff.BackoffCalculator;
 import ru.ludwigandreas.outbox.config.OutboxProperties;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
 import ru.ludwigandreas.outbox.entity.OutboxStatus;
@@ -22,13 +22,13 @@ import java.util.UUID;
 public class OutboxOutcomeRecorder {
 
     private final OutboxMessageRepository repository;
-    private final OutboxBackoffCalculator backoffCalculator;
+    private final BackoffCalculator backoffCalculator;
     private final OutboxAuditLogger auditLogger;
     private final OutboxMetrics metrics;
     private final OutboxProperties properties;
 
     public OutboxOutcomeRecorder(OutboxMessageRepository repository,
-                                  OutboxBackoffCalculator backoffCalculator,
+                                  BackoffCalculator backoffCalculator,
                                   OutboxAuditLogger auditLogger,
                                   OutboxMetrics metrics,
                                   OutboxProperties properties) {

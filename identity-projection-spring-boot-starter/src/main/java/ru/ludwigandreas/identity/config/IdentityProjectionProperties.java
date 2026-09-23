@@ -37,6 +37,7 @@ public class IdentityProjectionProperties {
 
     private final Kafka kafka = new Kafka();
     private final Liquibase liquibase = new Liquibase();
+    private final Contact contact = new Contact();
 
     public boolean isEnabled() {
         return enabled;
@@ -74,8 +75,36 @@ public class IdentityProjectionProperties {
         return kafka;
     }
 
+    public Contact getContact() {
+        return contact;
+    }
+
     public Liquibase getLiquibase() {
         return liquibase;
+    }
+
+    /**
+     * Whether the projection stores the user's verified contact data.
+     *
+     * <p>Off by default, and that is the whole point of it being a switch. The projection is
+     * replicated into every service that uses this module, so a contact column that was always
+     * populated would put a person's address in every service database in the estate - including the
+     * ones with no reason to have it, and every one of them a place a deletion request has to reach.
+     *
+     * <p>A service that actually sends messages to people - the notification service - turns it on and
+     * reads the address from the directory rather than keeping its own copy that nothing keeps in step.
+     */
+    public static class Contact {
+
+        private boolean enabled;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 
     public static class Kafka {

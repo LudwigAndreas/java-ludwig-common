@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
+import ru.ludwigandreas.security.data.DataAccessGuard;
+import ru.ludwigandreas.security.data.DataAction;
 import ru.ludwigandreas.notification.service.metrics.NotificationMetrics;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.NotificationRequestRepository;
@@ -61,6 +63,16 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
 
+    /**
+     * The name this resource's scope mapping and policies are registered under.
+     *
+     * <p>Repeated here rather than imported from {@code config.SecurityConfig}, which is where the
+     * mapping is declared. The configuration package is the composition root and depends on this
+     * layer; importing back out of it would be the cycle the architecture rules reject.
+     * {@code DeliveryAdminService} carries its own copy of the delivery's name for the same reason.
+     */
+    private static final String REQUEST_RESOURCE = "notification-request";
+
     private final NotificationRequestRepository requestRepository;
     private final NotificationDeliveryRepository deliveryRepository;
     private final DeliveryFanOutService fanOutService;
@@ -71,6 +83,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationProperties properties;
     private final NotificationMetrics metrics;
     private final ObjectMapper objectMapper;
+    private final DataAccessGuard dataAccessGuard;
 
     @Override
     public NotificationRequestView submit(NotificationCommand command) {
@@ -100,6 +113,21 @@ public class NotificationServiceImpl implements NotificationService {
         log.info("Request {} ({}) fanned out into {} deliveries",
                 request.getId(), command.templateKey(), deliveries.size());
         return mapper.toView(request, mapper.toViews(deliveries), false);
+    }
+
+    /**
+     * The guard is applied after the row is loaded rather than folded into the query, for the same
+     * reason it is on a delivery: a load by id does not go through a scoped query, so without it a
+     * caller who was shown or guessed a request id could read any tenant's. Loading first also means
+     * the audit trail names the row that was refused.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public NotificationRequestView get(UUID id) {
+        NotificationRequestEntity request = existing(id);
+        dataAccessGuard.check(REQUEST_RESOURCE, DataAction.READ, request,
+                NotificationRequestEntity::getId);
+        return view(request, false);
     }
 
     @Override

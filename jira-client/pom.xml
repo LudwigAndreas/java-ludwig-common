@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>jira-client</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Jira Server REST client</name>
+    <description>
+        A type-safe, framework-free Java client for the Jira Server / Data Center REST API v2, targeting
+        Jira Server 9.12.27 (buildNumber 9120027), plus the ALM Works Structure 2.0 REST API.
+
+        Deliberately NOT a Spring Boot starter and deliberately without a Spring dependency: the client is
+        constructed through JiraClient.builder() and runs on the JDK's own HttpClient, so it is usable from
+        a Spring service, a batch job, a CLI or a test with the same three lines of code. A service that
+        wants it as a bean declares one @Bean method - see README, "Using it from Spring".
+    </description>
+
+    <!--
+        ludwig-bom is imported, not inherited, exactly as in common-utils: the parent stays
+        ru.ludwigandreas:common so this module keeps the reactor's build configuration (Checkstyle,
+        flatten, JaCoCo, the -parameters compiler flag) while taking every third-party version from the
+        BOM. Nothing below carries a <version> for that reason.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            The only two hard runtime dependencies. Jackson does the JSON; jackson-datatype-jsr310 is
+            required rather than optional because every timestamp this client exposes is an
+            OffsetDateTime and the module registers its own (de)serializers on top of it - see
+            JiraJson. The transport is java.net.http.HttpClient from the JDK, so there is no HTTP
+            client dependency at all.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- API only. The client logs through SLF4J and binds to whatever the consuming application
+             already binds to; a consumer with no binding gets the no-op logger and nothing breaks. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!--
+            Optional: JiraClientBuilder.meterRegistry(...) publishes request counters, timers and a
+            retry counter. The client stays framework-free for everyone who does not call it -
+            Micrometer is never required in order to talk to Jira. Same arrangement as common-utils.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Compile-time only: Lombok generates the builders on the request objects. It never appears
+             on a consumer's classpath. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-params</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- Versions come from ludwig-bom via annotationProcessorPathsUseDepMgmt, which the
+                         reactor root sets on this plugin. -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

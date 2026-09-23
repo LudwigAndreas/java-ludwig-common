@@ -1,5 +1,7 @@
 # hot-reload-spring-boot-starter
 
+***English** · [Русский](README.ru.md)*
+
 Enterprise-ready hot reload for Java 17 + Spring Boot services: typed and validated configuration,
 live-reloading property/YAML files, FreeMarker templates and HashiCorp Vault secrets - with environment
 variables and system properties always able to override a reloaded value. Add the dependency, point it

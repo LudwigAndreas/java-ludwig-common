@@ -1,61 +1,42 @@
 package ru.ludwigandreas.odatafilter.integration;
 
-import com.querydsl.core.types.Order;
-import com.querydsl.core.types.OrderSpecifier;
-import com.querydsl.core.types.dsl.ComparablePath;
-import com.querydsl.core.types.dsl.PathBuilder;
-import com.querydsl.jpa.impl.JPAQueryFactory;
-import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.util.List;
-import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ludwigandreas.odatafilter.core.ODataQuery;
 import ru.ludwigandreas.odatafilter.testmodel.Employee;
 
 /**
  * Minimal controller used only by this module's own integration test, to exercise the full
- * request -> argument resolver -> ODataFilterService -> QueryDSL predicate -> Postgres chain.
- * Deliberately uses {@link JPAQueryFactory} directly against the library's dynamically-built
- * {@link PathBuilder} root, rather than a {@code QuerydslPredicateExecutor} repository, so the
- * test needs no annotation-processor-generated {@code QEmployee} class.
+ * request -> {@code ODataFilterService} -> QueryDSL predicate -> Postgres chain.
+ *
+ * <p>Written the way a consuming service should write it: the OData options arrive as plain
+ * request parameters and travel down unparsed, so no JPA entity and no QueryDSL type appears in
+ * this signature. {@link EmployeeQueryRepository} - the layer that owns {@link Employee} - is what
+ * turns them into a predicate.
  */
 @RestController
 @RequestMapping("/employees")
 class EmployeeQueryController {
 
-    private final EntityManager entityManager;
+    private final EmployeeQueryRepository repository;
 
-    EmployeeQueryController(EntityManager entityManager) {
-        this.entityManager = entityManager;
+    EmployeeQueryController(EmployeeQueryRepository repository) {
+        this.repository = repository;
     }
 
     @GetMapping
-    List<EmployeeView> search(ODataQuery<Employee> query) {
-        PathBuilder<Employee> root = new PathBuilder<>(Employee.class, "employee");
-        JPAQueryFactory queryFactory = new JPAQueryFactory(entityManager);
-
-        return queryFactory.selectFrom(root)
-                .where(query.predicate())
-                .offset(query.pageable().getOffset())
-                .limit(query.pageable().getPageSize())
-                .orderBy(toOrderSpecifiers(root, query.pageable().getSort()))
-                .fetch()
+    List<EmployeeView> search(
+            @RequestParam(name = "$filter", required = false) String filter,
+            @RequestParam(name = "$orderby", required = false) String orderBy,
+            @RequestParam(name = "$top", required = false) Integer top,
+            @RequestParam(name = "$skip", required = false) Integer skip) {
+        return repository.search(new EmployeeSearchCriteria(filter, orderBy, top, skip))
                 .stream()
                 .map(EmployeeView::of)
                 .toList();
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private OrderSpecifier<?>[] toOrderSpecifiers(PathBuilder<Employee> root, Sort sort) {
-        return sort.stream()
-                .map(order -> {
-                    ComparablePath path = root.getComparable(order.getProperty(), Comparable.class);
-                    return new OrderSpecifier(order.isAscending() ? Order.ASC : Order.DESC, path);
-                })
-                .toArray(OrderSpecifier[]::new);
     }
 
     record EmployeeView(String name, Integer age, BigDecimal salary, String status, String department) {

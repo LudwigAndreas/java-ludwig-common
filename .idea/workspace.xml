@@ -5,32 +5,106 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/common-utils/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/common-utils/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/common-utils/src/main/java/ru/ludwigandreas/common/retryer/RetryingCall.java" beforeDir="false" afterPath="$PROJECT_DIR$/common-utils/src/main/java/ru/ludwigandreas/common/retryer/RetryingCall.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/architecture-rules/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/architecture-rules/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/checkstyle-rules/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/checkstyle-rules/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crud-service-example/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/crud-service-example/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/repository/ProductQueryRepositoryImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/repository/ProductQueryRepositoryImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/repository/entity/ProductEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/repository/entity/ProductEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/web/ProductController.java" beforeDir="false" afterPath="$PROJECT_DIR$/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/web/ProductController.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/db-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db-core/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/audit/AuditorAwareAdapter.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/audit/AuditorAwareAdapter.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseAutoConfiguration.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/config/DatabaseProperties.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/ExternalEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/ExternalEntity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/SnapshotEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/entity/SnapshotEntity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/listener/SnapshotImmutabilityListener.java" beforeDir="false" afterPath="$PROJECT_DIR$/db-core/src/main/java/ru/ludwigandreas/db/core/listener/SnapshotImmutabilityListener.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hot-reload-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/hot-reload-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityProjectionAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityProjectionAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityProjectionProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityProjectionProperties.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/entity/SecurityUserEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/entity/SecurityUserEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/kafka/OidcUserEvent.java" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/kafka/OidcUserEvent.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/projection/IdentityProjectionService.java" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/projection/IdentityProjectionService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit/IdentityProjectionServiceTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit/IdentityProjectionServiceTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ludwig-bom/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/ludwig-bom/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationConfigurationValidator.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationConfigurationValidator.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationQueueConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationQueueConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/config/SecurityConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/config/SecurityConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/DeliveryQueryRepositoryImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/DeliveryQueryRepositoryImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/PreferenceQueryRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/PreferenceQueryRepositoryImpl.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/RecipientPreferenceRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/RecipientProfileQueryRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/RecipientProfileQueryRepositoryImpl.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/RecipientProfileRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/NotificationDeliveryEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/NotificationDeliveryEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/RecipientPreferenceEntity.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/RecipientProfileEntity.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/SuppressionEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/SuppressionEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/NotificationService.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/NotificationService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/NotificationServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/NotificationServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/RecipientAdminService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/PreferenceSetting.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/RecipientProfileView.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/preference/PreferenceEvaluator.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/preference/PreferenceEvaluator.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/queue/DeliveryFanOutService.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/queue/DeliveryFanOutService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/DefaultRecipientResolver.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/DefaultRecipientResolver.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/QuietHours.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/RecipientResolver.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/RecipientResolver.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/ResolvedRecipient.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/ResolvedRecipient.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/settings/NotificationProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/settings/NotificationProperties.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/DeliveryAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/DeliveryAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/NotificationController.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/NotificationController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/RecipientAdminController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/PreferenceRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/PreferenceResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/RecipientProfileRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/RecipientProfileResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/mapper/NotificationDtoMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/java/ru/ludwigandreas/notification/web/mapper/NotificationDtoMapper.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/resources/i18n/notification-messages.properties" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/resources/i18n/notification-messages.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/main/resources/i18n/notification-messages_ru.properties" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/main/resources/i18n/notification-messages_ru.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/integration/KafkaIngressIntegrationTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/integration/KafkaIngressIntegrationTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/integration/NotificationLifecycleIntegrationTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/integration/NotificationLifecycleIntegrationTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/integration/NotificationTestBase.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/integration/NotificationTestBase.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/unit/NotificationConfigurationValidatorTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/unit/NotificationConfigurationValidatorTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/unit/PreferenceEvaluatorTest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/unit/QuietHoursTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/notification-service/src/test/java/ru/ludwigandreas/notification/unit/QuietHoursTest.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/annotation/FilterPolicy.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/annotation/FilterPolicy.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/annotation/Filterable.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/annotation/Filterable.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterProperties.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfiguration.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/core/ODataFilterService.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/core/ODataFilterService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/core/ODataQuery.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/core/ODataQuery.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/policy/EntityFilterPolicy.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/policy/EntityFilterPolicy.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/policy/FilterFieldPolicy.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/policy/FilterFieldPolicy.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/policy/FilterPolicyRegistry.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/policy/FilterPolicyRegistry.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/web/ODataQueryArgumentResolver.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/web/ODataQueryArgumentResolver.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfigurationTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfigurationTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/core/ODataFilterServiceMetricsTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/core/ODataFilterServiceMetricsTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration/EmployeeQueryController.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration/EmployeeQueryController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/policy/FilterPolicyRegistryTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/policy/FilterPolicyRegistryTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/testmodel/Employee.java" beforeDir="false" afterPath="$PROJECT_DIR$/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/testmodel/Employee.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/MicrometerOutboxMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/MicrometerOutboxMetrics.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/NoopOutboxMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/NoopOutboxMetrics.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/OutboxMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/metrics/OutboxMetrics.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/backoff/OutboxBackoffCalculator.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/config/OutboxAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/config/OutboxAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/config/OutboxProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/config/OutboxProperties.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/repository/OutboxMessageRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/repository/OutboxMessageRepository.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxOutcomeRecorder.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxOutcomeRecorder.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxProcessingService.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxProcessingService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxPublisherScheduler.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxPublisherScheduler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxStaleReclaimScheduler.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/scheduler/OutboxStaleReclaimScheduler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit/OutboxBackoffCalculatorTest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit/OutboxOutcomeRecorderTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit/OutboxOutcomeRecorderTest.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web-core-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/web-core-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web-core-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/web-core-spring-boot-starter/pom.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,6 +117,10 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="KubernetesApiPersistence"><![CDATA[{}]]></component>
+  <component name="KubernetesApiProvider"><![CDATA[{
+  "isMigrated": true
+}]]></component>
   <component name="McpProjectServerCommands">
     <commands />
     <urls />
@@ -58,6 +136,9 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Maven.common [clean,install].executor": "Run",
+    "Maven.common [verify,-DskipITs].executor": "Run",
+    "Maven.common [verify].executor": "Run",
     "RunOnceActivity.MCP Project settings loaded": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
@@ -73,7 +154,14 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
-  <component name="RunManager">
+  <component name="RunAnythingCache">
+    <option name="myCommands">
+      <command value="mvn clean install" />
+      <command value="mvn verify " />
+      <command value="mvn verify -DskipITs" />
+    </option>
+  </component>
+  <component name="RunManager" selected="Spring Boot.CatalogApplication">
     <configuration default="true" type="JetRunConfigurationType">
       <module name="ludwig-common" />
       <method v="2">
@@ -83,6 +171,20 @@
     <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
       <module name="ludwig-common" />
       <option name="filePath" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="CatalogApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+      <module name="crud-service-example" />
+      <option name="SPRING_BOOT_MAIN_CLASS" value="ru.ludwigandreas.example.catalog.CatalogApplication" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="NotificationApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+      <module name="notification-service" />
+      <option name="SPRING_BOOT_MAIN_CLASS" value="ru.ludwigandreas.notification.NotificationApplication" />
       <method v="2">
         <option name="Make" enabled="true" />
       </method>
@@ -103,7 +205,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1786817614729</updated>
-      <workItem from="1786817616340" duration="4442000" />
+      <workItem from="1786817616340" duration="74396000" />
     </task>
     <servers />
   </component>

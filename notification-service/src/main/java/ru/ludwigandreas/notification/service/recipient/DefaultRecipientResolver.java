@@ -1,7 +1,7 @@
 package ru.ludwigandreas.notification.service.recipient;
 
-import java.time.ZoneId;
 import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.Locale;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -10,62 +10,115 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.identity.entity.SecurityUserEntity;
 import ru.ludwigandreas.identity.repository.SecurityUserRepository;
-import ru.ludwigandreas.notification.settings.NotificationProperties;
-import ru.ludwigandreas.notification.repository.RecipientProfileRepository;
-import ru.ludwigandreas.notification.repository.entity.RecipientProfileEntity;
 import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.notification.service.model.RecipientKind;
 import ru.ludwigandreas.notification.service.model.RecipientRef;
+import ru.ludwigandreas.notification.service.preference.QuietHours;
+import ru.ludwigandreas.notification.service.preference.QuietHoursWindow;
+import ru.ludwigandreas.notification.service.preference.RecipientPreferenceSource;
+import ru.ludwigandreas.notification.service.preference.RecipientPreferences;
+import ru.ludwigandreas.notification.service.preference.StoredPreferences;
+import ru.ludwigandreas.notification.settings.NotificationProperties;
 
 /**
- * Resolves a recipient from two sources, deliberately split.
+ * Resolves a recipient from two sources, neither of which is this service's own table.
  *
- * <h2>Why two sources</h2>
+ * <h2>Where the two halves come from</h2>
  *
- * <p>{@code identity-projection-spring-boot-starter} maintains a local projection of the OIDC
- * directory, and it stores a subject, a display name, a tenant, a status and a role set -
- * deliberately nothing else. Its own documentation gives the reason: the projection is replicated
- * into every service that uses the module, so every additional field is another copy of personal data
- * and another place a deletion request has to reach. An email address, a chat handle and a home
- * timezone are not authorization inputs and have no business being copied estate-wide.
+ * <p><b>The address</b> comes from {@code identity-projection-spring-boot-starter}: the OIDC provider
+ * verifies a person's email and phone, so it is the single source of truth for them, and this service
+ * reads the projection of that rather than keeping its own contact table. It used to keep one, and the
+ * argument for it - that the projection should not carry personal data into every service - was right
+ * about the general case and wrong about the answer. The projection now carries contact data only
+ * where a deployment asks for it ({@code ludwig.identity.contact.enabled}), which is this service and
+ * nothing else, so the estate-wide copy never happens and there is still exactly one place an address
+ * is correct.
  *
- * <p>So the identity projection answers the questions it is the authority for - does this user exist,
- * are they active, what do we call them, whose tenant are they in - and
- * {@code notification_recipient_profile} answers the ones this service is the authority for: where to
- * send, in what language, and during which hours not to. That is not a workaround. This service needs
- * the contact record anyway, because preferences and quiet hours hang off it, so owning it here is
- * where it belongs rather than a duplicate of something a module should have provided.
+ * <p><b>The preferences</b> come from a {@link RecipientPreferenceSource}, which is a seam rather
+ * than a dependency. Where the platform runs a preference store the adapter reads it locally; where
+ * it does not - and that is the shape this service is currently deployed in - the source answers
+ * "nothing stored" and every recipient resolves to the configured defaults. Either way no call
+ * leaves this process on the dispatch path, which is the property that matters on a queue worker.
+ *
+ * <h2>Precedence, and why it is this way round</h2>
+ *
+ * <p>For locale and timezone: the request's hint first, then what the recipient chose, then
+ * configuration. The hint wins because a calling service that names a locale has usually been told
+ * it by the very interaction that triggered the notification - the language the person was reading
+ * the page in when they asked for a password reset - and that is fresher than a profile setting they
+ * last touched a year ago.
+ *
+ * <p>For quiet hours the order is reversed and there is no hint at all: a caller does not get to say
+ * when it is acceptable to disturb somebody. See {@code PreferenceEvaluator} for the same principle
+ * applied to the transactional bypass.
  *
  * <h2>Degrading gracefully</h2>
  *
- * <p>A user unknown to the identity projection is <em>not</em> a failure. The projection is fed by a
- * Kafka stream, so a genuinely new user can be addressable before their record has arrived, and a
- * password-reset notification that refused to go out because a projection was three seconds behind
- * would be the worst possible outcome. When the projection has no row the notification still goes,
- * with the display name and tenant simply absent - the template sees a null it must handle
- * explicitly, which the strict renderer guarantees it does.
+ * <p>A user unknown to the identity projection is <em>not</em> a failure. A genuinely new user can be
+ * addressable before their record has arrived, and a password-reset notification refused because a
+ * projection was three seconds behind would be the worst possible outcome. With no row the
+ * notification still goes when the caller supplied a literal address; with no row and no address
+ * there is nothing to send to, and that settles as a terminal delivery rather than a rejected
+ * request.
  *
- * <p>The one thing that does stop a delivery is having no usable address for the channel, and that is
- * reported as an empty result rather than an exception, so one unreachable recipient out of five
- * settles as a terminal delivery while the other four go out.
+ * <p>An unverified address is treated as no address at all when
+ * {@code ludwig.notification.recipients.require-verified-contact} is on. Verification is the
+ * provider's job and this service does not second-guess it; what it decides is whether to write to an
+ * address nobody has confirmed belongs to the person.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DefaultRecipientResolver implements RecipientResolver {
 
-    private final RecipientProfileRepository profileRepository;
     private final SecurityUserRepository identityRepository;
+    private final RecipientPreferenceSource preferenceSource;
     private final NotificationProperties properties;
+
+    /**
+     * Resolves a recipient's preferences once, before the fan-out reaches any channel.
+     *
+     * <p>Separate from {@link #resolve} precisely so it is called once per recipient rather than once
+     * per recipient per channel. It may be one query either way where the source caches, but the
+     * shape of the call is what keeps it that way when somebody adds a fourth channel.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public RecipientPreferences preferences(RecipientRef ref) {
+        if (ref.kind() != RecipientKind.USER) {
+            // A literal address has nobody behind it to have preferences. Its locale and zone come
+            // from the caller or from configuration, which is all that is knowable about it.
+            return build(ref, StoredPreferences.none());
+        }
+
+        String tenantId = identityRepository.findById(ref.userId())
+                .map(SecurityUserEntity::getTenantId)
+                .orElse(null);
+        return build(ref, preferenceSource.lookup(ref.userId(), tenantId));
+    }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<ResolvedRecipient> resolve(RecipientRef ref, ChannelType channel) {
-        return ref.kind() == RecipientKind.USER ? resolveUser(ref, channel) : resolveAddress(ref, channel);
+    public Optional<ResolvedRecipient> resolve(RecipientRef ref, ChannelType channel,
+                                               RecipientPreferences preferences) {
+        return ref.kind() == RecipientKind.USER
+                ? resolveUser(ref, channel, preferences)
+                : resolveAddress(ref, channel, preferences);
     }
 
-    private Optional<ResolvedRecipient> resolveUser(RecipientRef ref, ChannelType channel) {
-        Optional<RecipientProfileEntity> profile = profileRepository.lookupByUserId(ref.userId());
+    /** The request's hints and the stored preferences, folded into what the fan-out needs. */
+    private RecipientPreferences build(RecipientRef ref, StoredPreferences stored) {
+        ZoneId zone = zoneOf(ref, stored);
+        return new RecipientPreferences(
+                localeOf(ref, stored),
+                zone,
+                quietHoursOf(stored, zone),
+                stored.digest(),
+                stored.optOuts());
+    }
+
+    private Optional<ResolvedRecipient> resolveUser(RecipientRef ref, ChannelType channel,
+                                                    RecipientPreferences preferences) {
         Optional<SecurityUserEntity> identity = identityRepository.findById(ref.userId());
 
         if (identity.isPresent() && !identity.get().isActive()) {
@@ -76,72 +129,84 @@ public class DefaultRecipientResolver implements RecipientResolver {
             return Optional.empty();
         }
 
-        String address = profile.map(entity -> addressOf(entity, channel)).orElse(null);
+        String address = identity.map(user -> addressOf(user, channel)).orElse(null);
         if (address == null || address.isBlank()) {
-            log.debug("Recipient {} has no {} address", ref.userId(), channel);
+            log.debug("Recipient {} has no usable {} address", ref.userId(), channel);
             return Optional.empty();
         }
 
-        if (identity.isEmpty()) {
-            // Worth saying, once, at INFO: it is normal during a projection lag and abnormal if it
-            // persists, and those two look identical unless the line exists to count.
-            log.info("Recipient {} is unknown to the identity projection; delivering without enrichment",
-                    ref.userId());
-        }
-
-        ZoneId zone = zoneOf(ref, profile.orElse(null));
         return Optional.of(new ResolvedRecipient(
                 ref.userId(),
                 channel,
                 address,
-                localeOf(ref, profile.orElse(null)),
-                zone,
+                preferences.locale(),
+                preferences.zone(),
                 identity.map(SecurityUserEntity::getDisplayName).orElse(null),
-                identity.map(SecurityUserEntity::getTenantId)
-                        .orElseGet(() -> profile.map(RecipientProfileEntity::getTenantId).orElse(null)),
+                identity.map(SecurityUserEntity::getTenantId).orElse(null),
                 identity.isPresent(),
-                quietHoursOf(profile.orElse(null), zone)));
+                preferences));
     }
 
     /**
      * A literal destination, with no account behind it.
      *
-     * <p>No profile lookup by address on purpose. A profile is keyed by subject, and searching it by
-     * address would let a caller who guessed an address inherit that person's locale, timezone and
-     * quiet hours - a small but real oracle, and an unnecessary one: a caller supplying a raw address
-     * can supply a locale too.
+     * <p>No preference lookup by address on purpose. Preferences are keyed by subject, and searching
+     * them by address would let a caller who guessed an address inherit that person's locale,
+     * timezone and quiet hours - a small but real oracle, and an unnecessary one: a caller supplying a
+     * raw address can supply a locale too.
      */
-    private Optional<ResolvedRecipient> resolveAddress(RecipientRef ref, ChannelType channel) {
-        ZoneId zone = zoneOf(ref, null);
+    private Optional<ResolvedRecipient> resolveAddress(RecipientRef ref, ChannelType channel,
+                                                       RecipientPreferences preferences) {
         return Optional.of(new ResolvedRecipient(
                 null,
                 channel,
                 ref.address(),
-                localeOf(ref, null),
-                zone,
+                preferences.locale(),
+                preferences.zone(),
                 null,
                 null,
                 false,
-                QuietHours.none(zone)));
+                preferences));
     }
 
-    private String addressOf(RecipientProfileEntity profile, ChannelType channel) {
+    /**
+     * The address for this channel, honouring the provider's verification flag.
+     *
+     * <p>The alternate address is the fallback for email, because an internal address that does not
+     * accept external mail is a common shape and the point of having two is that one of them works.
+     * Webhooks have no per-user address at all: a webhook is a machine destination, and a request that
+     * wants one names it literally.
+     */
+    private String addressOf(SecurityUserEntity user, ChannelType channel) {
         return switch (channel) {
-            case EMAIL -> profile.getEmailAddress();
-            case CHAT -> profile.getChatAddress();
-            case WEBHOOK -> profile.getWebhookUrl();
+            case EMAIL -> verified(user.getEmail(), user.getEmailVerified()) != null
+                    ? user.getEmail()
+                    : verified(user.getAlternateEmail(), user.getEmailVerified());
+            case CHAT -> user.getChatHandle();
+            case WEBHOOK -> null;
         };
     }
 
-    private Locale localeOf(RecipientRef ref, RecipientProfileEntity profile) {
+    private String verified(String address, Boolean addressVerified) {
+        if (address == null || address.isBlank()) {
+            return null;
+        }
+        if (!properties.getRecipients().isRequireVerifiedContact()) {
+            return address;
+        }
+        // Null means the provider did not say, which is not the same as saying no. Treating silence as
+        // unverified would stop every message the moment an older producer omitted the field.
+        return Boolean.FALSE.equals(addressVerified) ? null : address;
+    }
+
+    private Locale localeOf(RecipientRef ref, StoredPreferences stored) {
         if (ref.locale() != null) {
             return ref.locale();
         }
-        String tag = profile == null ? null : profile.getLocale();
-        if (tag == null || tag.isBlank()) {
-            tag = properties.getPreferences().getDefaultLocale();
+        if (stored.locale() != null) {
+            return stored.locale();
         }
-        return Locale.forLanguageTag(tag);
+        return Locale.forLanguageTag(properties.getPreferences().getDefaultLocale());
     }
 
     /**
@@ -151,14 +216,17 @@ public class DefaultRecipientResolver implements RecipientResolver {
      * to run in, so the same recipient would be quiet at different times depending on where the
      * scheduler placed the replica that handled them.
      */
-    private ZoneId zoneOf(RecipientRef ref, RecipientProfileEntity profile) {
-        String candidate = ref.timezone();
-        if (candidate == null || candidate.isBlank()) {
-            candidate = profile == null ? null : profile.getTimezone();
+    private ZoneId zoneOf(RecipientRef ref, StoredPreferences stored) {
+        if (ref.timezone() != null && !ref.timezone().isBlank()) {
+            return parse(ref.timezone());
         }
-        if (candidate == null || candidate.isBlank()) {
-            candidate = properties.getPreferences().getDefaultTimezone();
+        if (stored.zone() != null) {
+            return stored.zone();
         }
+        return parse(properties.getPreferences().getDefaultTimezone());
+    }
+
+    private ZoneId parse(String candidate) {
         try {
             return ZoneId.of(candidate);
         } catch (DateTimeException e) {
@@ -168,10 +236,20 @@ public class DefaultRecipientResolver implements RecipientResolver {
         }
     }
 
-    private QuietHours quietHoursOf(RecipientProfileEntity profile, ZoneId zone) {
-        if (profile == null || !properties.getPreferences().isQuietHoursEnabled()) {
+    /**
+     * The recipient's quiet window, taken from the stored preference and expressed in their own zone.
+     *
+     * <p>The store carries a window; this service carries the evaluation, because "is this instant
+     * inside it" needs a zone and a preference store has no business knowing about instants.
+     */
+    private QuietHours quietHoursOf(StoredPreferences stored, ZoneId zone) {
+        if (!properties.getPreferences().isQuietHoursEnabled()) {
             return QuietHours.none(zone);
         }
-        return new QuietHours(profile.getQuietHoursStart(), profile.getQuietHoursEnd(), zone);
+        QuietHoursWindow window = stored.quietHours();
+        if (!window.isConfigured()) {
+            return QuietHours.none(zone);
+        }
+        return new QuietHours(window.start(), window.end(), zone);
     }
 }

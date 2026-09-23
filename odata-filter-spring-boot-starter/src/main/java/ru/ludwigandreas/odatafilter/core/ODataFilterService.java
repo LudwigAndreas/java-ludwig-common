@@ -3,6 +3,8 @@ package ru.ludwigandreas.odatafilter.core;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.Expressions;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.springframework.context.ApplicationEventPublisher;
@@ -18,6 +20,7 @@ import ru.ludwigandreas.odatafilter.parser.ODataFilterParser;
 import ru.ludwigandreas.odatafilter.parser.ODataOrderByParser;
 import ru.ludwigandreas.odatafilter.parser.OrderByTerm;
 import ru.ludwigandreas.odatafilter.policy.EntityFilterPolicy;
+import ru.ludwigandreas.odatafilter.policy.FilterPolicyRegistry;
 import ru.ludwigandreas.odatafilter.querydsl.PredicateBuilder;
 import ru.ludwigandreas.odatafilter.security.FilterPrincipalResolver;
 import ru.ludwigandreas.odatafilter.validation.DepthValidator;
@@ -27,9 +30,13 @@ import ru.ludwigandreas.odatafilter.validation.FilterValidator;
 
 /**
  * Single entry point of the library: turns raw OData query-option strings into a validated,
- * policy-enforced, role-checked {@link ODataQuery}. This is what both the Spring MVC argument
- * resolver and any consumer wanting to call the library directly (e.g. from a GraphQL resolver,
- * a batch job replaying a saved filter, or a non-web service layer) should use.
+ * policy-enforced, role-checked {@link ODataQuery}.
+ *
+ * <p>Call it from the layer that owns the entity - the repository. The OData property paths are
+ * resolved against the JPA entity and the result is a QueryDSL {@link Predicate}, so both the
+ * input vocabulary and the output type belong to the persistence layer; parsing anywhere above it
+ * puts the entity in a service or controller signature and the query plan in the hands of a layer
+ * that cannot run it. The service layer passes the caller's raw option strings down unparsed.
  *
  * <p>Order of operations, all of which can reject the request: raw-length guard, syntax parsing,
  * depth check, field/operator/role check ({@code @Filterable}), any registered
@@ -38,7 +45,7 @@ import ru.ludwigandreas.odatafilter.validation.FilterValidator;
 public class ODataFilterService {
 
     private final ODataFilterProperties properties;
-    private final ru.ludwigandreas.odatafilter.policy.FilterPolicyRegistry policyRegistry;
+    private final FilterPolicyRegistry policyRegistry;
     private final PredicateBuilder predicateBuilder;
     private final FilterPrincipalResolver principalResolver;
     private final List<FilterValidator> customValidators;
@@ -50,7 +57,7 @@ public class ODataFilterService {
 
     public ODataFilterService(
             ODataFilterProperties properties,
-            ru.ludwigandreas.odatafilter.policy.FilterPolicyRegistry policyRegistry,
+            FilterPolicyRegistry policyRegistry,
             PredicateBuilder predicateBuilder,
             FilterPrincipalResolver principalResolver,
             List<FilterValidator> customValidators,
@@ -65,11 +72,10 @@ public class ODataFilterService {
         this.metrics = metrics;
     }
 
-    public <T> ODataQuery<T> parse(
-            Class<T> entityType, String filter, Integer top, Integer skip, String orderBy, Boolean count) {
+    public <T> ODataQuery<T> parse(Class<T> entityType, String filter, Integer top, Integer skip, String orderBy) {
         long startNanos = System.nanoTime();
         try {
-            ODataQuery<T> result = doParse(entityType, filter, top, skip, orderBy, count);
+            ODataQuery<T> result = doParse(entityType, filter, top, skip, orderBy);
             metrics.recordFilterApplied(entityType.getSimpleName());
             return result;
         } catch (RuntimeException e) {
@@ -81,7 +87,7 @@ public class ODataFilterService {
     }
 
     private <T> ODataQuery<T> doParse(
-            Class<T> entityType, String filter, Integer top, Integer skip, String orderBy, Boolean count) {
+            Class<T> entityType, String filter, Integer top, Integer skip, String orderBy) {
         EntityFilterPolicy policy = policyRegistry.policyFor(entityType);
         Set<String> callerRoles = principalResolver.resolveRoles();
 
@@ -100,21 +106,19 @@ public class ODataFilterService {
             predicate = predicateBuilder.build(policy, root);
         }
 
-        List<OrderByTerm> orderByTerms = orderByParser.parse(orderBy);
-        FieldAccessValidator.validateOrderBy(policy, orderByTerms, callerRoles);
+        List<OrderByTerm> requestedOrderBy = orderByParser.parse(orderBy);
+        FieldAccessValidator.validateOrderBy(policy, requestedOrderBy, callerRoles);
 
         int pageSize = resolvePageSize(policy, top);
         long offset = resolveOffset(skip);
-        Sort sort = toSort(orderByTerms);
+        Sort sort = toSort(requestedOrderBy, policy.defaultOrderBy());
         Pageable pageable = new OffsetPageRequest(offset, pageSize, sort);
-
-        boolean effectiveCount = count == null || count;
 
         if (eventPublisher != null) {
             eventPublisher.publishEvent(new FilterAppliedEvent(entityType, filter, predicate.toString(), callerRoles));
         }
 
-        return new ODataQuery<>(predicate, pageable, effectiveCount, filter);
+        return new ODataQuery<>(predicate, pageable, filter);
     }
 
     private int resolvePageSize(EntityFilterPolicy policy, Integer top) {
@@ -141,16 +145,29 @@ public class ODataFilterService {
         return skip;
     }
 
-    private Sort toSort(List<OrderByTerm> terms) {
-        if (terms.isEmpty()) {
-            return Sort.unsorted();
+    /**
+     * The caller's ordering first, then the entity's {@code defaultOrderBy} for any path the caller
+     * did not already name - so the server's tie-breaker keeps paging deterministic without ever
+     * overriding what the client asked for.
+     */
+    private Sort toSort(List<OrderByTerm> requested, List<OrderByTerm> entityDefault) {
+        List<Sort.Order> orders = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (OrderByTerm term : requested) {
+            if (seen.add(term.propertyPath())) {
+                orders.add(toOrder(term));
+            }
         }
-        List<Sort.Order> orders = terms.stream()
-                .map(term -> {
-                    String jpaPath = term.propertyPath().replace('/', '.');
-                    return term.descending() ? Sort.Order.desc(jpaPath) : Sort.Order.asc(jpaPath);
-                })
-                .toList();
-        return Sort.by(orders);
+        for (OrderByTerm term : entityDefault) {
+            if (seen.add(term.propertyPath())) {
+                orders.add(toOrder(term));
+            }
+        }
+        return orders.isEmpty() ? Sort.unsorted() : Sort.by(orders);
+    }
+
+    private Sort.Order toOrder(OrderByTerm term) {
+        String jpaPath = term.propertyPath().replace('/', '.');
+        return term.descending() ? Sort.Order.desc(jpaPath) : Sort.Order.asc(jpaPath);
     }
 }

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    This file exists so that the .mvn directory exists.
+
+    Maven locates the repository root by walking up from the working directory looking for
+    .mvn, and publishes it as ${maven.multiModuleProjectDirectory}. The root pom builds the
+    Checkstyle configuration path out of that property, so `mvn test` run from inside a module
+    directory finds the same configuration as a build started from the root. Without a .mvn
+    directory the property falls back to the current directory and the path breaks.
+
+    No build extensions are declared - os-maven-plugin is declared as a <build><extensions>
+    entry in the root pom instead.
+-->
+<extensions xmlns="http://maven.apache.org/EXTENSIONS/1.0.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/EXTENSIONS/1.0.0 http://maven.apache.org/xsd/core-extensions-1.0.0.xsd">
+</extensions>

@@ -2,6 +2,8 @@ package ru.ludwigandreas.notification.service.recipient;
 
 import java.util.Locale;
 import ru.ludwigandreas.notification.service.model.ChannelType;
+import ru.ludwigandreas.notification.service.preference.QuietHours;
+import ru.ludwigandreas.notification.service.preference.RecipientPreferences;
 
 /**
  * One recipient, turned into everything needed to address and render for them.
@@ -12,7 +14,8 @@ import ru.ludwigandreas.notification.service.model.ChannelType;
  * @param known        whether the identity projection had a record. False is not an error - see
  *                     {@link DefaultRecipientResolver} - it only means the notification goes out
  *                     without the enrichment a directory record would have added
- * @param quietHours   evaluated in the recipient's own zone, never the server's
+ * @param preferences  the recipient's preferences, resolved once for the whole fan-out and carried
+ *                     here so a per-delivery opt-out question costs nothing
  */
 public record ResolvedRecipient(
         String userId,
@@ -23,5 +26,10 @@ public record ResolvedRecipient(
         String displayName,
         String tenantId,
         boolean known,
-        QuietHours quietHours) {
+        RecipientPreferences preferences) {
+
+    /** The recipient's quiet window, evaluated in their own zone and never the server's. */
+    public QuietHours quietHours() {
+        return preferences.quietHours();
+    }
 }

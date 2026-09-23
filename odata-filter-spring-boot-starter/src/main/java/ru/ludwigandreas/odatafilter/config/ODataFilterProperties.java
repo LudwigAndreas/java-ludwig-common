@@ -99,8 +99,14 @@ public class ODataFilterProperties {
 
     public static class Web {
 
-        /** Whether to register the {@code ODataQuery<T>} Spring MVC argument resolver. */
-        private boolean argumentResolverEnabled = true;
+        /**
+         * Whether to register the deprecated {@code ODataQuery<T>} Spring MVC argument resolver.
+         * Off by default: resolving a filter into a controller parameter means naming the JPA
+         * entity in the controller's signature and executing a predicate built in the web layer.
+         * Parse in the repository with {@code ODataFilterService} instead.
+         */
+        @Deprecated(since = "1.1.0")
+        private boolean argumentResolverEnabled = false;
 
         /** Whether to register the {@code @RestControllerAdvice} that maps our exceptions to {@code ProblemDetail}. */
         private boolean problemDetailAdviceEnabled = true;
@@ -108,10 +114,12 @@ public class ODataFilterProperties {
         /** If true, only {@code $filter}/{@code $top}/... are read; the non-prefixed aliases are ignored. */
         private boolean dollarPrefixedParametersOnly = false;
 
+        @Deprecated(since = "1.1.0")
         public boolean isArgumentResolverEnabled() {
             return argumentResolverEnabled;
         }
 
+        @Deprecated(since = "1.1.0")
         public void setArgumentResolverEnabled(boolean argumentResolverEnabled) {
             this.argumentResolverEnabled = argumentResolverEnabled;
         }
