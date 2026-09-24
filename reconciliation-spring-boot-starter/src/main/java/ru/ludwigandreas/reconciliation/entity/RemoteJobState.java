@@ -1,5 +1,6 @@
 package ru.ludwigandreas.reconciliation.entity;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -61,9 +62,26 @@ public enum RemoteJobState {
      */
     ORPHANED;
 
-    /** States the engine still has work to do for; anything else is settled. */
+    /**
+     * States the engine still has work to do for; anything else is settled.
+     *
+     * <p>{@link #ORPHANED} is deliberately absent: there is no work left to do for an orphan - it is
+     * never polled, collected or resubmitted - but it does still hold a slot, which is what
+     * {@link #holdsRemoteWork()} is for. Conflating the two questions is how a slot gets released for
+     * a job that may still be running.
+     */
     private static final Set<RemoteJobState> NON_TERMINAL =
             Set.of(PENDING_SUBMIT, SUBMITTED, RUNNING, SUCCEEDED, COLLECTING);
+
+    /**
+     * Every state in which a job still covers its demand and must not be resubmitted.
+     *
+     * <p>Includes {@link #ORPHANED}, because resubmitting the demand of a job that may be running is
+     * the exact duplicate the ambiguity policy exists to prevent.
+     */
+    public static List<RemoteJobState> uncovered() {
+        return List.of(PENDING_SUBMIT, SUBMITTED, RUNNING, SUCCEEDED, COLLECTING, ORPHANED);
+    }
 
     /** Whether the engine still has something to do for a job in this state. */
     public boolean isTerminal() {

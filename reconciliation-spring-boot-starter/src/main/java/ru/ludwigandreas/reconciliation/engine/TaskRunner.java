@@ -18,11 +18,14 @@ import ru.ludwigandreas.reconciliation.repository.SyncInboxRecordRepository;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -33,6 +36,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link StagingService} and the {@link ApplyService}.
  */
 public class TaskRunner {
+
+    /** How many keys a dry run lists per outcome kind before the report stops being a report. */
+    private static final int SAMPLE_SIZE = 20;
 
     private static final Logger log = LoggerFactory.getLogger(TaskRunner.class);
 
@@ -59,6 +65,7 @@ public class TaskRunner {
      * @param auditLogger    the audit trail
      * @param correlationIds correlation id for the run
      */
+    @SuppressWarnings("checkstyle:ParameterNumber")
     public TaskRunner(RunLock runLock,
                       FetchWalker walker,
                       StagingService staging,
@@ -88,13 +95,11 @@ public class TaskRunner {
      */
     public int run(RegisteredTask<?, ?, ?> task, DemandTier tier) {
         TaskSettings settings = task.settings();
-        String lockName = "reconciliation:" + settings.name() + ":" + tier.name().toLowerCase(java.util.Locale.ROOT);
-
         // The lease is the run timeout: a run that outlives it has, by the task's own declaration,
         // stopped being the authoritative one, and another instance is entitled to take over.
-        var acquired = runLock.tryAcquire(lockName, settings.runTimeout());
+        var acquired = runLock.tryAcquire(lockName(settings.name(), tier), settings.runTimeout());
         if (acquired.isEmpty()) {
-            metrics.recordRun(settings.name(), tier.name().toLowerCase(java.util.Locale.ROOT),
+            metrics.recordRun(settings.name(), tier.name().toLowerCase(Locale.ROOT),
                     RunOutcome.SKIPPED_LOCKED, Duration.ZERO);
             log.debug("Task '{}' ({}) is already running on another instance", settings.name(), tier);
             return 0;
@@ -174,6 +179,111 @@ public class TaskRunner {
     }
 
     /**
+     * Fetches what a run would fetch and reports it, writing nothing.
+     *
+     * <p>What an operator reaches for before turning a new task on, or when one is behaving oddly:
+     * it answers "what does the partner actually say about my demand right now?" without staging a
+     * row, applying a record or moving a watermark. It does take the run lease, because a dry run
+     * that raced a real one would report a partner interaction that the real run also made.
+     *
+     * @param task the task
+     * @param tier which half of demand
+     * @return a count per outcome kind, plus a sample of the keys behind each
+     */
+    public Map<String, Object> dryRun(RegisteredTask<?, ?, ?> task, DemandTier tier) {
+        TaskSettings settings = task.settings();
+        var acquired = runLock.tryAcquire(lockName(settings.name(), tier), settings.runTimeout());
+        if (acquired.isEmpty()) {
+            return Map.of("ran", false,
+                    "note", "a run is in progress on another instance; nothing was fetched");
+        }
+        try (RunLockHandle lease = acquired.get();
+             CorrelationIdSource.Scope scope = correlationIds.open()) {
+            Instant started = Instant.now();
+            RunContext context = new RunContext(settings.name(), tier, lease.runId(),
+                    scope.correlationId(), started, started.plus(settings.runTimeout()));
+            audit(settings, "run.dry", context, null);
+            return inspect(task, context);
+        }
+    }
+
+    private <I, K, O> Map<String, Object> inspect(RegisteredTask<I, K, O> task, RunContext context) {
+        TaskSettings settings = task.settings();
+        DemandRequest request = new DemandRequest(settings.name(), context.tier(), null,
+                settings.demand().maxRecordsPerRun(), context.runId());
+        Set<K> keys = keysOf(task, task.task().demand().demand(request), context);
+
+        Map<String, List<String>> samples = new LinkedHashMap<>();
+        FetchSink<K, O> sink = outcomes -> {
+            outcomes.forEach(outcome -> samples
+                    .computeIfAbsent(kindOf(outcome), kind -> new ArrayList<>())
+                    .add(task.task().keyCodec().encode(outcome.key())));
+            return 0;
+        };
+        walker.walk(task, keys, context, sink);
+
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("ran", true);
+        report.put("runId", context.runId());
+        report.put("demandSize", keys.size());
+        samples.forEach((kind, matched) -> report.put(kind, Map.of(
+                "count", matched.size(),
+                "sample", matched.stream().limit(SAMPLE_SIZE).toList())));
+        report.put("note", "nothing was staged, applied or checkpointed");
+        return report;
+    }
+
+    private static <K, O> String kindOf(FetchOutcome<K, O> outcome) {
+        if (outcome instanceof FetchOutcome.Found) {
+            return "found";
+        }
+        return outcome instanceof FetchOutcome.NotFound ? "notFound" : "failed";
+    }
+
+    /**
+     * Fetches an explicit set of correlation keys and stages the results, bypassing the demand query.
+     *
+     * <p>The repair tool for the case the demand query cannot express: a range of records that were
+     * missed while an integration was switched off, or a set of ids a partner has asked to be
+     * re-synchronised. It goes through exactly the same walker, staging and apply path as a scheduled
+     * run, so a backfilled record is indistinguishable from a normally fetched one - including its
+     * stale-write and idempotency guards, which is what stops a backfill from overwriting newer state.
+     *
+     * @param task the task
+     * @param encodedKeys the keys, in the form the task's codec writes
+     * @return how many rows were staged
+     */
+    public int backfill(RegisteredTask<?, ?, ?> task, List<String> encodedKeys) {
+        return backfillTyped(task, encodedKeys);
+    }
+
+    private <I, K, O> int backfillTyped(RegisteredTask<I, K, O> task, List<String> encodedKeys) {
+        TaskSettings settings = task.settings();
+        var acquired = runLock.tryAcquire(lockName(settings.name(), DemandTier.HOT), settings.runTimeout());
+        if (acquired.isEmpty()) {
+            return 0;
+        }
+        try (RunLockHandle lease = acquired.get();
+             CorrelationIdSource.Scope scope = correlationIds.open()) {
+            Instant started = Instant.now();
+            RunContext context = new RunContext(settings.name(), DemandTier.HOT, lease.runId(),
+                    scope.correlationId(), started, started.plus(settings.runTimeout()));
+            audit(settings, "run.backfill", context, encodedKeys.size() + " key(s)");
+
+            Set<K> keys = new LinkedHashSet<>();
+            encodedKeys.forEach(key -> keys.add(task.task().keyCodec().decode(key)));
+            FetchSink<K, O> sink = outcomes -> settings.mode() == ProcessingMode.DIRECT
+                    ? directApply.apply(task, outcomes, context)
+                    : staging.stage(task, outcomes, context, null);
+
+            // The watermark is deliberately not advanced: a backfill visits a chosen set of keys, not
+            // everything that changed since a point in time, so treating it as a completed sweep would
+            // move the watermark past records it never looked at.
+            return walker.walk(task, keys, context, sink);
+        }
+    }
+
+    /**
      * Turns demand into correlation keys, dropping the ones this run must leave alone.
      *
      * <p>Suppression is read once per run rather than per key: a key whose fetch keeps failing is
@@ -213,8 +323,7 @@ public class TaskRunner {
                 .build());
     }
 
-    /** The run id this task's next run will be identified by, for tests and the actuator. */
-    static UUID newRunId() {
-        return UUID.randomUUID();
+    private static String lockName(String taskName, DemandTier tier) {
+        return "reconciliation:" + taskName + ":" + tier.name().toLowerCase(Locale.ROOT);
     }
 }

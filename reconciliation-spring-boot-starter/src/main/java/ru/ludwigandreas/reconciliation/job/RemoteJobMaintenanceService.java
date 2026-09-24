@@ -92,7 +92,7 @@ public class RemoteJobMaintenanceService {
 
     private <I, K, O> int expire(RegisteredTask<I, K, O> task) {
         List<SyncRemoteJob> expired = jobs.findByStateInAndExpiresAtLessThan(
-                RemoteJobSubmitService.NON_TERMINAL, Instant.now(), PageRequest.of(0, SWEEP_LIMIT));
+                RemoteJobState.uncovered(), Instant.now(), PageRequest.of(0, SWEEP_LIMIT));
         for (SyncRemoteJob job : expired) {
             settlement.cancelAndSettle(task, job, RemoteJobState.EXPIRED,
                     "Outlived the task's job.max-lifetime");

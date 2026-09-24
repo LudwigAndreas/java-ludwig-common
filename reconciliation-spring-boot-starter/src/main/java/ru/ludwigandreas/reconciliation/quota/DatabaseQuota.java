@@ -82,6 +82,19 @@ public class DatabaseQuota implements Quota {
      */
     private static final int WAITER_LIVENESS_INTERVALS = 3;
 
+    /**
+     * How long to pause between attempts when a caller has asked to wait for a slot.
+     *
+     * <p>Polling rather than a database notification: an acquisition that waits is already the
+     * unusual case - the default is not to wait at all - and a LISTEN/NOTIFY channel would add a
+     * dedicated connection and a second failure mode to a path whose whole point is to give up
+     * quickly.
+     */
+    private static final Duration ACQUIRE_POLL_INTERVAL = Duration.ofMillis(200);
+
+    /** Milliseconds per second, for the gauge that reports a wait in seconds. */
+    private static final double MILLIS_PER_SECOND = 1000.0;
+
     private static final Logger log = LoggerFactory.getLogger(DatabaseQuota.class);
 
     private final Map<String, ReconciliationProperties.Quota> configured;
@@ -136,14 +149,51 @@ public class DatabaseQuota implements Quota {
             return Optional.empty();
         }
         Instant started = Instant.now();
-        Optional<QuotaLeaseHandle> acquired = requiresNew.execute(status -> {
+        Instant deadline = started.plus(settings.getAcquireTimeout());
+        Optional<QuotaLeaseHandle> acquired = attempt(quotaName, taskName, jobId, settings);
+
+        // With the default acquire-timeout of zero this loop never runs, which is the intended shape:
+        // a scheduled pass that cannot get a slot has nothing useful to do but come back next tick.
+        // A caller that has explicitly asked to wait is usually one whose surrounding work has already
+        // cost something - a rate-limiter permit, a partially built request - and for which giving up
+        // a few hundred milliseconds early is the more expensive answer.
+        while (acquired.isEmpty() && Instant.now().isBefore(deadline)) {
+            if (!pause()) {
+                break;
+            }
+            acquired = attempt(quotaName, taskName, jobId, settings);
+        }
+
+        metrics.recordQuotaAcquire(quotaName, taskName, acquired.isPresent(),
+                Duration.between(started, Instant.now()));
+        return acquired;
+    }
+
+    private Optional<QuotaLeaseHandle> attempt(String quotaName,
+                                               String taskName,
+                                               UUID jobId,
+                                               ReconciliationProperties.Quota settings) {
+        return requiresNew.execute(status -> {
             lockQuota(quotaName);
             QuotaWaiter waiter = enqueue(quotaName, taskName);
             return grantIfPossible(quotaName, taskName, jobId, settings, waiter);
         });
-        metrics.recordQuotaAcquire(quotaName, taskName, acquired.isPresent(),
-                Duration.between(started, Instant.now()));
-        return acquired;
+    }
+
+    /**
+     * Waits one poll interval.
+     *
+     * @return whether the wait completed; false if the thread was interrupted, in which case the
+     *         caller must stop waiting rather than swallow the interrupt and carry on
+     */
+    private static boolean pause() {
+        try {
+            Thread.sleep(ACQUIRE_POLL_INTERVAL.toMillis());
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     private Optional<QuotaLeaseHandle> grantIfPossible(String quotaName,
@@ -240,7 +290,7 @@ public class DatabaseQuota implements Quota {
         Instant aliveAfter = Instant.now()
                 .minus(settings.getHeartbeatInterval().multipliedBy(WAITER_LIVENESS_INTERVALS));
         Instant oldest = readOnly.execute(status -> waiters.findOldestEnqueuedAt(quotaName, aliveAfter));
-        return oldest == null ? 0.0 : Duration.between(oldest, Instant.now()).toMillis() / 1000.0;
+        return oldest == null ? 0.0 : Duration.between(oldest, Instant.now()).toMillis() / MILLIS_PER_SECOND;
     }
 
     /** The configured limit, for the saturation gauge and the actuator endpoint. */

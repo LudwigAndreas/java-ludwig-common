@@ -138,7 +138,7 @@ public class RemoteJobSubmitService {
      */
     private <I, K, O> List<List<String>> pendingChunks(RegisteredTask<I, K, O> task, TaskSettings settings) {
         Set<String> covered = new HashSet<>();
-        jobs.findByTaskNameAndStateIn(settings.name(), NON_TERMINAL)
+        jobs.findByTaskNameAndStateIn(settings.name(), RemoteJobState.uncovered())
                 .forEach(job -> covered.addAll(demandKeys.read(job.getDemandKeys())));
         covered.addAll(records.findSuppressedKeys(settings.name(), Instant.now()));
 
@@ -233,8 +233,4 @@ public class RemoteJobSubmitService {
         return chunks;
     }
 
-    /** States in which a job still covers its demand and must not be resubmitted. */
-    static final List<RemoteJobState> NON_TERMINAL = List.of(
-            RemoteJobState.PENDING_SUBMIT, RemoteJobState.SUBMITTED, RemoteJobState.RUNNING,
-            RemoteJobState.SUCCEEDED, RemoteJobState.COLLECTING, RemoteJobState.ORPHANED);
 }

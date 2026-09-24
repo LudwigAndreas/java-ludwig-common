@@ -1,0 +1,128 @@
+{
+  "properties": [
+    {
+      "name": "ludwig.reconciliation.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Master switch for the whole module. False stops every task, pass and sweep; the beans are not created at all.",
+      "defaultValue": true
+    },
+    {
+      "name": "ludwig.reconciliation.instance",
+      "type": "java.lang.String",
+      "description": "Identity written into locked_by and owner_instance columns. Defaults to the shared job-core instance identity, which keeps one pod looking like one instance across every module that claims rows."
+    }
+  ],
+  "hints": [
+    {
+      "name": "ludwig.reconciliation.defaults.mode",
+      "values": [
+        {
+          "value": "staged",
+          "description": "Fetch, write down, apply later. The default: per-item retry without re-calling the partner, a replayable record of what the partner said, per-record dead-lettering instead of per-run failure, and an apply cadence independent of the fetch cadence."
+        },
+        {
+          "value": "direct",
+          "description": "Apply inline, with no staging row. Cheaper and strictly worse in every failure mode - a retry re-hits the partner, and the engine's idempotency and stale-write guards are unavailable because there is no history to consult. An explicit opt-in for integrations whose data is cheap to refetch."
+        }
+      ]
+    },
+    {
+      "name": "ludwig.reconciliation.defaults.not-found",
+      "values": [
+        {
+          "value": "ignore",
+          "description": "Count it and move on. The default: an id the partner has forgotten is a fact about the data, not an incident."
+        },
+        {
+          "value": "mark-missing",
+          "description": "Stage a payload-less record so the reconciler's missing-record branch runs. For domains where 'gone upstream' is itself meaningful - a deactivated account, a withdrawn catalogue entry."
+        },
+        {
+          "value": "fail",
+          "description": "Treat it as a retryable failure. Correct only for a partner that returns 404 for 'not ready yet'; anywhere else this is a runaway retry loop on purpose."
+        }
+      ]
+    },
+    {
+      "name": "ludwig.reconciliation.tasks.keys",
+      "description": "Each key must match a @ReconciliationTask bean's value. The context refuses to start if a configured task has no bean, or a bean has no configuration."
+    },
+    {
+      "name": "ludwig.reconciliation.tasks.values.mode",
+      "providers": [
+        {
+          "name": "any"
+        }
+      ],
+      "values": [
+        {
+          "value": "staged"
+        },
+        {
+          "value": "direct"
+        }
+      ]
+    },
+    {
+      "name": "ludwig.reconciliation.tasks.values.not-found",
+      "values": [
+        {
+          "value": "ignore"
+        },
+        {
+          "value": "mark-missing"
+        },
+        {
+          "value": "fail"
+        }
+      ]
+    },
+    {
+      "name": "ludwig.reconciliation.tasks.values.fetch.shape",
+      "values": [
+        {
+          "value": "per-item",
+          "description": "One call per key, fanned out under fetch.max-concurrency. For partners with no batch endpoint."
+        },
+        {
+          "value": "batched",
+          "description": "N keys per call, sliced into chunks of fetch.batch-size. A key absent from the answer means NOT FOUND, not an error."
+        },
+        {
+          "value": "paged",
+          "description": "A catalogue walked page by page with a checkpointed cursor, joined against demand."
+        },
+        {
+          "value": "async-job",
+          "description": "Submit, poll, collect against a partner that answers with a job handle. Requires a job block and job.on-ambiguous-submit."
+        }
+      ]
+    },
+    {
+      "name": "ludwig.reconciliation.tasks.values.job.on-ambiguous-submit",
+      "values": [
+        {
+          "value": "assume-submitted",
+          "description": "Mark the job ORPHANED, hold its quota slot until max-lifetime, never resubmit. Correct for expensive or billable jobs: the cost of being wrong is one wasted slot and a late sync."
+        },
+        {
+          "value": "resubmit",
+          "description": "Start a fresh job. Correct only when a submission is cheap and genuinely idempotent on the partner's side - otherwise one crash becomes two running jobs."
+        }
+      ]
+    },
+    {
+      "name": "ludwig.reconciliation.quotas.values.reclaim",
+      "values": [
+        {
+          "value": "verify-remote",
+          "description": "Poll the job an expired lease was held for, and reclaim the slot only if it has finished or outlived its lifetime. The default, and the only setting that keeps the slot count an honest description of what the partner is doing."
+        },
+        {
+          "value": "on-expiry",
+          "description": "Reclaim without checking. For partners with no status endpoint. Under this policy the number of jobs actually running at the partner can exceed max-concurrent, invisibly - document it where the integration is described."
+        }
+      ]
+    }
+  ]
+}
