@@ -251,12 +251,6 @@ ludwig:
       history-ttl: 180d
       batch-size: 1000
 
-    locks:
-      lease: 2m
-      # Must be at least 3x shorter than the lease, or one slow renewal hands the lock to another
-      # replica mid-job. Checked at startup.
-      heartbeat: 30s
-
     receipts:
       enabled: ${NOTIFICATION_RECEIPTS_ENABLED:true}
       signing-secret: ${RECEIPT_SIGNING_SECRET:}
@@ -298,6 +292,22 @@ ludwig:
     auditing-enabled: true
     default-page-size: 25
     max-page-size: 200
+
+  # --- job-core: the platform's distributed lock -------------------------------------------------
+  # The maintenance jobs (digest collapse, retention purge) run on exactly one replica under
+  # RunLock. This replaced this service's own leased lock and its notification_lock table.
+  job-core:
+    lock:
+      # The failover time: a pod that dies holding the lock blocks that job for exactly this long.
+      # Both jobs that take a lock run far more often than this, so a killed pod costs one missed
+      # window. Long enough that a garbage-collection pause cannot cost a running job its lease -
+      # both schedulers renew between work items and stop immediately when a renewal fails.
+      default-lease: 2m
+    liquibase:
+      # Same arrangement as outbox and identity below: job_run_lock is created by the changelog this
+      # service's own master changelog includes, so the module must not also apply it as a second,
+      # standalone SpringLiquibase.
+      enabled: false
 
   # --- outbox: OUTBOUND LIFECYCLE EVENTS ONLY ----------------------------------------------------
   # The delivery queue is not an outbox and does not use this. See the README.

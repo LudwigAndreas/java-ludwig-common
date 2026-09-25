@@ -1,0 +1,6 @@
+ru.ludwigandreas.ingest.autoconfigure.FileIngestMetricsAutoConfiguration
+ru.ludwigandreas.ingest.autoconfigure.FileIngestEventsAutoConfiguration
+ru.ludwigandreas.ingest.autoconfigure.FileIngestPersistenceAutoConfiguration
+ru.ludwigandreas.ingest.autoconfigure.FileIngestAutoConfiguration
+ru.ludwigandreas.ingest.autoconfigure.FileIngestActuatorAutoConfiguration
+ru.ludwigandreas.ingest.autoconfigure.FileIngestLiquibaseAutoConfiguration

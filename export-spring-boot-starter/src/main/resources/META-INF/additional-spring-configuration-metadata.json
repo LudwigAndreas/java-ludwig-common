@@ -1,0 +1,57 @@
+{
+  "hints": [
+    {
+      "name": "ludwig.export.enrichment.call-as",
+      "values": [
+        {
+          "value": "service-account",
+          "description": "Partner calls carry this service's own credentials, as configured for the named REST client. The only identity available to a deferred run, a subscription or a reclaimed attempt, and therefore the default. The report itself must do the narrowing: the partner sees one caller regardless of who asked."
+        },
+        {
+          "value": "requester",
+          "description": "Partner calls relay the requester's own access token, so the partner applies its own row-level scoping. Only possible while the run is on the request thread: a request whose estimate would defer it is refused, because the token is deliberately never stored. Requires the named REST client to be configured with auth.type: oauth2-token-relay, which the startup validator checks."
+        }
+      ]
+    },
+    {
+      "name": "ludwig.export.sink.type",
+      "values": [
+        {
+          "value": "filesystem",
+          "description": "Stores finished reports under ludwig.export.sink.directory on this machine. Correct for a single instance; a multi-instance deployment needs a shared sink, because a download can only be served by the instance that produced the file."
+        }
+      ]
+    },
+    {
+      "name": "ludwig.export.formats.csv.profile",
+      "values": [
+        {
+          "value": "excel",
+          "description": "UTF-8 with a byte-order mark, the delimiter taken from the request locale's list separator, CRLF line endings. What makes a Russian or German user's Excel split the columns correctly."
+        },
+        {
+          "value": "rfc4180",
+          "description": "UTF-8 with no byte-order mark, comma delimiter, CRLF line endings, strict quoting. What a parser on the other end expects."
+        }
+      ]
+    },
+    {
+      "name": "ludwig.export.formats.enabled",
+      "values": [
+        {
+          "value": "xlsx",
+          "description": "Office Open XML, written with Apache POI's streaming workbook."
+        },
+        {
+          "value": "csv",
+          "description": "Delimiter-separated text."
+        }
+      ],
+      "providers": [
+        {
+          "name": "any"
+        }
+      ]
+    }
+  ]
+}

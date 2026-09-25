@@ -26,7 +26,6 @@ WORKDIR /build
 # The poms first, in their own layer. They change far less often than the sources, so an ordinary
 # code change reuses this layer instead of re-resolving every dependency in the reactor.
 COPY pom.xml ./
-COPY common-utils/pom.xml common-utils/
 COPY odata-filter-spring-boot-starter/pom.xml odata-filter-spring-boot-starter/
 COPY db-core/pom.xml db-core/
 COPY outbox-spring-boot-starter/pom.xml outbox-spring-boot-starter/
@@ -49,7 +48,6 @@ RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -q -pl notification-service -am -Dmaven.test.skip=true dependency:go-offline
 
 COPY checkstyle-rules/src checkstyle-rules/src
-COPY common-utils/src common-utils/src
 COPY odata-filter-spring-boot-starter/src odata-filter-spring-boot-starter/src
 COPY db-core/src db-core/src
 COPY outbox-spring-boot-starter/src outbox-spring-boot-starter/src

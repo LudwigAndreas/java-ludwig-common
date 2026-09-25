@@ -26,6 +26,20 @@ import java.util.UUID;
  * own makes each lease operation atomic, immediately visible, and independent of whatever the caller
  * is doing transactionally.
  *
+ * <h2>Why a table and not {@code pg_try_advisory_lock}</h2>
+ *
+ * <p>An advisory lock is held by the database <em>session</em>. With a connection pool the session
+ * goes back to the pool the instant the statement finishes, so holding one across a multi-minute run
+ * means pinning a pooled connection for the duration and trusting that nothing in the stack quietly
+ * returns it - and if anything does, the lock vanishes silently while the job is still working. It
+ * survives no crash detection either: it does not fail over on a configured timeout, it simply
+ * disappears with the connection, mid-job.
+ *
+ * <p>It is also invisible. An operator asking "why has this job not run for an hour?" has nothing to
+ * look at, nothing to wait out and nothing to break by hand. A row with an explicit lease is
+ * inspectable, survives the connection, fails over on a timeout somebody chose, and can be released
+ * manually when something has genuinely gone wrong.
+ *
  * <h2>Why the acquire is a SKIP LOCKED claim</h2>
  *
  * <p>Every other claim in this platform is a {@code FOR UPDATE SKIP LOCKED} claim, and the reason
@@ -37,6 +51,22 @@ import java.util.UUID;
  * <p>The row is created on first use with an {@code ON CONFLICT DO NOTHING} insert whose expiry is
  * already in the past, so a brand-new lock is immediately claimable by whichever instance gets there
  * first, including the one that inserted it.
+ *
+ * <h2>Why release keeps the row</h2>
+ *
+ * <p>A release nulls the owner and sets {@code expires_at} to {@code now()} rather than deleting the
+ * row. Two things follow, both wanted: the table is bounded by the number of distinct lock names
+ * rather than churning a row per run, and acquisition has exactly one shape - the claim below -
+ * instead of an insert branch for a lock nobody holds and an update branch for one whose lease
+ * lapsed. A lock name that is no longer used leaves one dead row, which is a better problem than two
+ * acquisition paths that have to agree.
+ *
+ * <h2>Why instrumentation arrives as a listener</h2>
+ *
+ * <p>This class takes a {@link RunLockListener} rather than a {@code MeterRegistry} so that it
+ * carries no observability dependency at all: {@code job-core} is a library, and a consumer that does
+ * not use Micrometer should not acquire it through a lock. The listener is never null - it defaults
+ * to {@link RunLockListener#NOOP} - so there is no branch on the lease path either.
  */
 public class JdbcRunLock implements RunLock {
 
@@ -83,16 +113,38 @@ public class JdbcRunLock implements RunLock {
 
     private final DataSource dataSource;
     private final String owner;
+    private final Duration defaultLeaseTtl;
+    private final RunLockListener listener;
 
     /**
-     * Creates the lock.
+     * Creates the lock with no instrumentation and the fallback default lease.
      *
      * @param dataSource data source short auto-commit connections are taken from
      * @param owner      this instance's identity, from {@code ClaimOwner.resolve(...)}
      */
     public JdbcRunLock(DataSource dataSource, String owner) {
+        this(dataSource, owner, RunLock.FALLBACK_LEASE, RunLockListener.NOOP);
+    }
+
+    /**
+     * Creates the lock.
+     *
+     * @param dataSource      data source short auto-commit connections are taken from
+     * @param owner           this instance's identity, from {@code ClaimOwner.resolve(...)}
+     * @param defaultLeaseTtl lease used by {@link RunLock#runIfAvailable(String, java.util.function.Consumer)}
+     * @param listener        instrumentation, or {@link RunLockListener#NOOP}; never null
+     */
+    public JdbcRunLock(DataSource dataSource, String owner, Duration defaultLeaseTtl,
+                       RunLockListener listener) {
         this.dataSource = dataSource;
         this.owner = owner;
+        this.defaultLeaseTtl = defaultLeaseTtl == null ? RunLock.FALLBACK_LEASE : defaultLeaseTtl;
+        this.listener = listener == null ? RunLockListener.NOOP : listener;
+    }
+
+    @Override
+    public Duration defaultLeaseTtl() {
+        return defaultLeaseTtl;
     }
 
     @Override
@@ -110,15 +162,20 @@ public class JdbcRunLock implements RunLock {
                 claim.setString(++index, lockName);
                 try (ResultSet rows = claim.executeQuery()) {
                     if (!rows.next()) {
+                        listener.onContended(lockName, owner);
                         return Optional.empty();
                     }
                 }
             }
             log.debug("Acquired run lock '{}' as {} (run {})", lockName, owner, runId);
+            listener.onAcquired(lockName, owner, leaseTtl);
             return Optional.of(new Handle(lockName, runId));
         } catch (SQLException e) {
             // Losing a lease acquisition to a database blip must not kill the schedule: the tick
-            // simply did not get the lock, and the next one will try again.
+            // simply did not get the lock, and the next one will try again. Counted as contention
+            // rather than as its own outcome, because the caller cannot tell the two apart either -
+            // what both mean is "this replica is not running this tick".
+            listener.onContended(lockName, owner);
             log.warn("Could not acquire run lock '{}'; treating it as held elsewhere", lockName, e);
             return Optional.empty();
         }
@@ -185,6 +242,7 @@ public class JdbcRunLock implements RunLock {
                 renew.setObject(++index, runId);
                 boolean stillHeld = renew.executeUpdate() == 1;
                 if (!stillHeld) {
+                    listener.onLost(lockName, owner);
                     log.warn("Run lock '{}' was lost by {} (run {}): the lease expired and another "
                             + "instance may already be repeating this run", lockName, owner, runId);
                 }
@@ -192,6 +250,7 @@ public class JdbcRunLock implements RunLock {
             } catch (SQLException e) {
                 // A failed renewal is indistinguishable from a lost one from the caller's point of
                 // view, and must be treated as lost: continuing would risk two live runs.
+                listener.onLost(lockName, owner);
                 log.warn("Could not renew run lock '{}'; treating it as lost", lockName, e);
                 return false;
             }
@@ -210,6 +269,7 @@ public class JdbcRunLock implements RunLock {
                 release.setString(++index, owner);
                 release.setObject(++index, runId);
                 release.executeUpdate();
+                listener.onReleased(lockName, owner);
                 log.debug("Released run lock '{}' (run {})", lockName, runId);
             } catch (SQLException e) {
                 // Not fatal: the lease expires on its own. The cost of a failed release is that the

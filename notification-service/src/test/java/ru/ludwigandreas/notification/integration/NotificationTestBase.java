@@ -52,7 +52,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
         "spring.mail.properties.mail.smtp.auth=false",
         "spring.mail.properties.mail.smtp.starttls.enable=false",
         "ludwig.notification.receipts.signing-secret=test-receipt-secret",
-        "ludwig.notification.channels.email.from-address=no-reply@notifications.test"
+        "ludwig.notification.channels.email.from-address=no-reply@notifications.test",
+        // Lifecycle events are OFF by default in application.yml, because this deployment has no broker
+        // and every delivery would otherwise write an outbox row nothing could ever dispatch. The tests
+        // assert that the row is written in the outcome transaction, which is the guarantee the outbox
+        // pattern provides, so they have to switch the feature on - the outbox poller is disabled above,
+        // so the row stays where the assertion can see it.
+        "ludwig.notification.events.enabled=true"
 })
 abstract class NotificationTestBase {
 

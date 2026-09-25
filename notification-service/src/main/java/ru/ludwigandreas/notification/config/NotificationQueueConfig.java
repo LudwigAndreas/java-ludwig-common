@@ -1,6 +1,10 @@
 package ru.ludwigandreas.notification.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ru.ludwigandreas.job.core.claim.ClaimOwner;
+import ru.ludwigandreas.job.core.config.JobCoreProperties;
+import ru.ludwigandreas.job.core.claim.JobInstanceIdentity;
+import ru.ludwigandreas.job.core.lock.RunLock;
 import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -21,9 +25,6 @@ import ru.ludwigandreas.notification.service.channel.ChannelRuntime;
 import ru.ludwigandreas.notification.service.channel.NotificationChannel;
 import ru.ludwigandreas.notification.service.digest.DigestCollapseService;
 import ru.ludwigandreas.notification.service.digest.DigestScheduler;
-import ru.ludwigandreas.notification.service.lock.DistributedLock;
-import ru.ludwigandreas.notification.service.lock.LockLeaseService;
-import ru.ludwigandreas.notification.service.lock.PostgresDistributedLock;
 import ru.ludwigandreas.notification.service.preference.SuppressionService;
 import ru.ludwigandreas.notification.service.queue.ChannelRateLimiter;
 import ru.ludwigandreas.notification.service.queue.DeliveryBackoffCalculator;
@@ -31,7 +32,6 @@ import ru.ludwigandreas.notification.service.queue.DeliveryClaimService;
 import ru.ludwigandreas.notification.service.queue.DeliveryDispatchService;
 import ru.ludwigandreas.notification.service.queue.DeliveryOutcomeRecorder;
 import ru.ludwigandreas.notification.service.queue.DeliveryPollerScheduler;
-import ru.ludwigandreas.notification.service.queue.InstanceIdentity;
 import ru.ludwigandreas.notification.service.queue.QueueDepthReader;
 import ru.ludwigandreas.notification.service.queue.QueueMetricsScheduler;
 import ru.ludwigandreas.notification.service.queue.StaleLeaseReclaimScheduler;
@@ -45,8 +45,12 @@ import ru.ludwigandreas.notification.settings.NotificationProperties;
 import ru.ludwigandreas.notification.settings.NotificationRuntimeProperties;
 
 /**
- * Wires the queue: its pollers, its lock, its rate limiter, and the consistency checks that decide
- * whether this deployment is allowed to start at all.
+ * Wires the queue: its pollers, its rate limiter, and the consistency checks that decide whether
+ * this deployment is allowed to start at all.
+ *
+ * <p>Not its lock. That comes from {@code job-core} - see {@code RunLock} - and the only thing this
+ * class contributes to it is the instance identity below, so that a delivery lease and a lock row
+ * name the same pod.
  *
  * <p>The schedulers are registered as plain beans rather than annotated {@code @Component}s for two
  * reasons. They need values from {@link NotificationProperties} that only exist as bound
@@ -76,17 +80,30 @@ public class NotificationQueueConfig {
     private static final Duration SCHEDULER_SHUTDOWN_GRACE = Duration.ofSeconds(30);
 
     /**
-     * This instance's identity, recorded in delivery leases and in distributed locks.
+     * This instance's identity, recorded in delivery leases and in {@code job_run_lock} rows.
      *
      * <p>One value shared by both, so an operator looking at a stranded lease and a held lock can see
      * they belong to the same pod. Resolved once at startup rather than per call: a value that
      * changed between the claim and the release would make the shutdown drain release nothing.
+     *
+     * <p>Declared here rather than left to {@code JobCoreAutoConfiguration}, which would otherwise
+     * supply it, for one reason: this service's knob for it is {@code ludwig.notification.instance-id}
+     * and has been since before it used {@code job-core}. Registering the bean here keeps that
+     * property meaningful - {@code job-core} backs off on {@code @ConditionalOnMissingBean} - while
+     * the type, the resolution rule and the string written into every owner column are the platform's.
+     * A deployment that sets neither property still gets one identity, not two.
+     *
+     * <p>{@link JobInstanceIdentity} rather than the {@code String} bean this used to be: a
+     * {@code String} bean is injected by type, so the moment any library in the context publishes
+     * another one both become ambiguous, and the failure surfaces as a startup error several modules
+     * away from either of them.
      */
     @Bean
-    public String notificationInstanceId(NotificationProperties properties) {
-        String instanceId = InstanceIdentity.resolve(properties.getInstanceId());
-        log.info("Notification instance identity: {}", instanceId);
-        return instanceId;
+    public JobInstanceIdentity jobInstanceIdentity(NotificationProperties properties) {
+        JobInstanceIdentity identity =
+                new JobInstanceIdentity(ClaimOwner.resolve(properties.getInstanceId()));
+        log.info("Notification instance identity: {}", identity.owner());
+        return identity;
     }
 
     /**
@@ -143,11 +160,11 @@ public class NotificationQueueConfig {
         return new ChannelRuntime(properties, runtime);
     }
 
-    @Bean
-    public DistributedLock distributedLock(LockLeaseService leases, NotificationMetrics metrics,
-                                           String notificationInstanceId) {
-        return new PostgresDistributedLock(leases, metrics, notificationInstanceId);
-    }
+    /*
+     * No lock bean here any more. RunLock arrives from job-core's JobCoreAutoConfiguration, built on
+     * the same JobInstanceIdentity declared above, and its acquisition and lost-lease counters come
+     * from that module's Micrometer binding rather than from NotificationMetrics.
+     */
 
     @Bean
     @SuppressWarnings("checkstyle:ParameterNumber")
@@ -164,10 +181,10 @@ public class NotificationQueueConfig {
             NotificationProperties properties,
             NotificationMetrics metrics,
             ObjectMapper objectMapper,
-            String notificationInstanceId) {
+            JobInstanceIdentity identity) {
         return new DeliveryDispatchService(claimService, outcomeRecorder, rateLimiter, channelRegistry,
                 channelRuntime, templateRenderer, templateRevisionService, suppressionService,
-                correlationContext, properties, metrics, objectMapper, notificationInstanceId);
+                correlationContext, properties, metrics, objectMapper, identity.owner());
     }
 
     /**
@@ -219,23 +236,23 @@ public class NotificationQueueConfig {
     @Bean
     @ConditionalOnProperty(prefix = "ludwig.notification.digest", name = "enabled",
             havingValue = "true")
-    public DigestScheduler digestScheduler(DistributedLock distributedLock,
+    public DigestScheduler digestScheduler(RunLock runLock,
                                            DigestCollapseService collapseService,
                                            NotificationDeliveryRepository deliveryRepository,
                                            TaskScheduler notificationTaskScheduler,
                                            NotificationProperties properties) {
-        return new DigestScheduler(distributedLock, collapseService, deliveryRepository,
+        return new DigestScheduler(runLock, collapseService, deliveryRepository,
                 notificationTaskScheduler, properties);
     }
 
     @Bean
     @ConditionalOnProperty(prefix = "ludwig.notification.retention", name = "enabled",
             matchIfMissing = true)
-    public RetentionScheduler retentionScheduler(DistributedLock distributedLock,
+    public RetentionScheduler retentionScheduler(RunLock runLock,
                                                   RetentionService retentionService,
                                                   TaskScheduler notificationTaskScheduler,
                                                   NotificationProperties properties) {
-        return new RetentionScheduler(distributedLock, retentionService, notificationTaskScheduler,
+        return new RetentionScheduler(runLock, retentionService, notificationTaskScheduler,
                 properties);
     }
 
@@ -253,12 +270,17 @@ public class NotificationQueueConfig {
      * checks is about <em>which</em> source won and there is always exactly one primary - see
      * {@code PreferenceSourceConfig}. Taking it here also means the startup line names the source,
      * which is the first thing anybody asks when a recipient's quiet hours look ignored.
+     *
+     * <p>{@link JobCoreProperties} because one of those relationships now spans two modules: the lock
+     * lease belongs to {@code job-core} and the schedules it has to outlast belong here, and nothing
+     * but this service knows that the two are related.
      */
     @Bean
     public NotificationConfigurationValidator notificationConfigurationValidator(
-            NotificationProperties properties, ObjectProvider<ConfigurableEnvironment> environment,
+            NotificationProperties properties, JobCoreProperties jobCoreProperties,
+            ObjectProvider<ConfigurableEnvironment> environment,
             RecipientPreferenceSource preferenceSource) {
         return new NotificationConfigurationValidator(
-                properties, environment.getIfAvailable(), preferenceSource);
+                properties, jobCoreProperties, environment.getIfAvailable(), preferenceSource);
     }
 }

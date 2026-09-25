@@ -60,7 +60,7 @@ BOM автоматически и **не должен импортировать
 Все модули этого репозитория, все в `${project.version}` — которое во flattened-POM превращается в
 литерал, так что потребитель никогда не видит неразрешённого выражения:
 
-`common-utils` · `db-core` · `web-core-spring-boot-starter` · `odata-filter-spring-boot-starter` ·
+`db-core` · `web-core-spring-boot-starter` · `odata-filter-spring-boot-starter` ·
 `outbox-spring-boot-starter` · `security-spring-boot-starter` ·
 `identity-projection-spring-boot-starter` · `hot-reload-spring-boot-starter` ·
 `observability-spring-boot-starter` · `user-settings-spring-boot-starter` · `architecture-rules` ·

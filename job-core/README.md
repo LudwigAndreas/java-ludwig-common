@@ -22,7 +22,8 @@ to point at.
 | `ScheduleSpec` / `SelfSchedulingLifecycle` / `ScheduledJob` | A `SmartLifecycle` base that schedules itself on an injected `TaskScheduler`, refuses to run twice at once, contains exceptions, and drains on shutdown |
 | `SkipLockedClaim` | The `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING *` statement, rendered and executed |
 | `ClaimOwner` / `JobInstanceIdentity` | The string this process writes into `locked_by` / `owner` columns |
-| `RunLock` / `JdbcRunLock` | A leased, cluster-wide mutual exclusion for a named unit of scheduled work |
+| `RunLock` / `JdbcRunLock` | A leased, cluster-wide mutual exclusion for a named unit of scheduled work - the platform's only distributed lock |
+| `RunLockListener` / `MicrometerRunLockListener` | Lock instrumentation, optional and off the lock's own dependency path |
 
 ## Backoff
 
@@ -136,6 +137,34 @@ is how a string literal eventually gets mangled.
 
 ## The run lock
 
+**This is the platform's only distributed lock.** `notification-service` had a second one - its own
+interface, its own `notification_lock` table, its own fencing rule - and it was folded in here, so
+anything that needs "this runs on exactly one replica" takes it from this module. Two locks in one
+codebase are two tables, two failure modes and two sets of operational behaviour to learn, and nothing
+is ever coordinated between them.
+
+Most call sites want the callback form, which is a `default` method on `RunLock` so that there is
+exactly one implementation of acquire-run-release and it cannot drift:
+
+```java
+boolean ran = runLock.runIfAvailable("billing-status", handle -> {
+    for (Batch batch : batches) {
+        if (!handle.renew(runLock.defaultLeaseTtl())) {
+            return;               // superseded: another replica is already redoing this run
+        }
+        process(batch);
+    }
+});
+```
+
+Returning `false` is a normal outcome, not a failure: on a three-replica deployment two of the three
+skip every run. The lease is released in a `finally`, **so it is given back even when the work
+throws** - letting it expire would also be correct, but it would block the next scheduled run for a
+full lease period after a failure that took milliseconds. The exception itself propagates unchanged:
+whether a failed run should stop the schedule is the caller's decision, not the lock's.
+
+There is a three-argument overload taking an explicit `Duration`, and the primitive underneath both:
+
 ```java
 Optional<RunLockHandle> held = runLock.tryAcquire("billing-status", Duration.ofMinutes(5));
 if (held.isEmpty()) {
@@ -145,6 +174,15 @@ try (RunLockHandle lease = held.get()) {
     // ... periodically: if (!lease.renew(Duration.ofMinutes(5))) { stop immediately; }
 }
 ```
+
+### What it is not for
+
+Work already partitioned by its own data access. A poller built on `SELECT ... FOR UPDATE SKIP LOCKED`
+hands disjoint batches to every replica with no coordination at all, and wrapping a lock around it
+throws away all but one replica's throughput to solve a problem that does not exist - the classic way
+a horizontally-scalable queue becomes a single-threaded one. What needs a lock is work defined over a
+*set* of rows rather than over each row independently: a digest collapsing many rows into one message,
+a retention purge, a compaction over an expiry boundary.
 
 A **lease**, not a lock. A lock held by a process that has died is a lock held forever, and "the job
 silently stopped running after a pod was killed" is not something anything alerts on: the schedule
@@ -166,7 +204,32 @@ the work this process is part-way through is no longer the authoritative run.
 Every lease operation runs on its own short auto-commit JDBC connection rather than through the
 caller's `EntityManager`. Enlisting it in the caller's transaction would make it invisible to
 everyone else until that transaction commits, and would roll it back along with a failed run - so a
-run that failed would also silently give up a lease it needed to hold long enough to record why.
+run that failed would also silently give up a lease it needed to hold long enough to record why. It
+also means lease operations need no `PlatformTransactionManager`, no JPA entity and no entity
+scanning from the consumer.
+
+A release nulls the owner and moves `expires_at` to `now()` rather than deleting the row. The table is
+then bounded by the number of distinct lock names rather than churning a row per run, and acquisition
+has exactly one shape - the `SKIP LOCKED` claim - instead of an insert branch for a lock nobody holds
+and an update branch for one whose lease lapsed. A retired lock name leaves one dead row, which is a
+better problem than two acquisition paths that have to agree.
+
+### Metrics
+
+Optional, and deliberately not on the lock's own dependency path. `job-core` declares
+`micrometer-core` as `optional` and instruments through a small SPI - `RunLockListener`, no-op by
+default - which `MicrometerRunLockListener` implements. `JobCoreAutoConfiguration` registers that
+binding behind `@ConditionalOnClass(MeterRegistry.class)` and an `ObjectProvider<MeterRegistry>`, so a
+consumer without Micrometer, or with the jar but no registry bean, is unaffected and the lock itself
+carries no observability dependency at all.
+
+| Meter | Tags | What it answers |
+|---|---|---|
+| `ludwig.job.lock.acquisition` | `lock`, `acquired` | Is this job running at all? Every replica contending and none acquiring, sustained, means the lease is stranded on a pod that is gone |
+| `ludwig.job.lock.lost` | `lock` | A renewal found the lease no longer held. **This is the one to alert on**: a run was superseded while still working, so some work has been done twice or abandoned half done |
+
+The owner is not a tag. It carries a random suffix, so it is unbounded in cardinality across restarts
+- it belongs in a log line, where it is.
 
 ## Schema (PostgreSQL only)
 
@@ -184,7 +247,15 @@ stops being the holder, with no participation from the holder required.
 |---|---|---|
 | `ludwig.job-core.enabled` | `true` | Master switch for this module's autoconfiguration |
 | `ludwig.job-core.owner` | hostname + random suffix | Identity written into lock-owner columns |
+| `ludwig.job-core.lock.default-lease` | `5m` | Lease taken by the no-TTL `runIfAvailable` overload |
 | `ludwig.job-core.liquibase.enabled` | `true` | Whether this module applies its own changelog |
+
+`lock.default-lease` is the failover time a job inherits by not choosing one: a pod that dies holding
+the lock blocks that job for exactly this long. It exists so that a caller with no opinion does not
+invent a TTL at the call site - a number hard-coded next to a scheduled job is one an operator cannot
+change during an incident, and jobs that each picked their own would give the deployment several
+different failover times for no reason. A job whose runs are nothing like this length passes its own
+TTL to the explicit overload instead of moving the number for everyone.
 
 Deliberately tiny. Everything that varies per job - schedules, batch sizes, retry budgets - is
 configured by the module that owns the job, under that module's own prefix. `BackoffPolicy` and
@@ -213,5 +284,15 @@ SLF4J. Liquibase is optional.
 
 `mvn test` runs the unit suite: the backoff growth curve and its jitter window, `ScheduleSpec`
 validation, and the lifecycle's non-reentrancy, exception containment and drain-on-stop behaviour.
-`JdbcRunLock` is exercised against a real Postgres by its consumers' integration tests, where
-competing instances are what the lease actually has to survive.
+
+`mvn verify` additionally runs `JdbcRunLockIT` against a real PostgreSQL in Testcontainers - this is
+the one library module in the repository that binds failsafe, because starting a container and
+contending on it from several threads is not something `mvn test` should do on every build of every
+module that depends on `job-core`. Every property of the lock is a statement about how Postgres
+behaves when two transactions meet on a row, so a mock would assert only that the code sends the
+strings it sends. The suite covers: one live lease admitting one instance; a lapsed lease being
+claimable with no release; a renewal after the lease lapsed and was re-acquired *by the same owner*
+failing (the `run_id` fence); release being immediate; `runIfAvailable` releasing when the work throws
+and propagating nothing it should not; and N threads contending on one name producing exactly one
+winner. The schema comes from this module's own shipped changelog, so a column renamed there and not
+in `JdbcRunLock` fails here rather than in production.

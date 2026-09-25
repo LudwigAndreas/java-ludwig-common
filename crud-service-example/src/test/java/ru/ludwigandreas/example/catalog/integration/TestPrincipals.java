@@ -16,7 +16,7 @@ import ru.ludwigandreas.security.principal.PrincipalType;
  * to the test without exercising one extra line of the policy; token validation belongs to the security
  * module's own tests.
  */
-final class TestPrincipals {
+public final class TestPrincipals {
 
     static final String ADMIN_SUBJECT = "admin-subject";
     static final String EDITOR_SUBJECT = "editor-subject";

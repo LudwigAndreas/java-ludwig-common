@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for export-spring-boot-starter. Changeset ids/author are namespaced ("export-NNN",
+      "ludwig-export") so they never collide with a consuming application's own changesets in the
+      shared DATABASECHANGELOG table - see ExportLiquibaseAutoConfiguration, which registers this
+      changelog as a second, independent SpringLiquibase bean. Postgres-only: JSONB columns and
+      partial indexes throughout.
+    -->
+
+    <changeSet id="export-001-create-export-report-run" author="ludwig-export">
+        <createTable tableName="export_report_run">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="definition_key" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="definition_version" type="INT" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="saved_report_id" type="UUID"/>
+            <column name="requester" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="principal_snapshot" type="JSONB"/>
+            <column name="parameters" type="JSONB"/>
+            <column name="filter_expression" type="TEXT"/>
+            <column name="column_ids" type="JSONB"/>
+            <column name="formats" type="JSONB">
+                <constraints nullable="false"/>
+            </column>
+            <column name="locale" type="VARCHAR(35)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="time_zone" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)" defaultValue="PENDING">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_attempts" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_attempt_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cancel_requested" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="claimed_by" type="VARCHAR(255)"/>
+            <column name="claimed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="heartbeat_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="lease_until" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="rows_written" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="percent" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="started_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="finished_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="failure_code" type="VARCHAR(128)"/>
+            <column name="failure_message_key" type="VARCHAR(128)"/>
+            <column name="failure_arguments" type="JSONB"/>
+            <column name="degraded_stages" type="JSONB"/>
+            <column name="omitted_sheets" type="JSONB"/>
+            <column name="correlation_id" type="VARCHAR(64)"/>
+            <column name="idempotency_key" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="export_report_run"/>
+        </rollback>
+    </changeSet>
+
+    <!--
+      The idempotency key is what makes "a retry restarts the run from scratch" safe: the same
+      request cannot be in flight twice, so restarting one is not a race with another copy of it.
+      A unique constraint rather than a check in application code, because the check would have to
+      be a read followed by a write and two instances would pass it at the same time.
+    -->
+    <changeSet id="export-002-unique-idempotency-key" author="ludwig-export">
+        <addUniqueConstraint tableName="export_report_run"
+                             columnNames="idempotency_key"
+                             constraintName="uq_export_report_run_idempotency_key"/>
+        <rollback>
+            <dropUniqueConstraint tableName="export_report_run"
+                                  constraintName="uq_export_report_run_idempotency_key"/>
+        </rollback>
+    </changeSet>
+
+    <!--
+      THE CLAIM INDEX. This is the index the poller's FOR UPDATE SKIP LOCKED statement runs on, and
+      its column order is its due predicate and ORDER BY, in that order:
+
+          WHERE status = 'PENDING' AND next_attempt_at <= now()
+          ORDER BY next_attempt_at, id
+
+      Partial on PENDING because that is a vanishing fraction of the table on any busy estate - a
+      full index would be mostly succeeded runs nobody will ever claim, and would keep growing. The
+      trailing id is what makes the claim order total; without it two rows sharing a timestamp claim
+      in an order the planner chooses, which is the difference between a starved row and a fair queue.
+    -->
+    <changeSet id="export-003-index-claim" author="ludwig-export">
+        <sql>
+            CREATE INDEX idx_export_report_run_claim
+                ON export_report_run (next_attempt_at, id)
+                WHERE status = 'PENDING'
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_export_report_run_claim</sql>
+        </rollback>
+    </changeSet>
+
+    <!--
+      The reclaim index, for the other half of the lease: rows a dead instance left in RUNNING with
+      an expired lease. Separate from the claim index because the predicate is a different status and
+      a different column, and one index serving both would be usable for neither.
+    -->
+    <changeSet id="export-004-index-reclaim" author="ludwig-export">
+        <sql>
+            CREATE INDEX idx_export_report_run_reclaim
+                ON export_report_run (lease_until)
+                WHERE status = 'RUNNING'
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_export_report_run_reclaim</sql>
+        </rollback>
+    </changeSet>
+
+    <!-- Serves the per-user quota check and "show me my reports", which are the same query shape. -->
+    <changeSet id="export-005-index-requester" author="ludwig-export">
+        <createIndex tableName="export_report_run" indexName="idx_export_report_run_requester">
+            <column name="requester"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="export_report_run" indexName="idx_export_report_run_requester"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="export-006-create-export-report-output" author="ludwig-export">
+        <createTable tableName="export_report_output">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="run_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="format_id" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sink_uri" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="file_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="media_type" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="size_bytes" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sha256" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="purged_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="export_report_output"/>
+        </rollback>
+    </changeSet>
+
+    <!--
+      ON DELETE CASCADE: an output has no meaning without its run, and the retention policy deletes
+      runs. The alternative - orphaned output rows pointing at files whose run is gone - is a set of
+      sink uris nothing knows how to attribute or expire.
+    -->
+    <changeSet id="export-007-fk-output-run" author="ludwig-export">
+        <addForeignKeyConstraint baseTableName="export_report_output"
+                                 baseColumnNames="run_id"
+                                 constraintName="fk_export_report_output_run"
+                                 referencedTableName="export_report_run"
+                                 referencedColumnNames="id"
+                                 onDelete="CASCADE"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="export_report_output"
+                                      constraintName="fk_export_report_output_run"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="export-008-index-output-run" author="ludwig-export">
+        <createIndex tableName="export_report_output" indexName="idx_export_report_output_run">
+            <column name="run_id"/>
+            <column name="format_id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="export_report_output" indexName="idx_export_report_output_run"/>
+        </rollback>
+    </changeSet>
+
+    <!--
+      The purge index: files past their expiry that still have bytes behind them. Partial on
+      purged_at IS NULL because the purge runs every hour and the set it is looking for is almost
+      always empty - an index over every output ever produced would be scanned hourly to find nothing.
+    -->
+    <changeSet id="export-009-index-output-purge" author="ludwig-export">
+        <sql>
+            CREATE INDEX idx_export_report_output_purge
+                ON export_report_output (expires_at)
+                WHERE purged_at IS NULL
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_export_report_output_purge</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="export-010-create-export-saved-report" author="ludwig-export">
+        <createTable tableName="export_saved_report">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="definition_key" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+            <column name="parameters" type="JSONB"/>
+            <column name="column_ids" type="JSONB"/>
+            <column name="filter_expression" type="TEXT"/>
+            <column name="format_id" type="VARCHAR(32)"/>
+            <column name="revision" type="INT" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="updated_by" type="VARCHAR(255)"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="export_saved_report"/>
+        </rollback>
+    </changeSet>
+
+    <!-- "Which saved reports exist for this definition" is the listing every admin screen opens with. -->
+    <changeSet id="export-011-index-saved-report-definition" author="ludwig-export">
+        <createIndex tableName="export_saved_report" indexName="idx_export_saved_report_definition">
+            <column name="definition_key"/>
+            <column name="name"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="export_saved_report" indexName="idx_export_saved_report_definition"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="export-012-create-export-report-subscription" author="ludwig-export">
+        <createTable tableName="export_report_subscription">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="saved_report_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cron" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="time_zone" type="VARCHAR(64)" defaultValue="UTC">
+                <constraints nullable="false"/>
+            </column>
+            <column name="recipients" type="JSONB"/>
+            <column name="format_id" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="run_as" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_run_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_run_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="export_report_subscription"/>
+        </rollback>
+    </changeSet>
+
+    <!--
+      RESTRICT rather than CASCADE, unlike the outputs. Deleting a saved report that something is
+      subscribed to should fail and say so: the subscription is somebody's standing expectation of a
+      file arriving, and silently cancelling it is the kind of deletion nobody notices until the
+      report stops turning up.
+    -->
+    <changeSet id="export-013-fk-subscription-saved-report" author="ludwig-export">
+        <addForeignKeyConstraint baseTableName="export_report_subscription"
+                                 baseColumnNames="saved_report_id"
+                                 constraintName="fk_export_subscription_saved_report"
+                                 referencedTableName="export_saved_report"
+                                 referencedColumnNames="id"
+                                 onDelete="RESTRICT"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="export_report_subscription"
+                                      constraintName="fk_export_subscription_saved_report"/>
+        </rollback>
+    </changeSet>
+
+    <!-- Partial on enabled: the scheduler reads only the live ones, every tick, forever. -->
+    <changeSet id="export-014-index-subscription-enabled" author="ludwig-export">
+        <sql>
+            CREATE INDEX idx_export_subscription_enabled
+                ON export_report_subscription (saved_report_id)
+                WHERE enabled = true
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_export_subscription_enabled</sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

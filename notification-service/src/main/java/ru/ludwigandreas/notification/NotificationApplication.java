@@ -13,7 +13,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * {@code FOR UPDATE SKIP LOCKED}, renders a FreeMarker template and hands the result to a channel.
  *
  * <p>Assembled almost entirely from this repository's own modules: db-core, web-core, security,
- * identity-projection, odata-filter, hot-reload, observability, outbox and common-utils. What it adds
+ * identity-projection, odata-filter, hot-reload, observability and outbox. What it adds
  * are the two capabilities none of them provide yet - consumer-side idempotency and a distributed
  * lock - both behind narrow interfaces, and both candidates for promotion into a starter. See the
  * README.

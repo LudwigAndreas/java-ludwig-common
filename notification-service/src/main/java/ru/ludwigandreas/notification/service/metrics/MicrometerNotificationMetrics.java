@@ -35,7 +35,6 @@ public class MicrometerNotificationMetrics implements NotificationMetrics {
     private static final String CLAIMS = "notification.queue.claims";
     private static final String RECLAIMED = "notification.queue.reclaimed";
     private static final String RATE_LIMITED = "notification.queue.rate.limited";
-    private static final String LOCKS = "notification.locks";
     private static final String SEND_DURATION = "notification.send.duration";
     private static final String RENDER_DURATION = "notification.render.duration";
     private static final String END_TO_END = "notification.delivery.latency";
@@ -142,11 +141,6 @@ public class MicrometerNotificationMetrics implements NotificationMetrics {
     @Override
     public void recordRateLimited(ChannelType channel) {
         count(RATE_LIMITED, Tags.of("channel", name(channel)));
-    }
-
-    @Override
-    public void recordLockAcquisition(String lockName, boolean acquired) {
-        count(LOCKS, Tags.of("lock", lockName, "outcome", acquired ? "acquired" : "contended"));
     }
 
     private void count(String name, Tags tags) {

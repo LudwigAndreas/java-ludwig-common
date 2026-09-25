@@ -24,7 +24,7 @@
     </description>
 
     <!--
-        ludwig-bom is imported, not inherited, exactly as in common-utils: the parent stays
+        ludwig-bom is imported, not inherited, exactly as in the other library modules: the parent stays
         ru.ludwigandreas:common so this module keeps the reactor's build configuration (Checkstyle,
         flatten, JaCoCo, the -parameters compiler flag) while taking every third-party version from the
         BOM. Nothing below carries a <version> for that reason.
@@ -68,7 +68,7 @@
         <!--
             Optional: JiraClientBuilder.meterRegistry(...) publishes request counters, timers and a
             retry counter. The client stays framework-free for everyone who does not call it -
-            Micrometer is never required in order to talk to Jira. Same arrangement as common-utils.
+            Micrometer is never required in order to talk to Jira.
         -->
         <dependency>
             <groupId>io.micrometer</groupId>

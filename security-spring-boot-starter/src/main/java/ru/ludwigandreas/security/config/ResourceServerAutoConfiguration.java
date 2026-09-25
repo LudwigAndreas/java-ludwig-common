@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -57,8 +58,9 @@ import ru.ludwigandreas.security.web.SecurityMdcFilter;
  */
 @lombok.extern.slf4j.Slf4j
 /*
- * before, not after. Both SecurityAutoConfiguration and OAuth2ResourceServerAutoConfiguration
- * register a default SecurityFilterChain guarded by @ConditionalOnDefaultWebSecurity, which is
+ * before, not after. SecurityAutoConfiguration, OAuth2ResourceServerAutoConfiguration and
+ * OAuth2ClientAutoConfiguration each register a SecurityFilterChain guarded by
+ * @ConditionalOnDefaultWebSecurity or @ConditionalOnMissingBean, which is
  * @ConditionalOnMissingBean(SecurityFilterChain.class) - so whichever is processed first wins.
  * Declared "after", this module's chain lost that race every single time, and a service configured
  * with an issuer-uri silently ran on Boot's default chain instead: no public paths, CSRF on (which
@@ -69,7 +71,8 @@ import ru.ludwigandreas.security.web.SecurityMdcFilter;
  * Nothing here depends on those autoconfigurations having run: the JwtDecoder is injected as an
  * ObjectProvider and resolved when the chain is built, not when it is defined.
  */
-@AutoConfiguration(before = {SecurityAutoConfiguration.class, OAuth2ResourceServerAutoConfiguration.class})
+@AutoConfiguration(before = {SecurityAutoConfiguration.class, OAuth2ResourceServerAutoConfiguration.class,
+        OAuth2ClientAutoConfiguration.class})
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(SecurityFilterChain.class)
 @ConditionalOnProperty(prefix = "ludwig.security", name = "enabled", matchIfMissing = true)

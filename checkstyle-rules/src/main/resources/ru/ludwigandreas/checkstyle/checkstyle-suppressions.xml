@@ -71,9 +71,9 @@
     <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" id="NonAsciiSourceText"/>
 
     <!--
-        Console output. A test that exists to demonstrate an API (common-utils' retry
-        examples) prints its trace on purpose: the printout IS the documentation, and it goes
-        to a build log nobody ships. In main code the rule stands - see checkstyle.xml.
+        Console output. A test that exists to demonstrate an API prints its trace on purpose:
+        the printout IS the documentation, and it goes to a build log nobody ships. In main code
+        the rule stands - see checkstyle.xml.
     -->
     <suppress files="[\\/]src[\\/]test[\\/]java[\\/]" id="ConsoleOutput"/>
 

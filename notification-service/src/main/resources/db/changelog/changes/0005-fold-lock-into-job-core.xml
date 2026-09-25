@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="notification-050-drop-lock-table" author="ludwig-notification">
+        <comment>
+            Drops notification_lock. The service's leased mutex is now job-core's RunLock, backed by
+            job_run_lock, which the master changelog includes immediately before this file.
+
+            Where did the data go: nowhere, and there was none to move. Every row in this table was an
+            ephemeral lease - a claim on the next few minutes of one maintenance job - and the whole
+            design of a lease is that it means nothing once it expires. A row copied into job_run_lock
+            would either already have lapsed or would block the new lock for the remainder of a lease
+            taken by a process that no longer exists. The correct migration of a lease table is to
+            drop it and let the next tick acquire afresh.
+
+            The two lock names this service takes (notification-digest, notification-retention) are
+            unchanged, so the first run after this deployment simply creates its row in job_run_lock.
+
+            Ordering: this must run after the job-core changelog's include, or a fresh database would
+            briefly have neither lock table. See db.changelog-master.xml.
+        </comment>
+        <dropTable tableName="notification_lock"/>
+    </changeSet>
+
+</databaseChangeLog>

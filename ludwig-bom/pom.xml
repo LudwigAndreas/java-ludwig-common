@@ -71,6 +71,53 @@
         <spring-kafka.version>3.2.4</spring-kafka.version>
         <spring-vault.version>3.1.2</spring-vault.version>
         <freemarker.version>2.3.32</freemarker.version>
+        <!-- Apache POI, for the streaming XLSX writer only. Spring Boot manages no POI version, so
+             the platform has to pick one: 5.4.1 is the current 5.4.x line and the first to carry the
+             CVE-2025-31672 fix in poi-ooxml (a crafted OOXML package could exhaust memory while being
+             opened). The export starter reads workbooks back only in tests, but a template workbook
+             supplied by an administrator is untrusted input on the write path too. poi and poi-ooxml
+             are released together and must never be split across versions - poi-ooxml reaches into
+             poi's internals and a mismatch surfaces as a NoSuchMethodError on the first write. -->
+        <poi.version>5.4.1</poi.version>
+        <!-- Converged, not chosen: POI 5.4.1 pulls 2.18.0, commons-compress 2.16.1 and Olingo's
+             odata-server-core 2.13.0, so a service using both the export and the OData starters fails
+             the enforcer's DependencyConvergence rule. 2.18.0 is the highest of the three and the one
+             POI itself was built against, which is the safer direction to converge in: POI reaches
+             into commons-io's IOUtils and file-magic handling, whereas Olingo uses it for stream
+             copying only. Move this when POI moves. -->
+        <commons-io.version>2.18.0</commons-io.version>
+        <!-- AWS SDK for Java v2, for object-storage-spring-boot-starter. Spring Boot manages no
+             AWS version, so the platform picks one, and it is pinned as a BOM import below rather
+             than artifact by artifact: the SDK ships one service client per artifact plus a shared
+             core, and every one of them has to move together - a mismatched `s3` and
+             `sdk-core` fails at class-load time, not at build time. v2 rather than v1 because v1
+             reached end of support in December 2025; the async/Netty client is deliberately not
+             used, so `netty-nio-client` never enters the graph. -->
+        <awssdk.version>2.55.5</awssdk.version>
+        <!-- WireMock, for the partner half of an enrichment or client integration test. The
+             *-standalone* artifact is deliberate: the ordinary one brings its own Jetty, Jackson,
+             Guava and Handlebars, none of which agree with the versions Spring Boot manages, so it
+             fails the enforcer's DependencyConvergence rule in every module that would use it. The
+             standalone jar shades all of that, so it contributes exactly one test-scoped
+             dependency. -->
+        <wiremock.version>3.13.2</wiremock.version>
+        <!--
+            Mockito and Byte Buddy, both ahead of the versions spring-boot-dependencies manages
+            (5.11.0 / 1.14.19), and both for the same reason the lombok.version override in
+            ludwig-service-parent exists: a bytecode tool has to understand the class file version of
+            the JDK it runs on, and this platform is built on a JDK newer than Boot's line supports.
+
+            Symptom when they are left alone: "Mockito cannot mock this class ... Could not modify all
+            classes [class java.lang.Object, ...]" from net.bytebuddy.TypeCache on every test that mocks
+            a class rather than an interface. Byte Buddy is pinned separately rather than taken from
+            Mockito's own dependency, because Mockito's line lags the JDK by design and the agent has
+            to be the newer of the two.
+
+            Byte Buddy is also Hibernate's bytecode provider, so this pin is not test-only: move it
+            deliberately, and run the persistence integration tests when you do.
+        -->
+        <mockito.version>5.24.0</mockito.version>
+        <byte-buddy.version>1.18.14</byte-buddy.version>
         <springdoc.version>2.6.0</springdoc.version>
         <greenmail.version>2.1.3</greenmail.version>
         <jakarta-el.version>4.0.2</jakarta-el.version>
@@ -98,11 +145,6 @@
                  a consumer never sees an unresolved expression here. -->
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
-                <artifactId>common-utils</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>ru.ludwigandreas</groupId>
                 <artifactId>db-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -124,6 +166,21 @@
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
                 <artifactId>outbox-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>export-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>object-storage-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>file-ingest-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -303,6 +360,50 @@
                 <artifactId>freemarker</artifactId>
                 <version>${freemarker.version}</version>
             </dependency>
+            <!-- See the commons-io.version note above: a convergence pin, not a feature. -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>${commons-io.version}</version>
+            </dependency>
+            <!-- See the poi.version note above: these two ship as a pair. -->
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-ooxml</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <!-- See the mockito.version note above: these three move together. -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>${byte-buddy.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy-agent</artifactId>
+                <version>${byte-buddy.version}</version>
+            </dependency>
+            <!-- See the wiremock.version note above: test scope only, and the shaded artifact. -->
+            <dependency>
+                <groupId>org.wiremock</groupId>
+                <artifactId>wiremock-standalone</artifactId>
+                <version>${wiremock.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
@@ -378,7 +479,7 @@
                 from spring-boot-dependencies below, which keeps it internally consistent. Pinning
                 junit-jupiter independently while junit-platform-launcher stayed BOM-managed once
                 mixed Jupiter 5.12.2 with Platform 1.10.5 and broke test discovery with a
-                NoSuchMethodError - see common-utils/pom.xml. Do not add JUnit entries here.
+                NoSuchMethodError. Do not add JUnit entries here.
             -->
 
             <!-- ==== Imports, last: see the ordering note at the top of this section ==== -->
@@ -391,6 +492,21 @@
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!--
+                The AWS SDK v2 BOM. Imported rather than pinned artifact by artifact because the SDK
+                is dozens of co-released artifacts that reach into each other's internals: a service
+                client, its shared core, the HTTP client implementation, the auth and region modules
+                and the regional metadata are one release train, and pinning a subset leaves the rest
+                to whatever a transitive resolution picks. object-storage-spring-boot-starter
+                therefore declares `s3`, `apache-client` and `auth` with no version at all.
+            -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${awssdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

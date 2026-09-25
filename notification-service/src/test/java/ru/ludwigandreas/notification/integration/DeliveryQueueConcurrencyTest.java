@@ -14,14 +14,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.ludwigandreas.job.core.lock.JdbcRunLock;
+import ru.ludwigandreas.job.core.lock.RunLock;
+import ru.ludwigandreas.job.core.lock.RunLockHandle;
 import ru.ludwigandreas.notification.repository.DeliveryStatusHistoryRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
-import ru.ludwigandreas.notification.repository.DistributedLockRepository;
 import ru.ludwigandreas.notification.repository.IdempotencyRecordRepository;
 import ru.ludwigandreas.notification.repository.NotificationRequestRepository;
 import ru.ludwigandreas.notification.repository.RateLimitWindowRepository;
@@ -34,13 +37,9 @@ import ru.ludwigandreas.notification.repository.entity.NotificationRequestEntity
 import ru.ludwigandreas.notification.repository.entity.NotificationSource;
 import ru.ludwigandreas.notification.repository.entity.RequestStatus;
 import ru.ludwigandreas.notification.service.idempotency.IdempotencyStore;
-import ru.ludwigandreas.notification.service.lock.DistributedLock;
-import ru.ludwigandreas.notification.service.lock.LockLeaseService;
-import ru.ludwigandreas.notification.service.lock.PostgresDistributedLock;
 import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.notification.service.queue.ChannelRateLimiter;
 import ru.ludwigandreas.notification.service.queue.DeliveryClaimService;
-import ru.ludwigandreas.notification.service.metrics.NoopNotificationMetrics;
 
 /**
  * The properties that only exist under concurrency, against a real PostgreSQL.
@@ -66,6 +65,11 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
     private static final int REPLICAS = 3;
     private static final int DELIVERIES = 60;
 
+    private static final String TEST_LOCK = "test-job";
+
+    /** Long enough that nothing here expires while a case is running. */
+    private static final Duration LEASE = Duration.ofMinutes(5);
+
     /** Mirrors the property above; the limiter has no accessor and none is worth adding. */
     private static final int CHAT_RATE_LIMIT = 4;
 
@@ -85,13 +89,10 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
     private IdempotencyStore idempotencyStore;
 
     @Autowired
-    private LockLeaseService lockLeases;
-
-    @Autowired
     private ChannelRateLimiter rateLimiter;
 
     @Autowired
-    private DistributedLockRepository locks;
+    private DataSource dataSource;
 
     @Autowired
     private RateLimitWindowRepository rateLimitWindows;
@@ -115,10 +116,26 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
         history.deleteAll();
         deliveries.deleteAll();
         requests.deleteAll();
-        locks.deleteAll();
+        clearRunLocks();
         rateLimitWindows.deleteAll();
         idempotencyRecords.deleteAll();
         requestId = transactionTemplate.execute(status -> requests.saveAndFlush(request()).getId());
+    }
+
+    /**
+     * {@code job_run_lock} keeps its row when a lease is released - the owner is nulled and the
+     * expiry moved to now - so an empty table is not the resting state and asserting one would be
+     * asserting the wrong thing. What must not survive a case is a <em>live</em> lease, so the rows
+     * are deleted outright. Raw JDBC because this table belongs to job-core: it maps no entity here
+     * and there is no repository to call.
+     */
+    private void clearRunLocks() {
+        try (java.sql.Connection connection = dataSource.getConnection();
+                java.sql.Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DELETE FROM job_run_lock");
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException("could not clear job_run_lock between tests", e);
+        }
     }
 
     /**
@@ -311,22 +328,58 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
     }
 
     /**
-     * The second platform gap. A digest run on three replicas sends three digests to one person, and
-     * there is no SKIP LOCKED trick that fixes it - the work is defined over a set of rows rather
-     * than over each row independently.
+     * The fold's migration, on a database that never had the old table.
+     *
+     * <p>The master changelog includes {@code job-core}'s changelog and then drops
+     * {@code notification_lock}, and the order is not cosmetic: an {@code <include>} contributes its
+     * changesets where it appears, so the reverse order would leave a fresh database with neither lock
+     * table between the two changesets. On a fresh database 0003 still creates {@code
+     * notification_lock} and 0005 immediately drops it again - Liquibase history is append-only, so
+     * an applied changeset is never edited - and this case is what says the pair leaves the right end
+     * state rather than something that merely started up.
+     *
+     * <p>Every case in this class runs against a container built by exactly that changelog, so this
+     * is the fresh-database path and not a reconstruction of it.
+     */
+    @Test
+    @DisplayName("a fresh database ends with job_run_lock and without notification_lock")
+    void migrationLeavesOnlyTheJobCoreLockTable() throws Exception {
+        assertThat(tableExists("job_run_lock")).as("job-core's lock table was created").isTrue();
+        assertThat(tableExists("notification_lock")).as("this service's own was dropped").isFalse();
+    }
+
+    private boolean tableExists(String table) throws java.sql.SQLException {
+        try (java.sql.Connection connection = dataSource.getConnection();
+                java.sql.PreparedStatement query = connection.prepareStatement(
+                        "SELECT to_regclass(?) IS NOT NULL")) {
+            query.setString(1, table);
+            try (java.sql.ResultSet row = query.executeQuery()) {
+                row.next();
+                return row.getBoolean(1);
+            }
+        }
+    }
+
+    /**
+     * The second platform gap - since folded into {@code job-core}, which is why this exercises
+     * {@link RunLock} rather than a lock of this service's own. A digest run on three replicas sends
+     * three digests to one person, and there is no SKIP LOCKED trick that fixes it: the work is
+     * defined over a set of rows rather than over each row independently.
+     *
+     * <p>The lock's own properties - the {@code run_id} fence, lease expiry, release semantics - are
+     * covered where the lock lives, in {@code JdbcRunLockIT}. What is being checked here is the thing
+     * only this service can check: that the lock it actually wires up admits exactly one replica
+     * against this service's real schema and connection pool.
      */
     @Test
     @DisplayName("only one replica enters a job guarded by the distributed lock")
     void distributedLockAdmitsExactlyOne() throws Exception {
         AtomicInteger entered = new AtomicInteger();
-        List<Boolean> acquired = inParallel(REPLICAS, replica -> {
-            DistributedLock lock = new PostgresDistributedLock(lockLeases,
-                    new NoopNotificationMetrics(), "replica-" + replica);
-            return lock.runIfLockAvailable("test-job", handle -> {
-                entered.incrementAndGet();
-                sleepBriefly();
-            });
-        });
+        List<Boolean> acquired = inParallel(REPLICAS, replica ->
+                runLockFor("replica-" + replica).runIfAvailable(TEST_LOCK, LEASE, handle -> {
+                    entered.incrementAndGet();
+                    sleepBriefly();
+                }));
 
         assertThat(acquired).filteredOn(Boolean::booleanValue)
                 .as("exactly one replica took the lock").hasSize(1);
@@ -336,31 +389,26 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
     @Test
     @DisplayName("the lock is released after the job, so the next run can take it")
     void distributedLockIsReleased() {
-        DistributedLock first = new PostgresDistributedLock(lockLeases, new NoopNotificationMetrics(),
-                "replica-1");
-        DistributedLock second = new PostgresDistributedLock(lockLeases, new NoopNotificationMetrics(),
-                "replica-2");
-
-        assertThat(first.runIfLockAvailable("test-job", handle -> { })).isTrue();
-        assertThat(second.runIfLockAvailable("test-job", handle -> { })).isTrue();
+        assertThat(runLockFor("replica-1").runIfAvailable(TEST_LOCK, LEASE, handle -> { })).isTrue();
+        assertThat(runLockFor("replica-2").runIfAvailable(TEST_LOCK, LEASE, handle -> { })).isTrue();
     }
 
     /**
      * A job that stalled long enough to lose its lock must not be able to renew it out from under
-     * whichever replica has since taken over - a failed renewal is the signal to stop working.
+     * whichever replica has since taken over - a failed renewal is the signal to stop working, and
+     * both schedulers honour it by stopping mid-list.
      */
     @Test
     @DisplayName("a replica that no longer holds the lock cannot renew it")
     void renewalRequiresOwnership() {
-        assertThat(lockLeases.tryAcquire("test-job", "replica-1")).isTrue();
+        RunLockHandle held = runLockFor("replica-1").tryAcquire(TEST_LOCK, LEASE).orElseThrow();
 
-        assertThat(lockLeases.renew("test-job", "replica-1")).isTrue();
-        assertThat(lockLeases.renew("test-job", "replica-2")).isFalse();
+        assertThat(held.renew(LEASE)).as("the holder keeps its lease").isTrue();
+        assertThat(runLockFor("replica-2").tryAcquire(TEST_LOCK, LEASE))
+                .as("and nobody else can take it").isEmpty();
 
-        // A release naming the wrong owner does nothing, so the lock stays with replica-1 and
-        // replica-2 still cannot take it.
-        lockLeases.release("test-job", "replica-2");
-        assertThat(lockLeases.tryAcquire("test-job", "replica-2")).isFalse();
+        held.close();
+        assertThat(held.renew(LEASE)).as("a released lease is not renewable").isFalse();
     }
 
     /**
@@ -404,6 +452,11 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
     // ---------------------------------------------------------------------------------------------
     // Fixtures
     // ---------------------------------------------------------------------------------------------
+
+    /** One lock per "replica", each with its own owner string, exactly as three pods would have. */
+    private RunLock runLockFor(String owner) {
+        return new JdbcRunLock(dataSource, owner);
+    }
 
     private <T> List<T> inParallel(int workers, ParallelTask<T> task) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(workers);

@@ -1,0 +1,7 @@
+ru.ludwigandreas.export.config.ExportObjectStorageAutoConfiguration
+ru.ludwigandreas.export.config.ExportAutoConfiguration
+ru.ludwigandreas.export.config.ExportPersistenceAutoConfiguration
+ru.ludwigandreas.export.config.ExportPlatformIntegrationAutoConfiguration
+ru.ludwigandreas.export.config.ExportWebAutoConfiguration
+ru.ludwigandreas.export.config.ExportWebMvcAutoConfiguration
+ru.ludwigandreas.export.config.ExportLiquibaseAutoConfiguration

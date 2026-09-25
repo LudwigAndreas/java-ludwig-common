@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>export-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Export Spring Boot starter</name>
+    <description>
+        Tabular business reports for Java 17 + PostgreSQL + Spring Boot services: report definitions
+        declared as typed code and validated at startup, a windowed streaming engine that never
+        materialises a result set, cross-service enrichment through named REST clients with explicit
+        missing/failure policies, XLSX (streaming Apache POI) and CSV writers behind an open format
+        SPI, pluggable output sinks, run persistence and lease-based lifecycle on job-core, saved
+        configurations and cron subscriptions, and a full audit trail. Sized for a million-row
+        report inside a fixed heap budget.
+    </description>
+
+    <!--
+        The JDK baseline and the spring-boot-dependencies import are inherited from the parent pom,
+        ru.ludwigandreas:common. Third-party versions are NOT: they live in ludwig-bom, imported
+        below, so that a downstream service can get exactly the same set by importing one artifact
+        instead of copying a properties block it cannot see.
+
+        ludwig-bom is imported rather than inherited on purpose. Keeping ru.ludwigandreas:common as
+        the parent is what keeps this module usable by a service running a DIFFERENT Spring Boot
+        line - a library built against a fixed spring-boot-starter-parent bakes that line into
+        itself. For the same reason this module does not inherit ludwig-service-parent; see the
+        note in that file.
+    -->
+    <properties>
+        <!-- Tags surefire skips by default; cleared on the command line to run the load test. -->
+        <export.test.excluded.groups>load</export.test.excluded.groups>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- job-core: SKIP LOCKED claim, leased RunLock, self-scheduling poller, backoff curve,
+             instance identity. Async report runs are a claimed-and-leased job like any other, and
+             reimplementing that here is how two modules end up disagreeing about what a dead
+             instance looks like. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+        </dependency>
+
+        <!-- db-core: BaseRepository/GeneratedEntity/AuditedEntity and the auditing infrastructure. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+        </dependency>
+
+        <!--
+            NOT optional. Every failure this module reports to a caller - an unknown definition key,
+            a format the definition does not allow, a row cap exceeded, a revoked authority - IS a
+            LocalizedException rendered by web-core's single ProblemDetail pipeline. A service that
+            could not resolve web-core would not be able to load this module's exception types at
+            all, so declaring it optional would only move the failure to the first error.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- security-spring-boot-starter: the principal model, AuthorityResolver and
+             DataScopeProvider. A report is a bulk read of the same data a screen shows, so it runs
+             under the same scope predicate; being a report is not an exemption. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Optional: user-supplied $filter/$orderby are parsed by odata-filter, never by parsing
+             code written here. Absent it, a request simply cannot carry a filter. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>odata-filter-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: every outbound enrichment call goes through a named @LudwigRestClient so it
+             inherits that client's pool, timeouts, auth, retry/circuit-breaker and metrics. A
+             service with no enrichment stages does not need it. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>rest-client-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: the s3 sink. The platform's one bucket client lives in
+            object-storage-spring-boot-starter, and this module adapts it rather than carrying an AWS
+            SDK of its own - a second client here would be the JdbcRunLock mistake happening again.
+            Optional because a single-instance deployment writing to a mounted volume is a real
+            deployment and should not resolve the SDK to get it.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>object-storage-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: "report ready" is published as an outbox event carrying a link. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbox-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: watched XLSX template workbooks reuse the same reload mechanism the
+             FreeMarker templates already use. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>hot-reload-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: correlation id propagation and MDC for the run's structured logs. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>observability-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Hibernate + Spring Data JPA + jakarta.persistence-api -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- SmartLifecycle/TaskScheduler behind the run poller and the subscription scheduler -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Every query in this module is a compile-time-checked QueryDSL expression; the base row
+             query is handed to a RowSource as a Predicate rather than as a string. -->
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-jpa</artifactId>
+            <classifier>jakarta</classifier>
+        </dependency>
+
+        <!-- Parameters, column subsets and principal snapshots are stored as jsonb -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- The per-run enrichment cache. Bounded by entry count with eviction and hit-rate
+             statistics, both of which this module reports as metrics; a HashMap would give neither
+             and would grow without limit for the life of a million-row run. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- Optional: the XLSX writer. SXSSF only - see ludwig-bom for the version note. A service
+             that enables only CSV does not pay for POI. -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Mapping between the three model layers is generated, never written by hand. -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+        </dependency>
+
+        <!-- Plug-and-play with Postgres, ships transitively to consumers -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Optional: schema delivered as a Liquibase changelog, only applied if the consumer uses Liquibase -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: REST layer. A service that only schedules reports needs no controllers. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: run, enrichment, cache and writer metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            ArchUnit, for this module's own internal boundaries - which packages may see POI, which
+            may see the filter parser, and that nothing here ships a @RestControllerAdvice. The
+            cross-cutting conventions (layering, cycles, persistence, exceptions) are already covered
+            by architecture-rules' shipped rule sets and need nothing added here; what those cannot
+            express is a boundary that only exists inside one module.
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok-mapstruct-binding</artifactId>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                        </path>
+                        <path>
+                            <groupId>com.querydsl</groupId>
+                            <artifactId>querydsl-apt</artifactId>
+                            <classifier>jakarta</classifier>
+                        </path>
+                        <path>
+                            <groupId>jakarta.persistence</groupId>
+                            <artifactId>jakarta.persistence-api</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>org.mapstruct.ap.MappingProcessor</annotationProcessor>
+                        <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <!--
+                The load test is tagged "load" and excluded from every ordinary build: it writes a
+                million rows into two formats and takes minutes, which is not something a developer
+                should pay for on every `mvn test`. Run it with
+
+                  mvn -pl export-spring-boot-starter test \
+                      -Dexport.test.excluded.groups= -Dgroups=load -DargLine="-Xmx512m"
+
+                The -Xmx matters: the test asserts a peak-heap ceiling itself, and a small heap makes
+                the JVM fail the run outright if the engine ever stops streaming. Both checks are
+                deliberate - one of them catches a regression, the other proves the bound.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                        A property rather than a literal, because a literal in the POM cannot be
+                        overridden from the command line - which would make the exclusion permanent
+                        and the load test unrunnable.
+                    -->
+                    <excludedGroups>${export.test.excluded.groups}</excludedGroups>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -34,11 +34,35 @@ spring:
 
   security:
     oauth2:
+      # The two halves of OAuth2, and they are genuinely different jobs that happen to name the same
+      # issuer. resourceserver VALIDATES tokens that arrive here; client MINTS tokens to present to
+      # peers. A service that only answers needs the first; a service that also calls needs both, and
+      # the second needs spring-boot-starter-oauth2-client on the classpath - see this service's pom.
       resourceserver:
         jwt:
           # The edge exchanges the browser's session cookie for a short-lived token from this issuer;
           # Spring Boot builds the JwtDecoder from here (JWKS fetch, key rotation, caching included).
           issuer-uri: ${OIDC_ISSUER_URI:https://login.example.internal/realms/corp}
+
+      # client_credentials, not a relayed user token, and the distinction is the important one. The
+      # notification call is made by a background poller minutes after the user's request finished;
+      # there is no inbound token left to relay by then. It is also this service's own decision to
+      # make rather than the user's - the steward hears about a new product because the catalogue
+      # says so, not because whoever created it had permission to send mail. Relaying would hand
+      # every peer the user's full authority, which is far more than any of them needs.
+      client:
+        registration:
+          catalog-sa:
+            client-id: ${CATALOG_CLIENT_ID:product-catalog}
+            client-secret: ${CATALOG_CLIENT_SECRET:}
+            authorization-grant-type: client_credentials
+            # What the notification service will see as the caller's grant. Its own
+            # ludwig.security.jwt.audiences is what stops a token minted for one peer being
+            # replayed at another.
+            scope: notifications.send
+        provider:
+          catalog-sa:
+            token-uri: ${OIDC_TOKEN_URI:${OIDC_ISSUER_URI:https://login.example.internal/realms/corp}/protocol/openid-connect/token}
 
   jackson:
     default-property-inclusion: non_null
@@ -99,6 +123,174 @@ ludwig:
         transport: KAFKA
         destination: catalog.product-events
         event-types: ProductCreated,ProductUpdated,ProductDeleted
+      # Named explicitly by ProductServiceImpl rather than matched on event type, so an entry added
+      # here later cannot silently capture these rows. The destination is unused - the path lives on
+      # the @PostExchange and the host on the rest client - but the outbox requires one, and naming
+      # the endpoint keeps the table readable.
+      product-notifications:
+        transport: NOTIFICATIONS
+        destination: notification-service/api/v1/notifications
+
+  # --- outbound HTTP ----------------------------------------------------------------------------
+  # One entry per dependency. Each gets its own connection pool, timeouts, identity, breaker and
+  # bulkhead, so a slow notification service cannot consume the connections or the patience that
+  # another dependency needs.
+  # --- ludwig export ---------------------------------------------------------------------------
+  export:
+    # The changelog ships inside the starter's jar and is included by this service's own master
+    # changelog, so the module must not also apply it as a second, standalone SpringLiquibase.
+    liquibase:
+      enabled: false
+
+    # The five numbers that decide the engine's memory profile. They interact, and the module refuses
+    # to start on a combination that cannot work (a source page larger than a window, an enrichment
+    # batch larger than a window, a cache smaller than a batch), so they are set together here rather
+    # than one at a time when something is slow.
+    source-page-size: 1000
+    window-size: 2000
+    handoff-queue-depth: 4
+
+    # Below this estimate the run happens on the request thread and the caller gets the file back from
+    # the same call. Above it the request returns 202 and a run id. One code path, two exits - the
+    # threshold only decides which.
+    sync-threshold-rows: 5000
+    wall-clock-budget: 15m
+    max-rows-per-run: 500000
+
+    enrichment:
+      # Defaults the catalogue report's supplier stage deliberately overrides, because its ceiling is
+      # the partner's query-string length rather than anything the engine knows.
+      batch-size: 200
+      concurrency: 4
+      cache-size: 50000
+      # Whose credentials partner calls carry when a stage does not say. service-account is this
+      # service's own, as configured for the named REST client, and it is the only identity a deferred
+      # run has - the requester's token is never stored, so a run that is not on the request thread has
+      # none to relay.
+      #
+      # Set this to `requester` in an estate where partners scope by the caller and reports are small
+      # enough to run while somebody waits; the export module then refuses a request it would have to
+      # defer, rather than quietly producing a file scoped to this service instead of to the person.
+      # Either way a stage can override it, and the startup validator refuses a stage whose choice
+      # disagrees with its client's auth.type.
+      call-as: service-account
+
+    formats:
+      # Stated rather than left to the default so that removing poi-ooxml from the pom fails startup
+      # with "xlsx is enabled and nothing writes it" instead of quietly serving CSV to a caller who
+      # asked for a workbook.
+      enabled: xlsx,csv
+      xlsx:
+        flush-window: 500
+      csv:
+        # Excel's dialect: UTF-8 with a BOM, the locale's list separator, CRLF. The alternative
+        # (rfc4180) is correct and opens in Excel as one column of mojibake, which is why the default
+        # here is the one a human will double-click.
+        profile: excel
+
+    sink:
+      # Left at the module's default directory, which is a subdirectory of the JVM temp directory and
+      # is created if it is absent. A *configured* directory must already exist - the sink refuses one
+      # that does not, because a typo in a path is otherwise indistinguishable from a correct path -
+      # so a real deployment sets REPORT_OUTPUT_DIR to a volume its manifest also mounts.
+      #
+      # A directory in the container, not a shared volume, is correct here regardless: outputs are
+      # addressed through a short-lived download link and purged on expiry, so nothing under it needs
+      # to survive a restart. An estate with more than one instance replaces this with an
+      # object-storage sink, which is why the property is a bean name rather than a path.
+      type: filesystem
+      directory: ${REPORT_OUTPUT_DIR:}
+      retention: 3d
+      download-link-ttl: 15m
+
+    poller:
+      # Deferred runs are claimed with SKIP LOCKED, so every instance runs this and no two claim the
+      # same run. Two at a time per instance: a report is IO-bound on the database and the partner,
+      # and the memory budget is per concurrent run.
+      enabled: ${REPORT_POLLER_ENABLED:true}
+      interval: 5s
+      concurrency: 2
+      lease-duration: 5m
+      heartbeat-interval: 1m
+
+    quota:
+      # Per user, and enforced regardless of how many instances there are, because the resource being
+      # protected is the database and the partners rather than this process.
+      concurrent-runs-per-user: 3
+      daily-runs-per-user: 50
+
+  rest-client:
+    defaults:
+      # Inherited by every client below; a per-client key replaces it rather than merging into it.
+      connect-timeout: 2s
+      read-timeout: 5s
+      resilience:
+        circuit-breaker:
+          failure-rate-threshold: 50
+          sliding-window-size: 50
+          wait-duration-in-open-state: 30s
+
+    clients:
+      notifications:
+        # https, not http: both clients here mint an OAuth2 client-credentials token, and the
+        # rest-client starter refuses at startup to send a credential over plain HTTP to anything but
+        # loopback. That refusal is right even inside a mesh - a sidecar that is misconfigured, or
+        # absent, is exactly when the token is readable on the wire, and that is the case a validator
+        # has to assume.
+        base-url: ${NOTIFICATION_BASE_URL:https://notification-service:8443}
+        # Submitting a notification is a 202 and a database write on the far side. If it has not
+        # answered in three seconds it is not about to.
+        read-timeout: 3s
+        auth:
+          type: oauth2-client-credentials
+          registration-id: catalog-sa
+        resilience:
+          retry:
+            # Two attempts, not more: this call is already inside the outbox, which retries across
+            # minutes and process restarts. What this layer is for is the blip that would otherwise
+            # cost a round trip through the database - not persistence, which is the outbox's job.
+            max-attempts: 2
+            wait-duration: 200ms
+            exponential-backoff-multiplier: 2.0
+            randomized-wait-factor: 0.5
+            # Left at its default of true, which refuses to repeat a POST. The call site opts in per
+            # request with X-Ludwig-Retry, which it may only do because it also sends an
+            # Idempotency-Key - see NotificationApi.
+            idempotent-methods-only: true
+          bulkhead:
+            # The outbox poller is the only caller and it is single-threaded, so this is a ceiling
+            # against a future second caller rather than a limit anyone is expected to hit.
+            max-concurrent-calls: 8
+
+      suppliers:
+        # Read by the catalogue report's enrichment stage, and by nothing else in this service.
+        base-url: ${SUPPLIER_DIRECTORY_BASE_URL:https://supplier-directory:8443}
+        # A directory lookup is an indexed read of at most a hundred rows. Five seconds would mean a
+        # report window stalling on a partner that is already gone.
+        read-timeout: 2s
+        auth:
+          type: oauth2-client-credentials
+          registration-id: catalog-sa
+        pool:
+          # max-per-route is the number that binds, because this client talks to one host: every call
+          # it makes is the same route, so a pool of fifty with a per-route cap of twenty sustains
+          # twenty concurrent calls. The export module refuses to start if the stage asks for more
+          # than this, so raising the stage's concurrency means raising this first.
+          max-total: 16
+          max-per-route: 16
+        resilience:
+          retry:
+            # A GET is safe to repeat without an idempotency key, so this may be more generous than
+            # the notifications client's - but not much: the engine is waiting on this call with a
+            # window of rows held in memory behind it.
+            max-attempts: 3
+            wait-duration: 100ms
+            exponential-backoff-multiplier: 2.0
+            idempotent-methods-only: true
+          bulkhead:
+            # Equal to the pool, so a stage that saturates the pool is refused here rather than
+            # queueing invisibly inside it.
+            max-concurrent-calls: 16
 
   # --- ludwig security -------------------------------------------------------------------------
   security:
@@ -198,3 +390,19 @@ management:
 logging:
   level:
     ru.ludwigandreas.example.catalog: INFO
+
+  # --- catalog notifications ---------------------------------------------------------------------
+  # What this service asks the notification service for. Off by default: an environment without a
+  # reachable notification service would otherwise accumulate outbox rows that can never be
+  # dispatched, and the table would grow until somebody noticed.
+  catalog:
+    notifications:
+      enabled: ${CATALOG_NOTIFICATIONS_ENABLED:false}
+      template-key: catalog-product-published
+      category: catalog
+      category-class: MARKETING
+      priority: BULK
+      channels: EMAIL
+      # Platform user ids, not addresses: the notification service owns the address, the locale and
+      # the recipient's preferences, and a copy held here is one that goes stale silently.
+      steward-user-ids: ${CATALOG_STEWARD_USER_IDS:}

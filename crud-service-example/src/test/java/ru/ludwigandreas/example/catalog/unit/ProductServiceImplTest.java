@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +26,7 @@ import ru.ludwigandreas.example.catalog.repository.ProductRepository;
 import ru.ludwigandreas.example.catalog.repository.entity.CategoryEntity;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductEntity;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductStatus;
+import ru.ludwigandreas.example.catalog.config.CatalogNotificationProperties;
 import ru.ludwigandreas.example.catalog.service.ProductServiceImpl;
 import ru.ludwigandreas.example.catalog.service.event.ProductEventPayload;
 import ru.ludwigandreas.example.catalog.service.event.ProductEventType;
@@ -75,6 +77,14 @@ class ProductServiceImplTest {
     @Spy
     private ProductEntityMapper mapper = new ProductEntityMapperImpl();
 
+    /**
+     * A real settings object rather than a mock, because what the tests care about is the switch it
+     * carries. Disabled here, which is also the shipped default, so the cases above see exactly one
+     * outbox row.
+     */
+    @Spy
+    private CatalogNotificationProperties notificationProperties = new CatalogNotificationProperties();
+
     @InjectMocks
     private ProductServiceImpl service;
 
@@ -113,6 +123,54 @@ class ProductServiceImplTest {
                 .isInstanceOf(ProductEventPayload.class)
                 .extracting("sku", "status", "categoryCode")
                 .containsExactly("HAMMER-1", "ACTIVE", "TOOLS");
+    }
+
+    /**
+     * Two rows, not one, and they are different intentions: a fact published to whoever subscribes,
+     * and an instruction addressed to one named peer. They are separate so they can succeed, retry
+     * and dead-letter independently - and because a unique index on idempotency_key means they must
+     * not share a key.
+     */
+    @Test
+    void createAlsoRequestsAStewardNotificationWhenThatIsEnabled() {
+        notificationProperties.setEnabled(true);
+        notificationProperties.setStewardUserIds(java.util.List.of("user-7"));
+        when(productRepository.skuTaken("HAMMER-1", null)).thenReturn(false);
+        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(productRepository.saveAndFlush(any(ProductEntity.class))).thenAnswer(invocation -> {
+            ProductEntity entity = invocation.getArgument(0);
+            entity.setId(PRODUCT_ID);
+            return entity;
+        });
+
+        service.create(newProduct("HAMMER-1"));
+
+        ArgumentCaptor<OutboxEvent> events = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxEventPublisher, times(2)).publish(events.capture());
+
+        OutboxEvent domainEvent = events.getAllValues().get(0);
+        OutboxEvent notification = events.getAllValues().get(1);
+        assertThat(domainEvent.getEventType()).isEqualTo(ProductEventType.CREATED);
+        assertThat(notification.getEventType()).isEqualTo(ProductEventType.NOTIFY_CREATED);
+        // Named explicitly, so an unrelated entry added to ludwig.outbox.routes cannot capture it.
+        assertThat(notification.getRoute()).isEqualTo("product-notifications");
+        assertThat(notification.getIdempotencyKey())
+                .isNotEqualTo(domainEvent.getIdempotencyKey());
+    }
+
+    @Test
+    void createDoesNotRequestANotificationWhenThatIsSwitchedOff() {
+        when(productRepository.skuTaken("HAMMER-1", null)).thenReturn(false);
+        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(productRepository.saveAndFlush(any(ProductEntity.class))).thenAnswer(invocation -> {
+            ProductEntity entity = invocation.getArgument(0);
+            entity.setId(PRODUCT_ID);
+            return entity;
+        });
+
+        service.create(newProduct("HAMMER-1"));
+
+        verify(outboxEventPublisher, times(1)).publish(any(OutboxEvent.class));
     }
 
     @Test

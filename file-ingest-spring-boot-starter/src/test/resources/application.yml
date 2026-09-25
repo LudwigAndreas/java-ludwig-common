@@ -1,0 +1,49 @@
+# The test service's configuration. One block per @IngestTask bean, which is what a real service
+# writes; the containers' coordinates are injected by @DynamicPropertySource.
+spring:
+  jpa:
+    open-in-view: false
+  main:
+    banner-mode: off
+
+ludwig:
+  ingest:
+    # Off for every test but SchedulingAndMissingFileIT, which turns it back on: each test drives a
+    # pass explicitly, because one that waited for a cron entry would be slow and would pass for the
+    # wrong reason on a slow machine. Here rather than in @DynamicPropertySource, which outranks
+    # @TestPropertySource and would make it impossible to turn on again.
+    scheduler-enabled: false
+    liquibase:
+      enabled: true
+    endpoint:
+      allow-manual-run: true
+    tasks:
+      partner-catalogue:
+        source:
+          uri: s3://partner-drop/catalogue/
+          pattern: "catalogue-*.csv*"
+        arrival:
+          # Off for most tests, which write the object atomically through the SDK and then drive the
+          # pass explicitly. SentinelIT turns it back on with its own property, because the point of
+          # that test is what happens while it is on.
+          sentinel: ""
+        schedule:
+          cron: "0 30 6 * * *"
+          run-timeout: 10m
+        lock:
+          lease: 30s
+        batch:
+          max-records: 100
+          max-bytes: 1MB
+        quarantine:
+          policy: threshold
+          max-ratio: 0.05
+          max-record-length: 4KB
+        receipt:
+          enabled: false
+        archive:
+          mode: none
+
+logging:
+  level:
+    ru.ludwigandreas.ingest: DEBUG

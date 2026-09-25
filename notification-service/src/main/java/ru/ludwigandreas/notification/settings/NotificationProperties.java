@@ -36,7 +36,14 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "ludwig.notification")
 public class NotificationProperties {
 
-    /** Owner name recorded in delivery leases and distributed locks; defaults to hostname + suffix. */
+    /**
+     * Owner name recorded in delivery leases and in {@code job_run_lock}; defaults to hostname +
+     * suffix.
+     *
+     * <p>Kept as this service's own property although the lock is now the platform's: it predates
+     * that move, deployments set it, and {@code NotificationQueueConfig} feeds it to the
+     * {@code JobInstanceIdentity} bean so one pod still writes one identity into both.
+     */
     private String instanceId;
 
     @Valid
@@ -68,9 +75,6 @@ public class NotificationProperties {
 
     @Valid
     private final Retention retention = new Retention();
-
-    @Valid
-    private final Locks locks = new Locks();
 
     @Valid
     private final Receipts receipts = new Receipts();
@@ -634,25 +638,13 @@ public class NotificationProperties {
         private int batchSize = 1000;
     }
 
-    /** The leased mutex the maintenance jobs run under. */
-    @Getter
-    @Setter
-    public static class Locks {
-
-        /**
-         * How long a lease lasts without a heartbeat.
-         *
-         * <p>This is the failover time: a pod that dies holding the lock blocks the job for exactly
-         * this long. Short enough that a missed digest window is one window, long enough that a
-         * garbage-collection pause cannot cost a running job its lock.
-         */
-        @NotNull
-        private Duration lease = Duration.ofMinutes(2);
-
-        /** Renewal interval. Must be comfortably shorter than the lease - validated at startup. */
-        @NotNull
-        private Duration heartbeat = Duration.ofSeconds(30);
-    }
+    /*
+     * There is deliberately no Locks block here any more. The leased mutex the maintenance jobs run
+     * under is job-core's RunLock, and its lease is ludwig.job-core.lock.default-lease - one setting
+     * for the whole platform rather than one per service that happens to take a lock. See
+     * NotificationConfigurationValidator, which still cross-checks that lease against this service's
+     * job intervals, because the relationship between them is this service's to know.
+     */
 
     /** Inbound provider callbacks. */
     @Getter

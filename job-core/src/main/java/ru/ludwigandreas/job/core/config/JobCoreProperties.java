@@ -2,6 +2,8 @@ package ru.ludwigandreas.job.core.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 /**
  * Configuration for the scheduling primitives shared by the job-shaped modules in this platform.
  *
@@ -21,6 +23,8 @@ public class JobCoreProperties {
      * the deployment already has a meaningful instance name (a pod name, a StatefulSet ordinal).
      */
     private String owner;
+
+    private final Lock lock = new Lock();
 
     private final Liquibase liquibase = new Liquibase();
 
@@ -44,9 +48,46 @@ public class JobCoreProperties {
         this.owner = owner;
     }
 
+    /** Run-lock settings. */
+    public Lock getLock() {
+        return lock;
+    }
+
     /** Schema-management settings. */
     public Liquibase getLiquibase() {
         return liquibase;
+    }
+
+    /**
+     * Settings for the shared {@code RunLock}.
+     *
+     * <p>Process-wide by the same test as everything else here: the lease length is the deployment's
+     * failover time for <em>every</em> job that does not state its own, so it is a property of the
+     * deployment rather than of any one job.
+     */
+    public static class Lock {
+
+        /**
+         * Lease taken by the no-TTL {@code runIfAvailable} overload.
+         *
+         * <p>This is the failover time a job inherits by not choosing one: a pod that dies holding
+         * the lock blocks that job for exactly this long. Five minutes is long enough that a
+         * garbage-collection pause or a slow statement cannot cost a running job its lease, and short
+         * enough that a killed pod costs one missed window rather than an afternoon. A job whose runs
+         * are longer or shorter than that passes its own TTL to the explicit overload rather than
+         * moving this number for everyone.
+         */
+        private Duration defaultLease = Duration.ofMinutes(5);
+
+        /** The lease length used when a caller names none. */
+        public Duration getDefaultLease() {
+            return defaultLease;
+        }
+
+        /** Sets the lease length used when a caller names none. */
+        public void setDefaultLease(Duration defaultLease) {
+            this.defaultLease = defaultLease;
+        }
     }
 
     /** Whether the shipped changelog is applied by this module. */

@@ -149,7 +149,24 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Optional: mode `async` - WebClient over Reactor Netty. -->
+        <!--
+            Optional: mode `async` - WebClient over Reactor Netty.
+
+            "Optional" currently overstates it. NamedClientFactory carries buildRest and buildWebClient
+            in one class, so verifying that class resolves WebClient and the reactive observation
+            convention even in a service whose every client is blocking; such a service fails to create
+            ludwigNamedClientFactory with "NoClassDefFoundError:
+            org/springframework/web/reactive/function/client/ClientRequestObservationConvention" and has
+            to declare spring-webflux itself (crud-service-example does, with a note).
+
+            It is not promoted to a compile dependency because webflux on the classpath of a service
+            with no servlet stack makes Boot resolve the application as REACTIVE, which breaks
+            consumers that have neither - reconciliation-spring-boot-starter's own test application
+            among them. The fix is to move buildWebClient and the LudwigWebClientCustomizer SPI into a
+            @ConditionalOnClass-guarded class, the same correction
+            RestClientObservabilityAutoConfiguration already carries: a method signature can only be
+            protected by a condition on the type that declares it.
+        -->
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webflux</artifactId>

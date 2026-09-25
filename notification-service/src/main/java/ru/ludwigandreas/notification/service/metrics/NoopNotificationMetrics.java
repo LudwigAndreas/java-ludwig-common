@@ -81,8 +81,4 @@ public class NoopNotificationMetrics implements NotificationMetrics {
     @Override
     public void recordRateLimited(ChannelType channel) {
     }
-
-    @Override
-    public void recordLockAcquisition(String lockName, boolean acquired) {
-    }
 }

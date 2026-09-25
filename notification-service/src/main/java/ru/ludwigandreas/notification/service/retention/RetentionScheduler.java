@@ -7,35 +7,40 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.scheduling.TaskScheduler;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
-import ru.ludwigandreas.notification.service.lock.DistributedLock;
+import ru.ludwigandreas.job.core.lock.RunLock;
+import ru.ludwigandreas.job.core.lock.RunLockHandle;
 import ru.ludwigandreas.notification.service.lock.LockNames;
 
 /**
  * Runs the retention purge on one replica per schedule.
  *
- * <p>Under the distributed lock, like the digest job and unlike the delivery poller. Three replicas
+ * <p>Under {@code job-core}'s leased {@link RunLock}, like the digest job and unlike the delivery
+ * poller. Three replicas
  * purging concurrently would not corrupt anything - the statements are idempotent deletes - but they
  * would take conflicting locks on the same pages of the largest table in the service, at the worst
  * possible moment, and two of the three would do nothing but contend.
  *
  * <p>The lease is renewed between steps, and a lost lease stops the run. A purge is made of
  * independent statements, so stopping half way is safe: the remaining steps run on the next tick.
+ *
+ * <p>The lease length comes from {@code ludwig.job-core.lock.default-lease} rather than from a
+ * constant here, so the deployment has one failover time rather than one per job.
  */
 @Slf4j
 public class RetentionScheduler implements SmartLifecycle {
 
-    private final DistributedLock distributedLock;
+    private final RunLock runLock;
     private final RetentionService retentionService;
     private final TaskScheduler taskScheduler;
     private final NotificationProperties properties;
 
     private volatile ScheduledFuture<?> scheduledFuture;
 
-    public RetentionScheduler(DistributedLock distributedLock,
+    public RetentionScheduler(RunLock runLock,
                               RetentionService retentionService,
                               TaskScheduler taskScheduler,
                               NotificationProperties properties) {
-        this.distributedLock = distributedLock;
+        this.runLock = runLock;
         this.retentionService = retentionService;
         this.taskScheduler = taskScheduler;
         this.properties = properties;
@@ -66,13 +71,13 @@ public class RetentionScheduler implements SmartLifecycle {
 
     private void run() {
         try {
-            distributedLock.runIfLockAvailable(LockNames.RETENTION, this::purge);
+            runLock.runIfAvailable(LockNames.RETENTION, this::purge);
         } catch (RuntimeException e) {
             log.error("Retention purge run failed", e);
         }
     }
 
-    private void purge(DistributedLock.LockHandle lock) {
+    private void purge(RunLockHandle lock) {
         Instant now = Instant.now();
         // Order matters in one place only: content is dropped before the deliveries that own it, so
         // the cascade never has to do the work twice. The rest are independent.
@@ -93,8 +98,8 @@ public class RetentionScheduler implements SmartLifecycle {
     }
 
     /** Runs one purge step, unless the lock has been lost since the previous one. */
-    private long step(DistributedLock.LockHandle lock, java.util.function.LongSupplier work) {
-        if (!lock.renew()) {
+    private long step(RunLockHandle lock, java.util.function.LongSupplier work) {
+        if (!lock.renew(runLock.defaultLeaseTtl())) {
             log.warn("Retention purge stopped part way: the lock was lost");
             return 0L;
         }

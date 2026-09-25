@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for file-ingest. Changeset ids and author are namespaced ("ingest-NNN",
+      "ludwig-file-ingest") so they never collide with a consuming application's own changesets in the
+      shared DATABASECHANGELOG table - see FileIngestLiquibaseAutoConfiguration, which registers this
+      changelog as an independent SpringLiquibase bean, and ludwig.ingest.liquibase.enabled, which
+      switches that off for a service that would rather fold this into its own master history.
+
+      Postgres-only, like every other changelog in this repository. The per-task staging tables are
+      NOT here: they belong to the author's own schema, because only the author knows what a record
+      looks like, and a module that created them would be guessing at columns.
+    -->
+
+    <changeSet id="ingest-001-create-run" author="ludwig-file-ingest">
+        <createTable tableName="file_ingest_run">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="task" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!--
+              The identity triple. Its unique constraint (below) IS the exactly-once guard - not a
+              `processed` flag somebody remembers to check, because a flag is read and then acted on
+              and two replicas reading it in the same moment both act.
+
+              content_identity is the third column and the one that keeps the guard honest: keying on
+              the key alone means a partner re-uploading a CORRECTED file under the same name is
+              skipped as a duplicate, which is silent data loss discovered weeks later.
+            -->
+            <column name="container" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="object_key" type="VARCHAR(1024)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_identity" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_uri" type="VARCHAR(2048)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="status" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!--
+              The checkpoint. Advanced in the SAME transaction as the batch it describes - see
+              IngestRunner, where that invariant lives. It is a column on this row rather than a
+              separate progress table precisely so that it cannot be written in a second transaction:
+              two transactions give duplicates or a gap depending on which commits first, and there is
+              no ordering of them that is safe.
+            -->
+            <column name="checkpoint_kind" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="checkpoint_position" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="records_committed" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- The balance check's four numbers, plus the bytes, plus what the sentinel declared. -->
+            <column name="bytes_read" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="records_read" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="records_applied" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="records_quarantined" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="records_skipped" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expected_records" type="BIGINT"/>
+
+            <column name="locked_by" type="VARCHAR(255)"/>
+            <column name="started_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="finished_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="failure_message" type="VARCHAR(4000)"/>
+
+            <!--
+              The side effects that happen AFTER the run is COMPLETED, recorded so a crash between
+              them does not have to guess. The order is deliberate and stated in IngestRunner: status
+              first because it is the source of truth, then the receipt, then the archive. The reverse
+              leaves a bucket that says "done" and a database that says "never ran".
+            -->
+            <column name="receipt_written" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="archived" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint tableName="file_ingest_run"
+                             columnNames="container, object_key, content_identity"
+                             constraintName="ux_file_ingest_run_identity"/>
+    </changeSet>
+
+    <changeSet id="ingest-002-index-run-task-status" author="ludwig-file-ingest">
+        <!--
+          Covers the two questions asked on every pass: "is a run of this task still in progress"
+          (resume) and "what has this task done lately" (the endpoint and the missing-file check).
+          started_at is in the index because both read it in descending order and a sort of a
+          year of daily runs is otherwise the slowest part of a pass that should do nothing.
+        -->
+        <createIndex tableName="file_ingest_run" indexName="ix_file_ingest_run_task_status">
+            <column name="task"/>
+            <column name="status"/>
+            <column name="started_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="ingest-003-create-quarantine" author="ludwig-file-ingest">
+        <createTable tableName="file_ingest_quarantine">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="run_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="task" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!--
+              Position, twice over. The ordinal is what a person counts to in the file; the byte offset
+              is what a tool seeks to. A row with only a count sends whoever reads it back to the source
+              object to find a line they cannot address.
+            -->
+            <column name="record_ordinal" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="byte_offset" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- PARSE / APPLY / OVERSIZED: the first question about a quarantine spike is which. -->
+            <column name="stage" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Truncated by the engine at the task's quarantine.max-record-length. The record that
+                 failed is disproportionately likely to be the enormous one. -->
+            <column name="raw_record" type="TEXT"/>
+            <column name="error" type="VARCHAR(4000)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="quarantined_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!--
+          No foreign key to file_ingest_run, deliberately. The quarantine rows are the evidence about
+          a run, and a cascade that removed them with the run - or a constraint that refused to remove
+          the run while they existed - would make retention of the two a single decision. They are not
+          one decision: a run row is small and worth keeping for a long time, and a quarantine row can
+          be 8 KB of raw record.
+        -->
+        <createIndex tableName="file_ingest_quarantine" indexName="ix_file_ingest_quarantine_run">
+            <column name="run_id"/>
+            <column name="record_ordinal"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

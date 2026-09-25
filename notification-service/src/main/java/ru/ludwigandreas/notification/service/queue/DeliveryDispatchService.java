@@ -33,8 +33,6 @@ import ru.ludwigandreas.notification.service.template.RenderedTemplate;
 import ru.ludwigandreas.notification.service.template.TemplateCoordinates;
 import ru.ludwigandreas.notification.service.template.TemplateRenderer;
 import ru.ludwigandreas.notification.service.template.TemplateRevisionService;
-import ru.ludwigandreas.common.retryer.RetryPolicy;
-import ru.ludwigandreas.common.retryer.RetryingCall;
 import ru.ludwigandreas.observability.correlation.CorrelationContext;
 
 /**
@@ -301,8 +299,8 @@ public class DeliveryDispatchService {
      *
      * <h2>The in-attempt retry, and why it is so narrow</h2>
      *
-     * <p>{@code common-utils}' {@link RetryingCall} retries the provider call a couple of times
-     * before the delivery is failed and re-queued - but <em>only</em> when the failure was a refused
+     * <p>{@link #sendWithConnectionRetry} retries the provider call a couple of times before the
+     * delivery is failed and re-queued - but <em>only</em> when the failure was a refused
      * connection. That restriction is the whole of the design here.
      *
      * <p>Retrying a send in general is unsafe: a read timeout means the request was transmitted and
@@ -321,7 +319,7 @@ public class DeliveryDispatchService {
         Instant start = Instant.now();
         DeliveryResult result;
         try {
-            result = RetryingCall.with(connectionRetryPolicy(channel)).call(() -> sender.send(message));
+            result = sendWithConnectionRetry(sender, message, channel);
         } catch (RuntimeException e) {
             log.warn("Channel {} threw for delivery {} to {}", sender.name(), delivery.getId(),
                     Pii.address(message.address()), e);
@@ -342,18 +340,59 @@ public class DeliveryDispatchService {
     }
 
     /**
-     * Retries only a refused connection, and only a couple of times.
+     * Sends, retrying only a refused connection and only a couple of times.
      *
-     * <p>Built per call rather than held as a field: {@link RetryPolicy} is mutable, and one shared
-     * instance mutated by a configuration reload while another thread is reading it is the kind of
-     * bug that appears once a month and never reproduces.
+     * <p>The attempt budget and the pause between attempts are read from {@link ChannelRuntime} on
+     * every call rather than captured once: both are reloadable at runtime, and a value captured in
+     * a field would go on serving a configuration the operator has already changed.
+     *
+     * <p>Anything the predicate does not recognise as a refused connection is rethrown on the spot,
+     * unwrapped and unmodified, for {@link #send} to classify and record.
+     *
+     * @param sender  the channel being asked to deliver
+     * @param message the rendered notification to hand to it
+     * @param channel the channel type whose retry budget applies
+     * @return the provider's result for the first attempt that produced one
      */
-    private RetryPolicy connectionRetryPolicy(ChannelType channel) {
-        return new RetryPolicy()
-                .withMaxRetries(channelRuntime.inAttemptRetries(channel))
-                .withDelay(channelRuntime.inAttemptRetryDelay(channel).toMillis(),
-                        java.util.concurrent.TimeUnit.MILLISECONDS)
-                .retryIf(DeliveryDispatchService::isConnectionRefused);
+    private DeliveryResult sendWithConnectionRetry(NotificationChannel sender,
+                                                   RenderedNotification message,
+                                                   ChannelType channel) {
+        int maxRetries = Math.max(0, channelRuntime.inAttemptRetries(channel));
+        Duration delay = channelRuntime.inAttemptRetryDelay(channel);
+
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return sender.send(message);
+            } catch (RuntimeException e) {
+                if (attempt >= maxRetries || !isConnectionRefused(e)) {
+                    throw e;
+                }
+                log.debug("Connection refused on attempt {} of {} for channel {}; retrying in {}",
+                        attempt + 1, maxRetries + 1, channel, delay);
+                pauseBeforeRetry(delay);
+            }
+        }
+    }
+
+    /**
+     * Waits out the inter-attempt delay, honouring interruption.
+     *
+     * <p>A dispatch worker that is being shut down must not sit in a sleep: the interrupt is
+     * restored and the send is abandoned, so the delivery stays claimed and is picked up by the
+     * next cycle rather than being retried by a thread that is going away.
+     *
+     * @param delay how long to wait; zero or negative waits not at all
+     */
+    private static void pauseBeforeRetry(Duration delay) {
+        if (delay == null || delay.isZero() || delay.isNegative()) {
+            return;
+        }
+        try {
+            Thread.sleep(delay.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting to retry a refused connection", e);
+        }
     }
 
     /**

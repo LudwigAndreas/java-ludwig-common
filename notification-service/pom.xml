@@ -75,6 +75,16 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>db-core</artifactId>
         </dependency>
+        <!--
+            The platform's distributed lock (RunLock/JdbcRunLock, table job_run_lock) plus the
+            instance identity written into it. This service used to ship its own leased lock; it was
+            folded into job-core so the platform has one, and one operational behaviour to learn -
+            see the README, "The distributed lock lives in job-core".
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+        </dependency>
         <!-- The admin/history search endpoint's $filter/$orderby/$top/$skip. -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
@@ -146,11 +156,6 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>observability-spring-boot-starter</artifactId>
-        </dependency>
-        <!-- RetryingCall/RetryPolicy for the in-attempt retry inside a single channel send. -->
-        <dependency>
-            <groupId>ru.ludwigandreas</groupId>
-            <artifactId>common-utils</artifactId>
         </dependency>
 
         <!-- Backs the security module's authority cache. -->

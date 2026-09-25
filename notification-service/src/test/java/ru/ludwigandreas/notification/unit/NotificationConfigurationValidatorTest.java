@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 import ru.ludwigandreas.notification.config.NotificationConfigurationValidator;
 import ru.ludwigandreas.notification.service.preference.ConfiguredPreferenceSource;
+import ru.ludwigandreas.job.core.config.JobCoreProperties;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
 
 /**
@@ -75,16 +76,37 @@ class NotificationConfigurationValidatorTest {
                 .hasMessageContaining("high-priority-reserve");
     }
 
+    /**
+     * The lease is the failover time: a pod that dies holding the lock blocks that job until the
+     * lease lapses. Longer than the schedule and one killed pod costs several consecutive runs, while
+     * the scheduler still looks perfectly healthy.
+     */
     @Test
-    @DisplayName("a heartbeat that cannot fire several times per lease is refused")
-    void refusesASlowHeartbeat() {
+    @DisplayName("a lock lease longer than the schedule it guards is refused")
+    void refusesALeaseLongerThanTheSchedule() {
         NotificationProperties properties = defaults();
-        properties.getLocks().setLease(Duration.ofMinutes(2));
-        properties.getLocks().setHeartbeat(Duration.ofMinutes(1));
+        properties.getRetention().setRunInterval(Duration.ofMinutes(10));
+        JobCoreProperties jobCore = jobCoreDefaults();
+        jobCore.getLock().setDefaultLease(Duration.ofMinutes(30));
 
-        assertThatThrownBy(() -> validator(properties).validate())
+        assertThatThrownBy(() -> validator(properties, jobCore).validate())
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("locks.heartbeat");
+                .hasMessageContaining("default-lease");
+    }
+
+    /**
+     * A job that is switched off has no schedule to outlast, and failing a deployment over one would
+     * be a startup error about nothing.
+     */
+    @Test
+    @DisplayName("the lease is not checked against a job this deployment has disabled")
+    void ignoresTheScheduleOfADisabledJob() {
+        NotificationProperties properties = defaults();
+        properties.getRetention().setEnabled(false);
+        JobCoreProperties jobCore = jobCoreDefaults();
+        jobCore.getLock().setDefaultLease(Duration.ofHours(12));
+
+        validator(properties, jobCore).validate();
     }
 
     /**
@@ -174,13 +196,14 @@ class NotificationConfigurationValidatorTest {
     void reportsEveryProblem() {
         NotificationProperties properties = defaults();
         properties.getQueue().setHighPriorityReserve(properties.getQueue().getBatchSize());
-        properties.getLocks().setHeartbeat(properties.getLocks().getLease());
+        JobCoreProperties jobCore = jobCoreDefaults();
+        jobCore.getLock().setDefaultLease(Duration.ofDays(1));
 
-        assertThatThrownBy(() -> validator(properties).validate())
+        assertThatThrownBy(() -> validator(properties, jobCore).validate())
                 .isInstanceOf(IllegalStateException.class)
                 .satisfies(failure -> assertThat(failure.getMessage())
                         .contains("high-priority-reserve")
-                        .contains("locks.heartbeat"));
+                        .contains("default-lease"));
     }
 
     /**
@@ -195,17 +218,31 @@ class NotificationConfigurationValidatorTest {
         properties.getQueue().setBatchSize(50);
         properties.getQueue().setLeaseTimeout(Duration.ofMinutes(5));
 
-        assertThatThrownBy(() -> new NotificationConfigurationValidator(properties,
+        assertThatThrownBy(() -> new NotificationConfigurationValidator(properties, jobCoreDefaults(),
                 new MockEnvironment(), new ConfiguredPreferenceSource()).validate())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("lease-timeout");
     }
 
     private static NotificationConfigurationValidator validator(NotificationProperties properties) {
+        return validator(properties, jobCoreDefaults());
+    }
+
+    private static NotificationConfigurationValidator validator(NotificationProperties properties,
+                                                                JobCoreProperties jobCore) {
         MockEnvironment environment = new MockEnvironment();
         environment.setProperty("spring.mail.properties.mail.smtp.timeout", "10000");
         return new NotificationConfigurationValidator(
-                properties, environment, new ConfiguredPreferenceSource());
+                properties, jobCore, environment, new ConfiguredPreferenceSource());
+    }
+
+    /**
+     * The module default, five minutes - not the two minutes this service's application.yml sets, so
+     * that a case which cares about the lease says so rather than inheriting a number from a file
+     * these tests do not read.
+     */
+    private static JobCoreProperties jobCoreDefaults() {
+        return new JobCoreProperties();
     }
 
     /** The shipped defaults, with the two secrets a deployment must supply. */

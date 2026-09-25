@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import ru.ludwigandreas.observability.config.ObservabilityProperties;
 import ru.ludwigandreas.observability.correlation.CorrelationContext;
@@ -60,31 +61,63 @@ public class RestClientObservabilityAutoConfiguration {
     }
 
     /**
-     * The blocking correlation interceptor, reusing observability's own implementation.
+     * The two beans that name {@code observability-spring-boot-starter}'s types in their signatures.
      *
-     * <p>Registered as a plain {@code ClientHttpRequestInterceptor} bean, which
-     * {@code NamedClientFactory} adds to every blocking client it builds.
+     * <h2>Why a nested class and not two conditional bean methods</h2>
+     *
+     * <p>{@code @ConditionalOnClass} on a {@code @Bean} method is read from the bytecode and so does
+     * not itself load anything - but Spring still reflects over every method of the configuration
+     * class to build its metadata, and reflecting over a method whose parameter type is absent throws
+     * {@code NoClassDefFoundError} before any condition is consulted. The failure is
+     * "Failed to introspect Class [RestClientObservabilityAutoConfiguration]", and it takes the whole
+     * application context with it.
+     *
+     * <p>Moving those methods into a member class guarded at the class level is Spring Boot's own
+     * answer: the nested class is never loaded when the condition does not hold, so its method
+     * signatures are never reflected over. The rule to carry away is that a method signature can only
+     * be protected by a condition on the type that declares it.
      */
-    @Bean
+    @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(CorrelationContext.class)
-    @ConditionalOnBean(CorrelationContext.class)
-    @ConditionalOnMissingBean(name = "ludwigRestClientCorrelationInterceptor")
-    public ClientHttpRequestInterceptor ludwigRestClientCorrelationInterceptor(
-            CorrelationContext correlationContext, ObservabilityProperties observabilityProperties) {
-        return new CorrelationPropagatingRequestInterceptor(correlationContext,
-                observabilityProperties.getCorrelation().getHeaderName());
-    }
+    public static class PlatformObservabilityIntegration {
 
-    /** The ambient identity of the current unit of work, from the platform's own sources. */
-    @Bean
-    @ConditionalOnClass(CorrelationContext.class)
-    @ConditionalOnBean(CorrelationContext.class)
-    public CallContextSource ludwigRestClientPlatformCallContextSource(
-            CorrelationContext correlationContext, ObservabilityProperties observabilityProperties,
-            ObjectProvider<Tracer> tracer, ObjectProvider<PrincipalSupplier> principals) {
-        String header = observabilityProperties.getCorrelation().getHeaderName();
-        return new PlatformCallContextSource(correlationContext, header, tracer,
-                principals.getIfAvailable());
+        /**
+         * The blocking correlation interceptor, reusing observability's own implementation.
+         *
+         * <p>Registered as a plain {@code ClientHttpRequestInterceptor} bean, which
+         * {@code NamedClientFactory} adds to every blocking client it builds.
+         *
+         * @param correlationContext      the platform's correlation store
+         * @param observabilityProperties for the configured header name
+         * @return the interceptor
+         */
+        @Bean
+        @ConditionalOnBean(CorrelationContext.class)
+        @ConditionalOnMissingBean(name = "ludwigRestClientCorrelationInterceptor")
+        public ClientHttpRequestInterceptor ludwigRestClientCorrelationInterceptor(
+                CorrelationContext correlationContext, ObservabilityProperties observabilityProperties) {
+            return new CorrelationPropagatingRequestInterceptor(correlationContext,
+                    observabilityProperties.getCorrelation().getHeaderName());
+        }
+
+        /**
+         * The ambient identity of the current unit of work, from the platform's own sources.
+         *
+         * @param correlationContext      the platform's correlation store
+         * @param observabilityProperties for the configured header name
+         * @param tracer                  Micrometer's tracer, when one is present
+         * @param principals              the audited principal, when security is present
+         * @return the context source
+         */
+        @Bean
+        @ConditionalOnBean(CorrelationContext.class)
+        public CallContextSource ludwigRestClientPlatformCallContextSource(
+                CorrelationContext correlationContext, ObservabilityProperties observabilityProperties,
+                ObjectProvider<Tracer> tracer, ObjectProvider<PrincipalSupplier> principals) {
+            String header = observabilityProperties.getCorrelation().getHeaderName();
+            return new PlatformCallContextSource(correlationContext, header, tracer,
+                    principals.getIfAvailable());
+        }
     }
 
     /**

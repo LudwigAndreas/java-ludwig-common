@@ -24,4 +24,11 @@
         security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false.
     -->
     <include file="classpath:db/changelog/identity/identity-changelog.xml" relativeToChangelogFile="false"/>
+
+    <!--
+        And for the export module's four tables (export_report_run, export_report_output,
+        export_saved_report, export_report_subscription) - see ludwig.export.liquibase.enabled=false.
+        Its changeset ids are namespaced (export-NNN/ludwig-export) for the same reason.
+    -->
+    <include file="classpath:db/changelog/export/export-changelog.xml" relativeToChangelogFile="false"/>
 </databaseChangeLog>

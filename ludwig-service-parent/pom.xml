@@ -67,6 +67,45 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!--
+            Lombok, restated so that services get the same version the library modules get.
+
+            ludwig-bom pins it (see the note there: Lombok reaches into javac internals and needs a
+            build that knows the compiler it is running under), but a BOM *import* loses to
+            dependencyManagement *inherited* from a parent, and this file's parent is
+            spring-boot-starter-parent, which manages Lombok through its own lombok.version property.
+            Redeclaring that property here is Spring Boot's documented override and is what makes the
+            two agree.
+
+            Symptom when they do not: a service fails to compile with
+            "ExceptionInInitializerError: com.sun.tools.javac.code.TypeTag :: UNKNOWN" on any JDK
+            newer than the pinned Lombok supports - which is a toolchain the platform will meet long
+            before it changes maven.compiler.release. Like spring-boot.version, this number therefore
+            appears twice on purpose; move it together with ludwig-bom's.
+        -->
+        <lombok.version>1.18.38</lombok.version>
+
+        <!--
+            Mockito and Byte Buddy, restated for exactly the reason Lombok above is: a BOM *import*
+            loses to dependencyManagement *inherited* from a parent, and this file's parent is
+            spring-boot-starter-parent, which manages both through its own properties. Redeclaring
+            those properties here is Spring Boot's documented override and is the only thing that
+            reaches them.
+
+            Both are bytecode tools, and a bytecode tool has to understand the class file version of
+            the JDK it runs on. Symptom when they are left at Boot's line on a newer JDK: "Mockito
+            cannot mock this class ... Could not modify all classes [class java.lang.Object, ...]"
+            from net.bytebuddy.TypeCache, on every test that mocks a class rather than an interface.
+
+            Byte Buddy is pinned separately rather than inherited from Mockito, because Mockito's own
+            line lags the JDK by design and the agent has to be the newer of the two. It is also
+            Hibernate's bytecode provider, so this is not a test-only number: move it deliberately and
+            run the persistence integration tests when you do. Like spring-boot.version and lombok,
+            these appear twice on purpose; move them together with ludwig-bom's.
+        -->
+        <mockito.version>5.24.0</mockito.version>
+        <byte-buddy.version>1.18.14</byte-buddy.version>
+
+        <!--
             The platform version, used for artifacts this file has to name outside of
             dependencyManagement (a plugin's own <dependencies> are not dependency-managed).
             ${project.parent.version} is this file's version as seen from the inheriting service,

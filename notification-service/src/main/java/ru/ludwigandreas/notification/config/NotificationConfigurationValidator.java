@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.ConfigurableEnvironment;
+import ru.ludwigandreas.job.core.config.JobCoreProperties;
 import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.notification.service.preference.ConfiguredPreferenceSource;
 import ru.ludwigandreas.notification.service.preference.RecipientPreferenceSource;
@@ -37,17 +38,17 @@ public class NotificationConfigurationValidator {
      */
     private static final int LEASE_SAFETY_FACTOR = 2;
 
-    /** How much shorter a heartbeat must be than the lease it renews. */
-    private static final int HEARTBEAT_SAFETY_FACTOR = 3;
-
     private final NotificationProperties properties;
+    private final JobCoreProperties jobCoreProperties;
     private final ConfigurableEnvironment environment;
     private final RecipientPreferenceSource preferenceSource;
 
     public NotificationConfigurationValidator(NotificationProperties properties,
+                                              JobCoreProperties jobCoreProperties,
                                               ConfigurableEnvironment environment,
                                               RecipientPreferenceSource preferenceSource) {
         this.properties = properties;
+        this.jobCoreProperties = jobCoreProperties;
         this.environment = environment;
         this.preferenceSource = preferenceSource;
     }
@@ -57,7 +58,7 @@ public class NotificationConfigurationValidator {
     public void validate() {
         List<String> problems = new ArrayList<>();
         checkLease(problems);
-        checkHeartbeat(problems);
+        checkLockLease(problems);
         checkHighPriorityReserve(problems);
         checkWebhookSecret(problems);
         checkReceiptSecret(problems);
@@ -107,19 +108,42 @@ public class NotificationConfigurationValidator {
     }
 
     /**
-     * A heartbeat must fire several times per lease.
+     * A lock lease must not outlast the interval between the runs it guards.
      *
-     * <p>One renewal per lease leaves no margin: a single slow renewal - a garbage-collection pause,
-     * a database hiccup - loses the lock mid-job, and another replica starts the same digest run.
+     * <p>This check replaced a heartbeat-vs-lease one when the lock moved to {@code job-core}. That
+     * check had stopped describing anything real: neither scheduler renews on a timer, they renew
+     * between work items, so there was no heartbeat interval to be too long. The relationship that
+     * <em>is</em> real is this one, and it is the reason the lease javadoc has always said "short
+     * enough that a missed window is one window".
+     *
+     * <p>The lease is the failover time - a pod that dies holding the lock blocks that job for
+     * exactly this long, because nothing releases it and nothing can take it until it lapses. Make it
+     * longer than the schedule and one killed pod costs several consecutive runs, a digest backlog
+     * builds up behind a job that looks perfectly healthy in the scheduler, and the first symptom is
+     * a batch of digests that all arrive at once hours later.
+     *
+     * <p>Only jobs that are actually enabled are considered. Failing a deployment over the schedule
+     * of a job it has switched off would be a startup error about nothing.
      */
-    private void checkHeartbeat(List<String> problems) {
-        NotificationProperties.Locks locks = properties.getLocks();
-        Duration required = locks.getLease().dividedBy(HEARTBEAT_SAFETY_FACTOR);
-        if (locks.getHeartbeat().compareTo(required) > 0) {
+    private void checkLockLease(List<String> problems) {
+        Duration lease = jobCoreProperties.getLock().getDefaultLease();
+        if (properties.getDigest().isEnabled()) {
+            checkLeaseAgainstSchedule(problems, lease, "digest", properties.getDigest().getRunInterval());
+        }
+        if (properties.getRetention().isEnabled()) {
+            checkLeaseAgainstSchedule(problems, lease, "retention",
+                    properties.getRetention().getRunInterval());
+        }
+    }
+
+    private void checkLeaseAgainstSchedule(List<String> problems, Duration lease, String job,
+                                           Duration runInterval) {
+        if (lease.compareTo(runInterval) > 0) {
             problems.add(String.format(
-                    "locks.heartbeat (%s) is not at least %dx shorter than locks.lease (%s). A single "
-                            + "slow renewal would hand the lock to another replica mid-job.",
-                    locks.getHeartbeat(), HEARTBEAT_SAFETY_FACTOR, locks.getLease()));
+                    "ludwig.job-core.lock.default-lease (%s) is longer than %s.run-interval (%s). A "
+                            + "pod that died holding the lock would block more than one run, and the "
+                            + "backlog would build behind a job that still looks scheduled.",
+                    lease, job, runInterval));
         }
     }
 

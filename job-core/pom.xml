@@ -80,6 +80,20 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
+        <!--
+            Optional: only MicrometerRunLockListener touches it, and that class is loaded only behind
+            @ConditionalOnClass in JobCoreAutoConfiguration. A library must not drag an observability
+            stack into an application that did not ask for one, so a consumer without Micrometer gets
+            the no-op listener and is otherwise unaffected. The version comes from
+            spring-boot-dependencies via the reactor root - deliberately NOT pinned in ludwig-bom,
+            which would fork Micrometer from the Boot line that manages it.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Optional: the shipped changelog is only applied if the consumer uses Liquibase. -->
         <dependency>
             <groupId>org.liquibase</groupId>
@@ -92,6 +106,27 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!--
+            A real PostgreSQL for JdbcRunLockIT. The lock's correctness is entirely in how Postgres
+            behaves when two transactions meet on a row - ON CONFLICT, FOR UPDATE SKIP LOCKED and
+            RETURNING - so an in-memory database would pass the suite and prove nothing.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -99,6 +134,32 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+                Failsafe, which the library modules in this repository do not normally have: they run
+                their container-backed tests under surefire by naming them *IntegrationTest, because
+                surefire's default includes pick that up and nothing here excludes it.
+
+                This module needs the real split. JdbcRunLockIT starts a container and contends on it
+                from several threads, which is not something `mvn test` should do on every build of
+                every module that depends on job-core - and since the lock is now the platform's only
+                one, the suite has to exist and has to run somewhere. Binding failsafe here puts it at
+                `verify`, the same phase and the same name convention the services use, so there is
+                one rule to remember rather than two.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

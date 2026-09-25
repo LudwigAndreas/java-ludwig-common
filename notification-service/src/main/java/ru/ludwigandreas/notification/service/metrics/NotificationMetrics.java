@@ -90,6 +90,10 @@ public interface NotificationMetrics {
     /** A poll cycle that claimed nothing because the channel's rate-limit window was exhausted. */
     void recordRateLimited(ChannelType channel);
 
-    /** A maintenance job's attempt to take the distributed lock. */
-    void recordLockAcquisition(String lockName, boolean acquired);
+    /*
+     * There is deliberately no lock metric here. The distributed lock is job-core's, and so are its
+     * meters: ludwig.job.lock.acquisition{lock,acquired} and ludwig.job.lock.lost{lock}. A second
+     * counter recorded from this side would be a second answer to the same question, and the two
+     * would disagree the first time a lock was taken by anything other than a notification job.
+     */
 }

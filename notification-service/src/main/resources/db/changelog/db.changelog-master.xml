@@ -20,6 +20,20 @@
     <include file="classpath:db/changelog/outbox/outbox-changelog.xml" relativeToChangelogFile="false"/>
 
     <!--
+        Same arrangement for job-core's job_run_lock, which replaced this service's own
+        notification_lock - see ludwig.job-core.liquibase.enabled=false. Its changeset ids are
+        namespaced (job-core-NNN/ludwig-job-core).
+
+        This include sits ABOVE 0005, which drops notification_lock, and the order is not cosmetic:
+        an <include> contributes its changesets at the position it appears, so putting it after the
+        drop would leave a fresh database with neither lock table between the two changesets - and a
+        deployment that failed part way through the migration would come up with no lock at all.
+    -->
+    <include file="classpath:db/changelog/job-core/job-core-changelog.xml" relativeToChangelogFile="false"/>
+
+    <include file="classpath:db/changelog/changes/0005-fold-lock-into-job-core.xml" relativeToChangelogFile="false"/>
+
+    <!--
         Same arrangement for the identity projection's tables (security_user, security_partner,
         security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false. This
         service sets ludwig.identity.contact.enabled, so its security_user rows carry the verified

@@ -47,7 +47,7 @@ Location: /api/v1/notifications/0f8a…
 - [The two aggregates, and why](#the-two-aggregates-and-why)
 - [The delivery state machine](#the-delivery-state-machine)
 - [The delivery queue is not the outbox](#the-delivery-queue-is-not-the-outbox)
-- [Promotion candidates: the two platform gaps](#promotion-candidates-the-two-platform-gaps)
+- [Promotion candidates: one gap left, one filled](#promotion-candidates-one-gap-left-one-filled)
 - [The request contract](#the-request-contract)
 - [Running without a broker](#running-without-a-broker)
 - [The Kafka topic](#the-kafka-topic)
@@ -203,10 +203,12 @@ condition and removes the class of bug where the two disagree.
 Two more partial indexes exist for the SLO gauges (`created_at` over the claimable set) and the stale
 sweeper (`claimed_at` over `CLAIMED`).
 
-## Promotion candidates: the two platform gaps
+## Promotion candidates: one gap left, one filled
 
-Both live behind a narrow interface in this service and both belong in a platform starter. **Without
-either of them this service double-sends at more than one replica** — they are not optional polish.
+Two capabilities lived behind narrow interfaces here because the platform had neither, and **without
+either of them this service double-sends at more than one replica** — they were never optional polish.
+The narrow interface was the point: it is what made promoting one of them a move rather than a
+rewrite. One has since been promoted; the other is still here.
 
 ### 1. `IdempotencyStore` — consumer-side idempotency
 
@@ -233,26 +235,42 @@ can still miss a row whose inserting transaction has not committed.
 Scoped by ingress, because a Kafka record key and an HTTP `Idempotency-Key` come from different
 namespaces and a collision between them would silently drop a genuine request.
 
-### 2. `DistributedLock` — a leased, cluster-wide mutex
+### 2. The distributed lock — **promoted into `job-core`**
 
-The delivery poller **does not use it and must not**: `SKIP LOCKED` already partitions the queue, so
-three pollers claim disjoint batches with no coordination. Putting a lock there would throw away two
-thirds of the throughput to solve a problem that does not exist.
+This service no longer has a lock of its own. `DistributedLock`, `PostgresDistributedLock`,
+`LockLeaseService`, their repositories and entity, and the `notification_lock` table are gone; the
+maintenance jobs run under `job-core`'s `RunLock`, backed by `job_run_lock`. The two lock *names* stay
+here in `LockNames`, because a lock name is this service's coordination contract between its own
+replicas and means nothing to any other service.
 
-What needs it is every job defined over a *set* of rows rather than over each row independently: the
-digest collapse (three replicas → three digests for one person), the retention purge, and the
-suppression compaction.
+The reasoning that made a lock necessary here is unchanged and now lives in `job-core`. The delivery
+poller **does not use it and must not**: `SKIP LOCKED` already partitions the queue, so three pollers
+claim disjoint batches with no coordination, and putting a lock there would throw away two thirds of
+the throughput to solve a problem that does not exist. What needs it is every job defined over a *set*
+of rows rather than over each row independently: the digest collapse (three replicas → three digests
+for one person), the retention purge, and the suppression compaction.
 
-A leased row rather than `pg_try_advisory_lock`. An advisory lock is held by the database *session*,
-and with a connection pool the session returns to the pool the moment the statement finishes — so
-holding one across a multi-minute digest run means pinning a pooled connection and trusting nothing in
-the stack quietly returns it. It is also invisible: an operator asking "why has the digest not run for
-an hour?" has nothing to look at. A row with an explicit `expires_at` is inspectable, survives the
-connection, fails over on a configured timeout rather than an accidental one, and can be broken by
-hand.
+Still a leased row rather than `pg_try_advisory_lock`, for the same reason it always was. An advisory
+lock is held by the database *session*, and with a connection pool the session returns to the pool the
+moment the statement finishes — so holding one across a multi-minute digest run means pinning a pooled
+connection and trusting nothing in the stack quietly returns it. It is also invisible: an operator
+asking "why has the digest not run for an hour?" has nothing to look at. A row with an explicit
+`expires_at` is inspectable, survives the connection, fails over on a configured timeout rather than an
+accidental one, and can be broken by hand.
 
-Both are small, self-contained and dependency-free. Lifting `0003-notification-platform-gaps.xml`
-plus the two interfaces and their Postgres implementations into a starter would be a mechanical move.
+What changed in the fold, and why the platform's version won on every axis where the two differed:
+
+| | was, here | is, in `job-core` |
+|---|---|---|
+| Table | `notification_lock`, id **is** the lock name, release **deletes** the row | `job_run_lock`, surrogate id + unique `lock_name`, release nulls the owner and expires the row — so the table is bounded by lock names and acquisition has one shape instead of two |
+| Transactions | `@Transactional(REQUIRES_NEW)` on a separate `LockLeaseService` bean, which existed **only** to dodge Spring's proxy self-invocation trap, and which coupled leases to a `PlatformTransactionManager`, a JPA entity, entity scanning and a generated Q-type | a short auto-commit JDBC connection of its own — one class, no proxy caveat, no JPA at all |
+| Fencing | renew matched `owner` only, so a lease that lapsed and was re-acquired **by the same pod** renewed as though nothing had happened | renew matches `owner` **and** `run_id`, so a superseded run is told to stop — a correctness property this service did not have |
+| Lease TTL | `ludwig.notification.locks.lease` | `ludwig.job-core.lock.default-lease`, one failover time for the platform |
+| Metrics | `notification.locks{lock,outcome}` | `ludwig.job.lock.acquisition{lock,acquired}` plus `ludwig.job.lock.lost{lock}` — a failed renewal, the event worth alerting on, which **neither** implementation used to record |
+
+`IdempotencyStore` remains the one unpromoted gap. It is small, self-contained and dependency-free;
+lifting it and its half of `0003-notification-platform-gaps.xml` into a starter would be the same kind
+of mechanical move the lock turned out to be.
 
 ## The request contract
 
@@ -755,8 +773,8 @@ empty batches.
 | **Delivery poller** | **all three, no coordination** | `SKIP LOCKED` makes the claims disjoint; the per-delivery lease makes ownership explicit |
 | Rate limiter | shared counter | `FOR UPDATE` inside the reservation serializes the three; the sum never exceeds the limit |
 | Stale sweeper | all three | a conditional bulk update — whoever runs first reclaims, the others match nothing |
-| **Digest collapse** | **exactly one**, under `notification-digest` | defined over a *set* of rows; three replicas would send three digests to one person |
-| **Retention purge** | **exactly one**, under `notification-retention` | idempotent, but three would contend on the largest table at the worst moment |
+| **Digest collapse** | **exactly one**, under `job-core`'s `RunLock`, name `notification-digest` | defined over a *set* of rows; three replicas would send three digests to one person |
+| **Retention purge** | **exactly one**, under `RunLock`, name `notification-retention` | idempotent, but three would contend on the largest table at the worst moment |
 | Outbox publisher | all three | the outbox module's own `SKIP LOCKED` poller |
 
 Failure modes and what recovers them:
@@ -830,7 +848,12 @@ that has died.
 Also: `notification.requests{source,outcome}`, `notification.deliveries{channel,priority,outcome,reason}`,
 `notification.sends{channel,outcome,class}`, `notification.receipts`, `notification.queue.claims`,
 `notification.queue.reclaimed` (non-zero means a pod was killed), `notification.queue.rate.limited`,
-`notification.locks{lock,outcome}`, and timers for send, render and end-to-end latency.
+and timers for send, render and end-to-end latency.
+
+The lock meters are `job-core`'s, not this service's: `ludwig.job.lock.acquisition{lock,acquired}` and
+`ludwig.job.lock.lost{lock}`. A second counter recorded from this side would be a second answer to the
+same question, and the two would disagree the first time a lock was taken by anything other than a
+notification job.
 
 Template key is deliberately **not** a tag: it is bounded in principle by a directory somebody can add
 files to without touching this code, which is not a bound at all.
@@ -875,9 +898,16 @@ The most serious failure this service can have. Check in this order:
 
 ### A digest or the purge has not run
 
-Check `notification.locks{outcome}`. All three replicas reporting `contended` and none `acquired`
-means a lock is held by a pod that is gone. Inspect it — `SELECT * FROM notification_lock` — and
-either wait out `expires_at` (two minutes at the shipped configuration) or delete the row.
+Check `ludwig.job.lock.acquisition{lock,acquired}`. All three replicas reporting `acquired=false` and
+none `acquired=true` means a lease is held by a pod that is gone. Inspect it —
+`SELECT * FROM job_run_lock WHERE lock_name = 'notification-digest'` — and either wait out
+`expires_at` (`ludwig.job-core.lock.default-lease`, two minutes at the shipped configuration) or clear
+the owner: `UPDATE job_run_lock SET owner = NULL, run_id = NULL, expires_at = now() WHERE lock_name = …`.
+Do **not** delete the row — a released lease keeps its row by design, and the next tick reuses it.
+
+If instead `ludwig.job.lock.lost` is climbing, the opposite is happening: runs are being superseded
+mid-flight, so the lease is too short for the work. Raise `ludwig.job-core.lock.default-lease` — the
+startup validator refuses a lease longer than the schedule it guards, which is the ceiling.
 
 ### A template change has not taken effect
 

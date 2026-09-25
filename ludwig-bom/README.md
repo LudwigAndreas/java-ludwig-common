@@ -60,7 +60,7 @@ version in it is a literal. That matters: a consumer importing this BOM must not
 Every module in this repository, all at `${project.version}` — which the flattened POM turns into a
 literal, so a consumer never sees an unresolved expression:
 
-`common-utils` · `db-core` · `web-core-spring-boot-starter` · `odata-filter-spring-boot-starter` ·
+`db-core` · `web-core-spring-boot-starter` · `odata-filter-spring-boot-starter` ·
 `outbox-spring-boot-starter` · `security-spring-boot-starter` ·
 `identity-projection-spring-boot-starter` · `hot-reload-spring-boot-starter` ·
 `observability-spring-boot-starter` · `user-settings-spring-boot-starter` · `architecture-rules` ·

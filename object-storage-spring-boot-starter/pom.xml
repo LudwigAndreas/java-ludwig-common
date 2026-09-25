@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>object-storage-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Object storage Spring Boot starter</name>
+    <description>
+        One bucket client for the whole platform: a small ObjectStore contract with ranged reads and
+        lazily paged listing, an AWS SDK v2 implementation for S3 and anything speaking its API, and
+        a filesystem implementation that honours the same contract so local development and
+        container-free tests exercise the code that runs in production. Credentials are resolved by
+        the SDK's default provider chain and appear in no POM and no YAML.
+    </description>
+
+    <!--
+        A library module: parented by the reactor root, importing ludwig-bom. Deliberately NOT
+        ludwig-service-parent - see the note in that file. A module that baked in a Spring Boot line
+        could not be consumed by a service on a different one, and this one is meant to be consumed
+        by every service that touches a bucket.
+    -->
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            NOT optional, for the reason the export starter gives about the same dependency: every
+            failure this module reports to a caller is a LocalizedException rendered by web-core's
+            one ProblemDetail pipeline. A consumer that could not resolve web-core could not load
+            ObjectNotFoundException at all, so marking it optional would only move the failure from
+            resolution time to the first missing object.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
+            The S3 client. Versionless on purpose: software.amazon.awssdk:bom is imported by
+            ludwig-bom, so the whole SDK release train moves as one.
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <optional>true</optional>
+            <exclusions>
+                <!--
+                    The SDK's default sync client is the Apache one and its default async client is
+                    Netty. Nothing here is async: every method on ObjectStore returns a blocking
+                    InputStream or a Stream that pages on demand, and an async client would buy
+                    nothing while adding Netty, its transport and its own thread pool to every
+                    service that stores a file. Excluded rather than merely unused so that it cannot
+                    be picked up by an @ConditionalOnClass somewhere downstream.
+                -->
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+                <!--
+                    apache5-client, the SDK's newer default sync client, is excluded because it does
+                    not work on this platform's Spring Boot line. SDK 2.55 compiles it against
+                    httpclient5 5.5 and calls TlsSocketStrategy, a type that does not exist in the
+                    5.3.1 spring-boot-dependencies manages; leaving it on the classpath makes it the
+                    client the SDK picks by default and the first request dies with a
+                    NoClassDefFoundError rather than anything naming the version conflict.
+
+                    Overriding Boot's httpclient5 to 5.5 was the alternative and is worse: httpclient5
+                    is what Spring's own RestClient and the rest-client starter use, so the platform
+                    would be moving the HTTP stack of every service to satisfy one optional
+                    dependency of one module. The httpclient4 branch below has no such overlap - it is
+                    used by nothing else here - which makes it the change with the smaller blast
+                    radius as well as the one that works today.
+                -->
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache5-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--
+            The sync HTTP client, chosen over url-connection-client.
+
+            UrlConnectionHttpClient is smaller - it is HttpURLConnection and nothing else - and that
+            is exactly what rules it out here. It has no connection pool, so every request pays a
+            fresh TCP and TLS handshake: a listing that pages through ten thousand objects opens ten
+            thousand connections, and the ranged reads this module exists for are a long sequence of
+            requests against one endpoint, which is the case pooling is for. It also cannot express
+            a separate connection-acquire timeout, so a saturated pool is indistinguishable from a
+            slow server.
+
+            ApacheHttpClient brings httpclient and httpcore. That is the price, it is paid once per
+            service, and it buys the pool, per-phase timeouts and expect-continue on large PUTs.
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- DefaultCredentialsProvider and the static provider used for local MinIO/LocalStack. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>auth</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>regions</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- @NotBlank / @Min on the properties; the same validation every other starter's
+             properties class uses. -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>localstack</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ArchUnit, for this module's own internal boundaries: which packages may see the AWS
+             SDK, and that nothing here ships a @RestControllerAdvice. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <!--
+                Failsafe, bound for the same reason job-core binds it: the contract suite this
+                module is built around runs twice, once against a container and once against a
+                temporary directory, and the container half must not run on every `mvn test` of
+                every module that depends on this one. Surefire's default includes never match
+                `*IT.java`, so the container tests are named that way and run only at `verify`.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

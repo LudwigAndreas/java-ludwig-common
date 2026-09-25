@@ -89,6 +89,22 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>outbox-spring-boot-starter</artifactId>
         </dependency>
+        <!--
+            Tabular exports. The starter is inert until a ReportDefinitionSource bean exists, so it
+            costs a service that declares no reports nothing but the jar.
+
+            poi-ooxml is an optional dependency of the starter and has to be declared by whoever wants
+            XLSX: a service exporting CSV only should not carry a workbook library, and the starter's
+            XLSX writer is conditional on exactly this class being present.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>export-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+        </dependency>
         <!-- The REST foundation: localized RFC 9457 problems, LocalizedException/ProblemStatus and
              the paged response envelope. This is what removes this service's own exception advice,
              localization config and page DTO - and what makes the OData, security and db-core
@@ -96,6 +112,55 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
+            Outbound HTTP to the other services in the estate. Every dependency this service calls is
+            declared under ludwig.rest-client.clients with its own pool, timeouts, identity and
+            resilience policy; nothing about a client lives in a @Configuration class here.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>rest-client-spring-boot-starter</artifactId>
+        </dependency>
+        <!--
+            spring-webflux, although this service exposes and calls nothing reactive.
+
+            It is needed because rest-client's NamedClientFactory carries both halves of its job -
+            buildRest and buildWebClient - in one class, so verifying that class resolves WebClient and
+            the reactive observation convention whether or not any client is in `async` mode. Without
+            this on the classpath, creating ludwigNamedClientFactory fails with
+            "NoClassDefFoundError: org/springframework/web/reactive/function/client/ClientRequestObservationConvention",
+            which names nothing a reader would connect to a missing optional dependency.
+
+            Declared here rather than made non-optional in the starter deliberately: webflux on the
+            classpath of a service that has no servlet stack changes its web application type to
+            REACTIVE, so promoting it there would break every webflux-free consumer. The real fix is to
+            split buildWebClient into its own @ConditionalOnClass-guarded class - see the note in
+            rest-client's pom and RestClientObservabilityAutoConfiguration - and this line goes when
+            that lands. Harmless here regardless: with spring-boot-starter-web also present, Boot
+            resolves the application as SERVLET.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+        </dependency>
+
+        <!--
+            The CALLER half of OAuth2, and it is a different artifact from the callee half.
+
+            security-spring-boot-starter brings spring-boot-starter-oauth2-resource-server, which
+            VALIDATES inbound tokens. Minting an outbound one needs ClientRegistrationRepository from
+            oauth2-client, and without it two things break: the rest-client starter's
+            oauth2-client-credentials provider is simply absent, and its auth autoconfiguration fails
+            to introspect at all - see the note in this service's README.
+
+            Every service that calls another over authenticated HTTP needs this. Every service that
+            only answers does not.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
         </dependency>
         <!-- Authentication (edge-minted JWT + partner mTLS) and both levels of authorization. -->
         <dependency>
@@ -191,6 +256,16 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            The partner half of the catalogue report's enrichment test: a real HTTP server the
+            declarative supplier client actually calls, so the test covers the proxy, the query-string
+            binding and the deserialization rather than a hand-made stand-in for them.
+        -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

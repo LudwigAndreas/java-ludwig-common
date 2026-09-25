@@ -21,6 +21,7 @@ import ru.ludwigandreas.example.catalog.service.model.NewProduct;
 import ru.ludwigandreas.example.catalog.service.model.Product;
 import ru.ludwigandreas.example.catalog.service.model.ProductQuery;
 import ru.ludwigandreas.example.catalog.service.model.ProductUpdate;
+import ru.ludwigandreas.example.catalog.service.notification.StewardNotificationSettings;
 import ru.ludwigandreas.outbox.api.OutboxEvent;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
 import ru.ludwigandreas.security.data.DataAccessGuard;
@@ -45,11 +46,15 @@ public class ProductServiceImpl implements ProductService {
     /** The name this resource's scope mapping and policies are registered under. */
     private static final String RESOURCE_TYPE = "product";
 
+    /** Entry under {@code ludwig.outbox.routes} that carries steward notifications. */
+    private static final String NOTIFICATION_ROUTE = "product-notifications";
+
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductEntityMapper mapper;
     private final OutboxEventPublisher outboxEventPublisher;
     private final DataAccessGuard dataAccessGuard;
+    private final StewardNotificationSettings notificationSettings;
 
     @Override
     public Product create(NewProduct command) {
@@ -63,6 +68,7 @@ public class ProductServiceImpl implements ProductService {
         Product created = mapper.toDomain(productRepository.saveAndFlush(entity));
 
         publish(created, ProductEventType.CREATED);
+        requestStewardNotification(created);
         log.info("Created product {} (sku={})", created.id(), created.sku());
         return created;
     }
@@ -145,6 +151,37 @@ public class ProductServiceImpl implements ProductService {
 
     private CategoryEntity requireCategory(UUID id) {
         return categoryRepository.findById(id).orElseThrow(() -> new CategoryNotFoundException(id));
+    }
+
+    /**
+     * Asks the notification service to tell the catalogue stewards about a new product.
+     *
+     * <p>A second outbox row rather than a second consumer of the first one, because the two are
+     * different intentions with different destinations and different consequences. {@code
+     * ProductCreated} is a fact this service publishes to whoever is listening, and losing one
+     * subscriber's copy is that subscriber's problem; this is an instruction to one named peer, and
+     * it succeeds or dead-letters on its own. One row that meant both would have to share a retry
+     * budget and a dead-letter fate between a broker and an HTTP endpoint.
+     *
+     * <p>The route is named explicitly rather than matched by event type: an explicit route is the
+     * first thing the resolver honours, so this row's destination cannot be changed by somebody
+     * adding an unrelated entry to {@code ludwig.outbox.routes}.
+     */
+    private void requestStewardNotification(Product product) {
+        if (!notificationSettings.isEnabled()) {
+            return;
+        }
+        outboxEventPublisher.publish(OutboxEvent.builder()
+                .aggregateType(AGGREGATE_TYPE)
+                .aggregateId(product.id().toString())
+                .eventType(ProductEventType.NOTIFY_CREATED)
+                .payload(mapper.toPayload(product))
+                .route(NOTIFICATION_ROUTE)
+                // A distinct suffix from the domain event's key: idempotency_key is unique across the
+                // whole table, and the two rows describe the same change for different destinations.
+                .idempotencyKey(product.id() + ":" + ProductEventType.NOTIFY_CREATED + ":"
+                        + product.version())
+                .build());
     }
 
     private void publish(Product product, String eventType) {

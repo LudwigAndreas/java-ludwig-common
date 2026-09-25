@@ -24,6 +24,24 @@ re-implements the same five stages, and **only stage 3 actually differs between 
 A service author writes a demand query, a fetcher and a reconciler. Everything operational is
 `application.yaml`, and it is identical across services.
 
+### What this module is *not* for: a file that is the authority
+
+If the thing to be synchronised arrives as a **large file** rather than as a set of keys this service
+already knows about, you want [`file-ingest-spring-boot-starter`](../file-ingest-spring-boot-starter)
+instead, and the difference is not one of scale.
+
+This module is **demand-driven**: stage 2 asks "which *local* records need external state" and stage 3
+fetches *by key*. A file inverts that — the file is the authority, and its keys are unknown until it is
+read. `Fetcher.Paged` joins its results against demand, so **a record in the file with no matching
+local row would be silently dropped**, which is exactly the failure a bulk ingest exists to prevent.
+
+The per-record staging row this module keeps (`sync_inbox_record`, with `attempts`,
+`next_attempt_at`, `locked_by` and `version`) is right for a few thousand drifting records that each
+need their own retry budget, and wrong for ten million rows a day — the per-row bookkeeping would cost
+more than the import.
+
+`Fetcher` is `sealed` on purpose. A file is not a fifth fetch shape.
+
 ## Quick start
 
 ```xml
