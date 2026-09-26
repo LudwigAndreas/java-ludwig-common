@@ -17,8 +17,9 @@ import org.mockito.quality.Strictness;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.event.AuthorizationDeniedEvent;
 import org.springframework.security.core.Authentication;
-import ru.ludwigandreas.security.audit.AccessAuditLogger;
-import ru.ludwigandreas.security.audit.AccessDecision;
+import ru.ludwigandreas.audit.AuditEvent;
+import ru.ludwigandreas.audit.AuditOutcome;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.audit.AuthorizationDeniedAuditListener;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
 import ru.ludwigandreas.security.principal.LudwigAuthentication;
@@ -34,7 +35,7 @@ class AuthorizationDeniedAuditListenerTest {
     }
 
     @Mock
-    private AccessAuditLogger auditLogger;
+    private AuditSink auditSink;
 
     @Mock
     private SecurityMetrics metrics;
@@ -43,7 +44,7 @@ class AuthorizationDeniedAuditListenerTest {
     private MethodInvocation invocation;
 
     private AuthorizationDeniedAuditListener listener() {
-        return new AuthorizationDeniedAuditListener(auditLogger, metrics);
+        return new AuthorizationDeniedAuditListener(auditSink, metrics);
     }
 
     private Method approve() throws NoSuchMethodException {
@@ -70,14 +71,17 @@ class AuthorizationDeniedAuditListenerTest {
         listener().onApplicationEvent(new AuthorizationDeniedEvent<>(
                 () -> authentication, invocation, new AuthorizationDecision(false)));
 
-        ArgumentCaptor<AccessDecision> recorded = ArgumentCaptor.forClass(AccessDecision.class);
-        verify(auditLogger).record(recorded.capture());
-        assertThat(recorded.getValue().granted()).isFalse();
-        assertThat(recorded.getValue().subject()).isEqualTo("alice");
-        assertThat(recorded.getValue().principalType()).isEqualTo(PrincipalType.USER);
-        assertThat(recorded.getValue().resourceType()).isEqualTo("OrderService");
-        assertThat(recorded.getValue().action()).isEqualTo("approve");
-        assertThat(recorded.getValue().reason()).isEqualTo("insufficient-authority");
+        ArgumentCaptor<AuditEvent> recorded = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(auditSink).record(recorded.capture());
+        AuditEvent event = recorded.getValue();
+        assertThat(event.outcome().status()).isEqualTo(AuditOutcome.Status.DENIED);
+        assertThat(event.category()).isEqualTo("access");
+        assertThat(event.action()).isEqualTo("access.denied");
+        assertThat(event.actor().subject()).isEqualTo("alice");
+        assertThat(event.actor().principalType()).isEqualTo(PrincipalType.USER.name());
+        assertThat(event.resource().type()).isEqualTo("OrderService");
+        assertThat(event.attributes()).containsEntry("scopeAccess", "N/A");
+        assertThat(event.outcome().reason()).isEqualTo("insufficient-authority");
         verify(metrics).recordAccessDenied("OrderService", "approve");
     }
 
@@ -98,7 +102,7 @@ class AuthorizationDeniedAuditListenerTest {
                 new AuthorizationDecision(false))))
                 .doesNotThrowAnyException();
 
-        verify(auditLogger).record(org.mockito.ArgumentMatchers.any(AccessDecision.class));
+        verify(auditSink).record(org.mockito.ArgumentMatchers.any(AuditEvent.class));
     }
 
     @Test
@@ -109,8 +113,8 @@ class AuthorizationDeniedAuditListenerTest {
         listener().onApplicationEvent(new AuthorizationDeniedEvent<>(
                 () -> authentication, "some-request", new AuthorizationDecision(false)));
 
-        ArgumentCaptor<AccessDecision> recorded = ArgumentCaptor.forClass(AccessDecision.class);
-        verify(auditLogger).record(recorded.capture());
-        assertThat(recorded.getValue().resourceType()).isEqualTo("unknown");
+        ArgumentCaptor<AuditEvent> recorded = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(auditSink).record(recorded.capture());
+        assertThat(recorded.getValue().resource().type()).isEqualTo("unknown");
     }
 }

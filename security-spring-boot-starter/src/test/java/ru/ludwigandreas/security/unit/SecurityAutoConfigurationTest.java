@@ -6,12 +6,13 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.PermissionEvaluator;
-import ru.ludwigandreas.security.audit.AccessAuditLogger;
+import ru.ludwigandreas.audit.ActorResolver;
 import ru.ludwigandreas.security.authn.mtls.MutualTlsAuthenticationFilter;
 import ru.ludwigandreas.security.authn.mtls.PartnerIdentityResolver;
 import ru.ludwigandreas.security.authz.Authorities;
@@ -22,6 +23,7 @@ import ru.ludwigandreas.security.authz.PrincipalRef;
 import ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
 import ru.ludwigandreas.security.config.MutualTlsAutoConfiguration;
+import ru.ludwigandreas.security.config.SecurityAuditAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration;
 import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.data.DataScopeMapping;
@@ -44,7 +46,9 @@ class SecurityAutoConfigurationTest {
                     LudwigSecurityAutoConfiguration.class,
                     SecurityMetricsAutoConfiguration.class,
                     DataAuthorizationAutoConfiguration.class,
-                    MutualTlsAutoConfiguration.class));
+                    MutualTlsAutoConfiguration.class,
+                    AuditCoreAutoConfiguration.class,
+                    SecurityAuditAutoConfiguration.class));
 
     @Test
     @DisplayName("it contributes its problem mapper and bundle when web-core is present")
@@ -81,7 +85,7 @@ class SecurityAutoConfigurationTest {
                 .hasSingleBean(AuthorityResolver.class)
                 .hasSingleBean(AuthorityLookup.class)
                 .hasSingleBean(AuthorityCache.class)
-                .hasSingleBean(AccessAuditLogger.class)
+                .hasSingleBean(ActorResolver.class)
                 .hasSingleBean(SecurityMetrics.class)
                 .hasSingleBean(DataAccessGuard.class)
                 .hasSingleBean(DataScopeRegistry.class)

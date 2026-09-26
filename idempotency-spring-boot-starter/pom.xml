@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>idempotency-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Idempotency Spring Boot starter</name>
+    <description>
+        The platform's one work-dedup store: claiming a caller-supplied key in a scope so the same ask
+        cannot be acted on twice. One conditional upsert whose ON CONFLICT ... DO UPDATE makes the loser
+        of a race block on the winner's row lock and read the committed winner, in two explicit claim
+        modes - TRANSACTIONAL, which commits with the caller's own work so a rollback frees the key, and
+        STANDALONE, which runs an IN_PROGRESS -> COMPLETED | FAILED state machine under a lease so a
+        dead holder's key is reclaimed. On top of it: an HTTP filter that replays the original response
+        rather than re-running the handler, request fingerprinting so a recycled key is refused instead
+        of being answered with somebody else's resource, a Kafka record filter that turns at-least-once
+        delivery into at-most-once effect, and a retention purge on job-core's leased lock.
+    </description>
+
+    <!--
+        The JDK baseline and the spring-boot-dependencies import are inherited from the parent pom,
+        ru.ludwigandreas:common. Third-party versions are NOT: they live in ludwig-bom, imported below.
+
+        ludwig-bom is imported rather than inherited on purpose, and ru.ludwigandreas:common stays the
+        parent rather than ludwig-service-parent: a library built against a fixed
+        spring-boot-starter-parent bakes that Boot line into itself and stops being usable by a service
+        running a different one.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            ===========================================================================================
+            THE DEPENDENCY TRIPWIRE - read this before adding a consumer of this module.
+
+            One module is correct here, and the check that says so is: nothing upstream of db-core needs
+            the store. The lowest-level consumers of work-dedup are services and the outbox-facing
+            helpers, all of which already sit above db-core, job-core and web-core - so this module may
+            depend on all three directly and does.
+
+            If rest-client-*, hot-reload-* or anything else that db-core/web-core themselves depend on
+            ever needs the store, this module MUST be split into idempotency-core (the SPI, the key, the
+            fingerprint, with zero in-repo dependencies) and this starter. Maven's reactor DAG ignores
+            scope, so the cycle would appear as a reactor failure at the worst possible moment - during
+            somebody else's unrelated change - rather than as a compile error where the mistake was made.
+            audit-core exists because that split was forced there; it has not been forced here yet.
+            ===========================================================================================
+        -->
+
+        <!-- The platform's audit envelope and sink. A fingerprint mismatch and a replay are both events
+             the trail should carry; audit-core rather than audit-spring-boot-starter, because where the
+             trail is written is a deployment's decision and this module needs only the seam. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!-- job-core: the leased RunLock and the self-scheduling lifecycle the retention purge runs on.
+             The purge must run on exactly one replica, and that is what the platform's one lock is for -
+             inventing a second expiry story here is the mistake this module exists to stop repeating in
+             its own domain. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+        </dependency>
+
+        <!-- db-core: BaseRepository, GeneratedEntity and the auditing infrastructure the claim row uses. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+        </dependency>
+
+        <!--
+            NOT optional. The 409 for an in-flight duplicate and the 422 for a reused key with a
+            different body ARE LocalizedExceptions rendered by web-core's single RFC 9457 pipeline, and
+            this module ships no @RestControllerAdvice of its own. A service that could not resolve
+            web-core would not be able to load this module's exception types at all, so declaring it
+            optional would only move the failure to the first duplicate.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
+            The constraint annotations on IdempotencyProperties. The API only, not
+            spring-boot-starter-validation: a library has no business dragging Hibernate Validator into a
+            consumer, and Boot's configuration binding validates these only when the consumer has a
+            validator of its own - at which point the annotations are already here to be read.
+        -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+
+        <!-- Hibernate + Spring Data JPA + jakarta.persistence-api -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- SmartLifecycle/TaskScheduler behind the retention purge -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Every query in this module except the two statements in ru.ludwigandreas.idempotency.sql is
+             a compile-time-checked QueryDSL expression - see that package's documentation. -->
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-jpa</artifactId>
+            <classifier>jakarta</classifier>
+        </dependency>
+
+        <!-- The replayed response's headers are stored as JSON, and the request fingerprint hashes a
+             canonicalised JSON body so that key order and whitespace do not make one request look like
+             two. Both need a real parser rather than string handling. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Plug-and-play with Postgres, ships transitively to consumers. The conditional upsert is a
+             Postgres statement and this module says so rather than pretending to be portable. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Optional: schema delivered as a Liquibase changelog, only applied if the consumer uses Liquibase -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: the HTTP surface. A service whose only ingress is a Kafka consumer needs the store
+             and the record filter, and no servlet filter at all. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: consumer-side dedup as a RecordFilterStrategy. Deliberately not an AspectJ aspect:
+             an aspect would make this module drag spring-boot-starter-aop into every consumer, and the
+             filter strategy runs inside the listener container's transaction, which is exactly where a
+             TRANSACTIONAL claim has to happen. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: the Redis backend, which can only serve STANDALONE mode - see
+             RedisIdempotencyStore's javadoc for the caveat, which is stated on the class and not only in
+             the README because a team picking Redis for throughput needs to meet it where they
+             configure it. -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: claims won, duplicates replayed, in-flight collisions, fingerprint mismatches. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            A real PostgreSQL. Everything load-bearing in this module is how Postgres behaves when two
+            transactions meet on one row - ON CONFLICT, the row lock the loser blocks on, RETURNING - so
+            an in-memory database would pass the whole suite and prove none of it. A single-threaded
+            test proves nothing here either, which is why the suite contends from N threads.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ArchUnit, for the fence around this module's SQL carve-out and its own internal boundaries. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>com.querydsl</groupId>
+                            <artifactId>querydsl-apt</artifactId>
+                            <classifier>jakarta</classifier>
+                        </path>
+                        <path>
+                            <groupId>jakarta.persistence</groupId>
+                            <artifactId>jakarta.persistence-api</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+                Failsafe, for the same reason job-core has it: the contention suite starts a container
+                and races N threads on one key, which is not something `mvn test` should do on every
+                build of every module that depends on this one. Named *IT, run at `verify`, the same
+                convention the services use.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -25,7 +25,6 @@ import ru.ludwigandreas.job.core.lock.RunLock;
 import ru.ludwigandreas.job.core.lock.RunLockHandle;
 import ru.ludwigandreas.notification.repository.DeliveryStatusHistoryRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
-import ru.ludwigandreas.notification.repository.IdempotencyRecordRepository;
 import ru.ludwigandreas.notification.repository.NotificationRequestRepository;
 import ru.ludwigandreas.notification.repository.RateLimitWindowRepository;
 import ru.ludwigandreas.notification.repository.entity.CategoryKind;
@@ -36,7 +35,6 @@ import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntit
 import ru.ludwigandreas.notification.repository.entity.NotificationRequestEntity;
 import ru.ludwigandreas.notification.repository.entity.NotificationSource;
 import ru.ludwigandreas.notification.repository.entity.RequestStatus;
-import ru.ludwigandreas.notification.service.idempotency.IdempotencyStore;
 import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.notification.service.queue.ChannelRateLimiter;
 import ru.ludwigandreas.notification.service.queue.DeliveryClaimService;
@@ -85,8 +83,6 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
     @Autowired
     private DeliveryStatusHistoryRepository history;
 
-    @Autowired
-    private IdempotencyStore idempotencyStore;
 
     @Autowired
     private ChannelRateLimiter rateLimiter;
@@ -97,8 +93,6 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
     @Autowired
     private RateLimitWindowRepository rateLimitWindows;
 
-    @Autowired
-    private IdempotencyRecordRepository idempotencyRecords;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -118,7 +112,6 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
         requests.deleteAll();
         clearRunLocks();
         rateLimitWindows.deleteAll();
-        idempotencyRecords.deleteAll();
         requestId = transactionTemplate.execute(status -> requests.saveAndFlush(request()).getId());
     }
 
@@ -276,56 +269,17 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
                 .isEqualTo(DeliveryStatus.PENDING);
     }
 
-    /**
-     * The first of the two platform gaps. Read-then-insert passes a single-threaded test and fails
-     * exactly here: both replicas see "no row", both insert, and one takes a constraint violation
-     * that aborts a transaction which has already written a request and its deliveries.
+    /*
+     * The three idempotency-claim cases that used to sit here are gone, and not because they stopped
+     * mattering: the mechanism is no longer this service's. IdempotencyStoreIT in
+     * idempotency-spring-boot-starter now races N threads on one key, proves a rollback frees it, and pins
+     * the TTL and lease boundaries - against the same PostgreSQL, with more cases than these had. What this
+     * service still tests is its own contract: that a duplicate submit answers 200 with the original
+     * request and duplicate=true, in NotificationLifecycleIntegrationTest and RestIngressIntegrationTest.
+     *
+     * Keeping copies here would mean two suites asserting one mechanism, which is how they start to
+     * disagree - and the one in the module that owns the code is the one that would be updated.
      */
-    @Test
-    @DisplayName("three replicas claiming one idempotency key agree on a single winner")
-    void idempotencyClaimHasOneWinner() throws Exception {
-        List<UUID> candidates = new ArrayList<>();
-        for (int i = 0; i < REPLICAS; i++) {
-            candidates.add(UUID.randomUUID());
-        }
-
-        List<UUID> owners = inParallel(REPLICAS,
-                replica -> claimInTransaction("kafka", "shared-key", candidates.get(replica)));
-
-        assertThat(owners).as("every replica is told the same owner").hasSize(REPLICAS)
-                .containsOnly(owners.get(0));
-        assertThat(candidates).as("and the owner is one of the contenders").contains(owners.get(0));
-    }
-
-    @Test
-    @DisplayName("a second claim of the same key returns the first one's request, not a new one")
-    void idempotencyClaimIsStable() {
-        UUID first = UUID.randomUUID();
-        UUID second = UUID.randomUUID();
-
-        UUID firstOwner = claimInTransaction("rest", "k", first);
-        UUID secondOwner = claimInTransaction("rest", "k", second);
-
-        assertThat(firstOwner).isEqualTo(first);
-        assertThat(secondOwner).isEqualTo(first);
-    }
-
-    /**
-     * Scoped by ingress, because a Kafka record key and an HTTP Idempotency-Key come from different
-     * namespaces - and a collision between them would silently drop a genuine request.
-     */
-    @Test
-    @DisplayName("the same key in two ingress scopes is two different claims")
-    void idempotencyScopesAreSeparate() {
-        UUID viaKafka = UUID.randomUUID();
-        UUID viaRest = UUID.randomUUID();
-
-        UUID kafkaOwner = claimInTransaction("kafka", "same", viaKafka);
-        UUID restOwner = claimInTransaction("rest", "same", viaRest);
-
-        assertThat(kafkaOwner).isEqualTo(viaKafka);
-        assertThat(restOwner).isEqualTo(viaRest);
-    }
 
     /**
      * The fold's migration, on a database that never had the old table.
@@ -482,16 +436,6 @@ class DeliveryQueueConcurrencyTest extends NotificationTestBase {
         } finally {
             pool.shutdownNow();
         }
-    }
-
-    /**
-     * The claim has to run inside a transaction: it is {@code MANDATORY}, because a claim that
-     * committed on its own would leave a key reserved for a request whose transaction then rolled
-     * back - and the retry of that request would be rejected as a duplicate of something that does
-     * not exist.
-     */
-    private UUID claimInTransaction(String scope, String key, UUID requestUuid) {
-        return transactionTemplate.execute(status -> idempotencyStore.claim(scope, key, requestUuid));
     }
 
     private void givenPending(int count, DeliveryPriority priority) {

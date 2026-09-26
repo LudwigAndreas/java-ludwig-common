@@ -34,11 +34,11 @@ import ru.ludwigandreas.restclient.core.DefaultRestClientRegistry;
 import ru.ludwigandreas.restclient.core.NamedClientFactory;
 import ru.ludwigandreas.restclient.core.RestClientRegistry;
 import ru.ludwigandreas.restclient.observability.RestClientMeters;
-import ru.ludwigandreas.restclient.observability.audit.LoggingAuditEventEmitter;
 import ru.ludwigandreas.restclient.resilience.ResilienceMetricsBinder;
 import ru.ludwigandreas.restclient.resilience.ResiliencePolicyFactory;
 import ru.ludwigandreas.restclient.resilience.ResilienceRegistries;
-import ru.ludwigandreas.restclient.spi.AuditEventEmitter;
+import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.audit.redaction.SensitivityClassifier;
 import ru.ludwigandreas.restclient.spi.LudwigRestClientCustomizer;
 import ru.ludwigandreas.restclient.spi.LudwigWebClientCustomizer;
 import ru.ludwigandreas.restclient.spi.ResponseErrorTranslator;
@@ -145,13 +145,6 @@ public class RestClientAutoConfiguration {
                 io.micrometer.core.instrument.simple.SimpleMeterRegistry::new));
     }
 
-    /** The default audit sink; replaced per client by {@code audit.emitter}, or globally by a bean. */
-    @Bean
-    @ConditionalOnMissingBean
-    public AuditEventEmitter ludwigRestClientAuditEventEmitter() {
-        return new LoggingAuditEventEmitter();
-    }
-
     /** With neither observability nor security present, calls carry no ambient identity. */
     @Bean
     @ConditionalOnMissingBean
@@ -171,15 +164,17 @@ public class RestClientAutoConfiguration {
             RestClientMeters meters, CallContextSource callContext,
             ObjectProvider<ObservationRegistry> observationRegistry,
             org.springframework.beans.factory.BeanFactory beanFactory,
-            AuditEventEmitter defaultEmitter, Clock ludwigRestClientClock, Environment environment) {
+            AuditSink auditSink, SensitivityClassifier sensitivity, Clock ludwigRestClientClock,
+            Environment environment) {
         return new ClientRuntimeBuilder(properties, authenticators, policies,
                 ordered(listeners.orderedStream().toList()),
                 ordered(translators.orderedStream().toList()),
                 objectMapper.getIfAvailable(ObjectMapper::new), meters, callContext,
                 observationRegistry.getIfAvailable(() -> ObservationRegistry.NOOP),
-                (clientName, audit) -> audit.getEmitter() == null
-                        ? defaultEmitter
-                        : beanFactory.getBean(audit.getEmitter(), AuditEventEmitter.class),
+                (clientName, audit) -> audit.getSink() == null
+                        ? auditSink
+                        : beanFactory.getBean(audit.getSink(), AuditSink.class),
+                sensitivity,
                 ludwigRestClientClock,
                 environment.getProperty("spring.application.name", "ludwig-service"));
     }

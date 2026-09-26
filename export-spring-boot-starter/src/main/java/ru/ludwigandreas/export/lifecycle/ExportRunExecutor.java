@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.extern.slf4j.Slf4j;
 import ru.ludwigandreas.export.api.ExportAuditEvent;
-import ru.ludwigandreas.export.api.ExportAuditSink;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.export.api.ReportFormat;
 import ru.ludwigandreas.export.api.ReportRequest;
 import ru.ludwigandreas.export.api.RunStatus;
@@ -64,7 +64,7 @@ public class ExportRunExecutor {
     private final ReportRunEngine engine;
     private final ExportRunService lifecycle;
     private final ExportReportRunRepository runs;
-    private final ExportAuditSink audit;
+    private final AuditSink audit;
     private final ExportMetrics metrics;
     private final ExportProperties properties;
     private final JobInstanceIdentity identity;
@@ -77,7 +77,7 @@ public class ExportRunExecutor {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public ExportRunExecutor(ExecutionPlanner planner, ReportRunEngine engine,
                              ExportRunService lifecycle, ExportReportRunRepository runs,
-                             ExportAuditSink audit, ExportMetrics metrics, ExportProperties properties,
+                             AuditSink audit, ExportMetrics metrics, ExportProperties properties,
                              JobInstanceIdentity identity, Clock clock,
                              ScheduledExecutorService heartbeats, ReportWriterFactories formats) {
         this.planner = planner;
@@ -187,10 +187,12 @@ public class ExportRunExecutor {
                                 List<String> degraded, List<String> uris, long startedNanos) {
         long millis = (System.nanoTime() - startedNanos) / NANOS_PER_MILLI;
         metrics.runFinished(run.getDefinitionKey(), status.name(), rows, millis);
+        // The typed record is still what this module authors; toAuditEvent flattens it into the one
+        // envelope every sink in the platform receives.
         audit.record(new ExportAuditEvent(run.getId(), status, clock.instant(),
                 run.getDefinitionKey(), run.getSavedReportId(), run.getRequester(),
                 run.getParameters(), run.getColumnIds(), run.getFormats(), rows, uris, degraded,
-                run.getCorrelationId()));
+                run.getCorrelationId()).toAuditEvent());
     }
 
     @SuppressWarnings("unchecked")

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import ru.ludwigandreas.security.audit.AccessAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.data.DataAction;
 import ru.ludwigandreas.security.data.DataScope;
@@ -32,7 +32,7 @@ import ru.ludwigandreas.security.unit.OrderFixture.Order;
 
 class DataAccessGuardTest {
 
-    private static final AccessAuditLogger NO_AUDIT = decision -> { };
+    private static final AuditSink NO_AUDIT = event -> { };
 
     private DataScopeMapping<Order> orderMapping() {
         return DataScopeMapping.forResource("order", Order.class)
@@ -43,7 +43,7 @@ class DataAccessGuardTest {
     private DataAccessGuard guard(DataScopeProvider provider, Set<String> unscoped) {
         DataScopeRegistry registry = new DataScopeRegistry(List.of(orderMapping()), unscoped);
         return new DataAccessGuard(provider, registry, new DataScopePredicateFactory(), NO_AUDIT,
-                new NoopSecurityMetrics());
+                new NoopSecurityMetrics(), false);
     }
 
     @BeforeEach

@@ -7,9 +7,9 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.env.Environment;
+import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import ru.ludwigandreas.hotreload.audit.AuditingSourceChangeListener;
-import ru.ludwigandreas.hotreload.audit.HotReloadAuditLogger;
-import ru.ludwigandreas.hotreload.audit.Slf4jHotReloadAuditLogger;
 import ru.ludwigandreas.hotreload.binding.ConfigurationBinder;
 import ru.ludwigandreas.hotreload.binding.HotReloadTypedConfigFactory;
 import ru.ludwigandreas.hotreload.core.SourceReloadCoordinator;
@@ -36,7 +36,8 @@ class HotReloadAutoConfigurationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(HotReloadAutoConfiguration.class,
-                    HotReloadVaultAutoConfiguration.class, HotReloadFreemarkerAutoConfiguration.class));
+                    HotReloadVaultAutoConfiguration.class, HotReloadFreemarkerAutoConfiguration.class,
+                    AuditCoreAutoConfiguration.class));
 
     @Test
     void coreBeansAreRegisteredWhenEnabled() {
@@ -46,8 +47,6 @@ class HotReloadAutoConfigurationTest {
             assertThat(context).hasSingleBean(HotReloadTypedConfigFactory.class);
             assertThat(context).hasSingleBean(EnvironmentPropertySourceBridge.class);
             assertThat(context).hasBean("hotReloadFileWatcherLifecycle");
-            assertThat(context).hasSingleBean(HotReloadAuditLogger.class);
-            assertThat(context.getBean(HotReloadAuditLogger.class)).isInstanceOf(Slf4jHotReloadAuditLogger.class);
             assertThat(context).hasSingleBean(AuditingSourceChangeListener.class);
             assertThat(context).hasSingleBean(HotReloadMetrics.class);
             assertThat(context.getBean(HotReloadMetrics.class)).isInstanceOf(NoopHotReloadMetrics.class);
@@ -75,9 +74,11 @@ class HotReloadAutoConfigurationTest {
 
     @Test
     void customAuditLoggerBeanIsPreferredOverTheDefault() {
-        HotReloadAuditLogger custom = entry -> { };
-        contextRunner.withBean(HotReloadAuditLogger.class, () -> custom)
-                .run(context -> assertThat(context.getBean(HotReloadAuditLogger.class)).isSameAs(custom));
+        // The replacement for "publish your own HotReloadAuditLogger": a deployment publishes an
+        // AuditSink, which now also receives every other module's trail rather than only this one's.
+        AuditSink custom = event -> { };
+        contextRunner.withBean("customAuditSink", AuditSink.class, () -> custom)
+                .run(context -> assertThat(context).hasBean("customAuditSink"));
     }
 
     @Test

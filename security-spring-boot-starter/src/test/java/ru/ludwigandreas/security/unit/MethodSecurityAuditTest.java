@@ -10,6 +10,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,8 +18,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import ru.ludwigandreas.security.audit.AccessAuditLogger;
-import ru.ludwigandreas.security.audit.AccessDecision;
+import ru.ludwigandreas.audit.AuditEvent;
+import ru.ludwigandreas.audit.AuditOutcome;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration;
@@ -41,7 +43,8 @@ class MethodSecurityAuditTest {
             .withConfiguration(AutoConfigurations.of(
                     LudwigSecurityAutoConfiguration.class,
                     SecurityMetricsAutoConfiguration.class,
-                    DataAuthorizationAutoConfiguration.class))
+                    DataAuthorizationAutoConfiguration.class,
+                    AuditCoreAutoConfiguration.class))
             .withUserConfiguration(GuardedServiceConfiguration.class);
 
     @AfterEach
@@ -70,11 +73,11 @@ class MethodSecurityAuditTest {
             assertThatThrownBy(service::approve).isInstanceOf(AccessDeniedException.class);
 
             assertThat(audit.recorded()).hasSize(1);
-            AccessDecision decision = audit.recorded().get(0);
-            assertThat(decision.granted()).isFalse();
-            assertThat(decision.subject()).isEqualTo("alice");
-            assertThat(decision.resourceType()).isEqualTo("GuardedService");
-            assertThat(decision.action()).isEqualTo("approve");
+            AuditEvent event = audit.recorded().get(0);
+            assertThat(event.outcome().status()).isEqualTo(AuditOutcome.Status.DENIED);
+            assertThat(event.actor().subject()).isEqualTo("alice");
+            assertThat(event.resource().type()).isEqualTo("GuardedService");
+            assertThat(event.action()).isEqualTo("access.denied");
         });
     }
 
@@ -100,17 +103,17 @@ class MethodSecurityAuditTest {
         }
     }
 
-    static class RecordingAuditLogger implements AccessAuditLogger {
+    static class RecordingAuditLogger implements AuditSink {
 
-        private final List<AccessDecision> decisions = new CopyOnWriteArrayList<>();
+        private final List<AuditEvent> events = new CopyOnWriteArrayList<>();
 
         @Override
-        public void record(AccessDecision decision) {
-            decisions.add(decision);
+        public void record(AuditEvent event) {
+            events.add(event);
         }
 
-        List<AccessDecision> recorded() {
-            return decisions;
+        List<AuditEvent> recorded() {
+            return events;
         }
     }
 

@@ -468,3 +468,21 @@ Containers are started once for the suite rather than per class. `@Container` st
 when its test class finishes, so the second IT class gets new containers on new ports while Spring —
 whose context cache key has not changed — reuses the context wired to the old ones. The symptom is
 "connection refused" in the second class and nowhere else, a long way from its cause.
+
+## Auditing
+
+This module no longer has an audit mechanism of its own. `IngestAuditLogger` and `Slf4jIngestAuditLogger` are gone. Its trail now goes through the
+platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
+SIEM through the transactional outbox, or several at once - see
+[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
+
+`IngestAuditEvent` stays, with all nine of its action constants, and gained a `toAuditEvent()`. Its
+flat-record-with-a-details-map shape was vindicated rather than replaced: that is what the platform
+envelope is too. Two mappings are worth knowing - `failed` and `missing` become outcome `FAILURE` and
+`quarantined` becomes `PARTIAL`, so "did anything go wrong overnight" is a query on the outcome
+column rather than a list of action names somebody has to know; and the run id is an `attributes`
+entry rather than the resource id, because the resource an ingest event is about is the *task*, which
+outlives any one run and is what a `missing` event has instead of a run.
+
+**What a deployment notices:** the `ru.ludwigandreas.ingest.audit.Slf4jIngestAuditLogger` logger no longer exists; the trail is
+on `ru.ludwigandreas.audit` with `category=ingest`.

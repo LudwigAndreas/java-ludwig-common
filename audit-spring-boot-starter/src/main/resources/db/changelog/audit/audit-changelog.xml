@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for audit-spring-boot-starter. Changeset ids/author are namespaced ("audit-NNN",
+      "ludwig-audit") so they never collide with a consuming application's own changesets in the shared
+      DATABASECHANGELOG table - see AuditLiquibaseAutoConfiguration, which registers this changelog as an
+      independent SpringLiquibase bean. Postgres-only.
+    -->
+
+    <changeSet id="audit-001-create-audit-event" author="ludwig-audit">
+        <comment>
+            The platform's single audit trail. One flat table for every category, rather than one shaped
+            table per subsystem: the question this table exists to answer is "what happened around this,
+            in order, on this day", and answering it across nine tables means nine queries and a manual
+            merge at the moment somebody is trying to work out what a person did.
+
+            Append-only. There is no update path in the module and no delete path outside the retention
+            purge, and AuditEventEntity extends db-core's SnapshotEntity so SnapshotImmutabilityListener
+            rejects any @PreUpdate rather than this being a convention.
+
+            No foreign keys to anything, ever. An FK would force a key-share lock on the parent row on
+            every insert, contending with the work being audited - and the trail has to outlive the rows
+            it describes, which is exactly the case somebody asks about later.
+        </comment>
+        <createTable tableName="audit_event">
+            <!--
+              The primary key is AuditEvent.id, assigned when the event is constructed rather than by the
+              database. That is what makes it usable as the idempotency key when the event is shipped off
+              the platform: a redelivery collides on the key instead of appending a second copy of the
+              same event.
+            -->
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <!-- Provenance, from db-core's ExternalEntity. `imported_at` is when the row was written and
+                 `occurred_at` is when the thing happened; the two differ for an event relayed from
+                 another service, and only `occurred_at` has meaning to an auditor. `source_system`
+                 records which deployment wrote the row. -->
+            <column name="imported_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_system" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_version" type="VARCHAR(64)"/>
+            <column name="source_timestamp" type="TIMESTAMP WITH TIME ZONE"/>
+
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="action" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- The actor's stable id, and the same string db-core stamps into created_by for the same
+                 actor - see ActorResolverAuditorProvider. Not nullable: an event with no attributable
+                 actor carries 'system', because a null here would be indistinguishable from a bug in
+                 whatever resolved it. -->
+            <column name="actor_subject" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor_type" type="VARCHAR(64)"/>
+            <column name="actor_display_name" type="VARCHAR(255)"/>
+            <column name="on_behalf_of" type="VARCHAR(255)"/>
+
+            <column name="resource_type" type="VARCHAR(128)"/>
+            <!-- Null for an event about a set rather than an object: a query-level authorization
+                 decision whose answer was a predicate, a whole-profile read. -->
+            <column name="resource_id" type="VARCHAR(255)"/>
+            <column name="resource_name" type="VARCHAR(512)"/>
+
+            <column name="outcome" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason" type="TEXT"/>
+
+            <column name="correlation_id" type="VARCHAR(128)"/>
+            <column name="trace_id" type="VARCHAR(64)"/>
+
+            <!-- Everything module-specific, already redacted before it reached this module.  jsonb and
+                 not a child table of name/value pairs: the attributes differ per action and are read as
+                 a whole rather than filtered on, so a child table would turn every read into a join and
+                 every write into N inserts on the path of the work being audited. Deliberately not
+                 GIN-indexed - that costs write throughput on every audited operation to speed up a query
+                 an auditor runs monthly, and a deployment that needs it can add one. -->
+            <column name="attributes" type="JSONB"/>
+        </createTable>
+
+        <!-- "Everything this person did, newest first" - the query the consolidation exists for. -->
+        <createIndex tableName="audit_event" indexName="idx_audit_event_actor">
+            <column name="actor_subject"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <createIndex tableName="audit_event" indexName="idx_audit_event_category">
+            <column name="category"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <!-- The retention purge scans by age alone when no category overrides it. -->
+        <createIndex tableName="audit_event" indexName="idx_audit_event_occurred">
+            <column name="occurred_at"/>
+        </createIndex>
+        <createIndex tableName="audit_event" indexName="idx_audit_event_resource">
+            <column name="resource_type"/>
+            <column name="resource_id"/>
+        </createIndex>
+        <!-- "What else happened in that request", which is the question a correlation id exists for. -->
+        <createIndex tableName="audit_event" indexName="idx_audit_event_correlation">
+            <column name="correlation_id"/>
+        </createIndex>
+    </changeSet>
+
+    <!--
+      ======================================================================================
+      MIGRATION OF THE TWO LEGACY TRAILS
+
+      Both are guarded by a tableExists precondition, because these changesets ship to every consumer:
+      a service that never used user-settings or reconciliation has no such table, and a migration that
+      failed there would make this changelog unusable for it.
+
+      Both are also runAlways="true", and that is not belt and braces - without it the migration
+      silently moves nothing. Ordering between two SpringLiquibase beans is not the order their
+      autoconfigurations are registered in: measured, this changelog runs BEFORE both the consuming
+      application's own changelog and the other modules', so on the boot that introduces this module
+      neither legacy table exists yet. A changeset marked as ran is never reconsidered, so a one-shot
+      precondition would mark these as ran against an absent table and no row would ever migrate, with
+      nothing to say so. runAlways makes the changeset re-evaluate its precondition on every boot, and
+      the statements are idempotent (`WHERE NOT EXISTS`), so it moves rows on the first boot where the
+      table is there and is a no-op afterwards.
+
+      The cost is one anti-join per boot against a legacy table. It is bounded and it is temporary: once
+      a deployment has verified the migration and dropped the legacy table, the precondition fails and
+      the statement is not run at all. That is the intended end state - see this module's README.
+
+      The row-moving statements are <sql> rather than <insert>, because a set-based INSERT ... SELECT is
+      the only way to move an unknown number of rows in one statement - Liquibase's <insert> takes
+      literal values. That is the same reasoning the ingest module's bulk package states for its own SQL,
+      and a changelog is not Java: the repository's "QueryDSL only" rule is about application code, which
+      is why the read side of this table in AuditEventQueryRepositoryImpl has no SQL in it at all.
+      ======================================================================================
+    -->
+
+    <changeSet id="audit-002-migrate-user-setting-audit" author="ludwig-audit" runAlways="true">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="user_setting_audit"/>
+        </preConditions>
+        <comment>
+            Moves user_setting_audit into audit_event. A genuine audit trail, so it migrates rather than
+            staying in a table nothing fills: a consolidation that starts the new trail empty has moved
+            the auditor's problem rather than solved it.
+
+            The mapping, and what is not lost:
+              - action becomes 'setting.set' / 'setting.reset' / 'setting.admin-read', keeping the
+                distinction the SettingAuditAction enum carried;
+              - subject becomes on_behalf_of and actor becomes actor_subject, which is the direction the
+                old columns actually meant - 'subject' was whose setting changed, not who changed it;
+              - tenant_id, setting_key, category, scope_type, scope_id, old_value, new_value and redacted
+                all become attributes, because they are what that category's events are about and nothing
+                else in the platform has a column for them;
+              - the old redaction marker '[redacted]' is rewritten to the platform's, inline, which is
+                the whole reason picking one marker was a data migration rather than a constant change.
+                It is done here as well as in audit-004 on purpose: this statement is where a row is
+                authored, so a freshly migrated row is never briefly wrong, and audit-004 is then only
+                the safety net for rows an earlier release of this changeset moved.
+
+            imported_at is set to occurred_at rather than now(): the row is not being authored now, and a
+            reader comparing the two columns on a migrated row should see that nothing was relayed.
+        </comment>
+        <sql><![CDATA[
+            INSERT INTO audit_event (
+                id, imported_at, source_system, occurred_at, category, action,
+                actor_subject, actor_type, on_behalf_of,
+                resource_type, resource_id, outcome, correlation_id, attributes)
+            SELECT
+                a.id,
+                a.occurred_at,
+                'migrated:user-settings',
+                a.occurred_at,
+                'settings',
+                CASE a.action
+                    WHEN 'SET' THEN 'setting.set'
+                    WHEN 'RESET' THEN 'setting.reset'
+                    WHEN 'ADMIN_READ' THEN 'setting.admin-read'
+                    ELSE 'setting.' || lower(a.action)
+                END,
+                a.actor,
+                NULL,
+                a.subject,
+                'setting',
+                a.setting_key,
+                'SUCCESS',
+                a.correlation_id,
+                jsonb_strip_nulls(jsonb_build_object(
+                    'tenantId', a.tenant_id,
+                    'settingKey', a.setting_key,
+                    'settingCategory', a.category,
+                    'scopeType', a.scope_type,
+                    'scopeId', a.scope_id,
+                    'oldValue', CASE WHEN a.old_value = '[redacted]'
+                                     THEN '***REDACTED***' ELSE a.old_value END,
+                    'newValue', CASE WHEN a.new_value = '[redacted]'
+                                     THEN '***REDACTED***' ELSE a.new_value END,
+                    'redacted', a.redacted))
+            FROM user_setting_audit a
+            WHERE NOT EXISTS (SELECT 1 FROM audit_event e WHERE e.id = a.id);
+        ]]></sql>
+        <rollback>
+            <sql>DELETE FROM audit_event WHERE source_system = 'migrated:user-settings';</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="audit-003-migrate-sync-audit-record" author="ludwig-audit" runAlways="true">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="sync_audit_record"/>
+        </preConditions>
+        <comment>
+            Moves sync_audit_record into audit_event. Its Category enum (RUN, RECORD, JOB, LEASE,
+            OPERATOR) is preserved as an attribute rather than as audit_event.category, because
+            audit_event.category names the subsystem and these five name a kind of event within it -
+            collapsing them into the subsystem column would lose the distinction and make the column mean
+            two different things depending on the row.
+
+            Note that nothing in the repository ever wrote this table: the entity and its repository
+            existed and the PersistingReconciliationAuditLogger its javadoc referred to did not. The
+            migration runs anyway, because a deployment may have written rows through a logger of its own
+            and a migration that assumed the table was empty would silently discard them.
+        </comment>
+        <sql><![CDATA[
+            INSERT INTO audit_event (
+                id, imported_at, source_system, occurred_at, category, action,
+                actor_subject, on_behalf_of, resource_type, resource_id,
+                outcome, reason, correlation_id, attributes)
+            SELECT
+                r.id,
+                r.occurred_at,
+                'migrated:reconciliation',
+                r.occurred_at,
+                'reconciliation',
+                r.event,
+                COALESCE(r.principal, 'system'),
+                NULL,
+                'sync-task',
+                r.task_name,
+                'SUCCESS',
+                r.detail,
+                r.correlation_id,
+                jsonb_strip_nulls(jsonb_build_object(
+                    'eventCategory', r.category,
+                    'taskName', r.task_name,
+                    'subject', r.subject,
+                    'fromState', r.from_state,
+                    'toState', r.to_state,
+                    'runId', r.run_id::text,
+                    'instance', r.instance))
+            FROM sync_audit_record r
+            WHERE NOT EXISTS (SELECT 1 FROM audit_event e WHERE e.id = r.id);
+        ]]></sql>
+        <rollback>
+            <sql>DELETE FROM audit_event WHERE source_system = 'migrated:reconciliation';</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="audit-004-normalise-redaction-marker" author="ludwig-audit" runAlways="true">
+        <comment>
+            The safety net for the one redaction marker that was ever persisted.
+
+            user-settings stored '[redacted]' in old_value and new_value, so choosing a single platform
+            marker was a data migration and not a constant change: without it, the table spells one
+            concept two ways and no query can tell "redacted under the old rule" from "a user whose
+            setting value is literally the string [redacted]". The rest-client's '****' and the
+            hot-reload module's '***REDACTED***' were only ever logged, so they need nothing.
+
+            audit-002 already rewrites the marker as it migrates each row, so on a deployment that
+            adopts this module at this release there is nothing here to do. This changeset exists for a
+            deployment that ran an earlier release of audit-002, which migrated the marker verbatim -
+            and it is runAlways for the same reason audit-002 is.
+
+            Applied to the migrated attributes rather than to the old table, which is left untouched so a
+            deployment can verify the migration against it before dropping it.
+        </comment>
+        <sql><![CDATA[
+            UPDATE audit_event
+               SET attributes = jsonb_strip_nulls(
+                       attributes
+                       || CASE WHEN attributes->>'oldValue' = '[redacted]'
+                               THEN jsonb_build_object('oldValue', '***REDACTED***')
+                               ELSE '{}'::jsonb END
+                       || CASE WHEN attributes->>'newValue' = '[redacted]'
+                               THEN jsonb_build_object('newValue', '***REDACTED***')
+                               ELSE '{}'::jsonb END)
+             WHERE category = 'settings'
+               AND (attributes->>'oldValue' = '[redacted]' OR attributes->>'newValue' = '[redacted]');
+        ]]></sql>
+        <rollback>
+            <sql><![CDATA[
+                UPDATE audit_event
+                   SET attributes = jsonb_strip_nulls(
+                           attributes
+                           || CASE WHEN attributes->>'oldValue' = '***REDACTED***'
+                                   THEN jsonb_build_object('oldValue', '[redacted]')
+                                   ELSE '{}'::jsonb END
+                           || CASE WHEN attributes->>'newValue' = '***REDACTED***'
+                                   THEN jsonb_build_object('newValue', '[redacted]')
+                                   ELSE '{}'::jsonb END)
+                 WHERE category = 'settings'
+                   AND source_system = 'migrated:user-settings';
+            ]]></sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

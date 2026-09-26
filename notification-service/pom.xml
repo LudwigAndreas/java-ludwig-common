@@ -85,6 +85,22 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>job-core</artifactId>
         </dependency>
+        <!--
+            The platform's work-dedup store. This service used to ship the primitive itself - an
+            IdempotencyStore, a Postgres implementation, an entity and three repositories - and its README
+            called it promotion candidate #1; it was folded into idempotency-spring-boot-starter so the
+            platform has one, and one operational behaviour to learn.
+
+            The store stays DIRECTLY callable here rather than being replaced by that module's HTTP filter,
+            and that is a deliberate decision rather than a half-finished migration: this service's batch
+            endpoint carries one key per item in the body, which a header-based filter cannot serve, and
+            NotificationRequestResponse.duplicate is a documented part of this service's API. See the
+            README, "Promoted: the work-dedup store now lives in idempotency-spring-boot-starter".
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>idempotency-spring-boot-starter</artifactId>
+        </dependency>
         <!-- The admin/history search endpoint's $filter/$orderby/$top/$skip. -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>

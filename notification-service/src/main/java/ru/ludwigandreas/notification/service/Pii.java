@@ -17,7 +17,19 @@ import java.util.Locale;
  */
 public final class Pii {
 
-    /** What a value is replaced by when it is too short to mask meaningfully. */
+    /**
+     * What a value is replaced by when it is too short to mask meaningfully.
+     *
+     * <p>Not {@code Redaction.MASK}, and this is the one place in the platform where a second marker is
+     * correct rather than an oversight. The platform's marker is a <em>total</em> replacement, chosen
+     * because an audit row only has to record that a value changed. This class does <em>partial</em>
+     * masking on purpose - {@code j***n@e***.com} - because its whole reason for existing is that an
+     * operator can confirm they are looking at the right delivery while a customer reads their address
+     * out over the phone. This constant is the degenerate case of that scheme, for a value too short to
+     * keep a visible prefix, and it has to look like the rest of the scheme's output rather than like an
+     * audit marker.
+     */
+    // SUPPRESS CHECKSTYLE ID SecondRedactionMask - a partial-masking scheme, not the audit mask; see above.
     private static final String FULLY_MASKED = "***";
 
     /** Characters kept at the start of a local part or a host label. */

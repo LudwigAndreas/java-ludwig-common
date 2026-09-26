@@ -74,6 +74,15 @@ public enum RuleGroup {
     /** Mappers are MapStruct interfaces. */
     MAPPERS("mappers", true),
 
+    /**
+     * There is one audit trail, and nobody declares a second one.
+     *
+     * <p>On by default, and vacuous for a service that audits nothing - it then simply has no audit SPI
+     * to find. See {@link ru.ludwigandreas.archrules.rules.AuditRules} for what this group deliberately
+     * leaves to Checkstyle and why.
+     */
+    AUDIT("audit", true),
+
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);
 

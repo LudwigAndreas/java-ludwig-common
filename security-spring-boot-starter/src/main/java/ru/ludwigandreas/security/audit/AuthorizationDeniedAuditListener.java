@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.security.authorization.event.AuthorizationDeniedEvent;
 import org.springframework.security.authorization.method.MethodInvocationResult;
 import org.springframework.security.core.Authentication;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
@@ -25,6 +26,13 @@ import ru.ludwigandreas.security.principal.PrincipalType;
  * <p>The listener is deliberately total. An exception escaping an event listener would propagate into
  * the authorization decision that published it, so a bug in audit code could turn a clean 403 into a
  * 500 - or, worse, interfere with the denial itself. Everything here is wrapped.
+ *
+ * <p>This is the one place in the platform where a {@code catch} around the audit sink is still correct
+ * rather than an override of the deployment's {@code AuditFailurePolicy}. It is not protecting the
+ * caller from the sink - {@code FailurePolicyAuditSink} does that, and for the {@code access} category
+ * it logs and continues - it is protecting the authorization decision from <em>this listener</em>,
+ * including the reflection above it. An exception from a Spring event listener is not returned to a
+ * caller that can decide what to do with it; it replaces a denial with a fault.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -32,7 +40,7 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
 
     private static final String UNKNOWN = "unknown";
 
-    private final AccessAuditLogger auditLogger;
+    private final AuditSink auditSink;
     private final SecurityMetrics metrics;
 
     @Override
@@ -43,7 +51,7 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
             String action = method == null ? UNKNOWN : method.getName();
 
             metrics.recordAccessDenied(resourceType, action);
-            auditLogger.record(decisionFor(event, resourceType, action));
+            auditSink.record(decisionFor(event, resourceType, action).toAuditEvent());
         } catch (RuntimeException e) {
             log.warn("Failed to audit an authorization denial; the denial itself stands", e);
         }

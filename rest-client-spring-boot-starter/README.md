@@ -460,6 +460,17 @@ walks the parsed document, so `"name":"password"` survives and `"password":"hunt
 regular expression gets that backwards. Use `additional-redacted-headers` / `additional-redacted-fields`
 to add to the defaults; setting `redacted-headers` replaces them.
 
+The masking itself is now `audit-core`'s `Redactor`, shared with the whole platform: the structural JSON
+walk, the wholesale replacement of a form-encoded body and the truncation marker moved there unchanged,
+along with the reasoning and the tests that proved them. What stayed here is `ClientRedactor`, the
+per-client binding - *which* names this client masks, which is per-partner configuration and belongs next
+to the client.
+
+A per-client list can only **widen** what is masked, never narrow it: it is composed with the
+deployment-wide `ludwig.audit.redaction` rules rather than replacing them, so a body field called
+`client_secret` is masked whether or not this client's list happens to name it. Narrowing is the operation
+that leaks, and a module must not be able to undo a platform rule.
+
 ### Recipe: adding a listener
 
 ```java
@@ -498,6 +509,10 @@ that blocks makes every call slower; hand the work to an executor.
 Opt-in per client. Distinct from logging and not a louder version of it: an audit record is retained,
 is read by people who are not operators, and must never contain a credential or a payload.
 
+Whether a partner's calls are audited at all, at what sampling rate, and which of its headers are
+allow-listed stay here, per named client, because those are facts about the relationship with that partner.
+What moved to `ludwig.audit` is the destination, the failure policy and the retention.
+
 ```yaml
 ludwig:
   rest-client:
@@ -507,6 +522,7 @@ ludwig:
           enabled: true
           sampling-probability: 0.1
           include-response-headers: [X-Request-Id]
+          sink: mySiemAuditSink        # optional; a bean name, per client
 ```
 
 A record carries: client, method, **templated** URI, status, outcome, duration, attempts, correlation
@@ -517,10 +533,31 @@ person who remembered to extend it.
 Sampling applies to **successful calls only**. Failures, refused calls and authentication errors are
 always recorded: the rare events are what an audit exists for.
 
-The default sink writes one structured line to the `ludwig.restclient.audit` logger. A service that
-needs a table or a topic publishes an `AuditEventEmitter` bean and names it in `audit.emitter`. It
-must not block, and it must not throw - one that does is caught and counted, because an audit sink
-must not be able to fail a payment.
+Records go to the platform's single `AuditSink` with `category=outbound-call` - a log, the append-only
+`audit_event` table, a SIEM through the transactional outbox, or several at once. `NOT_PERMITTED` is
+recorded as outcome `DENIED` rather than as a failure: the call was refused by this service's own policy
+and nothing broke, which is the distinction an incident responder needs first.
+
+**`AuditEventEmitter` and `LoggingAuditEventEmitter` are gone, and `audit.emitter` is now `audit.sink`.**
+They were two of the nine audit mechanisms this platform had collected; see
+[`audit-core`](../audit-core). The property is renamed rather than aliased on purpose: an alias would let a
+property naming a bean of a type no longer on the classpath look like it was honoured. `audit.sink` stays
+**per client**, because one service can legitimately have to send one partner's trail to a vendor's API and
+the rest to the platform's sink.
+
+`OutboundCallAudit` stays as the authoring surface and gained a `toAuditEvent()`; everything it said about
+what an outbound-call record may contain still holds and is still where it was.
+
+"An audit sink must not be able to fail a payment" is still true for this category and is still enforced -
+by `FailurePolicyAuditSink`, which resolves `ludwig.audit.failure.by-category` and logs-and-continues for
+`outbound-call`. What is gone is the `catch` in `AuditRecorder`: keeping one there as well would override
+whatever a deployment configured with a decision hard-coded in a library, which is precisely what nine
+separate mechanisms did. The counter that made a silently-dropping sink visible is now platform-wide and
+tagged by category - `ludwig.audit.sink.failures{category="outbound-call"}` - rather than
+`RestClientMeters.auditFailure`, which remains as published API but is no longer incremented here.
+
+**What a deployment notices:** the `ludwig.restclient.audit` logger no longer exists; records are on
+`ru.ludwigandreas.audit` with `category=outbound-call`.
 
 ## Errors
 

@@ -9,8 +9,9 @@ import ru.ludwigandreas.reconciliation.api.ExternalStamp;
 import ru.ludwigandreas.reconciliation.api.FetchOutcome;
 import ru.ludwigandreas.reconciliation.api.ReconcileContext;
 import ru.ludwigandreas.reconciliation.api.ReconcileResult;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.NotFoundPolicy;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
 import ru.ludwigandreas.reconciliation.metrics.ReconciliationMetrics;
@@ -46,7 +47,7 @@ public class DirectApplyService {
     private static final Logger log = LoggerFactory.getLogger(DirectApplyService.class);
 
     private final ReconciliationMetrics metrics;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
     private final TransactionTemplate perRecord;
 
     /**
@@ -57,7 +58,7 @@ public class DirectApplyService {
      * @param transactionManager the transaction manager each record's apply runs against
      */
     public DirectApplyService(ReconciliationMetrics metrics,
-                              ReconciliationAuditLogger auditLogger,
+                              AuditSink auditLogger,
                               PlatformTransactionManager transactionManager) {
         this.metrics = metrics;
         this.auditLogger = auditLogger;
@@ -159,7 +160,7 @@ public class DirectApplyService {
         }
         metrics.recordRecordOutcome(settings.name(), outcome);
         if (settings.audit().enabled()) {
-            auditLogger.record(AuditEvent.builder(settings.name(), AuditEvent.Category.RECORD,
+            auditLogger.record(ReconciliationAuditEvent.builder(settings.name(), Category.RECORD,
                             "record." + outcome)
                     .subject(key).runId(context.runId()).correlationId(context.correlationId()).build());
         }

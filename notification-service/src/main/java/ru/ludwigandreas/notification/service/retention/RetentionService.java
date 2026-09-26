@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
-import ru.ludwigandreas.notification.repository.IdempotencyRecordRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.RateLimitWindowRepository;
 import ru.ludwigandreas.notification.repository.SuppressionRepository;
@@ -41,7 +40,6 @@ public class RetentionService {
 
     private final NotificationDeliveryRepository deliveryRepository;
     private final SuppressionRepository suppressionRepository;
-    private final IdempotencyRecordRepository idempotencyRepository;
     private final RateLimitWindowRepository rateLimitRepository;
     private final NotificationProperties properties;
 
@@ -84,11 +82,13 @@ public class RetentionService {
         return suppressionRepository.purgeExpired(now);
     }
 
-    /** Releases idempotency keys past their window, so a caller may reuse one. */
-    @Transactional
-    public long purgeIdempotencyKeys(Instant now) {
-        return idempotencyRepository.purgeExpired(now);
-    }
+    /*
+     * The idempotency purge used to be a step here. It is not gone, it moved: the claim table belongs to
+     * idempotency-spring-boot-starter now, and that module ships its own purge on job-core's leased lock -
+     * batched, with the lease renewed between batches, for the same reason the steps below are. A module that
+     * owns a TTL has to own the thing that makes the TTL true, and leaving that to every consumer is how one
+     * of them forgets and the table grows without limit.
+     */
 
     /** Deletes rate-limit counters for windows that have closed. */
     @Transactional

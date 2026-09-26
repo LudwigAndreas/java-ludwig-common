@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for idempotency-spring-boot-starter. Changeset ids and author are namespaced
+      ("idempotency-NNN", "ludwig-idempotency") so they never collide with a consuming application's own
+      changesets in the shared DATABASECHANGELOG table - see IdempotencyLiquibaseAutoConfiguration, which
+      registers this changelog as an independent SpringLiquibase bean. Postgres-only, because the claim is
+      a Postgres conditional upsert and this module says so rather than pretending to be portable.
+    -->
+
+    <changeSet id="idempotency-001-create-claim" author="ludwig-idempotency">
+        <comment>
+            The work-dedup claim table, promoted out of notification-service. Without it a service
+            double-sends the moment it runs at more than one replica: a Kafka consumer is at-least-once by
+            construction, and REST callers retry on timeouts that were often successful writes.
+        </comment>
+        <createTable tableName="idempotency_claim">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_idempotency_claim"/>
+            </column>
+            <!--
+              Scoped, not global: a Kafka record key and an HTTP Idempotency-Key come from different
+              namespaces, and a collision between them would silently drop a genuine request. The HTTP
+              surface narrows it further, to one scope per endpoint, because a client that generates one key
+              per user action and calls two endpoints with it is not sending a duplicate.
+            -->
+            <column name="scope" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- The holder. Updatable, unlike the scope and the key: a reclaim rewrites it in the same
+                 statement that would otherwise have inserted the row. -->
+            <column name="request_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <!-- IN_PROGRESS | COMPLETED | FAILED. A string rather than an ordinal: an ordinal makes
+                 inserting a constant a data migration, and makes this table unreadable to whoever is
+                 looking at it during an incident without the Java source to hand. -->
+            <column name="state" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- A hash of the request, not the request. Cheaper, and it keeps this table out of the set of
+                 places that accumulate request payloads - which would otherwise need audit-core's redaction
+                 rules applied to it and an entitlement check on every reader. -->
+            <column name="fingerprint" type="varchar(64)"/>
+            <!-- Null on every state but IN_PROGRESS. The single source of truth for "is this holder still
+                 working", with no participation from the holder required - which is the only way a claim
+                 survives the process holding it being killed. -->
+            <column name="lease_expires_at" type="timestamp with time zone"/>
+            <column name="failure_reason" type="varchar(512)"/>
+            <column name="response_status" type="integer"/>
+            <column name="response_content_type" type="varchar(128)"/>
+            <!-- text and not jsonb, unlike every other JSON column in this platform: nothing ever queries
+                 inside this value. It is written once by the filter and read once by the replay, whole. -->
+            <column name="response_headers" type="text"/>
+            <!-- bytea so a replay is byte-for-byte. Re-encoding a body through a varchar changes the length
+                 of anything outside ASCII, and a replay a client can tell from the original is not one. -->
+            <column name="response_body" type="bytea"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <!-- The window in which a retry is recognised, which makes it a correctness parameter rather
+                 than housekeeping: shortening it converts duplicates into double executions, not into disk
+                 savings. -->
+            <column name="expires_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!--
+          THE constraint. Everything else about this module is convenience; this is what makes it correct.
+          Two replicas processing the same at-least-once record both run the same
+          INSERT ... ON CONFLICT DO UPDATE, the second blocks on the first's row lock, and when it proceeds
+          it reads the committed winner instead of inserting a second claim. It is also the conflict target
+          the statement names, so a rename here is a compile-clean, silently-broken deployment.
+        -->
+        <addUniqueConstraint tableName="idempotency_claim" columnNames="scope, idempotency_key"
+                             constraintName="uk_idempotency_claim_key"/>
+
+        <!-- Serves the purge, which is the only query that reads rows by window rather than by key. -->
+        <createIndex tableName="idempotency_claim" indexName="ix_idempotency_claim_expiry">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+    <!--
+      ======================================================================================
+      MIGRATION OF notification-service's notification_idempotency
+
+      Guarded by a tableExists precondition, because this changelog ships to every consumer: a service that
+      never had that table must not be unable to use this module.
+
+      runAlways="true", and that is not belt and braces - without it the migration silently moves nothing.
+      Ordering between two SpringLiquibase beans is not the order their autoconfigurations are registered
+      in, and this changelog runs before the consuming application's own. A changeset marked as ran is never
+      reconsidered, so a one-shot precondition would mark this as ran against a table that is there and then
+      never reconsider a row inserted a second later. runAlways re-evaluates on every boot, and the statement
+      is idempotent (WHERE NOT EXISTS), so it moves rows on every boot where there are rows to move and is an
+      anti-join that finds nothing afterwards.
+
+      The same shape and the same reasoning as audit-002 and audit-003, which moved user_setting_audit and
+      sync_audit_record into audit_event. That is not a coincidence: it is the shape a promotion out of a
+      service into a platform module takes, and doing it differently here would mean two migration patterns
+      to learn.
+
+      WHY THE ROWS MOVE AT ALL, rather than the new table starting empty: every key in the old table is a
+      claim on work that has been done. Starting empty means every in-flight key is a duplicate the service
+      will act on a second time - once, during the deploy that migrates it. For notification-service that is
+      a second email or a second chat message to a real person, which is precisely the failure this module
+      exists to prevent, arriving as a side effect of introducing it.
+
+      WHY THE OLD TABLE IS NOT DROPPED HERE: a deployment verifies the counts first - see this module's
+      README and notification-service's. Once it drops the table, this precondition fails and the statement
+      is not run at all, which is the intended end state.
+      ======================================================================================
+    -->
+    <changeSet id="idempotency-002-migrate-notification-idempotency" author="ludwig-idempotency"
+               runAlways="true">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="notification_idempotency"/>
+        </preConditions>
+        <comment>
+            Moves notification_idempotency into idempotency_claim.
+
+            The mapping, and what is not lost:
+              - scope and idempotency_key carry over unchanged, so a key claimed under the old 'kafka' or
+                'rest' scope keeps deduplicating against redeliveries that are already in flight;
+              - request_id carries over, so a duplicate arriving after the deploy is still answered with the
+                id of the request that was actually created;
+              - state becomes COMPLETED, which is what every row in the old table meant: that table had no
+                state column because its only claim mode was the transactional one, where a visible row
+                describes committed work by construction;
+              - lease_expires_at, the response columns and fingerprint are null. The old primitive had no
+                in-progress state, stored no response and computed no fingerprint, and inventing values here
+                would be worse than absent ones - a fabricated fingerprint would refuse the very retries
+                these rows exist to recognise, because ClaimResult treats a null fingerprint as "never
+                mismatches" on purpose;
+              - created_at and expires_at carry over, so a migrated claim expires exactly when it would
+                have. Recomputing the window from now() would silently extend every in-flight key by a
+                whole TTL.
+
+            The id carries over too, which is what makes the anti-join below able to say "already moved".
+        </comment>
+        <sql><![CDATA[
+            INSERT INTO idempotency_claim (
+                id, scope, idempotency_key, request_id, state, fingerprint, lease_expires_at,
+                failure_reason, response_status, response_content_type, response_headers, response_body,
+                created_at, expires_at)
+            SELECT
+                n.id,
+                n.scope,
+                n.idempotency_key,
+                n.request_id,
+                'COMPLETED',
+                NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                n.created_at,
+                n.expires_at
+            FROM notification_idempotency n
+            WHERE NOT EXISTS (SELECT 1 FROM idempotency_claim c WHERE c.id = n.id)
+              AND NOT EXISTS (SELECT 1 FROM idempotency_claim c
+                              WHERE c.scope = n.scope AND c.idempotency_key = n.idempotency_key);
+        ]]></sql>
+        <!--
+          Two anti-joins rather than one. The first makes a re-run a no-op for rows this statement already
+          moved. The second is the one that matters on a live deployment: between one boot and the next, a
+          request may have claimed the same (scope, key) through the new table, and that claim is newer and
+          authoritative - inserting the old row would violate the unique constraint and fail the whole
+          migration, taking the application's startup with it.
+        -->
+        <rollback>
+            <sql>
+                DELETE FROM idempotency_claim c
+                USING notification_idempotency n
+                WHERE c.id = n.id;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -29,7 +29,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 import ru.ludwigandreas.notification.repository.DeliveryStatusHistoryRepository;
-import ru.ludwigandreas.notification.repository.IdempotencyRecordRepository;
+import ru.ludwigandreas.idempotency.repository.IdempotencyClaimRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.NotificationRequestRepository;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatus;
@@ -143,8 +143,15 @@ class KafkaIngressIntegrationTest {
     @Autowired
     private RecipientFixtures recipients;
 
+    /**
+     * The platform's claim table, which replaced this service's own {@code notification_idempotency}.
+     *
+     * <p>Cleared between cases for the same reason it always was: these cases replay one record deliberately,
+     * and a claim left behind by the previous case would make the replay look like the duplicate it is
+     * testing for.
+     */
     @Autowired
-    private IdempotencyRecordRepository idempotencyRecords;
+    private IdempotencyClaimRepository idempotencyClaims;
 
     @Autowired
     private DeliveryDispatchService dispatchService;
@@ -154,7 +161,7 @@ class KafkaIngressIntegrationTest {
         history.deleteAll();
         deliveries.deleteAll();
         requests.deleteAll();
-        idempotencyRecords.deleteAll();
+        idempotencyClaims.deleteAll();
         recipients.reset();
 
         recipients.givenUser(RECIPIENT_ID, RECIPIENT_EMAIL);

@@ -1,5 +1,7 @@
 package ru.ludwigandreas.usersettings.unit;
 
+import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
+import ru.ludwigandreas.security.config.SecurityAuditAutoConfiguration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.ZoneId;
@@ -34,7 +36,15 @@ class SettingsStartupValidationTest {
             .withConfiguration(AutoConfigurations.of(
                     DataSourceAutoConfiguration.class,
                     HibernateJpaAutoConfiguration.class,
-                    UserSettingsAutoConfiguration.class))
+                    UserSettingsAutoConfiguration.class,
+                    // The change trail now goes through the platform sink, so the slice needs the audit
+                    // wiring - it brings the SLF4J sink alone, no database and no scheduler. And the
+                    // security starter's audit autoconfiguration with it: audit-core's own two actor
+                    // resolvers deliberately step aside when LudwigPrincipal is on the classpath, because
+                    // only PrincipalActorResolver can read a subject out of one. A real service always has
+                    // it - it is ungated and in the imports file - but a hand-listed slice has to say so.
+                    AuditCoreAutoConfiguration.class,
+                    SecurityAuditAutoConfiguration.class))
             .withPropertyValues(
                     "ludwig.user-settings.owner.enabled=true",
                     "spring.datasource.url=jdbc:h2:mem:settings-startup;DB_CLOSE_DELAY=-1",

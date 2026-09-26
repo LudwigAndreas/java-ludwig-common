@@ -5,6 +5,7 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import ru.ludwigandreas.archrules.rules.AuditRules;
 import ru.ludwigandreas.archrules.rules.ConfigurationAccessRules;
 import ru.ludwigandreas.archrules.rules.ConfigurationPropertiesRules;
 import ru.ludwigandreas.archrules.rules.CycleRules;
@@ -76,7 +77,19 @@ class RuleEvaluationTest {
                 ConfigurationPropertiesRules.PROPERTIES_ARE_VALIDATED.value(),
                 OptionalUsageRules.NOT_A_FIELD_TYPE.value(),
                 MapperConventionRules.MAPPERS_ARE_MAPSTRUCT_INTERFACES.value(),
-                SpringWiringRules.SINGLETON_BEANS_ARE_STATELESS.value());
+                SpringWiringRules.SINGLETON_BEANS_ARE_STATELESS.value(),
+                AuditRules.NO_SECOND_AUDIT_SPI.value());
+    }
+
+    /**
+     * The rule that is the real deliverable of the audit consolidation: replacing nine mechanisms fixes the
+     * state of the code, and only a rule stops the same reasonable local decision being made again.
+     */
+    @Test
+    @DisplayName("a module inventing its own audit SPI is reported, and a query-side type is not")
+    void localAuditSpiIsReported() {
+        assertThat(Fixtures.failingRuleIds(Fixtures.configurationFor("bad.audit").build()))
+                .contains(AuditRules.NO_SECOND_AUDIT_SPI.value());
     }
 
     @Test

@@ -339,7 +339,7 @@ public class HotReloadProperties {
 
     public static class Audit {
 
-        /** When false, no {@code HotReloadAuditLogger} listener is registered. */
+        /** When false, no {@code AuditingSourceChangeListener} is registered and reloads are not audited. */
         private boolean enabled = true;
 
         /**

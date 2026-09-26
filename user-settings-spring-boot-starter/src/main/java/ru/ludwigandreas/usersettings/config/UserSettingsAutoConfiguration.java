@@ -25,10 +25,15 @@ import org.springframework.orm.jpa.SharedEntityManagerCreator;
 import ru.ludwigandreas.db.core.repository.BaseRepositoryImpl;
 import ru.ludwigandreas.security.authz.AuthorityLookup;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
+import ru.ludwigandreas.usersettings.api.SettingDefinition;
 import ru.ludwigandreas.usersettings.api.SettingDefinitionSource;
 import ru.ludwigandreas.usersettings.api.SettingScopeResolver;
 import ru.ludwigandreas.usersettings.api.SettingValueSource;
 import ru.ludwigandreas.usersettings.api.SettingsLookup;
+import ru.ludwigandreas.audit.ActorResolver;
+import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.audit.redaction.DeclaredSensitivityClassifier;
+import ru.ludwigandreas.audit.redaction.SensitivityClassifier;
 import ru.ludwigandreas.usersettings.audit.SettingsAuditRecorder;
 import ru.ludwigandreas.usersettings.audit.SettingsCorrelationIdProvider;
 import ru.ludwigandreas.usersettings.cache.CaffeineSettingsCache;
@@ -41,7 +46,6 @@ import ru.ludwigandreas.usersettings.exception.SettingConfigurationException;
 import ru.ludwigandreas.usersettings.metrics.NoopSettingsMetrics;
 import ru.ludwigandreas.usersettings.metrics.SettingsMetrics;
 import ru.ludwigandreas.usersettings.registry.SettingDefinitionRegistry;
-import ru.ludwigandreas.usersettings.repository.UserSettingAuditRepository;
 import ru.ludwigandreas.usersettings.repository.UserSettingValueRepository;
 import ru.ludwigandreas.usersettings.resolve.ConfiguredSettingValueSource;
 import ru.ludwigandreas.usersettings.resolve.DefaultSettingsLookup;
@@ -249,11 +253,49 @@ public class UserSettingsAutoConfiguration {
         return new ConfiguredSettingValueSource(defaults, registry);
     }
 
+    /**
+     * The change trail, written to the platform's shared sink.
+     *
+     * <p>No {@code UserSettingAuditRepository} any more: {@code user_setting_audit} migrated into
+     * {@code audit_event} and its entity and repositories are gone. What this bean still owns is the
+     * declarative PII rule - {@code SettingDefinition.isPii()} - which no heuristic and no configured list
+     * can replace, and which is contributed to the platform classifier by
+     * {@link #settingsSensitivityClassifier}.
+     *
+     * @param auditSink   the platform trail
+     * @param actors      the platform's one actor resolution, shared with db-core's created_by stamping
+     * @param correlation joins an event to the logs and traces of the same request
+     * @param userSettingsClock stamps the event
+     * @return the recorder
+     */
     @Bean
     @ConditionalOnMissingBean
-    public SettingsAuditRecorder settingsAuditRecorder(UserSettingAuditRepository repository,
-                                                       SettingsCorrelationIdProvider correlation) {
-        return new SettingsAuditRecorder(repository, correlation);
+    public SettingsAuditRecorder settingsAuditRecorder(AuditSink auditSink, ActorResolver actors,
+                                                       SettingsCorrelationIdProvider correlation,
+                                                       Clock userSettingsClock) {
+        return new SettingsAuditRecorder(auditSink, actors, correlation, userSettingsClock);
+    }
+
+    /**
+     * This module's classification rule, contributed to the platform's redaction.
+     *
+     * <p>The declarative classifier - the only one of the four that recognises <em>personal</em> data rather
+     * than <em>secret</em> data. A setting called {@code mobile} matches no secret-name heuristic and appears
+     * in no partner's header list, and a phone number in a trail retained for years outlives every erasure
+     * request that was meant to remove it.
+     *
+     * <p>Contributed as a bean so that anything else redacting in this service - a problem document, an
+     * outbound call carrying a settings payload - masks the same keys this module does, rather than each
+     * place having to ask the registry for itself.
+     *
+     * @param registry the declared settings
+     * @return the classifier
+     */
+    @Bean
+    public SensitivityClassifier settingsSensitivityClassifier(SettingDefinitionRegistry registry) {
+        return new DeclaredSensitivityClassifier(key -> registry.find(key)
+                .map(SettingDefinition::isPii)
+                .orElse(false));
     }
 
     @Bean

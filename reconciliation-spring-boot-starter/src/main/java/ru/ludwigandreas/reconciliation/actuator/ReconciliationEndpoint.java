@@ -9,8 +9,9 @@ import org.springframework.boot.actuate.endpoint.annotation.WriteOperation;
 import org.springframework.data.domain.PageRequest;
 import ru.ludwigandreas.db.core.audit.AuditorProvider;
 import ru.ludwigandreas.reconciliation.api.DemandTier;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.ReconciliationProperties;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
 import ru.ludwigandreas.reconciliation.engine.RegisteredTask;
@@ -77,7 +78,7 @@ public class ReconciliationEndpoint {
     private final QuotaLeaseRepository leases;
     private final DatabaseQuota quota;
     private final ReconciliationProperties properties;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
     private final AuditorProvider<String> auditor;
 
     /**
@@ -105,7 +106,7 @@ public class ReconciliationEndpoint {
                                   QuotaLeaseRepository leases,
                                   DatabaseQuota quota,
                                   ReconciliationProperties properties,
-                                  ReconciliationAuditLogger auditLogger,
+                                  AuditSink auditLogger,
                                   AuditorProvider<String> auditor) {
         this.registry = registry;
         this.runtime = runtime;
@@ -389,7 +390,7 @@ public class ReconciliationEndpoint {
     }
 
     private void audit(String task, String action, String detail) {
-        auditLogger.record(AuditEvent.builder(task, AuditEvent.Category.OPERATOR, "operator." + action)
+        auditLogger.record(ReconciliationAuditEvent.builder(task, Category.OPERATOR, "operator." + action)
                 .subject(task)
                 .principal(principal())
                 .detail(detail)

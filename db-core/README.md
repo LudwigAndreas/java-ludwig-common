@@ -142,6 +142,23 @@ authenticated principal's name; otherwise it falls back to `"system"`. Override 
 own `AuditorProvider<String>` bean, or implement `AuditorProvider<T>` directly for a non-`String`
 auditor type.
 
+**This is field stamping, and the audit consolidation deliberately left it alone.** `AuditedEntity` and
+`AuditorProvider` answer "who last touched this row" and put it in `created_by` / `last_modified_by`; an
+audit *trail* answers "what happened" and lives in `audit_event`, owned by
+[`audit-spring-boot-starter`](../audit-spring-boot-starter). Folding the two together would have changed
+the mapping of every entity in the platform for no gain, since they answer different questions.
+
+What *was* unified is the **resolution**. There used to be two paths to "who is acting" -
+`SpringSecurityAuditorProvider` here and `SecurityPrincipals.currentSubject()` in the settings module - and
+when two paths to one answer disagree, a row's `last_modified_by` and the audit event describing that
+modification name the same person differently, so the join an auditor needs does not exist. When the audit
+starter is present it publishes an `AuditorProvider` backed by the platform's single `ActorResolver`, which
+this module's own `@ConditionalOnMissingBean` then yields to, and the two agree by construction. A service
+that publishes its own provider still wins and is then responsible for keeping the two in step itself.
+
+`SnapshotImmutabilityListener` is also reused rather than duplicated: `audit_event` is a `SnapshotEntity`
+precisely so that the platform has one enforced-append-only mechanism rather than two.
+
 ## Query helpers
 
 ```java

@@ -44,8 +44,11 @@
 
         <!-- Library modules: parented by this POM, consumed as jars. -->
         <module>odata-filter-spring-boot-starter</module>
+        <module>audit-core</module>
         <module>db-core</module>
+        <module>audit-spring-boot-starter</module>
         <module>job-core</module>
+        <module>idempotency-spring-boot-starter</module>
         <module>export-spring-boot-starter</module>
         <module>object-storage-spring-boot-starter</module>
         <module>file-ingest-spring-boot-starter</module>

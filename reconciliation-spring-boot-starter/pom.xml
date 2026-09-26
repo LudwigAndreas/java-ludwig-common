@@ -44,6 +44,17 @@
     </dependencyManagement>
 
     <dependencies>
+        <!--
+            The platform's audit envelope and sink. This module's ReconciliationAuditLogger and its SLF4J
+            implementation are gone into it; its AuditEvent record survives, renamed
+            ReconciliationAuditEvent so that it and the platform envelope can be imported into one file,
+            with its Category enum intact as an attribute.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
         <!-- Backoff, scheduling base, SKIP LOCKED claim helper, instance identity, run lock -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>

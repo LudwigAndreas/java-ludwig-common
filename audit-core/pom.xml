@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>audit-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Ludwig audit core</name>
+    <description>
+        The platform's single audit envelope, its sink SPI and its redaction package. Depends on no
+        other module in this repository, and must not be given one: security-spring-boot-starter,
+        rest-client-spring-boot-starter and hot-reload-spring-boot-starter all sit below db-core and
+        all need to audit, so an edge from here to db-core would be a reactor cycle the moment
+        anything upstream of db-core wanted a trail. Everything that needs a database, a job
+        scheduler or an outbox lives in audit-spring-boot-starter instead.
+    </description>
+
+    <!--
+        Same arrangement as every other library module here: the JDK baseline and the
+        spring-boot-dependencies import come from the parent, third-party versions come from
+        ludwig-bom imported below, and the parent is deliberately NOT ludwig-service-parent - a
+        library that inherits spring-boot-starter-parent bakes one Boot line into itself and stops
+        being usable by a service running a different one.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!--
+            Autoconfiguration machinery, so that depending on this module is enough to get a working
+            sink. A module below db-core cannot take audit-spring-boot-starter, so if the wiring lived
+            only there those modules would each have to wire a sink for themselves - which is how nine
+            of them ended up with nine mechanisms in the first place.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Compile scope rather than optional, because the structural JSON redaction in
+            Redactor is not an optional extra: it is the one redaction rule in the platform
+            that finds a credential nested three objects deep, and a Redactor that silently
+            degraded to leaving bodies alone when Jackson happened to be absent would be a
+            redactor that leaks on exactly the deployments nobody checked.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!--
+            Optional: Spring Security is one way, not the only way, to resolve the actor. It has to be
+            declared here rather than only in the starter because the Spring Security resolver and the
+            unattributed fallback must be registered by the same autoconfiguration class - see
+            SpringSecurityActorResolver for what went wrong when they were not.
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

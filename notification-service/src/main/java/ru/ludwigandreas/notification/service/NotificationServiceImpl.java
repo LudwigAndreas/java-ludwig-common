@@ -24,7 +24,10 @@ import ru.ludwigandreas.notification.repository.entity.NotificationRequestEntity
 import ru.ludwigandreas.notification.repository.entity.NotificationSource;
 import ru.ludwigandreas.notification.repository.entity.RequestStatus;
 import ru.ludwigandreas.notification.service.exception.RequestNotFoundException;
-import ru.ludwigandreas.notification.service.idempotency.IdempotencyStore;
+import ru.ludwigandreas.idempotency.api.ClaimRequest;
+import ru.ludwigandreas.idempotency.config.IdempotencyProperties;
+import ru.ludwigandreas.idempotency.api.ClaimResult;
+import ru.ludwigandreas.idempotency.api.IdempotencyStore;
 import ru.ludwigandreas.notification.service.mapper.NotificationEntityMapper;
 import ru.ludwigandreas.notification.service.model.NotificationCommand;
 import ru.ludwigandreas.notification.service.model.NotificationRequestView;
@@ -77,6 +80,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationDeliveryRepository deliveryRepository;
     private final DeliveryFanOutService fanOutService;
     private final IdempotencyStore idempotencyStore;
+    private final IdempotencyProperties idempotencyProperties;
     private final TemplateRenderer templateRenderer;
     private final TemplateRevisionService templateRevisionService;
     private final NotificationEntityMapper mapper;
@@ -182,6 +186,33 @@ public class NotificationServiceImpl implements NotificationService {
      * <p>A command with no key is not an error: fire-and-forget callers who genuinely accept a
      * duplicate on a retry exist, and forcing a key on them would only produce keys made of random
      * values, which protect nothing while making the table grow.
+     *
+     * <h2>Why this calls the store directly rather than sitting behind the HTTP filter</h2>
+     *
+     * <p>{@code idempotency-spring-boot-starter} ships a filter that replays a completed duplicate's
+     * response, which is the better default for most APIs and the wrong one for this service. Two reasons,
+     * both of them contracts this service has already published:
+     *
+     * <ul>
+     *   <li>{@code NotificationRequestResponse.duplicate} is a documented field, and the 200-versus-202
+     *       distinction the controller makes is built on it. A filter would replay the original 202 instead,
+     *       silently changing what a retrying caller is told;</li>
+     *   <li>the batch endpoint carries one key <em>per item, in the body</em>, because a header cannot carry
+     *       one value per item. No header-based filter can serve it, so a partial adoption would leave the
+     *       two endpoints deduplicating differently - which is worse than either choice made consistently.
+     *   </li>
+     * </ul>
+     *
+     * <p>So the store is called here, in {@code TRANSACTIONAL} mode, which is exactly what the local
+     * primitive did: the claim is written in this method's transaction alongside the request row and its
+     * deliveries, and a rollback frees the key. That is required rather than convenient - a claim that
+     * committed independently would leave a key permanently reserved for a request whose transaction then
+     * rolled back, and the retry of that request would be rejected as a duplicate of something that does not
+     * exist.
+     *
+     * <p>The TTL comes from {@code ludwig.idempotency.ttl} (per scope where the two ingresses disagree)
+     * rather than from a property of this service. That is the point of the promotion: the window in which a
+     * retry is recognised is now one number for the platform instead of one per service.
      */
     private UUID claim(NotificationCommand command, UUID requestId) {
         if (!properties.getIdempotency().isEnabled()
@@ -192,7 +223,9 @@ public class NotificationServiceImpl implements NotificationService {
         String scope = command.source() == ru.ludwigandreas.notification.service.model.IngressSource.KAFKA
                 ? properties.getIdempotency().getKafkaScope()
                 : properties.getIdempotency().getRestScope();
-        return idempotencyStore.claim(scope, command.idempotencyKey(), requestId);
+        ClaimResult claim = idempotencyStore.claim(ClaimRequest.transactional(
+                scope, command.idempotencyKey(), requestId, idempotencyProperties.ttlFor(scope)));
+        return claim.owner();
     }
 
     private NotificationRequestEntity existing(UUID requestId) {

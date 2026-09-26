@@ -53,6 +53,19 @@
 
     <dependencies>
         <!--
+            For one thing only: ru.ludwigandreas.audit.redaction.Redaction.MASK. This module masks
+            sensitive MDC values in log lines, which is the same concern as masking them in the audit
+            trail, and the platform has exactly one marker for it - an operator who sees `***` in a log
+            line and `***REDACTED***` in the trail for the same field has two markers to learn instead of
+            one. audit-core is safe to depend on from anywhere because it depends on nothing in this
+            repository; see its README for why redaction lives there rather than in a redaction-core.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!--
             The three dependencies below are deliberately NOT optional, unlike most modules in this
             repository. This is a starter whose entire purpose is that a service gets metrics, logs
             and traces without assembling them: making the exporter optional would put the assembly

@@ -2,7 +2,7 @@ package ru.ludwigandreas.restclient.core;
 
 import ru.ludwigandreas.restclient.config.ClientProperties;
 import ru.ludwigandreas.restclient.observability.ExchangeLogger;
-import ru.ludwigandreas.restclient.observability.HeaderRedactor;
+import ru.ludwigandreas.restclient.observability.ClientRedactor;
 import ru.ludwigandreas.restclient.observability.audit.AuditRecorder;
 import ru.ludwigandreas.restclient.resilience.RetryPolicy;
 
@@ -25,6 +25,6 @@ public record RefreshableClientState(
         ClientProperties properties,
         RetryPolicy retry,
         ExchangeLogger exchangeLogger,
-        HeaderRedactor redactor,
+        ClientRedactor redactor,
         AuditRecorder audit) {
 }

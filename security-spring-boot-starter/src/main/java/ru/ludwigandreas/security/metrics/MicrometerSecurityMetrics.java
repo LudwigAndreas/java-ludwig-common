@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
  * action, a fixed reason enum. Nothing caller-controlled (subject, partner id, request path) is ever
  * used as a tag: that would let an external caller drive cardinality in the metrics backend, which is
  * both a cost problem and a denial-of-service vector. Per-subject detail belongs in the audit log
- * ({@link ru.ludwigandreas.security.audit.AccessAuditLogger}), which is built to hold it.
+ * (the platform's {@link ru.ludwigandreas.audit.AuditSink}), which is built to hold it.
  */
 @RequiredArgsConstructor
 public class MicrometerSecurityMetrics implements SecurityMetrics {

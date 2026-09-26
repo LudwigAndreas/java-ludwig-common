@@ -71,7 +71,7 @@ full stop, regardless of what a hot-reloaded file or Vault secret says.
 | FreeMarker templates | `template` |
 | Configuration, autoconfiguration | `config` (`HotReloadProperties`, `ludwig.hotreload.*`) |
 | Generic reload notification | `event` (`ConfigurationRefreshedEvent`) |
-| Audit trail (who/when/old/new) | `audit` (`HotReloadAuditLogger`, `HotReloadAuditEntry`) |
+| Audit trail (who/when/old/new) | `audit` (`HotReloadAuditEntry`, `AuditingSourceChangeListener`) |
 | Metrics | `metrics` (Micrometer, optional) |
 
 ## Configuration reference
@@ -165,28 +165,38 @@ Configuration freeMarkerConfiguration(HotReloadableTemplateLoader templateLoader
 
 ## Audit trail
 
-Every successful reload produces one `HotReloadAuditEntry` per changed key - source, timestamp, actor,
-old value, new value - handed to a `HotReloadAuditLogger`:
+Every successful reload produces one `HotReloadAuditEntry` - source, timestamp, actor, and the old and
+new value of every key that changed - which is flattened into the platform's audit envelope and handed to
+the single `AuditSink`:
 
 ```java
 public record HotReloadAuditEntry(String sourceId, Instant timestamp, String actor,
                                    Map<String, ValueChange> changes) {
     public record ValueChange(Object oldValue, Object newValue) { }
+    public AuditEvent toAuditEvent() { ... }        // action: config.reloaded
 }
 ```
 
-The default implementation (`Slf4jHotReloadAuditLogger`) logs one structured line per changed key. For a
-regulated environment, supply your own `@Bean HotReloadAuditLogger` - persist to a table, ship to a SIEM -
-the same way `outbox-spring-boot-starter` lets you replace `OutboxAuditLogger`:
+**`HotReloadAuditLogger` and `Slf4jHotReloadAuditLogger` are gone.** They were two of the nine audit
+mechanisms this platform had collected, and the trail now goes wherever every other module's goes - a log,
+the append-only `audit_event` table, a SIEM through the transactional outbox, or several at once. See
+[`audit-core`](../audit-core). For a regulated environment, publish an `@Bean AuditSink` instead of a
+`HotReloadAuditLogger`, and you get every other module's trail through the same bean rather than only this
+one's:
 
 ```java
 @Bean
-HotReloadAuditLogger hotReloadAuditLogger(MyAuditRepository repository) {
-    return entry -> entry.changes().forEach((key, change) ->
-            repository.save(new AuditRow(entry.sourceId(), entry.timestamp(), entry.actor(),
-                    key, change.oldValue(), change.newValue())));
+AuditSink auditSink(MySiemClient siem) {
+    return event -> siem.ship(event);               // every category, not just config
 }
 ```
+
+**One reload is now one event, not one event per key.** The changed keys are an attribute - a map of
+`key -> {old, new}` plus a sorted `changedKeys` list - because a reload *is* one thing that happened:
+somebody edited a ConfigMap once. `Slf4jHotReloadAuditLogger` did log a line per key, and splitting a
+reload into N events would make "what did that reload change" a correlation problem instead of a single
+row. A failed reload is a separate action, `config.reload-failed`, with outcome `FAILURE`, rather than an
+entry with an empty change set - "nothing changed" and "it broke" must not be the same shape.
 
 **What `actor` is, and what it isn't.** `actor` identifies *this application instance* (the local
 hostname by default, override with `ludwig.hotreload.audit.actor`) - i.e. "which instance observed and
@@ -194,17 +204,25 @@ applied the change, and when." It is **not** the upstream identity that made the
 place. Neither a mounted file nor a plain Vault read exposes who wrote it - that's what Vault's own audit
 device (or `git blame` on the ConfigMap/Secret manifest) is for. This library's audit trail is the
 complementary "who/when noticed and applied it" record on the consuming side, not a replacement for
-Vault's audit log.
+Vault's audit log. It is recorded with `principalType` `INSTANCE` for exactly that reason: a trail in
+which a hostname sits in the same column as a person's id with nothing to tell them apart is a trail that
+will be read wrong.
 
-**Secret values are always redacted before reaching `HotReloadAuditLogger`** - every key sourced from
-Vault, plus any key whose name matches a common secret pattern (`password`, `secret`, `token`,
-`credential`, `apiKey`, ...), is masked as `***REDACTED***` regardless of which logger implementation is
-configured, so a custom implementation persisting to a database can't accidentally leak a credential into
-it. If you need full audit visibility into actual secret *values*, that has to come from Vault's own
-audit device, which is access-controlled for exactly that purpose - this library deliberately doesn't
-try to be that.
+**Secret values are always redacted before the entry exists** - every key sourced from Vault, plus any key
+whose name matches a common secret pattern (`password`, `secret`, `token`, `credential`, `apiKey`, ...), is
+masked as `***REDACTED***` no matter which sink is configured, so a custom sink persisting to a database
+can't accidentally leak a credential into it. If you need full audit visibility into actual secret
+*values*, that has to come from Vault's own audit device, which is access-controlled for exactly that
+purpose - this library deliberately doesn't try to be that.
 
-Set `ludwig.hotreload.audit.enabled=false` to disable the audit trail entirely.
+Both of this module's classification rules survived the consolidation as composable classifiers, and the
+`vault:` / `vault-lease:` prefixes are now configuration rather than source: see
+`ludwig.audit.redaction.sensitive-provenance-prefixes`. A deployment with a differently named secret store
+adds its own prefix there rather than patching this module.
+
+Set `ludwig.hotreload.audit.enabled=false` to disable this module's contribution to the audit trail
+entirely. **What a deployment notices:** the `ru.ludwigandreas.hotreload.audit` logger no longer exists;
+reloads are on `ru.ludwigandreas.audit` with `category=config`.
 
 ## Metrics
 

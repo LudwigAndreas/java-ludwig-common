@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        The second half of 0003 leaves this service.
+
+        notification_idempotency, IdempotencyStore, PostgresIdempotencyStore, IdempotencyRecordEntity and
+        its three repositories are gone; the claim lives in idempotency-spring-boot-starter's
+        idempotency_claim, and this service calls that module's store directly in TRANSACTIONAL mode - see
+        the README, "Promoted: the work-dedup store now lives in idempotency-spring-boot-starter".
+
+        This file drops the old table, and it does so AFTER the module's own changelog has been included
+        (which creates idempotency_claim and moves every row into it) in db.changelog-master.xml. The order is
+        not cosmetic: an <include> contributes its changesets at the position it appears, so dropping the
+        legacy table before the migration had run would discard every in-flight key - and every one of those
+        is a claim on work that has been done, which means every one of them is a notification this service
+        would otherwise send to a real person a second time, during the very deploy that introduces the module
+        whose purpose is to stop that.
+
+        Same shape as 0005, which dropped notification_lock after job-core's changelog was included.
+    -->
+
+    <changeSet id="notification-060-drop-idempotency" author="ludwig-notification">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="notification_idempotency"/>
+            <!--
+                And only once the rows are somewhere. A deployment whose migration failed part way must not
+                also lose the source: with this precondition the drop is skipped, the changeset is marked ran
+                against a database where it did not apply, and the legacy table survives for an operator to
+                reconcile by hand. Without it, a failed migration and a successful drop would be silent data
+                loss with no way back.
+            -->
+            <tableExists tableName="idempotency_claim"/>
+            <sqlCheck expectedResult="0">
+                SELECT count(*)
+                FROM notification_idempotency n
+                WHERE NOT EXISTS (SELECT 1 FROM idempotency_claim c
+                                  WHERE c.scope = n.scope AND c.idempotency_key = n.idempotency_key)
+            </sqlCheck>
+        </preConditions>
+        <comment>
+            Drops notification_idempotency, every row of which is now in idempotency_claim. The sqlCheck above
+            is the reconciliation the runbook would otherwise ask an operator to perform by eye: zero rows in
+            the old table that are not in the new one.
+        </comment>
+        <dropTable tableName="notification_idempotency"/>
+        <rollback>
+            <!--
+                A rollback recreates the table empty rather than repopulating it. Repopulating would mean
+                copying claims back out of a shared table this service no longer owns, and a rolled-back
+                deployment is a deployment running the previous release - which had these rows in its own
+                table and will simply re-claim on the next redelivery. An empty table is one duplicate per
+                in-flight key in the worst case; a half-copied one is a dedup table nobody can reason about.
+            -->
+            <createTable tableName="notification_idempotency">
+                <column name="id" type="uuid">
+                    <constraints primaryKey="true" primaryKeyName="pk_notification_idempotency"/>
+                </column>
+                <column name="scope" type="varchar(64)">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="idempotency_key" type="varchar(255)">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="request_id" type="uuid">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="created_at" type="timestamp with time zone">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="expires_at" type="timestamp with time zone">
+                    <constraints nullable="false"/>
+                </column>
+            </createTable>
+            <addUniqueConstraint tableName="notification_idempotency"
+                                 columnNames="scope, idempotency_key"
+                                 constraintName="uk_notification_idempotency_key"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

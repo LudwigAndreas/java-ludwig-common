@@ -1,5 +1,6 @@
 package ru.ludwigandreas.observability.unit;
 
+import ru.ludwigandreas.audit.redaction.Redaction;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.qos.logback.classic.Level;
@@ -87,8 +88,8 @@ class JsonLogEncoderTest {
 
         JsonNode labels = encode(config(LogFieldNames.ecs()), event).get("labels");
 
-        assertThat(labels.get("userPassword").asText()).isEqualTo("***");
-        assertThat(labels.get("X-Api-Key").asText()).isEqualTo("***");
+        assertThat(labels.get("userPassword").asText()).isEqualTo(Redaction.MASK);
+        assertThat(labels.get("X-Api-Key").asText()).isEqualTo(Redaction.MASK);
         assertThat(labels.get("tenant").asText()).isEqualTo("acme");
     }
 
@@ -100,7 +101,7 @@ class JsonLogEncoderTest {
 
         JsonNode line = encode(config(LogFieldNames.ecs()), event);
 
-        assertThat(line.get("accessToken").asText()).isEqualTo("***");
+        assertThat(line.get("accessToken").asText()).isEqualTo(Redaction.MASK);
         assertThat(line.get("orderId").asText()).isEqualTo("4711");
     }
 

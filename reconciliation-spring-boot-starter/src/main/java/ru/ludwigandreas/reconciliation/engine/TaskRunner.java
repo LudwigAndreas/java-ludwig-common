@@ -8,8 +8,9 @@ import ru.ludwigandreas.reconciliation.api.DemandRequest;
 import ru.ludwigandreas.reconciliation.api.DemandTier;
 import ru.ludwigandreas.reconciliation.api.ExternalStamp;
 import ru.ludwigandreas.reconciliation.api.FetchOutcome;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.ProcessingMode;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
 import ru.ludwigandreas.reconciliation.metrics.ReconciliationMetrics;
@@ -49,7 +50,7 @@ public class TaskRunner {
     private final TaskStateService taskState;
     private final SyncInboxRecordRepository repository;
     private final ReconciliationMetrics metrics;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
     private final CorrelationIdSource correlationIds;
 
     /**
@@ -73,7 +74,7 @@ public class TaskRunner {
                       TaskStateService taskState,
                       SyncInboxRecordRepository repository,
                       ReconciliationMetrics metrics,
-                      ReconciliationAuditLogger auditLogger,
+                      AuditSink auditLogger,
                       CorrelationIdSource correlationIds) {
         this.runLock = runLock;
         this.walker = walker;
@@ -315,7 +316,7 @@ public class TaskRunner {
         if (!settings.audit().enabled()) {
             return;
         }
-        auditLogger.record(AuditEvent.builder(settings.name(), AuditEvent.Category.RUN, event)
+        auditLogger.record(ReconciliationAuditEvent.builder(settings.name(), Category.RUN, event)
                 .subject(context.tierTag())
                 .detail(detail)
                 .runId(context.runId())

@@ -32,7 +32,8 @@ public final class BuiltInRuleSets {
             new RestPathRules(),
             new ConfigurationPropertiesRules(),
             new OptionalUsageRules(),
-            new MapperConventionRules());
+            new MapperConventionRules(),
+            new AuditRules());
 
     private BuiltInRuleSets() {
     }

@@ -266,6 +266,43 @@ by assignability and by nesting, not by name, since MapStruct's `@Generated` has
 never reaches the bytecode. The rule locks the convention for classes already identified as mappers;
 it does not look for mapping logic written elsewhere.
 
+### `audit` - there is one audit trail, and nobody declares a second one
+
+| Rule id | What it enforces |
+|---|---|
+| `audit.no-second-audit-spi` | No interface outside `ru.ludwigandreas.audit..` is named like an audit sink, logger, emitter or recorder *and* declares a void, single-argument recording method |
+| `audit.no-private-audit-logger-names` | **Opt-in.** No class in an `audit` package outside `ru.ludwigandreas.audit..` declares a static SLF4J logger field of its own |
+
+This group is the durable half of a consolidation. Nine modules of this platform had each invented an
+audit mechanism - nine SPIs, seven SLF4J implementations, three persistent stores with three schemas -
+and every one was a reasonable local decision: a module needed somewhere for its trail to go, an SPI with
+a shipped default is the idiomatic answer, and nobody was in a position to see the other eight. Replacing
+them with [`audit-core`](../audit-core) fixed the state of the code; only a rule stops the same reasonable
+local decision being made again next quarter.
+
+Interfaces only, and only ones somebody could implement. A concrete class named `SomethingAuditRecorder`
+is a *caller* of the sink - `SettingsAuditRecorder` is exactly that after the consolidation - and
+forbidding the name would forbid a reasonable name for a class doing the right thing. What must not exist
+is a second **seam**: an interface inviting a deployment to publish its own implementation, because that
+is the point at which one module's trail stops going where the platform's goes.
+
+The name test alone would flag a marker interface or a query-side type that merely mentions auditing, so
+the rule also requires a void, single-argument, non-static method - the shape all nine had. It is not
+keyed on that shape alone, because one void method taking one object is also the shape of every listener,
+consumer and callback in the platform.
+
+**A second redaction mask constant is checked by Checkstyle, not here.** A mask is the *value* of a string
+constant, and ArchUnit reads compiled bytecode, where a `static final String`'s value is a constant-pool
+entry `JavaField` does not expose. The nearest structural approximation - "no field named `MASK` or
+`REDACTED`" - would miss the one somebody spells `HIDDEN` and would flag legitimate unrelated constants.
+`checkstyle-rules` does see source text, so there the check is exact: `SecondRedactionMask`. Same division
+of labour as everywhere else in this repository.
+
+**That a module actually audits what it should is also not checked.** "Every state mutation emits an audit
+event" needs to know which methods mutate state, which is a semantic judgment no structural rule can make.
+What is checkable, and what this group checks, is that when a module does audit, it audits through the
+platform's type.
+
 ## Configuring the conventions
 
 Nothing in the rules hardcodes a package name. A service maps its own layout onto the library's

@@ -48,6 +48,17 @@
     </dependencyManagement>
 
     <dependencies>
+        <!--
+            The platform's audit envelope, sink SPI and redaction. audit-core has no in-repo
+            dependencies of its own, which is the property that makes it safe for a module this low in
+            the stack: the JPA sink, the outbox sink and the retention purge live in
+            audit-spring-boot-starter, which needs db-core and which this module must not take.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
         <!-- Core Spring Security: SecurityContext, method security, PermissionEvaluator. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

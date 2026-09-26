@@ -11,7 +11,7 @@ import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.web.client.ResponseErrorHandler;
 import ru.ludwigandreas.restclient.core.AnnotatedClientHttpResponse;
 import ru.ludwigandreas.restclient.core.CallContextSource;
-import ru.ludwigandreas.restclient.observability.HeaderRedactor;
+import ru.ludwigandreas.restclient.observability.ClientRedactor;
 import ru.ludwigandreas.restclient.spi.ErrorContext;
 
 /**
@@ -31,7 +31,7 @@ public class TranslatingResponseErrorHandler implements ResponseErrorHandler {
 
     private final String clientName;
     private final ResponseErrorTranslation translation;
-    private final HeaderRedactor redactor;
+    private final ClientRedactor redactor;
     private final CallContextSource callContext;
     private final int maxBodySize;
 
@@ -39,7 +39,7 @@ public class TranslatingResponseErrorHandler implements ResponseErrorHandler {
     // CHECKSTYLE.OFF: ParameterNumber - five per-client collaborators, all needed to build one
     // ErrorContext.
     public TranslatingResponseErrorHandler(String clientName, ResponseErrorTranslation translation,
-                                           HeaderRedactor redactor, CallContextSource callContext,
+                                           ClientRedactor redactor, CallContextSource callContext,
                                            int maxBodySize) {
         this.clientName = clientName;
         this.translation = translation;

@@ -13,7 +13,7 @@ import ru.ludwigandreas.restclient.config.ClientProperties;
 import ru.ludwigandreas.restclient.config.RateLimiterProperties;
 import ru.ludwigandreas.restclient.error.ResponseErrorTranslation;
 import ru.ludwigandreas.restclient.observability.ExchangeLogger;
-import ru.ludwigandreas.restclient.observability.HeaderRedactor;
+import ru.ludwigandreas.restclient.observability.ClientRedactor;
 import ru.ludwigandreas.restclient.observability.RestClientListeners;
 import ru.ludwigandreas.restclient.observability.RestClientMeters;
 import ru.ludwigandreas.restclient.observability.audit.AuditRecorder;
@@ -134,7 +134,7 @@ public class ClientRuntime {
     }
 
     /** The per-client header and body redactor. */
-    public HeaderRedactor getRedactor() {
+    public ClientRedactor getRedactor() {
         return state.redactor();
     }
 

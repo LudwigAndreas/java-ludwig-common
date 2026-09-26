@@ -464,7 +464,7 @@ public final class ClientPropertiesMerger {
     private static void mergeAudit(AuditProperties out, AuditProperties base, AuditProperties overlay) {
         out.setEnabled(pick(overlay.getEnabled(), base.getEnabled()));
         out.setSamplingProbability(pick(overlay.getSamplingProbability(), base.getSamplingProbability()));
-        out.setEmitter(pick(overlay.getEmitter(), base.getEmitter()));
+        out.setSink(pick(overlay.getSink(), base.getSink()));
         out.setIncludeRequestHeaders(
                 pickList(overlay.getIncludeRequestHeaders(), base.getIncludeRequestHeaders()));
         out.setIncludeResponseHeaders(

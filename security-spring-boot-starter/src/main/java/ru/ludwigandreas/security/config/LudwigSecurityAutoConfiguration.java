@@ -13,8 +13,6 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
-import ru.ludwigandreas.security.audit.AccessAuditLogger;
-import ru.ludwigandreas.security.audit.Slf4jAccessAuditLogger;
 import ru.ludwigandreas.security.authz.AuthorityCache;
 import ru.ludwigandreas.security.authz.AuthorityLookup;
 import ru.ludwigandreas.security.authz.AuthorityResolver;
@@ -88,20 +86,6 @@ public class LudwigSecurityAutoConfiguration {
     public AuthorityLookup ludwigAuthorityLookup(AuthorityResolver resolver, AuthorityCache cache,
                                                  SecurityMetrics metrics) {
         return new CachingAuthorityResolver(resolver, cache, metrics);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(AccessAuditLogger.class)
-    @ConditionalOnProperty(prefix = "ludwig.security.audit", name = "enabled", matchIfMissing = true)
-    public AccessAuditLogger ludwigAccessAuditLogger(SecurityProperties properties) {
-        return new Slf4jAccessAuditLogger(properties.getAudit().isLogGrants());
-    }
-
-    /** Audit disabled: still needs a bean, because the guard records unconditionally. */
-    @Bean
-    @ConditionalOnMissingBean(AccessAuditLogger.class)
-    public AccessAuditLogger ludwigNoopAccessAuditLogger() {
-        return decision -> { };
     }
 
     @Bean

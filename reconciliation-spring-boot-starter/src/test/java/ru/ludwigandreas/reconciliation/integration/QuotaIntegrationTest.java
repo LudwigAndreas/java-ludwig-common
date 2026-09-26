@@ -12,7 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.QuotaReclaimPolicy;
 import ru.ludwigandreas.reconciliation.config.ReconciliationProperties;
 import ru.ludwigandreas.reconciliation.entity.QuotaLease;
@@ -74,7 +74,7 @@ class QuotaIntegrationTest {
     private PlatformTransactionManager transactionManager;
 
     @Autowired
-    private ReconciliationAuditLogger auditLogger;
+    private AuditSink auditLogger;
 
     @Autowired
     private TransactionTemplate transactions;

@@ -11,13 +11,14 @@ import ru.ludwigandreas.restclient.core.RefreshableClientState;
 import ru.ludwigandreas.restclient.error.ProblemDetailResponseErrorTranslator;
 import ru.ludwigandreas.restclient.error.ResponseErrorTranslation;
 import ru.ludwigandreas.restclient.observability.ExchangeLogger;
-import ru.ludwigandreas.restclient.observability.HeaderRedactor;
+import ru.ludwigandreas.restclient.observability.ClientRedactor;
 import ru.ludwigandreas.restclient.observability.RestClientListeners;
 import ru.ludwigandreas.restclient.observability.RestClientMeters;
 import ru.ludwigandreas.restclient.observability.audit.AuditRecorder;
 import ru.ludwigandreas.restclient.resilience.ClientResiliencePolicy;
 import ru.ludwigandreas.restclient.resilience.ResiliencePolicyFactory;
-import ru.ludwigandreas.restclient.spi.AuditEventEmitter;
+import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.audit.redaction.SensitivityClassifier;
 import ru.ludwigandreas.restclient.spi.ResponseErrorTranslator;
 import ru.ludwigandreas.restclient.spi.RestClientListener;
 
@@ -41,7 +42,8 @@ public class ClientRuntimeBuilder {
     private final RestClientMeters meters;
     private final CallContextSource callContext;
     private final ObservationRegistry observationRegistry;
-    private final AuditEmitterResolver auditEmitters;
+    private final AuditSinkResolver auditSinks;
+    private final SensitivityClassifier sensitivity;
     private final Clock clock;
     private final String applicationName;
 
@@ -55,7 +57,8 @@ public class ClientRuntimeBuilder {
                                 ObjectMapper objectMapper, RestClientMeters meters,
                                 CallContextSource callContext,
                                 ObservationRegistry observationRegistry,
-                                AuditEmitterResolver auditEmitters, Clock clock,
+                                AuditSinkResolver auditSinks, SensitivityClassifier sensitivity,
+                                Clock clock,
                                 String applicationName) {
         this.properties = properties;
         this.authenticators = authenticators;
@@ -66,7 +69,8 @@ public class ClientRuntimeBuilder {
         this.meters = meters;
         this.callContext = callContext;
         this.observationRegistry = observationRegistry;
-        this.auditEmitters = auditEmitters;
+        this.auditSinks = auditSinks;
+        this.sensitivity = sensitivity;
         this.clock = clock;
         this.applicationName = applicationName;
     }
@@ -120,10 +124,10 @@ public class ClientRuntimeBuilder {
      */
     private RefreshableClientState refreshableState(String clientName, ClientProperties merged) {
         LoggingProperties logging = merged.getLogging();
-        HeaderRedactor redactor = new HeaderRedactor(
+        ClientRedactor redactor = new ClientRedactor(clientName, sensitivity,
                 concat(logging.getRedactedHeaders(), logging.getAdditionalRedactedHeaders()),
                 concat(logging.getRedactedFields(), logging.getAdditionalRedactedFields()),
-                objectMapper);
+                logging.getMaxBodySize() == null ? 0 : logging.getMaxBodySize());
         return new RefreshableClientState(
                 merged,
                 policies.retryPolicy(clientName, merged),
@@ -131,7 +135,7 @@ public class ClientRuntimeBuilder {
                         Boolean.TRUE.equals(logging.getLogRequestBeforeCall())),
                 redactor,
                 new AuditRecorder(clientName, merged.getAudit(),
-                        auditEmitters.resolve(clientName, merged.getAudit()), meters, clock));
+                        auditSinks.resolve(clientName, merged.getAudit()), clock));
     }
 
     /**
@@ -179,11 +183,18 @@ public class ClientRuntimeBuilder {
         return out;
     }
 
-    /** Resolves a client's audit sink: its named bean, or the default one. */
+    /**
+     * Resolves a client's audit sink: the bean named in its {@code audit.sink}, or the platform's.
+     *
+     * <p>A resolver rather than a single injected sink because {@code audit.sink} is per client: one service
+     * can legitimately send one partner's trail to a vendor's API and the rest to the platform's own sink.
+     * The named bean is an {@code AuditSink} - the property was {@code audit.emitter} naming an
+     * {@code AuditEventEmitter} before the consolidation, and that SPI is gone.
+     */
     @FunctionalInterface
-    public interface AuditEmitterResolver {
+    public interface AuditSinkResolver {
 
-        /** The emitter for {@code clientName}. */
-        AuditEventEmitter resolve(String clientName, AuditProperties properties);
+        /** The sink for {@code clientName}. */
+        AuditSink resolve(String clientName, AuditProperties properties);
     }
 }

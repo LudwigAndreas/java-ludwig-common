@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import ru.ludwigandreas.ingest.api.IngestRunStatus;
 import ru.ludwigandreas.ingest.api.IngestRunSummary;
 import ru.ludwigandreas.ingest.audit.IngestAuditEvent;
-import ru.ludwigandreas.ingest.audit.IngestAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.ingest.config.FileIngestProperties;
 import ru.ludwigandreas.ingest.entity.FileIngestRun;
 import ru.ludwigandreas.ingest.event.IngestEventPublisher;
@@ -48,7 +48,7 @@ public class IngestPass {
     private final ru.ludwigandreas.storage.api.ObjectStore store;
     private final RunLock lock;
     private final IngestMetrics metrics;
-    private final IngestAuditLogger audit;
+    private final AuditSink audit;
     private final IngestEventPublisher events;
     private final Clock clock;
 
@@ -73,7 +73,7 @@ public class IngestPass {
     public IngestPass(IngestTaskRegistry registry, ObjectDiscovery discovery, ArrivalDetector arrival,
                       IngestRunner runner, FileIngestRunRepository runs,
                       ru.ludwigandreas.storage.api.ObjectStore store, RunLock lock,
-                      IngestMetrics metrics, IngestAuditLogger audit, IngestEventPublisher events,
+                      IngestMetrics metrics, AuditSink audit, IngestEventPublisher events,
                       Clock clock) {
         this.registry = registry;
         this.discovery = discovery;
@@ -161,7 +161,7 @@ public class IngestPass {
                     task.name(), uri.value(), object.contentIdentity());
             metrics.recordSkippedAlreadyProcessed(task.name());
             audit.record(new IngestAuditEvent(clock.instant(), existing.get().getId(), task.name(),
-                    IngestAuditEvent.SKIPPED_ALREADY_PROCESSED, Map.of("uri", uri.value())));
+                    IngestAuditEvent.SKIPPED_ALREADY_PROCESSED, Map.of("uri", uri.value())).toAuditEvent());
             return;
         }
 

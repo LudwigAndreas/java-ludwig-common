@@ -1,0 +1,6 @@
+ru.ludwigandreas.idempotency.config.IdempotencyAutoConfiguration
+ru.ludwigandreas.idempotency.config.IdempotencyPersistenceAutoConfiguration
+ru.ludwigandreas.idempotency.config.IdempotencyRedisAutoConfiguration
+ru.ludwigandreas.idempotency.config.IdempotencyWebAutoConfiguration
+ru.ludwigandreas.idempotency.config.IdempotencyKafkaAutoConfiguration
+ru.ludwigandreas.idempotency.config.IdempotencyLiquibaseAutoConfiguration

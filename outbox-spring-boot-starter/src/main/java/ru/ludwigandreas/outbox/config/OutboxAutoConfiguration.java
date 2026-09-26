@@ -21,7 +21,8 @@ import ru.ludwigandreas.db.core.repository.BaseRepositoryImpl;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
 import ru.ludwigandreas.outbox.audit.PersistingOutboxAuditLogger;
-import ru.ludwigandreas.outbox.audit.Slf4jOutboxAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.outbox.audit.AuditSinkOutboxAuditLogger;
 import ru.ludwigandreas.job.core.backoff.BackoffCalculator;
 import ru.ludwigandreas.outbox.dispatch.OutboxDispatcher;
 import ru.ludwigandreas.outbox.dispatch.OutboxDispatcherRegistry;
@@ -62,17 +63,43 @@ public class OutboxAutoConfiguration {
         return new PropertiesOutboxRouteResolver(properties);
     }
 
+    /**
+     * Transitions into {@code outbox_status_history} <em>and</em> into the platform audit trail.
+     *
+     * <p>{@code outbox_status_history} stays, and it is the one place in this repository where two audit
+     * stores is the right answer. It is not only a trail: the dispatcher and its actuator endpoint read it -
+     * how many attempts a message has had, when it was last tried, what the last failure said - so
+     * collapsing it into {@code audit_event} would couple dispatch to audit retention, and a deployment that
+     * shortened its audit retention would silently shorten the dispatcher's own memory. The generic trail
+     * gets the same transitions <em>as well</em>, because "who was never told what happened" is an audit
+     * question and an auditor should not have to know this module's schema to ask it.
+     *
+     * @param repository the operational history
+     * @param auditSink  the platform trail
+     * @return the logger
+     */
     @Bean
     @ConditionalOnMissingBean(OutboxAuditLogger.class)
     @ConditionalOnProperty(prefix = "ludwig.outbox.audit", name = "persist-history", havingValue = "true")
-    public OutboxAuditLogger persistingOutboxAuditLogger(OutboxStatusHistoryRepository repository) {
-        return new PersistingOutboxAuditLogger(repository, new Slf4jOutboxAuditLogger());
+    public OutboxAuditLogger persistingOutboxAuditLogger(OutboxStatusHistoryRepository repository,
+                                                         AuditSink auditSink) {
+        return new PersistingOutboxAuditLogger(repository, new AuditSinkOutboxAuditLogger(auditSink));
     }
 
+    /**
+     * Transitions into the platform audit trail alone.
+     *
+     * <p>Replaces the SLF4J logger this module used to ship. The trail's destination is now a deployment's
+     * choice - a log line, the {@code audit_event} table, a SIEM through the outbox itself - rather than
+     * this module's.
+     *
+     * @param auditSink the platform trail
+     * @return the logger
+     */
     @Bean
     @ConditionalOnMissingBean(OutboxAuditLogger.class)
-    public OutboxAuditLogger slf4jOutboxAuditLogger() {
-        return new Slf4jOutboxAuditLogger();
+    public OutboxAuditLogger auditSinkOutboxAuditLogger(AuditSink auditSink) {
+        return new AuditSinkOutboxAuditLogger(auditSink);
     }
 
     @Bean

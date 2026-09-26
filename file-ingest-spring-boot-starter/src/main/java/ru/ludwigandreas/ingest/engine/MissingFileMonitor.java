@@ -11,7 +11,7 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.TaskScheduler;
 import ru.ludwigandreas.ingest.audit.IngestAuditEvent;
-import ru.ludwigandreas.ingest.audit.IngestAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.ingest.config.FileIngestProperties;
 import ru.ludwigandreas.ingest.entity.QFileIngestRun;
 import ru.ludwigandreas.ingest.metrics.IngestMetrics;
@@ -60,7 +60,7 @@ public class MissingFileMonitor extends SelfSchedulingLifecycle {
     private final IngestTaskRegistry registry;
     private final FileIngestRunRepository runs;
     private final IngestMetrics metrics;
-    private final IngestAuditLogger audit;
+    private final AuditSink audit;
     private final Clock clock;
 
     /**
@@ -75,7 +75,7 @@ public class MissingFileMonitor extends SelfSchedulingLifecycle {
      * @param clock         the clock
      */
     public MissingFileMonitor(IngestTaskRegistry registry, FileIngestRunRepository runs,
-                              IngestMetrics metrics, IngestAuditLogger audit,
+                              IngestMetrics metrics, AuditSink audit,
                               TaskScheduler taskScheduler, Duration drainTimeout, Clock clock) {
         super(JOB_NAME, taskScheduler, ScheduleSpec.fixedDelay(INTERVAL, INTERVAL), drainTimeout);
         this.registry = registry;
@@ -114,7 +114,7 @@ public class MissingFileMonitor extends SelfSchedulingLifecycle {
                     task.name(), expectedBy, alert.getZone());
             audit.record(new IngestAuditEvent(clock.instant(), null, task.name(),
                     IngestAuditEvent.MISSING, Map.of("expectedBy", expectedBy.toString(),
-                    "zone", alert.getZone())));
+                    "zone", alert.getZone())).toAuditEvent());
         }
     }
 

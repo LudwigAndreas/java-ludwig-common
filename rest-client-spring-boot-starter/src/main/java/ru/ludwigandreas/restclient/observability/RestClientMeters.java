@@ -82,7 +82,14 @@ public class RestClientMeters {
                 Tags.of("client", clientName, "listener", listener, "callback", callback));
     }
 
-    /** One audit emission that threw. */
+    /**
+     * One audit emission that threw.
+     *
+     * <p>Kept as published API but no longer incremented by this module: after the audit consolidation a
+     * sink failure is counted once for the whole platform by {@code AuditMetrics}, tagged by category and
+     * failure policy, so a deployment watches {@code ludwig.audit.sink.failures} instead. A service that
+     * wraps its own sink and wants a per-client signal can still call this.
+     */
     public void auditFailure(String clientName) {
         counter(AUDIT_FAILURES, Tags.of("client", clientName));
     }

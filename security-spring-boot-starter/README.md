@@ -549,3 +549,42 @@ believe is restricted means a policy is not matching.
 | `web` | header stripping, problem-detail handlers, MDC, i18n |
 | `audit`, `metrics` | decision trail and instrumentation |
 | `config` | properties and autoconfiguration |
+
+## Auditing
+
+This module no longer has an audit mechanism of its own. `AccessAuditLogger` and `Slf4jAccessAuditLogger` are gone. Its trail now goes through the
+platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
+SIEM through the transactional outbox, or several at once - see
+[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
+
+`AccessDecision` stays and gained a `toAuditEvent()` - and it is the record the platform envelope was
+*derived from*, because it was already the closest thing in the repository to a universal one: actor,
+resource type, resource id, action, outcome, reason. A refusal is recorded as outcome `DENIED` and not
+`FAILURE`, which is the distinction an incident responder needs first: "we refused them" and "we
+broke" look identical in a `granted=false` column and lead to opposite investigations. `scopeAccess`
+becomes an attribute, because how wide a grant turned out is a fact about this platform's data-scope
+model rather than about auditing in general.
+
+This module also publishes `PrincipalActorResolver`, which is what teaches the platform's single actor
+resolution about `LudwigPrincipal` and its `PrincipalType`. `audit-core` cannot know that type exists - it
+depends on nothing in this repository, which is what lets this module depend on it at all - so the richer
+resolver lives here and `audit-core`'s two plainer ones step aside by the *presence* of `LudwigPrincipal` on
+the classpath. Why it has to exist at all is concrete: `Authentication.getName()` on a token whose principal
+is a `LudwigPrincipal` answers with that object's `toString()`, not with its subject, so the trail would
+carry a rendered object where a joinable id belongs.
+
+It lives in its own autoconfiguration, `SecurityAuditAutoConfiguration`, gated on **neither**
+`ludwig.security.audit.enabled` nor `ludwig.security.enabled`. Those govern whether access *decisions* are
+recorded and whether this module installs a filter chain; actor resolution is a different thing and feeds two
+consumers - every `AuditEvent.actor` and `db-core`'s `created_by` / `last_modified_by` stamping. Gating it
+would mean that switching the security starter off silently changed which name appears in every entity's
+audit columns and in every audit event, from the person's subject to `system`, with nothing to say so. A
+wrong value in a trail retained for years is a worse failure than a missing bean.
+
+`ludwig.security.audit.log-grants` still works and now means what it says. It moved from the sink into
+`DataAccessGuard`, because the sink is shared: once a grant can reach an append-only table and a SIEM
+rather than only a log level somebody can turn down, "do not record them" has to mean "do not emit
+them" rather than "emit them quietly".
+
+**What a deployment notices:** the `ru.ludwigandreas.security.audit` logger no longer exists; decisions are on
+`ru.ludwigandreas.audit` with `category=access`, denials at WARN and grants at INFO.

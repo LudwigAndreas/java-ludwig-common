@@ -17,7 +17,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import ru.ludwigandreas.restclient.core.RestClientRegistry;
-import ru.ludwigandreas.restclient.spi.AuditEventEmitter;
+import ru.ludwigandreas.audit.AuditEvent;
+import ru.ludwigandreas.audit.AuditOutcome;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.restclient.spi.OutboundCallAudit;
 import ru.ludwigandreas.restclient.spi.OutboundRequest;
 import ru.ludwigandreas.restclient.spi.OutboundResponse;
@@ -157,11 +159,15 @@ class ObservabilityIntegrationTest {
 
                     RecordingEmitter emitter = context.getBean(RecordingEmitter.class);
                     assertThat(emitter.records).hasSize(1);
-                    OutboundCallAudit audit = emitter.records.get(0);
-                    assertThat(audit.uriTemplate()).isEqualTo("/invoices/{id}");
-                    assertThat(audit.clientName()).isEqualTo("billing");
-                    assertThat(audit.outcome()).isEqualTo("SUCCESS");
-                    assertThat(audit.statusCode()).isEqualTo(200);
+                    AuditEvent audit = emitter.records.get(0);
+                    assertThat(audit.category()).isEqualTo("outbound-call");
+                    assertThat(audit.action()).isEqualTo(OutboundCallAudit.ACTION);
+                    // The template and never the expanded path: the rule the record has always stated,
+                    // now asserted on the envelope the trail actually stores.
+                    assertThat(audit.resource().id()).isEqualTo("/invoices/{id}");
+                    assertThat(audit.resource().type()).isEqualTo("billing");
+                    assertThat(audit.outcome().status()).isEqualTo(AuditOutcome.Status.SUCCESS);
+                    assertThat(audit.attributes()).containsEntry("statusCode", 200);
                 });
     }
 
@@ -185,7 +191,9 @@ class ObservabilityIntegrationTest {
 
                     RecordingEmitter emitter = context.getBean(RecordingEmitter.class);
                     assertThat(emitter.records).hasSize(1);
-                    assertThat(emitter.records.get(0).outcome()).isEqualTo("SERVER_ERROR");
+                    AuditEvent audit = emitter.records.get(0);
+                    assertThat(audit.outcome().status()).isEqualTo(AuditOutcome.Status.FAILURE);
+                    assertThat(audit.attributes()).containsEntry("outcome", "SERVER_ERROR");
                 });
     }
 
@@ -221,14 +229,14 @@ class ObservabilityIntegrationTest {
         }
     }
 
-    /** Collects audit records instead of writing them anywhere. */
-    static class RecordingEmitter implements AuditEventEmitter {
+    /** Collects audit events instead of writing them anywhere. */
+    static class RecordingEmitter implements AuditSink {
 
-        private final List<OutboundCallAudit> records = new CopyOnWriteArrayList<>();
+        private final List<AuditEvent> records = new CopyOnWriteArrayList<>();
 
         @Override
-        public void emit(OutboundCallAudit audit) {
-            records.add(audit);
+        public void record(AuditEvent event) {
+            records.add(event);
         }
     }
 

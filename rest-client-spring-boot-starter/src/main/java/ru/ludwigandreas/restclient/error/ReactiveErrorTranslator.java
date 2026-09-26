@@ -6,7 +6,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import reactor.core.publisher.Mono;
 import ru.ludwigandreas.restclient.core.CallContextSource;
-import ru.ludwigandreas.restclient.observability.HeaderRedactor;
+import ru.ludwigandreas.restclient.observability.ClientRedactor;
 import ru.ludwigandreas.restclient.spi.ErrorContext;
 
 /**
@@ -25,14 +25,14 @@ public class ReactiveErrorTranslator {
 
     private final String clientName;
     private final ResponseErrorTranslation translation;
-    private final HeaderRedactor redactor;
+    private final ClientRedactor redactor;
     private final CallContextSource callContext;
     private final int maxBodySize;
 
     /** Creates the translator for one named client. */
     // CHECKSTYLE.OFF: ParameterNumber - mirrors the blocking handler, for the same reasons.
     public ReactiveErrorTranslator(String clientName, ResponseErrorTranslation translation,
-                                   HeaderRedactor redactor, CallContextSource callContext,
+                                   ClientRedactor redactor, CallContextSource callContext,
                                    int maxBodySize) {
         this.clientName = clientName;
         this.translation = translation;

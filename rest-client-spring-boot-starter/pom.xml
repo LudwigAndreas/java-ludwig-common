@@ -41,6 +41,17 @@
 
     <dependencies>
         <!--
+            The platform's audit envelope, sink SPI and redaction. This module's HeaderRedactor - the
+            structural JSON walk, the form-encoded rule, the truncation marker - moved into audit-core's
+            Redactor; ClientRedactor is the per-client binding that stayed. audit-core has no in-repo
+            dependencies, which is what makes it usable by a module this low in the stack.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!--
             spring-web is NOT optional here, unlike in observability: RestClient, the request
             factories and the whole execution pipeline are spring-web types. A module that cannot
             see spring-web cannot use a single class in this starter.

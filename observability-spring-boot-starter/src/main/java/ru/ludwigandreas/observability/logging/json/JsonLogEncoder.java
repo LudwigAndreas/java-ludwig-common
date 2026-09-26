@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Marker;
 import org.slf4j.event.KeyValuePair;
+import ru.ludwigandreas.audit.redaction.Redaction;
 import ru.ludwigandreas.observability.core.ServiceIdentity;
 
 /**
@@ -73,7 +74,6 @@ public class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
     private static final DateTimeFormatter TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
-    private static final String MASK = "***";
     private static final String TRUNCATION_SUFFIX = "...[truncated]";
 
     /**
@@ -309,7 +309,7 @@ public class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
         String lowerKey = key.toLowerCase(Locale.ROOT);
         for (String masked : config.maskedKeySubstrings()) {
             if (lowerKey.contains(masked)) {
-                return MASK;
+                return Redaction.MASK;
             }
         }
         return value;

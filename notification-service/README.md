@@ -17,8 +17,10 @@ poller claims due deliveries with `FOR UPDATE SKIP LOCKED`, renders a FreeMarker
 recipient's language, and hands the result to a channel — SMTP, the internal chat API, or a signed
 webhook.
 
-It is built from this repository's own modules and adds the two things none of them provide yet:
-consumer-side idempotency and a distributed lock.
+It is built entirely from this repository's own modules. It used to add the two things none of them
+provided - consumer-side idempotency and a leased distributed lock - and both have since been promoted
+into the platform: the store into `idempotency-spring-boot-starter`, the lock into `job-core`. See
+[Promoted: both platform gaps are filled](#promoted-both-platform-gaps-are-filled).
 
 ```console
 $ curl -X POST https://notifications.internal/api/v1/notifications \
@@ -47,7 +49,7 @@ Location: /api/v1/notifications/0f8a…
 - [The two aggregates, and why](#the-two-aggregates-and-why)
 - [The delivery state machine](#the-delivery-state-machine)
 - [The delivery queue is not the outbox](#the-delivery-queue-is-not-the-outbox)
-- [Promotion candidates: one gap left, one filled](#promotion-candidates-one-gap-left-one-filled)
+- [Promoted: both platform gaps are filled](#promoted-both-platform-gaps-are-filled)
 - [The request contract](#the-request-contract)
 - [Running without a broker](#running-without-a-broker)
 - [The Kafka topic](#the-kafka-topic)
@@ -203,60 +205,101 @@ condition and removes the class of bug where the two disagree.
 Two more partial indexes exist for the SLO gauges (`created_at` over the claimable set) and the stale
 sweeper (`claimed_at` over `CLAIMED`).
 
-## Promotion candidates: one gap left, one filled
+## Promoted: both platform gaps are filled
 
-Two capabilities lived behind narrow interfaces here because the platform had neither, and **without
-either of them this service double-sends at more than one replica** — they were never optional polish.
-The narrow interface was the point: it is what made promoting one of them a move rather than a
-rewrite. One has since been promoted; the other is still here.
+Two capabilities lived behind narrow interfaces here because the platform had neither, and **without either
+of them this service double-sends at more than one replica** — they were never optional polish. The narrow
+interface was the point: it is what made promoting each of them a move rather than a rewrite. Both have now
+been promoted, and this section is the record of where they went.
 
-### 1. `IdempotencyStore` — consumer-side idempotency
+### 1. `IdempotencyStore` → **`idempotency-spring-boot-starter`**
 
-The Kafka consumer is at-least-once by construction and REST callers retry on timeouts that were often
-successful writes, so *"have I already done this?"* is the normal path during any rebalance, deploy or
-network blip.
+This service no longer has a dedup store of its own. `IdempotencyStore`, `PostgresIdempotencyStore`,
+`IdempotencyRecordEntity`, `IdempotencyRecordRepository`, `IdempotencyQueryRepository(Impl)` and the
+`notification_idempotency` table are gone; the claim lives in `idempotency_claim` and this service calls that
+module's store.
 
-The correctness is entirely in one statement:
+The correctness was always in one statement, and it survived the move unchanged:
 
 ```sql
-INSERT INTO notification_idempotency (id, scope, idempotency_key, request_id, created_at, expires_at)
+INSERT INTO idempotency_claim (…)
 VALUES (…)
-ON CONFLICT (scope, idempotency_key) DO UPDATE SET scope = notification_idempotency.scope
-RETURNING request_id
+ON CONFLICT (scope, idempotency_key) DO UPDATE SET …
+RETURNING request_id, state, …
 ```
 
-Read-then-insert passes a single-threaded test and fails exactly here: two replicas handling the same
-record both read "no row", both insert, and one takes a constraint violation that aborts a transaction
-which has already written a request and its deliveries. `DO UPDATE` makes the loser block on the
-winner's row lock and then read the committed winner — no exception, no rollback, no double send.
-`DO NOTHING` would not do either: it returns no row on conflict, and in `READ COMMITTED` the re-select
-can still miss a row whose inserting transaction has not committed.
+Read-then-insert passes a single-threaded test and fails exactly here: two replicas handling the same record
+both read "no row", both insert, and one takes a constraint violation that aborts a transaction which has
+already written a request and its deliveries. `DO UPDATE` makes the loser block on the winner's row lock and
+then read the committed winner — no exception, no rollback, no double send. `DO NOTHING` would not do either:
+it returns no row on conflict, and in `READ COMMITTED` the re-select can still miss a row whose inserting
+transaction has not committed.
 
-Scoped by ingress, because a Kafka record key and an HTTP `Idempotency-Key` come from different
-namespaces and a collision between them would silently drop a genuine request.
+Scoped by ingress, because a Kafka record key and an HTTP `Idempotency-Key` come from different namespaces and
+a collision between them would silently drop a genuine request. **The two scope names stay here**, in
+`ludwig.notification.idempotency`, for the same reason the two lock names did: a scope is this service's
+coordination contract between its own two ingresses and means nothing to any other service.
 
-### 2. The distributed lock — **promoted into `job-core`**
+**Two API-compatibility decisions, both taken deliberately rather than inherited.**
+
+**The store stays directly callable, and this service does not use the module's HTTP filter.** That filter
+replays a completed duplicate's response, which is the better default for most APIs and the wrong one here:
+
+- `NotificationRequestResponse.duplicate` is a documented field of this service's API, and the **200-versus-202
+  distinction below is built on it** — a duplicate answers 200 with the original request so a caller retrying
+  after a timeout can tell whether their retry did the work. The filter's natural behaviour is to replay the
+  original **202** instead, which would silently change what a retrying caller is told. The flag is kept and
+  the contract is unchanged.
+- `BatchSendRequest` carries a key **per item, in the body**, precisely because a header cannot carry one value
+  per item. No header-based filter can serve that endpoint, so adopting the filter for `POST /` alone would
+  leave the two endpoints deduplicating differently — which is worse than either choice made consistently.
+
+So `NotificationServiceImpl` claims in `TRANSACTIONAL` mode, which is exactly what the local primitive did:
+the claim is written in the same transaction as the request row and its deliveries, and a rollback frees the
+key. That is required rather than convenient — a claim that committed independently would leave a key
+permanently reserved for a request whose transaction then rolled back, and the retry of that request would be
+rejected as a duplicate of something that does not exist.
+
+What changed for a deployment:
+
+| | was, here | is, in `idempotency-spring-boot-starter` |
+|---|---|---|
+| Table | `notification_idempotency` | `idempotency_claim`, with state, lease, fingerprint and a stored response this service does not use |
+| TTL | `ludwig.notification.idempotency.ttl` | `ludwig.idempotency.ttl`, **per scope** — so the Kafka ingress can hold keys for a week while REST holds them for a day, which this service could not express before |
+| Purge | a step in `RetentionScheduler`, under `LockNames.RETENTION` | the module's own batched job under `job-core`'s lock, with the lease renewed **between batches** — which this service's single-statement step did not do |
+| Claim modes | one, transactional and undocumented as such | two, named and required at the call site |
+| Expiry | evaluated by the purge only, so a key past its TTL still deduped until the purge next ran | evaluated **inside the claim statement**, so the TTL means what the configuration says |
+| Metrics | none | claims, replays, failures, **fingerprint mismatches** and purged rows |
+
+**The migration moves the rows.** `db.changelog-master.xml` includes the module's changelog *above*
+`0006-fold-idempotency-into-starter.xml`, which drops the old table — and that order is load-bearing rather
+than cosmetic. The module's changelog carries the changeset that moves every row across; dropping first would
+discard every in-flight key, and **every in-flight key is a claim on work that has been done**, so every one
+of them is a notification this service would send to a real person a second time, during the very deploy that
+introduces the module whose purpose is to prevent it. The drop's precondition is the reconciliation an operator
+would otherwise perform by eye: zero rows in the old table that are not in the new one.
+
+### 2. The distributed lock → **`job-core`**
 
 This service no longer has a lock of its own. `DistributedLock`, `PostgresDistributedLock`,
-`LockLeaseService`, their repositories and entity, and the `notification_lock` table are gone; the
-maintenance jobs run under `job-core`'s `RunLock`, backed by `job_run_lock`. The two lock *names* stay
-here in `LockNames`, because a lock name is this service's coordination contract between its own
-replicas and means nothing to any other service.
+`LockLeaseService`, their repositories and entity, and the `notification_lock` table are gone; the maintenance
+jobs run under `job-core`'s `RunLock`, backed by `job_run_lock`. The two lock *names* stay here in
+`LockNames`, because a lock name is this service's coordination contract between its own replicas and means
+nothing to any other service.
 
-The reasoning that made a lock necessary here is unchanged and now lives in `job-core`. The delivery
-poller **does not use it and must not**: `SKIP LOCKED` already partitions the queue, so three pollers
-claim disjoint batches with no coordination, and putting a lock there would throw away two thirds of
-the throughput to solve a problem that does not exist. What needs it is every job defined over a *set*
-of rows rather than over each row independently: the digest collapse (three replicas → three digests
-for one person), the retention purge, and the suppression compaction.
+The reasoning that made a lock necessary here is unchanged and now lives in `job-core`. The delivery poller
+**does not use it and must not**: `SKIP LOCKED` already partitions the queue, so three pollers claim disjoint
+batches with no coordination, and putting a lock there would throw away two thirds of the throughput to solve a
+problem that does not exist. What needs it is every job defined over a *set* of rows rather than over each row
+independently: the digest collapse (three replicas → three digests for one person), the retention purge, and
+the suppression compaction.
 
-Still a leased row rather than `pg_try_advisory_lock`, for the same reason it always was. An advisory
-lock is held by the database *session*, and with a connection pool the session returns to the pool the
-moment the statement finishes — so holding one across a multi-minute digest run means pinning a pooled
-connection and trusting nothing in the stack quietly returns it. It is also invisible: an operator
-asking "why has the digest not run for an hour?" has nothing to look at. A row with an explicit
-`expires_at` is inspectable, survives the connection, fails over on a configured timeout rather than an
-accidental one, and can be broken by hand.
+Still a leased row rather than `pg_try_advisory_lock`, for the same reason it always was. An advisory lock is
+held by the database *session*, and with a connection pool the session returns to the pool the moment the
+statement finishes — so holding one across a multi-minute digest run means pinning a pooled connection and
+trusting nothing in the stack quietly returns it. It is also invisible: an operator asking "why has the digest
+not run for an hour?" has nothing to look at. A row with an explicit `expires_at` is inspectable, survives the
+connection, fails over on a configured timeout rather than an accidental one, and can be broken by hand.
 
 What changed in the fold, and why the platform's version won on every axis where the two differed:
 
@@ -268,9 +311,16 @@ What changed in the fold, and why the platform's version won on every axis where
 | Lease TTL | `ludwig.notification.locks.lease` | `ludwig.job-core.lock.default-lease`, one failover time for the platform |
 | Metrics | `notification.locks{lock,outcome}` | `ludwig.job.lock.acquisition{lock,acquired}` plus `ludwig.job.lock.lost{lock}` — a failed renewal, the event worth alerting on, which **neither** implementation used to record |
 
-`IdempotencyStore` remains the one unpromoted gap. It is small, self-contained and dependency-free;
-lifting it and its half of `0003-notification-platform-gaps.xml` into a starter would be the same kind
-of mechanical move the lock turned out to be.
+### What is left here that could still be promoted
+
+The **cluster-wide rate limiter** (`notification_rate_limit_window`, `PostgresChannelRateLimiter`). It is
+genuinely general — an in-process token bucket is wrong at more than one replica and wrong in the direction
+nobody notices, because three pods each holding a 100-per-minute bucket send 300 per minute — and nothing about
+it is specific to notifications. It has not been promoted because no second consumer has asked for it, and a
+platform module with one consumer is a module whose interface has been guessed rather than designed.
+
+The **template revision table** is not a candidate: it is about FreeMarker sources this service owns, and a
+platform module for it would have exactly one possible user.
 
 ## The request contract
 
@@ -824,8 +874,10 @@ than the delivery that owns it means the purge orphans it.
 | Delivery rows | `retention.delivery-ttl` | 90d | by then carrying no personal data; capacity planning and bounce rates |
 | Status history | `retention.history-ttl` | 180d | the audit trail, personal-data-free by construction |
 
-Also purged: expired idempotency keys, expired suppressions (**never** permanent ones — a spam
-complaint does not stop being true), and closed rate-limit windows.
+Also purged: expired suppressions (**never** permanent ones — a spam complaint does not stop being true)
+and closed rate-limit windows. **Expired dedup claims are not in this list any more**: that table belongs
+to `idempotency-spring-boot-starter`, which runs its own batched purge under the same `RunLock` mechanism.
+Two purges of one table on two schedules is exactly the duplication the promotion removed.
 
 ## Metrics, and the two that matter
 
@@ -892,7 +944,10 @@ The most serious failure this service can have. Check in this order:
 2. `notification.queue.reclaimed` correlated with the duplicates: the sweeper reclaiming rows a healthy
    pod is still sending is the classic cause.
 3. `ludwig.notification.idempotency.enabled` — with it off, every at-least-once redelivery is a new
-   request.
+   request. Then `ludwig.idempotency.ttl` (and any per-scope override): a window shorter than the longest
+   redelivery a broker or a caller will perform converts duplicates into double sends, which is what this
+   symptom looks like. Check `ludwig.idempotency.fingerprint.mismatches` too — a client reusing one key for
+   different requests produces 422s nobody reports.
 4. The unique index `ux_notification_delivery_dedup_key` — if it is missing, the last line of defence
    is gone.
 

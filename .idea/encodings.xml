@@ -3,16 +3,24 @@
   <component name="Encoding">
     <file url="file://$PROJECT_DIR$/architecture-rules/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/architecture-rules/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/audit-core/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/audit-core/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/audit-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/audit-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/checkstyle-rules/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/checkstyle-rules/src/main/resources" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/common-utils/src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/common-utils/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/crud-service-example/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/crud-service-example/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/db-core/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/db-core/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/export-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/export-spring-boot-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/file-ingest-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/file-ingest-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/hot-reload-spring-boot-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/hot-reload-spring-boot-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/idempotency-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/idempotency-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/identity-projection-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/jira-client/src/main/java" charset="UTF-8" />
@@ -25,6 +33,8 @@
     <file url="file://$PROJECT_DIR$/ludwig-service-parent/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/notification-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/notification-service/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/object-storage-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/object-storage-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/observability-spring-boot-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/observability-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/odata-filter-spring-boot-starter/src/main/java" charset="UTF-8" />

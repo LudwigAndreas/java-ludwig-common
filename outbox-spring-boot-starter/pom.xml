@@ -47,6 +47,20 @@
     </dependencyManagement>
 
     <dependencies>
+        <!--
+            The platform's audit envelope and sink. The Slf4jOutboxAuditLogger this module shipped is gone
+            into it; OutboxAuditLogger and PersistingOutboxAuditLogger stay, because outbox_status_history
+            is operational state the dispatcher reads and not only a trail.
+
+            Note the direction: this module depends on audit-core, and audit-spring-boot-starter depends on
+            this module for its optional outbox sink. That is acyclic precisely because audit-core has no
+            in-repo dependencies of its own.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
         <!-- job-core: backoff curve, self-scheduling lifecycle base, SKIP LOCKED claim, instance identity -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>

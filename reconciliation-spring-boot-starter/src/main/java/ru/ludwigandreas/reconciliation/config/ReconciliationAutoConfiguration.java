@@ -26,8 +26,7 @@ import ru.ludwigandreas.job.core.config.JobCoreAutoConfiguration;
 import ru.ludwigandreas.job.core.lock.JdbcRunLock;
 import ru.ludwigandreas.job.core.lock.RunLock;
 import ru.ludwigandreas.reconciliation.api.SyncTask;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
-import ru.ludwigandreas.reconciliation.audit.Slf4jReconciliationAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.engine.ApplyService;
 import ru.ludwigandreas.reconciliation.engine.CorrelationIdSource;
 import ru.ludwigandreas.reconciliation.engine.DirectApplyService;
@@ -120,17 +119,6 @@ public class ReconciliationAutoConfiguration {
     public DemandKeys reconciliationDemandKeys(ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new DemandKeys(objectMapperProvider.getIfAvailable(
                 ReconciliationAutoConfiguration::defaultObjectMapper));
-    }
-
-    /**
-     * Structured-log audit trail, replaced by publishing a {@link ReconciliationAuditLogger} bean.
-     *
-     * @return the default audit logger
-     */
-    @Bean
-    @ConditionalOnMissingBean(ReconciliationAuditLogger.class)
-    public ReconciliationAuditLogger reconciliationAuditLogger() {
-        return new Slf4jReconciliationAuditLogger();
     }
 
     /**
@@ -328,7 +316,7 @@ public class ReconciliationAutoConfiguration {
                                              QuotaWaiterRepository waiters,
                                              EntityManager entityManager,
                                              ReconciliationMetrics metrics,
-                                             ReconciliationAuditLogger auditLogger,
+                                             AuditSink auditLogger,
                                              @Qualifier("reconciliationInstanceOwner") String owner,
                                              PlatformTransactionManager transactionManager) {
         return new DatabaseQuota(properties.getQuotas(), leases, waiters, entityManager,
@@ -361,7 +349,7 @@ public class ReconciliationAutoConfiguration {
     public StagingService reconciliationStagingService(SyncInboxRecordRepository repository,
                                                        PayloadCodec payloadCodec,
                                                        ReconciliationMetrics metrics,
-                                                       ReconciliationAuditLogger auditLogger) {
+                                                       AuditSink auditLogger) {
         return new StagingService(repository, payloadCodec, metrics, auditLogger);
     }
 
@@ -379,7 +367,7 @@ public class ReconciliationAutoConfiguration {
     public RecordApplier reconciliationRecordApplier(SyncInboxRecordRepository repository,
                                                      PayloadCodec payloadCodec,
                                                      ReconciliationMetrics metrics,
-                                                     ReconciliationAuditLogger auditLogger) {
+                                                     AuditSink auditLogger) {
         return new RecordApplier(repository, payloadCodec, metrics, auditLogger);
     }
 
@@ -412,7 +400,7 @@ public class ReconciliationAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(DirectApplyService.class)
     public DirectApplyService reconciliationDirectApplyService(ReconciliationMetrics metrics,
-                                                               ReconciliationAuditLogger auditLogger,
+                                                               AuditSink auditLogger,
                                                                PlatformTransactionManager transactionManager) {
         return new DirectApplyService(metrics, auditLogger, transactionManager);
     }
@@ -472,7 +460,7 @@ public class ReconciliationAutoConfiguration {
                                                TaskStateService taskState,
                                                SyncInboxRecordRepository repository,
                                                ReconciliationMetrics metrics,
-                                               ReconciliationAuditLogger auditLogger,
+                                               AuditSink auditLogger,
                                                CorrelationIdSource correlationIds) {
         return new TaskRunner(runLock, walker, staging, directApply, taskState, repository,
                 metrics, auditLogger, correlationIds);
@@ -493,7 +481,7 @@ public class ReconciliationAutoConfiguration {
     public RemoteJobSettlement reconciliationJobSettlement(SyncRemoteJobRepository jobs,
                                                            QuotaRegistry quotas,
                                                            ReconciliationMetrics metrics,
-                                                           ReconciliationAuditLogger auditLogger,
+                                                           AuditSink auditLogger,
                                                            PlatformTransactionManager transactionManager) {
         return new RemoteJobSettlement(jobs, quotas, metrics, auditLogger, transactionManager);
     }
@@ -519,7 +507,7 @@ public class ReconciliationAutoConfiguration {
             SyncInboxRecordRepository records,
             QuotaRegistry quotas,
             RateLimitRegistry rateLimits,
-            ReconciliationAuditLogger auditLogger,
+            AuditSink auditLogger,
             DemandKeys demandKeys,
             @Qualifier("reconciliationInstanceOwner") String owner,
             PlatformTransactionManager transactionManager) {
@@ -544,7 +532,7 @@ public class ReconciliationAutoConfiguration {
             SyncRemoteJobRepository jobs,
             QuotaRegistry quotas,
             RemoteJobSettlement settlement,
-            ReconciliationAuditLogger auditLogger,
+            AuditSink auditLogger,
             @Qualifier("reconciliationInstanceOwner") String owner,
             PlatformTransactionManager transactionManager) {
         return new RemoteJobPollService(jobs, quotas, settlement, auditLogger, owner, transactionManager);
@@ -615,7 +603,7 @@ public class ReconciliationAutoConfiguration {
             SyncRemoteJobRepository jobs,
             TaskRegistry registry,
             ReconciliationMetrics metrics,
-            ReconciliationAuditLogger auditLogger,
+            AuditSink auditLogger,
             PlatformTransactionManager transactionManager) {
         return new QuotaReclaimService(properties.getQuotas(), leases, waiters, jobs, registry,
                 metrics, auditLogger, transactionManager);

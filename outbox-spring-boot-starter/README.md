@@ -204,3 +204,28 @@ PostgreSQL container via Testcontainers - applying the real Liquibase changelog 
 against the JPA mappings via `ddl-auto=validate` - to exercise `FOR UPDATE SKIP LOCKED` concurrent
 claiming, per-key ordering, idempotency, retry/dead-lettering and stale-claim recovery end to end; it
 needs a working Docker daemon.
+
+## Auditing
+
+This module no longer has an audit mechanism of its own. `Slf4jOutboxAuditLogger` is gone, replaced by `AuditSinkOutboxAuditLogger`. Its trail now goes through the
+platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
+SIEM through the transactional outbox, or several at once - see
+[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
+
+**`OutboxAuditLogger` and `PersistingOutboxAuditLogger` stay, and so does `outbox_status_history`.**
+It is the one place in this repository where two audit stores is the right answer, and the reason is
+written into `PersistingOutboxAuditLogger` itself so that nobody later "finishes the job":
+`user_setting_audit` and `sync_audit_record` were audit trails and nothing else, whereas this table is
+operational state *the dispatcher itself reads* - attempt counts, last failure, when a message was last
+tried. Folding it into a generic table would couple dispatch to audit retention, so a deployment that
+shortened its audit window would shorten the dispatcher's memory with it.
+
+Every transition now *additionally* reaches the platform trail through `OutboxTransitionAudit`, so
+"who was never told what happened" is answerable without knowing this module's schema.
+`DEAD_LETTER` and `FAILED` are recorded as outcome `FAILURE`; the payload is never included, for the
+reason every other module gives about bodies.
+
+**What a deployment notices:** the `ru.ludwigandreas.outbox.audit` logger no longer exists; transitions are on
+`ru.ludwigandreas.audit` with `category=outbox`. A service that published its own
+`OutboxAuditLogger` still wins, and is now responsible for forwarding to the trail itself - the
+shipped wiring composes the two rather than choosing.

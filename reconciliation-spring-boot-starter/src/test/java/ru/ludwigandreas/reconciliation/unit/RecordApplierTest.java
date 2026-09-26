@@ -12,7 +12,7 @@ import ru.ludwigandreas.reconciliation.api.ReconcileContext;
 import ru.ludwigandreas.reconciliation.api.ReconcileResult;
 import ru.ludwigandreas.reconciliation.api.Reconciler;
 import ru.ludwigandreas.reconciliation.api.SyncTask;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.FetchShape;
 import ru.ludwigandreas.reconciliation.config.ReconciliationProperties;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
@@ -57,7 +57,7 @@ class RecordApplierTest {
     private final SyncInboxRecordRepository repository = mock(SyncInboxRecordRepository.class);
     private final PayloadCodec codec = new PayloadCodec(new ObjectMapper());
     private final RecordApplier applier = new RecordApplier(repository, codec,
-            new NoopReconciliationMetrics(), mock(ReconciliationAuditLogger.class));
+            new NoopReconciliationMetrics(), mock(AuditSink.class));
 
     private final AtomicInteger reconcileCalls = new AtomicInteger();
     private final AtomicInteger missingCalls = new AtomicInteger();

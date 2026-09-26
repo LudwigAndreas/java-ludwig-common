@@ -6,8 +6,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.ludwigandreas.reconciliation.api.Fetcher;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
 import ru.ludwigandreas.reconciliation.engine.RegisteredTask;
 import ru.ludwigandreas.reconciliation.entity.RemoteJobState;
@@ -46,7 +47,7 @@ public class RemoteJobSettlement {
     private final SyncRemoteJobRepository jobs;
     private final QuotaRegistry quotas;
     private final ReconciliationMetrics metrics;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
     private final TransactionTemplate requiresNew;
 
     /**
@@ -61,7 +62,7 @@ public class RemoteJobSettlement {
     public RemoteJobSettlement(SyncRemoteJobRepository jobs,
                                QuotaRegistry quotas,
                                ReconciliationMetrics metrics,
-                               ReconciliationAuditLogger auditLogger,
+                               AuditSink auditLogger,
                                PlatformTransactionManager transactionManager) {
         this.jobs = jobs;
         this.quotas = quotas;
@@ -104,7 +105,7 @@ public class RemoteJobSettlement {
         metrics.recordJobSettled(settings.name(), state.name().toLowerCase(Locale.ROOT),
                 lifetime, settled.getPollAttempts());
         if (settings.audit().enabled()) {
-            auditLogger.record(AuditEvent.builder(settings.name(), AuditEvent.Category.JOB,
+            auditLogger.record(ReconciliationAuditEvent.builder(settings.name(), Category.JOB,
                             "job." + state.name().toLowerCase(Locale.ROOT))
                     .subject(String.valueOf(jobId)).detail(reason).build());
         }
@@ -154,7 +155,7 @@ public class RemoteJobSettlement {
         quotas.adopt(job.getQuotaLeaseId()).ifPresent(lease -> {
             lease.close();
             if (settings.audit().enabled()) {
-                auditLogger.record(AuditEvent.builder(settings.name(), AuditEvent.Category.LEASE,
+                auditLogger.record(ReconciliationAuditEvent.builder(settings.name(), Category.LEASE,
                                 "lease.released")
                         .subject(settings.quotaName().orElse(null))
                         .detail("job " + job.getId() + " settled as " + job.getState())

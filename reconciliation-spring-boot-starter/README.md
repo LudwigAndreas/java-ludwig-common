@@ -646,3 +646,34 @@ task.
   rather than resubmission.
 
 Integration tests need a running Docker daemon.
+
+## Auditing
+
+This module no longer has an audit mechanism of its own. `ReconciliationAuditLogger` and `Slf4jReconciliationAuditLogger` are gone, and `SyncAuditRecord`
+with its repository is gone too - nothing in this repository ever wrote it (the
+`PersistingReconciliationAuditLogger` its javadoc referred to did not exist), and any rows a
+deployment wrote through a logger of its own are migrated into `audit_event` by the audit module's
+`audit-003` changeset. Its trail now goes through the
+platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
+SIEM through the transactional outbox, or several at once - see
+[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
+
+The `AuditEvent` record stays, **renamed `ReconciliationAuditEvent`** so that it and the platform
+envelope can be imported into one file, with its `Category` enum (`RUN`, `RECORD`, `JOB`, `LEASE`,
+`OPERATOR`) intact. `Builder.build()` now returns the platform `AuditEvent` directly, which is why no
+call site in this module grew a `.toAuditEvent()`; `buildTyped()` returns this module's record for a
+caller that wants its named components.
+
+`Category` becomes an **attribute** rather than `audit_event.category`. That column names the
+subsystem and these five name a kind of event within it; collapsing them would make one column mean
+two different things depending on the row. The `audit-003` migration maps it the same way, so a
+migrated row and a new one are the same shape.
+
+The outcome is inferred from the event name - `.failed`, `.timed-out` and `.reclaimed` are failures,
+`.quarantined` and `.skipped` are partial - rather than carried, because the record never had an
+outcome component and adding one would mean revisiting every call site to say something they all
+already say in the name.
+
+**What a deployment notices:** the `ru.ludwigandreas.reconciliation.audit` logger no longer exists; the trail is on
+`ru.ludwigandreas.audit` with `category=reconciliation`. The `sync_audit_record` table is not
+dropped - verify the migration against it and drop it yourself.

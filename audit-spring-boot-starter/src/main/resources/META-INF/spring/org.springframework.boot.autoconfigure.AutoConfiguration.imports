@@ -1,0 +1,4 @@
+ru.ludwigandreas.audit.store.config.AuditLiquibaseAutoConfiguration
+ru.ludwigandreas.audit.store.config.AuditPersistenceAutoConfiguration
+ru.ludwigandreas.audit.store.config.AuditRetentionAutoConfiguration
+ru.ludwigandreas.audit.store.config.AuditOutboxAutoConfiguration

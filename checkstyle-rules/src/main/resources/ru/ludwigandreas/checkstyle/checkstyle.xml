@@ -215,6 +215,23 @@
             <property name="influenceFormat" value="2"/>
         </module>
 
+        <!--
+            The same thing for a rule addressed by `id` rather than by class name:
+            `// SUPPRESS CHECKSTYLE ID SecondRedactionMask - <reason>`.
+
+            A separate filter and not an extra property on the one above, because Checkstyle ANDs
+            checkFormat with idFormat: adding idFormat to that filter would make every existing
+            `// SUPPRESS CHECKSTYLE MagicNumber` stop working, since MagicNumber has no id. The rules
+            that need this form are the RegexpSinglelineJava instances - several checks share that one
+            class name, so suppressing by class name would switch all of them off at once, which is
+            exactly what checkFormat exists to prevent.
+        -->
+        <module name="SuppressWithNearbyCommentFilter">
+            <property name="commentFormat" value="SUPPRESS CHECKSTYLE ID (\w+)"/>
+            <property name="idFormat" value="$1"/>
+            <property name="influenceFormat" value="2"/>
+        </module>
+
         <!-- ============================================================================
              SOURCE TEXT
 
@@ -264,6 +281,36 @@
             <property name="ignoreComments" value="true"/>
             <property name="message"
                       value="Do not call printStackTrace() - log the exception with context or let it propagate."/>
+        </module>
+
+        <!--
+            There is one redaction mask in this platform, and it lives on
+            ru.ludwigandreas.audit.redaction.Redaction. This rule stops a second one being declared.
+
+            Why this is a Checkstyle rule and not an ArchUnit one, since the companion rule about audit
+            SPIs is: a mask is the VALUE of a string constant, and ArchUnit reads compiled bytecode,
+            where a `static final String`'s value is a constant-pool entry its JavaField model does not
+            expose. The nearest structural approximation - "no field named MASK or REDACTED" - would miss
+            the one somebody spells HIDDEN and would flag legitimate unrelated constants. Checkstyle does
+            see source text, so here the check is exact. Same division of labour as everywhere else in
+            this repository: architecture-rules owns structure, this file owns source text.
+
+            The pattern matches a declaration whose value is a masking literal, not every occurrence of
+            the literal - `assertThat(x).isEqualTo("****")` in a test is fine and is a test of the real
+            mask, whereas `private static final String MASK = "****";` is the beginning of a second one.
+
+            There were three of these before the audit consolidation ( `***REDACTED***`, `****` and
+            `[redacted]` ) and one of them was persisted, which made picking a single marker a data
+            migration rather than a constant change. That is the cost this rule exists to prevent
+            repeating.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="SecondRedactionMask"/>
+            <property name="format"
+                      value="(?i)\bstatic\s+final\s+String\s+\w*(MASK|REDACT\w*|SANITIS\w*|SANITIZ\w*|HIDDEN|OBFUSCAT\w*)\w*\s*=\s*&quot;"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Do not declare a redaction mask. Use ru.ludwigandreas.audit.redaction.Redaction.MASK - one marker for the whole platform, deliberately not configurable, and migrating a persisted one is a Liquibase changeset."/>
         </module>
 
         <!--

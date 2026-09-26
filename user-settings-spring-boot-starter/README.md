@@ -549,25 +549,61 @@ unbounded, caller-controlled cardinality and, for a value, personal data publish
 erasure request will ever reach.
 
 Redaction is a fixed marker, not a hash or a truncation: a hash is reversible for any value drawn from a
-small set, and a truncation leaks exactly the part of an identifier that identifies.
+small set, and a truncation leaks exactly the part of an identifier that identifies. The marker and that
+argument moved to `audit-core`'s `Redaction.MASK`, which is where the whole platform now reads it from -
+and it changed from `[redacted]` to `***REDACTED***`, which was a **data migration** rather than a
+constant change because this module *persisted* it. The audit module's `audit-004` changeset rewrites the
+existing rows; without it the table would spell one concept two ways and no query could tell "redacted
+under the old rule" from "a user whose setting value is literally the string `[redacted]`".
+
+This module contributes the `DeclaredSensitivityClassifier` that the platform's redaction consults - the
+only one of its four classifiers that recognises *personal* data rather than *secret* data. A setting
+called `mobile` matches no secret-name heuristic and appears in no partner's header list.
 
 The rejected value is omitted from a validation problem **unconditionally**, flagged or not. A rule that
 omitted it only for flagged settings would depend on every definition having been flagged correctly.
 
 Every change records who, when, which definition, old → new, which layer, and the request correlation id
-— which is what joins an audit row to the logs, traces and downstream calls of the same request.
+— which is what joins an audit event to the logs, traces and downstream calls of the same request.
+
+**`user_setting_audit` is gone, and so are its entity and repositories.** The trail moved into the
+platform's single `audit_event` table with `category=settings`, and its rows were migrated there by the
+audit module's `audit-002` changeset - a consolidation that started the new trail empty and left the
+history in a table nobody queries would have moved the auditor's problem rather than solved it. The old
+table is *not* dropped: verify the migration against it and drop it yourself. See
+[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
+
+`SettingsAuditRecorder` stays and is now a caller of `AuditSink` - it never was an SPI, it was a concrete
+class writing its own table, and it was the only one of the nine audit mechanisms with no logging path at
+all. It still runs **inside the caller's transaction**, which is the property worth having and the reason
+`settings` is the one category whose `AuditFailurePolicy` defaults to `FAIL_OPERATION`: a change that
+committed without its audit row is precisely what the trail exists to make impossible, and rethrowing here
+actually rolls the change back rather than reporting a change that stands anyway. A caller therefore has to
+expect `AuditWriteFailedException`, answered as a **503** by the shared problem pipeline - the change did
+not happen and retrying is correct.
+
+One mapping is worth knowing: the old table's `subject` column becomes `on_behalf_of` and `actor` becomes
+`actor_subject`. That is the direction those columns actually meant - `subject` was whose setting changed,
+not who changed it - and an administrator editing somebody else's profile is what makes it visible.
 
 ### Retention
 
 | Table | Default retention | Purged automatically |
 |---|---|---|
-| `user_setting_audit` | 365 days | yes, when `retention.enabled=true` |
+| `audit_event` (`category=settings`) | 7 years | yes, by `ludwig.audit.retention` |
 | `user_setting_value` tombstones | 30 days | yes, when `retention.enabled=true` |
 | `user_consent` | — | **never** |
 
-The purge runs in bounded batches on a fixed delay: a single unbounded delete over a year of rows takes a
-long lock and a lot of WAL on a table that is also on the write path of every settings change. Each pass
-removes at most `batch-size` rows and the scheduler comes back for the rest.
+**The change trail is no longer purged by this module.** It lives in `audit_event` and is purged by
+`audit-spring-boot-starter`'s per-category retention job. Two schedules deleting from one table would be
+two retention policies for one set of rows with the shorter one silently winning - and the shorter one was
+this module's, whose default was a year against the platform's seven. `ludwig.user-settings.retention.audit`
+is no longer read; a deployment that wants the old figure sets
+`ludwig.audit.retention.by-category.settings=P1Y`.
+
+The tombstone purge runs in bounded batches on a fixed delay: a single unbounded delete over a year of rows
+takes a long lock and a lot of WAL on a table that is also on the write path of every settings change. Each
+pass removes at most `batch-size` rows and the scheduler comes back for the rest.
 
 **Consents are never purged on a schedule.** `SettingsRetentionService.purgeConsents` exists, works, and
 is called by nothing in this module. How long consent evidence must be kept is a legal question with a
@@ -713,16 +749,19 @@ outlives deployments, and a retired setting's leftover YAML should not stop a se
 
 ## Schema
 
-Three tables, applied by an independent `SpringLiquibase` alongside the application's own changelog —
+Two tables, applied by an independent `SpringLiquibase` alongside the application's own changelog —
 the same pattern `outbox-spring-boot-starter` uses, with changeset ids namespaced `usrset-NNN`.
 
 | Table | Holds |
 |---|---|
 | `user_setting_value` | one value per `(tenant, scope type, scope id, setting key)`, plus tombstones |
-| `user_setting_audit` | who changed what, when, from what to what, at which layer |
 | `user_consent` | the append-only consent ledger |
 
-The same three tables serve both modes. A projection is a replica, not a different shape, and giving it
+`user_setting_audit` is no longer one of them: the change trail is `audit_event`, owned by
+[`audit-spring-boot-starter`](../audit-spring-boot-starter), with this module's rows migrated into it. The
+old table is left in place for a deployment to verify against and drop.
+
+The same two tables serve both modes. A projection is a replica, not a different shape, and giving it
 its own schema would mean two sets of migrations to keep in step forever — and a bug fixed in one of them.
 
 To control migration order across modules, set `ludwig.user-settings.liquibase.enabled=false` and include

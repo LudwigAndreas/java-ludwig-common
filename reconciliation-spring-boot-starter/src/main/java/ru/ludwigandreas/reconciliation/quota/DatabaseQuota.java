@@ -7,8 +7,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.ReconciliationProperties;
 import ru.ludwigandreas.reconciliation.entity.QuotaLease;
 import ru.ludwigandreas.reconciliation.entity.QuotaWaiter;
@@ -102,7 +103,7 @@ public class DatabaseQuota implements Quota {
     private final QuotaWaiterRepository waiters;
     private final EntityManager entityManager;
     private final ReconciliationMetrics metrics;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
     private final String owner;
     private final TransactionTemplate requiresNew;
     private final TransactionTemplate readOnly;
@@ -124,7 +125,7 @@ public class DatabaseQuota implements Quota {
                          QuotaWaiterRepository waiters,
                          EntityManager entityManager,
                          ReconciliationMetrics metrics,
-                         ReconciliationAuditLogger auditLogger,
+                         AuditSink auditLogger,
                          String owner,
                          PlatformTransactionManager transactionManager) {
         this.configured = Map.copyOf(configured);
@@ -225,7 +226,7 @@ public class DatabaseQuota implements Quota {
         QuotaLease saved = leases.save(lease);
         waiters.delete(waiter);
 
-        auditLogger.record(AuditEvent.builder(taskName, AuditEvent.Category.LEASE, "lease.acquired")
+        auditLogger.record(ReconciliationAuditEvent.builder(taskName, Category.LEASE, "lease.acquired")
                 .subject(quotaName).detail("slot " + (live + 1) + " of " + settings.getMaxConcurrent())
                 .build());
         return Optional.of(new Handle(saved.getId(), quotaName, taskName, settings));
@@ -366,7 +367,7 @@ public class DatabaseQuota implements Quota {
             }
             released = true;
             requiresNew.executeWithoutResult(status -> leases.deleteById(leaseId));
-            auditLogger.record(AuditEvent.builder(taskName, AuditEvent.Category.LEASE, "lease.released")
+            auditLogger.record(ReconciliationAuditEvent.builder(taskName, Category.LEASE, "lease.released")
                     .subject(quotaName).build());
         }
     }

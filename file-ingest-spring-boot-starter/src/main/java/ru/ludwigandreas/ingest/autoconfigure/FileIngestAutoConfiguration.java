@@ -19,8 +19,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import ru.ludwigandreas.ingest.api.FileIngest;
-import ru.ludwigandreas.ingest.audit.IngestAuditLogger;
-import ru.ludwigandreas.ingest.audit.Slf4jIngestAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.ingest.bulk.CopyStagingWriter;
 import ru.ludwigandreas.ingest.bulk.JdbcBatchStagingWriter;
 import ru.ludwigandreas.ingest.bulk.StagingMerge;
@@ -235,17 +234,6 @@ public class FileIngestAutoConfiguration {
     }
 
     /**
-     * The audit sink.
-     *
-     * @return the SLF4J default, unless the application supplied one
-     */
-    @Bean
-    @ConditionalOnMissingBean(IngestAuditLogger.class)
-    public IngestAuditLogger ingestAuditLogger() {
-        return new Slf4jIngestAuditLogger();
-    }
-
-    /**
      * The metrics, defaulting to the no-op so the engine has no null to check.
      *
      * @return the no-op recorder
@@ -341,7 +329,7 @@ public class FileIngestAutoConfiguration {
                                      BatchCommitter committer, StagingWriter stagingWriter,
                                      StagingMerge merge, ReceiptWriter receipts,
                                      SourceArchiver archiver, IngestMetrics metrics,
-                                     IngestAuditLogger audit, Clock clock) {
+                                     AuditSink audit, Clock clock) {
         return new IngestRunner(store, runs, committer, stagingWriter, merge, receipts, archiver,
                 metrics, audit, clock);
     }
@@ -368,7 +356,7 @@ public class FileIngestAutoConfiguration {
     public IngestPass ingestPass(IngestTaskRegistry registry, ObjectDiscovery discovery,
                                  ArrivalDetector arrival, IngestRunner runner,
                                  FileIngestRunRepository runs, ObjectStore store, RunLock lock,
-                                 IngestMetrics metrics, IngestAuditLogger audit,
+                                 IngestMetrics metrics, AuditSink audit,
                                  IngestEventPublisher events, Clock clock) {
         return new IngestPass(registry, discovery, arrival, runner, runs, store, lock, metrics, audit,
                 events, clock);
@@ -399,7 +387,7 @@ public class FileIngestAutoConfiguration {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public FileIngestSchedules fileIngestSchedules(IngestTaskRegistry registry, IngestPass pass,
                                                    FileIngestRunRepository runs,
-                                                   IngestMetrics metrics, IngestAuditLogger audit,
+                                                   IngestMetrics metrics, AuditSink audit,
                                                    @Qualifier(TASK_SCHEDULER) TaskScheduler taskScheduler,
                                                    FileIngestProperties properties, Clock clock) {
         List<SelfSchedulingLifecycle> lifecycles = new ArrayList<>();

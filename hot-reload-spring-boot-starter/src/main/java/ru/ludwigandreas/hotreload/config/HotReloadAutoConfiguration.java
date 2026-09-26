@@ -13,9 +13,9 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.ConfigurableEnvironment;
+import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.audit.redaction.Redactor;
 import ru.ludwigandreas.hotreload.audit.AuditingSourceChangeListener;
-import ru.ludwigandreas.hotreload.audit.HotReloadAuditLogger;
-import ru.ludwigandreas.hotreload.audit.Slf4jHotReloadAuditLogger;
 import ru.ludwigandreas.hotreload.binding.ConfigurationBinder;
 import ru.ludwigandreas.hotreload.binding.HotReloadTypedConfigFactory;
 import ru.ludwigandreas.hotreload.core.FileBackedSource;
@@ -90,19 +90,29 @@ public class HotReloadAutoConfiguration {
         return new ResourceWatcherLifecycle(watcher);
     }
 
-    @Bean
-    @ConditionalOnMissingBean(HotReloadAuditLogger.class)
-    public HotReloadAuditLogger hotReloadAuditLogger() {
-        return new Slf4jHotReloadAuditLogger();
-    }
-
+    /**
+     * The reload trail, written to the platform's shared sink.
+     *
+     * <p>No {@code HotReloadAuditLogger} bean any more: the SPI and its SLF4J implementation are gone, and
+     * {@code audit-core} supplies the {@code AuditSink} and the {@code Redactor}. A deployment that used to
+     * publish its own {@code HotReloadAuditLogger} publishes an {@code AuditSink} instead, and now gets
+     * every other module's trail through the same bean rather than only this one's.
+     *
+     * @param properties supplies the instance actor
+     * @param auditSink  where entries go
+     * @param redactor   masks Vault-sourced and secret-named values before an entry is built
+     * @param coordinator the listener registry
+     * @return the listener
+     */
     @Bean
     @ConditionalOnMissingBean(AuditingSourceChangeListener.class)
     @ConditionalOnProperty(prefix = "ludwig.hotreload.audit", name = "enabled", matchIfMissing = true)
     public AuditingSourceChangeListener hotReloadAuditingSourceChangeListener(HotReloadProperties properties,
-                                                                                HotReloadAuditLogger auditLogger,
-                                                                                SourceReloadCoordinator coordinator) {
-        AuditingSourceChangeListener listener = new AuditingSourceChangeListener(auditLogger, resolveActor(properties));
+                                                                             AuditSink auditSink,
+                                                                             Redactor redactor,
+                                                                             SourceReloadCoordinator coordinator) {
+        AuditingSourceChangeListener listener =
+                new AuditingSourceChangeListener(auditSink, redactor, resolveActor(properties));
         coordinator.addListener(listener);
         return listener;
     }

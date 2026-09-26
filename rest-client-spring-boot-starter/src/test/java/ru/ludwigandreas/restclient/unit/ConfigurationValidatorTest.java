@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import ru.ludwigandreas.restclient.config.RestClientAuthAutoConfiguration;
 import ru.ludwigandreas.restclient.config.RestClientAutoConfiguration;
 
@@ -169,7 +170,8 @@ class ConfigurationValidatorTest {
                 .withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(
                         "org.apache.hc.client5.http.impl.classic.HttpClients"))
                 .withConfiguration(AutoConfigurations.of(JacksonAutoConfiguration.class,
-                        RestClientAutoConfiguration.class, RestClientAuthAutoConfiguration.class))
+                        RestClientAutoConfiguration.class, RestClientAuthAutoConfiguration.class,
+                        AuditCoreAutoConfiguration.class))
                 .withPropertyValues("ludwig.rest-client.clients.billing.base-url=https://billing.internal",
                         "ludwig.rest-client.clients.billing.transport=apache")
                 .run(context -> assertThat(context).hasFailed()
@@ -179,7 +181,8 @@ class ConfigurationValidatorTest {
     private ApplicationContextRunner runner(String... properties) {
         return new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(JacksonAutoConfiguration.class,
-                        RestClientAutoConfiguration.class, RestClientAuthAutoConfiguration.class))
+                        RestClientAutoConfiguration.class, RestClientAuthAutoConfiguration.class,
+                        AuditCoreAutoConfiguration.class))
                 .withPropertyValues(properties);
     }
 }

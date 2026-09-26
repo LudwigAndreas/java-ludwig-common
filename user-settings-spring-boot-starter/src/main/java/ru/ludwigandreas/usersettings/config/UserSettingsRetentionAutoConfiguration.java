@@ -11,12 +11,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import ru.ludwigandreas.usersettings.repository.UserConsentRepository;
-import ru.ludwigandreas.usersettings.repository.UserSettingAuditRepository;
 import ru.ludwigandreas.usersettings.repository.UserSettingValueRepository;
 import ru.ludwigandreas.usersettings.retention.SettingsRetentionService;
 
 /**
- * Purges the audit trail and old tombstones on a schedule.
+ * Purges old tombstones on a schedule.
+ *
+ * <p>The change trail is not purged here any more: it lives in {@code audit_event} and is purged by
+ * {@code audit-spring-boot-starter}'s per-category retention job, under {@code ludwig.audit.retention}.
  *
  * <p>Off by default. Deleting rows on a timer is a decision an operator makes against a written
  * retention policy, not something a library should start doing because it was added to a pom.
@@ -33,11 +35,10 @@ public class UserSettingsRetentionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public SettingsRetentionService settingsRetentionService(UserSettingAuditRepository audit,
-                                                              UserSettingValueRepository values,
+    public SettingsRetentionService settingsRetentionService(UserSettingValueRepository values,
                                                               UserConsentRepository consents,
                                                               Clock userSettingsClock) {
-        return new SettingsRetentionService(audit, values, consents, userSettingsClock);
+        return new SettingsRetentionService(values, consents, userSettingsClock);
     }
 
     @Bean
@@ -65,11 +66,10 @@ public class UserSettingsRetentionAutoConfiguration {
         @Scheduled(fixedDelayString = "${ludwig.user-settings.retention.interval:PT1H}")
         public void purge() {
             UserSettingsProperties.Retention retention = properties.getRetention();
-            int audit = service.purgeAudit(retention.getAudit(), retention.getBatchSize());
             int tombstones = service.purgeTombstones(retention.getTombstones(), retention.getBatchSize());
-            if (audit == retention.getBatchSize() || tombstones == retention.getBatchSize()) {
-                log.info("Settings retention pass filled a batch (audit={}, tombstones={});"
-                        + " the backlog will continue on the next tick", audit, tombstones);
+            if (tombstones == retention.getBatchSize()) {
+                log.info("Settings retention pass filled a batch (tombstones={}); the backlog will"
+                        + " continue on the next tick", tombstones);
             }
         }
     }

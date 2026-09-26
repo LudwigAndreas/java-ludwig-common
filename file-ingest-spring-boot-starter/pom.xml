@@ -42,6 +42,16 @@
 
     <dependencies>
         <!--
+            The platform's audit envelope and sink. This module's IngestAuditLogger and its SLF4J
+            implementation are gone into it; IngestAuditEvent stays as the authoring surface, with its
+            nine action constants, and gains toAuditEvent().
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!--
             NOT optional. The whole point of this module is that it reads the object through the
             platform's one ObjectStore rather than through a bucket client of its own - writing a
             second client here is the JdbcRunLock mistake, and an optional dependency would make it

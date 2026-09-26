@@ -8,8 +8,9 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.ludwigandreas.reconciliation.api.Fetcher;
 import ru.ludwigandreas.reconciliation.api.JobStatus;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.QuotaReclaimPolicy;
 import ru.ludwigandreas.reconciliation.config.ReconciliationProperties;
 import ru.ludwigandreas.reconciliation.engine.RegisteredTask;
@@ -64,7 +65,7 @@ public class QuotaReclaimService {
     private final SyncRemoteJobRepository jobs;
     private final TaskRegistry tasks;
     private final ReconciliationMetrics metrics;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
     private final TransactionTemplate requiresNew;
 
     /**
@@ -85,7 +86,7 @@ public class QuotaReclaimService {
                                SyncRemoteJobRepository jobs,
                                TaskRegistry tasks,
                                ReconciliationMetrics metrics,
-                               ReconciliationAuditLogger auditLogger,
+                               AuditSink auditLogger,
                                PlatformTransactionManager transactionManager) {
         this.configured = Map.copyOf(configured);
         this.leases = leases;
@@ -225,7 +226,7 @@ public class QuotaReclaimService {
     private boolean release(QuotaLease lease, String reason, String policy) {
         requiresNew.executeWithoutResult(status -> leases.deleteById(lease.getId()));
         metrics.recordLeaseReclaimed(lease.getQuotaName(), policy);
-        auditLogger.record(AuditEvent.builder(lease.getTaskName(), AuditEvent.Category.LEASE,
+        auditLogger.record(ReconciliationAuditEvent.builder(lease.getTaskName(), Category.LEASE,
                         "lease.reclaimed")
                 .subject(lease.getQuotaName())
                 .detail("held by " + lease.getOwnerInstance() + "; " + reason)

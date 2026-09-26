@@ -15,7 +15,7 @@ import org.springframework.security.authorization.SpringAuthorizationEventPublis
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
 import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
-import ru.ludwigandreas.security.audit.AccessAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.audit.AuthorizationDeniedAuditListener;
 import ru.ludwigandreas.security.data.CompositeDataScopeProvider;
 import ru.ludwigandreas.security.data.DataAccessGuard;
@@ -113,9 +113,11 @@ public class DataAuthorizationAutoConfiguration {
     public DataAccessGuard ludwigDataAccessGuard(CompositeDataScopeProvider scopeProvider,
                                                   DataScopeRegistry registry,
                                                   DataScopePredicateFactory predicateFactory,
-                                                  AccessAuditLogger auditLogger,
-                                                  SecurityMetrics metrics) {
-        return new DataAccessGuard(scopeProvider, registry, predicateFactory, auditLogger, metrics);
+                                                  AuditSink auditSink,
+                                                  SecurityMetrics metrics,
+                                                  SecurityProperties properties) {
+        return new DataAccessGuard(scopeProvider, registry, predicateFactory, auditSink, metrics,
+                properties.getAudit().isEnabled() && properties.getAudit().isLogGrants());
     }
 
     @Bean
@@ -139,8 +141,8 @@ public class DataAuthorizationAutoConfiguration {
     @ConditionalOnMissingBean(AuthorizationDeniedAuditListener.class)
     @ConditionalOnProperty(prefix = "ludwig.security.audit", name = "enabled", matchIfMissing = true)
     public AuthorizationDeniedAuditListener ludwigAuthorizationDeniedAuditListener(
-            AccessAuditLogger auditLogger, SecurityMetrics metrics) {
-        return new AuthorizationDeniedAuditListener(auditLogger, metrics);
+            AuditSink auditSink, SecurityMetrics metrics) {
+        return new AuthorizationDeniedAuditListener(auditSink, metrics);
     }
 
     @Bean

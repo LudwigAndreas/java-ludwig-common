@@ -53,6 +53,17 @@
     </dependencyManagement>
 
     <dependencies>
+        <!--
+            The platform's audit envelope and sink. This module's ExportAuditSink and its SLF4J
+            implementation are gone into it; ExportAuditEvent stays as the authoring surface and gains
+            toAuditEvent(). audit-core rather than audit-spring-boot-starter, because the trail's
+            destination is a deployment's decision and this module needs only the seam.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
         <!-- job-core: SKIP LOCKED claim, leased RunLock, self-scheduling poller, backoff curve,
              instance identity. Async report runs are a claimed-and-leased job like any other, and
              reimplementing that here is how two modules end up disagreeing about what a dead

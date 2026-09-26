@@ -49,6 +49,17 @@
 
     <dependencies>
         <!--
+            The audit STARTER, not just audit-core: this module's trail was the one that was already
+            persistent (user_setting_audit), so it needs the audit_event table, its Liquibase changelog and
+            the migration of its own rows into it. This module sits above db-core, so taking the starter is
+            not the problem it would be for security, rest-client or hot-reload.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
             PrincipalRef is the lookup key of this module's whole API, LudwigPrincipal is what the
             self-or-admin check reads, and the cache is modelled directly on AuthorityCache.
         -->

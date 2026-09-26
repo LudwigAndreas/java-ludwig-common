@@ -7,6 +7,10 @@
         <option value="$PROJECT_DIR$/pom.xml" />
       </list>
     </option>
+    <option name="ignoredFiles">
+      <set>
+      </set>
+    </option>
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="temurin-17" project-jdk-type="JavaSDK" />
 </project>

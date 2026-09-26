@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import ru.ludwigandreas.db.core.audit.AuditorProvider;
 import ru.ludwigandreas.reconciliation.actuator.ReconciliationEndpoint;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.engine.ReconciliationRuntime;
 import ru.ludwigandreas.reconciliation.engine.TaskRegistry;
 import ru.ludwigandreas.reconciliation.engine.TaskRunner;
@@ -66,7 +66,7 @@ public class ReconciliationActuatorAutoConfiguration {
                                                          QuotaLeaseRepository leases,
                                                          DatabaseQuota quota,
                                                          ReconciliationProperties properties,
-                                                         ReconciliationAuditLogger auditLogger,
+                                                         AuditSink auditLogger,
                                                          ObjectProvider<AuditorProvider<?>> auditors) {
         AuditorProvider<String> auditor = auditors.stream()
                 .findFirst()

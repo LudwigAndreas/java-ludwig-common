@@ -9,8 +9,9 @@ import ru.ludwigandreas.job.core.backoff.BackoffCalculator;
 import ru.ludwigandreas.reconciliation.api.ExternalStamp;
 import ru.ludwigandreas.reconciliation.api.ReconcileContext;
 import ru.ludwigandreas.reconciliation.api.ReconcileResult;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
 import ru.ludwigandreas.reconciliation.entity.SyncInboxRecord;
 import ru.ludwigandreas.reconciliation.entity.SyncRecordKind;
@@ -57,7 +58,7 @@ public class RecordApplier {
     private final SyncInboxRecordRepository repository;
     private final PayloadCodec payloadCodec;
     private final ReconciliationMetrics metrics;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
 
     /**
      * Creates the applier.
@@ -70,7 +71,7 @@ public class RecordApplier {
     public RecordApplier(SyncInboxRecordRepository repository,
                          PayloadCodec payloadCodec,
                          ReconciliationMetrics metrics,
-                         ReconciliationAuditLogger auditLogger) {
+                         AuditSink auditLogger) {
         this.repository = repository;
         this.payloadCodec = payloadCodec;
         this.metrics = metrics;
@@ -230,7 +231,7 @@ public class RecordApplier {
         if (!settings.audit().enabled()) {
             return;
         }
-        auditLogger.record(AuditEvent.builder(settings.name(), AuditEvent.Category.RECORD,
+        auditLogger.record(ReconciliationAuditEvent.builder(settings.name(), Category.RECORD,
                         "record." + status.name().toLowerCase(Locale.ROOT))
                 .subject(record.getCorrelationKey())
                 .transition(SyncRecordStatus.PROCESSING, status)

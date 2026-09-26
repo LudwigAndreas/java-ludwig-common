@@ -4,7 +4,7 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
-import ru.ludwigandreas.security.audit.AccessAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.audit.AccessDecision;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
@@ -39,8 +39,20 @@ public class DataAccessGuard {
     private final DataScopeProvider scopeProvider;
     private final DataScopeRegistry registry;
     private final DataScopePredicateFactory predicateFactory;
-    private final AccessAuditLogger auditLogger;
+    private final AuditSink auditSink;
     private final SecurityMetrics metrics;
+
+    /**
+     * Whether a granted decision is recorded as well as a refused one.
+     *
+     * <p>Off by default, from {@code ludwig.security.audit.log-grants}. Recording every grant sounds
+     * thorough and in practice buries the denials - the events anyone actually reads - under normal
+     * traffic; {@code Slf4jAccessAuditLogger} made the same argument by logging grants at DEBUG. The
+     * decision moved here from the sink because the sink is now shared: once grants can reach an
+     * append-only table and a SIEM rather than only a log level somebody can turn down, "do not record
+     * them" has to mean "do not emit them" rather than "emit them quietly".
+     */
+    private final boolean recordGrants;
 
     /** The caller's scope for this resource and action, before it is compiled into anything. */
     public DataScope scope(String resourceType, String action) {
@@ -116,13 +128,16 @@ public class DataAccessGuard {
         DataScope scope = scopeProvider.scopeFor(principal, resourceType, action);
 
         if (matches(scope, mapping, target)) {
-            auditLogger.record(decision(principal, resourceType, action, target, idExtractor, scope, true, null));
+            if (recordGrants) {
+                auditSink.record(decision(principal, resourceType, action, target, idExtractor, scope,
+                        true, null).toAuditEvent());
+            }
             return;
         }
 
         metrics.recordAccessDenied(resourceType, action);
-        auditLogger.record(decision(principal, resourceType, action, target, idExtractor, scope, false,
-                "out-of-scope"));
+        auditSink.record(decision(principal, resourceType, action, target, idExtractor, scope, false,
+                "out-of-scope").toAuditEvent());
         // The message is intentionally free of the object's identifiers: it reaches the client, and
         // "you may not read order 42" confirms order 42 exists.
         throw new AccessDeniedException("Access to this " + resourceType + " is not permitted");

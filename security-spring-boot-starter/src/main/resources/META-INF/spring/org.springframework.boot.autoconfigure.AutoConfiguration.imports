@@ -1,3 +1,4 @@
+ru.ludwigandreas.security.config.SecurityAuditAutoConfiguration
 ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration
 ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration
 ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration

@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 import ru.ludwigandreas.usersettings.api.ResolvedSettings;
 import ru.ludwigandreas.usersettings.api.ResolvedValue;
 import ru.ludwigandreas.usersettings.api.SettingDefinition;
-import ru.ludwigandreas.usersettings.audit.SettingsRedaction;
+import ru.ludwigandreas.audit.redaction.Redaction;
 import ru.ludwigandreas.usersettings.consent.ConsentRecord;
 import ru.ludwigandreas.usersettings.consent.ConsentState;
 import ru.ludwigandreas.usersettings.registry.SettingDefinitionRegistry;
@@ -80,7 +80,7 @@ public class SettingsResponseRenderer {
         ResolvedValue<T> resolved = settings.resolved(definition);
         String encoded = encode(definition, resolved.value());
         if (redactPii && definition.isPii() && encoded != null) {
-            encoded = SettingsRedaction.REDACTED;
+            encoded = Redaction.MASK;
         }
         return new SettingValueResponse(
                 definition.getKey(),

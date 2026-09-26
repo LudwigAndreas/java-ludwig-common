@@ -783,3 +783,20 @@ one does) and that `purge-interval` is shorter than `retention`, which the start
 | `expires_at` in the past, `purged_at` null | Expired but not yet swept; the endpoint still refuses it. |
 | A 404 rather than a 403 | The caller is not the requester and holds no admin authority. This is intentional: a 403 on a run id would confirm the run exists. |
 | `X-Report-Sha256` not matching bytes a recipient still holds | The file was replaced or corrupted in transit. The checksum is of the stored bytes, recorded at store time, so it is comparable months later. |
+
+## Auditing
+
+This module no longer has an audit mechanism of its own. `ExportAuditSink` and `Slf4jExportAuditSink` are gone. Its trail now goes through the
+platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
+SIEM through the transactional outbox, or several at once - see
+[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
+
+`ExportAuditEvent` stays exactly as it was - it is the readable authoring surface, and thirteen
+components assembled positionally beat thirteen entries put into a `Map<String, Object>` - and
+gained a `toAuditEvent()`. Its validation is unchanged: an event with no run id, no status or no
+timestamp is still impossible to construct. A run that degraded an enrichment stage is now recorded
+as outcome `PARTIAL` rather than as a success with a `degradedStages` field somebody had to notice.
+
+**What a deployment notices:** the `ru.ludwigandreas.export.audit` logger no longer exists. The same information is on
+`ru.ludwigandreas.audit` with `category=export`, in a fixed field order, and the run's own fields are
+in `attributes`.

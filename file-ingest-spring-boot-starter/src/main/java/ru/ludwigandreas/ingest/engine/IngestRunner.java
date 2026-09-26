@@ -22,7 +22,7 @@ import ru.ludwigandreas.ingest.api.ParsedRecord;
 import ru.ludwigandreas.ingest.api.RecordApplier;
 import ru.ludwigandreas.ingest.api.RecordParser;
 import ru.ludwigandreas.ingest.audit.IngestAuditEvent;
-import ru.ludwigandreas.ingest.audit.IngestAuditLogger;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.ingest.bulk.StagingMerge;
 import ru.ludwigandreas.ingest.bulk.StagingWriter;
 import ru.ludwigandreas.ingest.config.FileIngestProperties;
@@ -95,7 +95,7 @@ public class IngestRunner {
     private final ReceiptWriter receipts;
     private final SourceArchiver archiver;
     private final IngestMetrics metrics;
-    private final IngestAuditLogger audit;
+    private final AuditSink audit;
     private final Clock clock;
 
     /**
@@ -117,7 +117,7 @@ public class IngestRunner {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public IngestRunner(ObjectStore store, FileIngestRunRepository runs, BatchCommitter committer,
                         StagingWriter stagingWriter, StagingMerge merge, ReceiptWriter receipts,
-                        SourceArchiver archiver, IngestMetrics metrics, IngestAuditLogger audit,
+                        SourceArchiver archiver, IngestMetrics metrics, AuditSink audit,
                         Clock clock) {
         this.store = store;
         this.runs = runs;
@@ -148,7 +148,7 @@ public class IngestRunner {
 
         audit.record(new IngestAuditEvent(clock.instant(), run.getId(), task.name(),
                 fresh ? IngestAuditEvent.CLAIMED : IngestAuditEvent.RESUMED,
-                Map.of("uri", candidate.uri().value(), "checkpoint", checkpoint.position())));
+                Map.of("uri", candidate.uri().value(), "checkpoint", checkpoint.position())).toAuditEvent());
 
         if (fresh && task.settings().getWrite().isTruncateStagingOnFreshRun()) {
             // Only when fresh. A resumed run must not truncate: the staged rows are exactly the work
@@ -295,7 +295,7 @@ public class IngestRunner {
                 outcome.quarantined(), outcome.skipped());
         audit.record(new IngestAuditEvent(clock.instant(), run.getId(), task.name(),
                 IngestAuditEvent.BATCH_COMMITTED,
-                Map.of("applied", outcome.applied(), "checkpoint", checkpoint.position())));
+                Map.of("applied", outcome.applied(), "checkpoint", checkpoint.position())).toAuditEvent());
     }
 
     /**
@@ -395,7 +395,7 @@ public class IngestRunner {
         int merged = merge.merge(applier.mergeStatement());
         metrics.recordMerge(task.name(), Duration.between(mergeStarted, clock.instant()));
         audit.record(new IngestAuditEvent(clock.instant(), run.getId(), task.name(),
-                IngestAuditEvent.MERGED, Map.of("targetRows", merged, "staged", staged)));
+                IngestAuditEvent.MERGED, Map.of("targetRows", merged, "staged", staged)).toAuditEvent());
 
         // 1. The database, because it is the source of truth.
         latest.setStatus(IngestRunStatus.COMPLETED);
@@ -404,7 +404,7 @@ public class IngestRunner {
         IngestRunSummary summary = summaryOf(latest, candidate, startedAt, latest.getFinishedAt());
         metrics.recordRun(task.name(), IngestRunStatus.COMPLETED, summary.duration());
         audit.record(new IngestAuditEvent(clock.instant(), run.getId(), task.name(),
-                IngestAuditEvent.COMPLETED, Map.of("records", summary.recordsApplied())));
+                IngestAuditEvent.COMPLETED, Map.of("records", summary.recordsApplied())).toAuditEvent());
 
         // 2. The receipt, and 3. the archive. Both idempotent, both redone by a re-run that finds the
         // status already COMPLETED, and both after the status for the reason in this class's note.
@@ -444,7 +444,7 @@ public class IngestRunner {
         metrics.recordRun(task.name(), IngestRunStatus.FAILED,
                 Duration.between(latest.getStartedAt(), latest.getFinishedAt()));
         audit.record(new IngestAuditEvent(clock.instant(), run.getId(), task.name(),
-                IngestAuditEvent.FAILED, Map.of("reason", failure.getClass().getSimpleName())));
+                IngestAuditEvent.FAILED, Map.of("reason", failure.getClass().getSimpleName())).toAuditEvent());
         log.error("Ingest run {} for task {} failed", run.getId(), task.name(), failure);
     }
 

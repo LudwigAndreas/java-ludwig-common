@@ -58,7 +58,15 @@ Consequences when editing POMs:
   `src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`.
 - Starters ship their own i18n bundle under `src/main/resources/i18n/ludwig-<module>-messages[_ru].properties`
   and contribute exception mappers into `web-core`'s single RFC 9457 `ProblemDetail` pipeline rather
-  than shipping their own `@RestControllerAdvice`. User-facing text is never hard-coded (Checkstyle's
+  than shipping their own `@RestControllerAdvice`.
+- **Auditing goes through `audit-core`'s one `AuditSink`.** A module must not declare an audit SPI of its
+  own, must not create a logger named `*.audit`, and must not declare a redaction mask - there is one, on
+  `Redaction.MASK`, and it is deliberately not configurable. Keep the module's typed event record as the
+  authoring surface and give it a `toAuditEvent()`. Do not put a `try`/`catch` around `record`: whether a
+  sink failure fails the caller is `AuditFailurePolicy`, resolved from configuration, and a `catch` in a
+  library overrides it. An ArchUnit rule (`RuleGroup.AUDIT`) and a Checkstyle rule
+  (`SecondRedactionMask`) fail the build on the first two and the third respectively; the split is
+  deliberate, because ArchUnit cannot see a string constant's value. User-facing text is never hard-coded (Checkstyle's
   `NonAsciiSourceText` enforces this); bundle key sets must match across locales.
 - Services follow the reference shape in `crud-service-example`: three model layers
   `web.dto` → `service.model` → `repository.entity`, wired by MapStruct; Lombok instead of
@@ -67,7 +75,7 @@ Consequences when editing POMs:
   `src/main/resources/db/changelog`.
 - Every container image reference is pinned by name, version **and** `sha256` digest. A bare tag is
   not acceptable anywhere, including in READMEs and docker run examples.
-- **One carve-out from the QueryDSL-only rule exists, and it has a boundary.**
+- **Two carve-outs from the QueryDSL-only rule exist, and each has a boundary.**
   `ru.ludwigandreas.ingest.bulk` in `file-ingest-spring-boot-starter` may contain SQL strings, because
   two statements cannot be written in QueryDSL and both are load-bearing: Postgres `COPY` (via
   `CopyManager`, which streams and is several times faster than batched `INSERT`) and the set-based
@@ -75,10 +83,18 @@ Consequences when editing POMs:
   alternative is reading four million staged rows into the JVM to write them back one at a time,
   which is the behaviour that module exists to avoid. The conditions: every SQL string stays in that
   one package; each statement carries javadoc saying why QueryDSL cannot express it (the standard
-  `DistributedLockRepository` and `IdempotencyRecordRepository` already meet for their native
-  `@Query`s); `SqlConfinementTest` in that module fails the build if SQL or JDBC appears anywhere
-  else in it. Nothing outside that package, and no other module, has this exception - the ingest
+  `IdempotencyRecordRepository` in notification-service met this for its native `@Query`
+  before that class was promoted into `idempotency-spring-boot-starter`); `SqlConfinementTest` in that module fails the build if SQL or JDBC appears anywhere
+  else in it. Nothing outside that package has this exception - the ingest
   module's own tables are queried through QueryDSL predicates like everything else.
+- **The second carve-out is `ru.ludwigandreas.idempotency.sql` in `idempotency-spring-boot-starter`**, on the
+  same conditions and enforced the same way by its own `SqlConfinementTest`. One statement: the conditional
+  upsert that claims a key, `INSERT ... ON CONFLICT (scope, idempotency_key) DO UPDATE ... RETURNING`. JPQL
+  has neither `ON CONFLICT` nor `RETURNING` and QueryDSL-JPA generates JPQL, and the alternatives are not
+  merely less tidy but wrong: read-then-insert lets two replicas both insert and aborts a transaction that has
+  already written real work, and `DO NOTHING` returns no row on conflict so the loser must re-select - which in
+  `READ COMMITTED` can still miss a row whose inserting transaction has not committed. The reads, the three
+  state transitions and the purge in that module are QueryDSL like everything else.
 
 ## Tests
 
@@ -109,7 +125,12 @@ Suppressions must always name the rule and give a reason:
 @SuppressWarnings("checkstyle:MagicNumber")                 // whole declaration
 // CHECKSTYLE.OFF: IllegalCatch - reason        ... // CHECKSTYLE.ON: IllegalCatch
 // SUPPRESS CHECKSTYLE VisibilityModifier - reason          // next line
+// SUPPRESS CHECKSTYLE ID SecondRedactionMask - reason      // next line, rule addressed by id
 ```
+
+The last form exists because several checks share the `RegexpSinglelineJava` class name, so naming the
+class would switch all of them off at once. Use it for any rule the config gives an `id`
+(`NonAsciiSourceText`, `ConsoleOutput`, `SecondRedactionMask`, ...).
 
 ## Credentials
 

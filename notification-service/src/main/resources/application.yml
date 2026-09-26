@@ -123,10 +123,12 @@ ludwig:
         fail-fast: false
 
     idempotency:
+      # Whether this service claims a dedup key at all. The mechanism is the platform's now - see
+      # ludwig.idempotency below - and what stays here is this service's own two scope names and the
+      # decision to use them.
       enabled: true
-      # Must comfortably exceed the longest redelivery a broker or a caller will perform: a
-      # consumer-group rebalance, an offset reset, and a client's own retry budget all fit in a day.
-      ttl: 24h
+      kafka-scope: kafka
+      rest-scope: rest
 
     templates:
       # Unset here: templates load from the classpath by default, which is what a local run and the
@@ -307,6 +309,44 @@ ludwig:
       # Same arrangement as outbox and identity below: job_run_lock is created by the changelog this
       # service's own master changelog includes, so the module must not also apply it as a second,
       # standalone SpringLiquibase.
+      enabled: false
+
+  # --- idempotency: the platform's work-dedup store ----------------------------------------------
+  # This service used to ship the primitive itself; it was promoted into
+  # idempotency-spring-boot-starter. What is configured here is the window a retry is recognised in and
+  # the purge that keeps the table bounded. The HTTP filter stays OFF: this service calls the store
+  # directly, because its batch endpoint carries one key per item in the body and its response's
+  # `duplicate` flag is a published part of its API. See the README.
+  idempotency:
+    # A correctness parameter, not housekeeping. It is the window in which a retry is recognised, so
+    # shortening it converts duplicates into double executions rather than into disk savings.
+    ttl: 24h
+    scopes:
+      # The Kafka ingress needs longer than the REST one: a redelivery after an offset reset is still a
+      # redelivery, and the topic's retention outlives any HTTP client's retry budget.
+      - scope: kafka
+        ttl: 7d
+      - scope: rest
+        ttl: 24h
+    http:
+      # Deliberately off - see above. Turning it on would replay the original 202 to a retrying caller
+      # instead of the 200-with-duplicate=true this service's API documents, and would still not cover
+      # the batch endpoint.
+      enabled: false
+    kafka:
+      # Off too: this service claims inside its own application service, where the claim shares the
+      # transaction that writes the request and its deliveries. A RecordFilterStrategy would claim before
+      # that service is reached, which is the same transaction here but a second place to look.
+      enabled: false
+    purge:
+      enabled: true
+      interval: 15m
+      batch-size: 1000
+    liquibase:
+      # Same arrangement as outbox and job-core above: idempotency_claim is created by the changelog this
+      # service's own master changelog includes, so the module must not also apply it as a second,
+      # standalone SpringLiquibase - which would run at a different time and, on the deploy that
+      # introduces it, before the table it migrates rows out of exists.
       enabled: false
 
   # --- outbox: OUTBOUND LIFECYCLE EVENTS ONLY ----------------------------------------------------

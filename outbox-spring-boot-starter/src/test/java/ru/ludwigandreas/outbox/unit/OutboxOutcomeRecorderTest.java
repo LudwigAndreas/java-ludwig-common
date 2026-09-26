@@ -1,7 +1,8 @@
 package ru.ludwigandreas.outbox.unit;
 
 import org.junit.jupiter.api.Test;
-import ru.ludwigandreas.outbox.audit.Slf4jOutboxAuditLogger;
+import ru.ludwigandreas.audit.NoopAuditSink;
+import ru.ludwigandreas.outbox.audit.AuditSinkOutboxAuditLogger;
 import ru.ludwigandreas.job.core.backoff.BackoffCalculator;
 import ru.ludwigandreas.outbox.config.OutboxProperties;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
@@ -47,7 +48,7 @@ class OutboxOutcomeRecorderTest {
         OutboxOutcomeRecorder recorder = new OutboxOutcomeRecorder(
                 repository,
                 new BackoffCalculator(new OutboxProperties.Retry().toBackoffPolicy()),
-                new Slf4jOutboxAuditLogger(),
+                new AuditSinkOutboxAuditLogger(NoopAuditSink.INSTANCE),
                 metrics,
                 new OutboxProperties());
 

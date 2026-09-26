@@ -145,6 +145,16 @@
                  a consumer never sees an unresolved expression here. -->
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
+                <artifactId>audit-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>audit-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
                 <artifactId>db-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -161,6 +171,11 @@
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
                 <artifactId>job-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>idempotency-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

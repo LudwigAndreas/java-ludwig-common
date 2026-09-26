@@ -7,8 +7,9 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.ludwigandreas.reconciliation.api.Fetcher;
 import ru.ludwigandreas.reconciliation.api.JobStatus;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
 import ru.ludwigandreas.reconciliation.engine.RegisteredTask;
 import ru.ludwigandreas.reconciliation.entity.RemoteJobState;
@@ -47,7 +48,7 @@ public class RemoteJobPollService {
     private final SyncRemoteJobRepository jobs;
     private final QuotaRegistry quotas;
     private final RemoteJobSettlement settlement;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
     private final String owner;
     private final TransactionTemplate requiresNew;
 
@@ -64,7 +65,7 @@ public class RemoteJobPollService {
     public RemoteJobPollService(SyncRemoteJobRepository jobs,
                                 QuotaRegistry quotas,
                                 RemoteJobSettlement settlement,
-                                ReconciliationAuditLogger auditLogger,
+                                AuditSink auditLogger,
                                 String owner,
                                 PlatformTransactionManager transactionManager) {
         this.jobs = jobs;
@@ -204,7 +205,7 @@ public class RemoteJobPollService {
         if (!settings.audit().enabled()) {
             return;
         }
-        auditLogger.record(AuditEvent.builder(settings.name(), AuditEvent.Category.JOB, event)
+        auditLogger.record(ReconciliationAuditEvent.builder(settings.name(), Category.JOB, event)
                 .subject(String.valueOf(job.getId())).detail(detail).build());
     }
 }

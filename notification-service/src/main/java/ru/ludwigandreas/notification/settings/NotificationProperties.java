@@ -160,27 +160,39 @@ public class NotificationProperties {
         private boolean failFast = false;
     }
 
-    /** The consumer-side dedup window - one of the two capabilities the platform does not ship. */
+    /**
+     * What this service claims dedup keys under.
+     *
+     * <p>The mechanism itself is no longer here: {@code IdempotencyStore} and its Postgres implementation are
+     * {@code idempotency-spring-boot-starter}'s now, along with the table and the retention purge. What stays
+     * is the part that is genuinely this service's - whether to dedup at all, and the two scope names, which
+     * are its own coordination contract between its two ingresses and mean nothing to any other service.
+     *
+     * <p>{@code ttl} is gone, and that is the promotion doing its job rather than a lost knob. The window in
+     * which a retry is recognised is now {@code ludwig.idempotency.ttl}, with a per-scope override for the
+     * case where the two ingresses genuinely disagree - a Kafka consumer usually needs longer than its
+     * topic's retention, an HTTP caller usually needs a day. One number for the platform, rather than one per
+     * service that each has to be got right separately.
+     */
     @Getter
     @Setter
     public static class Idempotency {
 
+        /**
+         * Whether a key is claimed at all.
+         *
+         * <p>Kept here rather than deferred to {@code ludwig.idempotency.enabled}, which switches the whole
+         * module off including its purge. This one says "this service does not dedup", which a deployment
+         * running a single replica against a broker it trusts may legitimately want, and which must not also
+         * stop the purge from clearing claims some other component made.
+         */
         private boolean enabled = true;
 
-        /**
-         * How long a key stays claimed.
-         *
-         * <p>Must comfortably exceed the longest redelivery a broker or a caller will perform. Too
-         * short and an at-least-once redelivery arriving after the window sends a second time; too
-         * long and the table grows and a caller cannot legitimately reuse a key. A day covers a
-         * consumer-group rebalance, an offset reset and a client's own retry budget.
-         */
-        @NotNull
-        private Duration ttl = Duration.ofDays(1);
-
+        /** The scope keys arriving on the Kafka ingress are claimed under. */
         @NotBlank
         private String kafkaScope = "kafka";
 
+        /** The scope keys arriving on the REST ingress are claimed under. */
         @NotBlank
         private String restScope = "rest";
     }

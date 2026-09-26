@@ -38,7 +38,10 @@ import ru.ludwigandreas.usersettings.api.SettingUpdate;
 import ru.ludwigandreas.usersettings.api.SettingsLookup;
 import ru.ludwigandreas.usersettings.api.SettingsSubject;
 import ru.ludwigandreas.usersettings.api.SettingsWriter;
-import ru.ludwigandreas.usersettings.audit.SettingsRedaction;
+import ru.ludwigandreas.audit.redaction.Redaction;
+import ru.ludwigandreas.audit.store.entity.AuditEventEntity;
+import ru.ludwigandreas.audit.store.repository.AuditEventRepository;
+import ru.ludwigandreas.audit.store.repository.AuditTrailQuery;
 import ru.ludwigandreas.usersettings.backfill.SettingsBackfillRequest;
 import ru.ludwigandreas.usersettings.backfill.SettingsBackfillResult;
 import ru.ludwigandreas.usersettings.backfill.SettingsBackfillService;
@@ -47,13 +50,11 @@ import ru.ludwigandreas.usersettings.consent.ConsentGrant;
 import ru.ludwigandreas.usersettings.consent.ConsentRecord;
 import ru.ludwigandreas.usersettings.consent.ConsentService;
 import ru.ludwigandreas.usersettings.consent.ConsentState;
-import ru.ludwigandreas.usersettings.entity.SettingAuditAction;
+import ru.ludwigandreas.usersettings.audit.SettingAuditAction;
 import ru.ludwigandreas.usersettings.entity.UserConsentEntity;
-import ru.ludwigandreas.usersettings.entity.UserSettingAuditEntity;
 import ru.ludwigandreas.usersettings.exception.SettingNotEditableException;
 import ru.ludwigandreas.usersettings.exception.SettingValidationException;
 import ru.ludwigandreas.usersettings.repository.UserConsentRepository;
-import ru.ludwigandreas.usersettings.repository.UserSettingAuditRepository;
 import ru.ludwigandreas.usersettings.repository.UserSettingValueRepository;
 
 /**
@@ -125,7 +126,8 @@ class OwnerModeIntegrationTest {
     private UserSettingValueRepository values;
 
     @Autowired
-    private UserSettingAuditRepository audit;
+    private AuditEventRepository audit;
+
 
     @Autowired
     private UserConsentRepository consentRows;
@@ -344,14 +346,20 @@ class OwnerModeIntegrationTest {
         writer.set(PrincipalRef.user(SUBJECT), IntegrationSettings.PAGE_SIZE, 50);
         writer.set(PrincipalRef.user(SUBJECT), IntegrationSettings.PAGE_SIZE, 75);
 
-        List<UserSettingAuditEntity> trail = audit.forSubject(ACME, SUBJECT, 10);
+        // The consolidated trail: the same two events, now in audit_event alongside every other
+        // subsystem's, found by the subject they were about rather than by this module's own table.
+        List<AuditEventEntity> trail = trailFor(SUBJECT);
         assertThat(trail).hasSize(2);
-        UserSettingAuditEntity latest = trail.get(0);
-        assertThat(latest.getAction()).isEqualTo(SettingAuditAction.SET);
-        assertThat(latest.getSettingKey()).isEqualTo("ui.page-size");
-        assertThat(latest.getOldValue()).isEqualTo("50");
-        assertThat(latest.getNewValue()).isEqualTo("75");
-        assertThat(latest.isRedacted()).isFalse();
+        AuditEventEntity latest = trail.stream()
+                .filter(event -> "75".equals(event.getAttributes().get("newValue")))
+                .findFirst().orElseThrow();
+        assertThat(latest.getAction()).isEqualTo(SettingAuditAction.SET.action());
+        assertThat(latest.getResourceId()).isEqualTo("ui.page-size");
+        assertThat(latest.getAttributes())
+                .containsEntry("settingKey", "ui.page-size")
+                .containsEntry("oldValue", "50")
+                .containsEntry("newValue", "75")
+                .containsEntry("redacted", false);
     }
 
     @Test
@@ -361,10 +369,10 @@ class OwnerModeIntegrationTest {
         // written here would survive every erasure request meant to remove it.
         writer.set(PrincipalRef.user(SUBJECT), IntegrationSettings.CONTACT_NOTE, "+7 900 000 00 00");
 
-        UserSettingAuditEntity entry = audit.forSubject(ACME, SUBJECT, 10).get(0);
-        assertThat(entry.isRedacted()).isTrue();
-        assertThat(entry.getNewValue()).isEqualTo(SettingsRedaction.REDACTED);
-        assertThat(entry.getNewValue()).doesNotContain("900");
+        AuditEventEntity entry = trailFor(SUBJECT).get(0);
+        assertThat(entry.getAttributes()).containsEntry("redacted", true);
+        assertThat(entry.getAttributes()).containsEntry("newValue", Redaction.MASK);
+        assertThat((String) entry.getAttributes().get("newValue")).doesNotContain("900");
 
         // The value itself is still stored and still readable by its owner - redaction governs the
         // trail, not the setting.
@@ -479,11 +487,13 @@ class OwnerModeIntegrationTest {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
 
-        List<UserSettingAuditEntity> trail = audit.forSubject(ACME, SUBJECT, 10);
+        List<AuditEventEntity> trail = trailFor(SUBJECT);
         assertThat(trail).hasSize(1);
-        assertThat(trail.get(0).getAction()).isEqualTo(SettingAuditAction.ADMIN_READ);
-        assertThat(trail.get(0).getActor()).isEqualTo("admin-1");
-        assertThat(trail.get(0).getSubject()).isEqualTo(SUBJECT);
+        assertThat(trail.get(0).getAction()).isEqualTo(SettingAuditAction.ADMIN_READ.action());
+        // actor is who looked, onBehalfOf is whose settings they looked at - the direction the old
+        // table's `actor`/`subject` columns meant, now named for it.
+        assertThat(trail.get(0).getActorSubject()).isEqualTo("admin-1");
+        assertThat(trail.get(0).getOnBehalfOf()).isEqualTo(SUBJECT);
     }
 
     @Test
@@ -497,7 +507,16 @@ class OwnerModeIntegrationTest {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
 
-        assertThat(audit.forSubject(ACME, SUBJECT, 10)).isEmpty();
+        assertThat(trailFor(SUBJECT)).isEmpty();
+    }
+
+    /** The settings trail for one subject, from the platform's consolidated table. */
+    private List<AuditEventEntity> trailFor(String subject) {
+        return audit.find(AuditTrailQuery.builder()
+                .categories(List.of("settings"))
+                .onBehalfOf(subject)
+                .limit(10)
+                .build());
     }
 
     private static void authenticateAsAdmin() {

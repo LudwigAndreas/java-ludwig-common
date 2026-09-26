@@ -34,6 +34,22 @@
     <include file="classpath:db/changelog/changes/0005-fold-lock-into-job-core.xml" relativeToChangelogFile="false"/>
 
     <!--
+        Same arrangement for idempotency-spring-boot-starter's idempotency_claim, which replaced this
+        service's own notification_idempotency - see ludwig.idempotency.liquibase.enabled=false. Its changeset
+        ids are namespaced (idempotency-NNN/ludwig-idempotency).
+
+        This include sits ABOVE 0006, which drops notification_idempotency, and the order is load-bearing for
+        a stronger reason than it was for the lock: the module's changelog carries the changeset that MOVES
+        every row out of the old table, and an <include> contributes its changesets at the position it
+        appears. Putting it after the drop would discard every in-flight key - and every in-flight key is a
+        claim on work that has been done, so every one of them is a notification this service would send to a
+        real person a second time.
+    -->
+    <include file="classpath:db/changelog/idempotency/idempotency-changelog.xml" relativeToChangelogFile="false"/>
+
+    <include file="classpath:db/changelog/changes/0006-fold-idempotency-into-starter.xml" relativeToChangelogFile="false"/>
+
+    <!--
         Same arrangement for the identity projection's tables (security_user, security_partner,
         security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false. This
         service sets ludwig.identity.contact.enabled, so its security_user rows carry the verified

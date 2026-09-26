@@ -7,19 +7,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.usersettings.repository.UserConsentRepository;
-import ru.ludwigandreas.usersettings.repository.UserSettingAuditRepository;
 import ru.ludwigandreas.usersettings.repository.UserSettingValueRepository;
 
 /**
- * Keeps the two tables that grow without bound from growing without bound.
+ * Keeps the tables that grow without bound from growing without bound.
  *
  * <h2>What is purged, and what is not</h2>
  *
- * <p><b>Audit rows</b> are purged on a schedule. They accumulate one row per change and one per
- * administrative read, forever, on a table that is also on the write path of every settings change -
- * so without a purge the trail eventually costs more than it is worth. The default retention is a
- * year, which is long enough to answer "who changed this and when" for any support question anybody
- * actually asks, and an operator with a longer obligation raises it.
+ * <p><b>Audit rows are no longer purged here.</b> The change trail moved into {@code audit_event} and is
+ * purged by {@code audit-spring-boot-starter}'s own per-category retention job, under
+ * {@code ludwig.audit.retention}. Two schedules deleting from one table would be two retention policies
+ * for one set of rows, with the shorter one silently winning - and the shorter one was this module's,
+ * whose default was a year against the platform's seven. A deployment that wants the old figure sets
+ * {@code ludwig.audit.retention.by-category.settings}. {@code ludwig.user-settings.retention.audit} is
+ * no longer read; the module README says so.
  *
  * <p><b>Tombstones</b> are purged on the same schedule, with a much shorter retention. A tombstone
  * only has to outlive the window in which a late event could still arrive for the setting it covers,
@@ -45,25 +46,9 @@ import ru.ludwigandreas.usersettings.repository.UserSettingValueRepository;
 @RequiredArgsConstructor
 public class SettingsRetentionService {
 
-    private final UserSettingAuditRepository audit;
     private final UserSettingValueRepository values;
     private final UserConsentRepository consents;
     private final Clock clock;
-
-    /**
-     * Removes one batch of expired change-trail entries.
-     *
-     * @return how many audit rows were removed; equal to {@code batchSize} means there is more to do
-     */
-    @Transactional
-    public int purgeAudit(Duration retention, int batchSize) {
-        Instant cutoff = cutoff(retention);
-        int removed = audit.purgeOlderThan(cutoff, batchSize);
-        if (removed > 0) {
-            log.info("Purged {} settings audit entries older than {}", removed, cutoff);
-        }
-        return removed;
-    }
 
     /**
      * Removes one batch of tombstones whose late-event window has passed.

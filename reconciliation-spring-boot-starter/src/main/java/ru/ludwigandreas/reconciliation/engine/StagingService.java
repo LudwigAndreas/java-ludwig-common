@@ -6,8 +6,9 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.job.core.backoff.BackoffCalculator;
 import ru.ludwigandreas.reconciliation.api.ExternalStamp;
 import ru.ludwigandreas.reconciliation.api.FetchOutcome;
-import ru.ludwigandreas.reconciliation.audit.AuditEvent;
-import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditLogger;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
+import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.NotFoundPolicy;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
 import ru.ludwigandreas.reconciliation.entity.SyncInboxRecord;
@@ -37,7 +38,7 @@ public class StagingService {
     private final SyncInboxRecordRepository repository;
     private final PayloadCodec payloadCodec;
     private final ReconciliationMetrics metrics;
-    private final ReconciliationAuditLogger auditLogger;
+    private final AuditSink auditLogger;
 
     /**
      * Creates the service.
@@ -50,7 +51,7 @@ public class StagingService {
     public StagingService(SyncInboxRecordRepository repository,
                           PayloadCodec payloadCodec,
                           ReconciliationMetrics metrics,
-                          ReconciliationAuditLogger auditLogger) {
+                          AuditSink auditLogger) {
         this.repository = repository;
         this.payloadCodec = payloadCodec;
         this.metrics = metrics;
@@ -184,7 +185,7 @@ public class StagingService {
             row.setStatus(SyncRecordStatus.QUARANTINED);
             row.setSettledAt(Instant.now());
             metrics.recordRecordOutcome(settings.name(), "fetch_quarantined");
-            auditLogger.record(AuditEvent.builder(settings.name(), AuditEvent.Category.RECORD,
+            auditLogger.record(ReconciliationAuditEvent.builder(settings.name(), Category.RECORD,
                             "fetch.quarantined")
                     .subject(key).detail(reason).runId(context.runId())
                     .correlationId(context.correlationId()).build());

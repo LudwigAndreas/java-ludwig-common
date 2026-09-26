@@ -24,7 +24,7 @@ import ru.ludwigandreas.usersettings.audit.SettingsAuditRecorder;
 import ru.ludwigandreas.usersettings.cache.AfterCommitEviction;
 import ru.ludwigandreas.usersettings.cache.SettingsCache;
 import ru.ludwigandreas.usersettings.api.SettingValueConverter;
-import ru.ludwigandreas.usersettings.entity.SettingAuditAction;
+import ru.ludwigandreas.usersettings.audit.SettingAuditAction;
 import ru.ludwigandreas.usersettings.entity.UserSettingValueEntity;
 import ru.ludwigandreas.usersettings.event.SettingsEventPublisher;
 import ru.ludwigandreas.usersettings.event.UserSettingChangedEvent;

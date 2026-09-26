@@ -86,14 +86,15 @@ public class RetentionScheduler implements SmartLifecycle {
         long deliveries = step(lock, () -> retentionService.purgeDeliveries(now));
         long history = step(lock, () -> retentionService.purgeHistory(now));
         long suppressions = step(lock, () -> retentionService.compactSuppressions(now));
-        long keys = step(lock, () -> retentionService.purgeIdempotencyKeys(now));
+        // No idempotency step: that table and its purge belong to idempotency-spring-boot-starter, which
+        // schedules its own run under the same lock mechanism. Two purges of one table on two schedules is
+        // exactly the duplication the promotion removed.
         long windows = step(lock, () -> retentionService.purgeRateLimitWindows(now));
 
-        if (content + scrubbed + deliveries + history + suppressions + keys + windows > 0) {
+        if (content + scrubbed + deliveries + history + suppressions + windows > 0) {
             log.info("Retention purge: {} bodies dropped, {} deliveries scrubbed, {} deliveries "
-                            + "deleted, {} history rows, {} suppressions, {} idempotency keys, "
-                            + "{} rate-limit windows",
-                    content, scrubbed, deliveries, history, suppressions, keys, windows);
+                            + "deleted, {} history rows, {} suppressions, {} rate-limit windows",
+                    content, scrubbed, deliveries, history, suppressions, windows);
         }
     }
 

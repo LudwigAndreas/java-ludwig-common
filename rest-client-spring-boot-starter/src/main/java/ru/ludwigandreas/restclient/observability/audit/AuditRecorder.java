@@ -12,8 +12,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.ludwigandreas.restclient.config.AuditProperties;
-import ru.ludwigandreas.restclient.observability.RestClientMeters;
-import ru.ludwigandreas.restclient.spi.AuditEventEmitter;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.restclient.spi.OutboundCallAudit;
 
 /**
@@ -43,24 +42,20 @@ public class AuditRecorder {
     private final double samplingProbability;
     private final Set<String> requestHeaders;
     private final Set<String> responseHeaders;
-    private final AuditEventEmitter emitter;
-    private final RestClientMeters meters;
+    private final AuditSink auditSink;
     private final Clock clock;
 
     /** Creates the recorder for one named client from its {@code audit} block. */
-    // CHECKSTYLE.OFF: ParameterNumber - configuration plus two collaborators, all per client.
-    public AuditRecorder(String clientName, AuditProperties properties, AuditEventEmitter emitter,
-                         RestClientMeters meters, Clock clock) {
+    public AuditRecorder(String clientName, AuditProperties properties, AuditSink auditSink,
+                         Clock clock) {
         this.clientName = clientName;
         this.enabled = Boolean.TRUE.equals(properties.getEnabled());
         this.samplingProbability = properties.getSamplingProbability();
         this.requestHeaders = lowerCased(properties.getIncludeRequestHeaders());
         this.responseHeaders = lowerCased(properties.getIncludeResponseHeaders());
-        this.emitter = emitter;
-        this.meters = meters;
+        this.auditSink = auditSink;
         this.clock = clock;
     }
-    // CHECKSTYLE.ON: ParameterNumber
 
     /** Whether auditing is on for this client at all. */
     public boolean enabled() {
@@ -89,17 +84,24 @@ public class AuditRecorder {
         emit(audit);
     }
 
+    /**
+     * Hands the record to the platform sink.
+     *
+     * <p>No {@code catch} here any more, and that is the point of the consolidation rather than an
+     * omission. "An audit sink must not be able to fail a payment" is still true for this category and is
+     * still enforced - by {@code FailurePolicyAuditSink}, which resolves
+     * {@code ludwig.audit.failure.by-category} and logs-and-continues for {@code outbound-call}. Keeping a
+     * {@code catch} here as well would override whatever a deployment configured with a decision hard-coded
+     * in a library, which is precisely what nine separate audit mechanisms did.
+     *
+     * <p>The counter that made a silently-dropping sink visible before an auditor found it is kept, and is
+     * now platform-wide rather than per client: {@code audit-spring-boot-starter} registers
+     * {@code AuditMetrics} as an {@code AuditSinkFailureListener}, tagged by category and policy, so
+     * {@code ludwig.audit.sink.failures{category="outbound-call"}} is the same signal
+     * {@code RestClientMeters.auditFailure} used to give for this module alone.
+     */
     private void emit(OutboundCallAudit audit) {
-        try {
-            emitter.emit(audit);
-        } catch (RuntimeException ex) {
-            // Same rule as a listener: an audit sink must not be able to fail a business call. The
-            // counter is what makes a sink that has been silently dropping records for a month
-            // visible before an auditor finds it.
-            meters.auditFailure(clientName);
-            log.warn("Audit emitter {} failed for client {}; the call was not affected.",
-                    emitter.getClass().getName(), clientName, ex);
-        }
+        auditSink.record(audit.toAuditEvent());
     }
 
     private boolean shouldRecord(AuditRecord record) {

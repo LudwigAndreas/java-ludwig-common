@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import ru.ludwigandreas.restclient.config.RestClientAuthAutoConfiguration;
 import ru.ludwigandreas.restclient.config.RestClientAutoConfiguration;
 import ru.ludwigandreas.restclient.config.RestClientInterfaceAutoConfiguration;
@@ -30,7 +31,8 @@ final class RestClientTestSupport {
                         JacksonAutoConfiguration.class,
                         RestClientAutoConfiguration.class,
                         RestClientAuthAutoConfiguration.class,
-                        RestClientInterfaceAutoConfiguration.class))
+                        RestClientInterfaceAutoConfiguration.class,
+                        AuditCoreAutoConfiguration.class))
                 .withPropertyValues(properties);
     }
 

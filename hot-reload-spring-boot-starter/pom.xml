@@ -46,6 +46,16 @@
     </dependencyManagement>
 
     <dependencies>
+        <!--
+            The platform's audit envelope, sink SPI and redaction. This module's own SecretRedaction and
+            HotReloadAuditLogger are gone into it. audit-core has no in-repo dependencies, which is what
+            makes it safe here: this module sits below db-core and cannot take audit-spring-boot-starter.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
         <!-- Environment/PropertySource machinery, ApplicationEvent publishing -->
         <dependency>
             <groupId>org.springframework</groupId>

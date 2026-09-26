@@ -20,10 +20,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import ru.ludwigandreas.db.core.repository.BaseRepositoryImpl;
-import ru.ludwigandreas.export.api.ExportAuditSink;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.export.api.ReportSink;
 import ru.ludwigandreas.export.api.ReportWriterFactory;
-import ru.ludwigandreas.export.audit.Slf4jExportAuditSink;
 import ru.ludwigandreas.export.engine.ExecutionPlanner;
 import ru.ludwigandreas.export.event.OutboxReportEventPublisher;
 import ru.ludwigandreas.export.event.ReportEventPublisher;
@@ -91,16 +90,6 @@ public class ExportPersistenceAutoConfiguration {
     }
 
     /**
-     * The trail. SLF4J by default, because a service whose logs are already shipped to a retained
-     * store has somewhere for it to go; a service that needs it in a table contributes its own bean.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    public ExportAuditSink exportAuditSink() {
-        return new Slf4jExportAuditSink();
-    }
-
-    /**
      * The fallback announcer: nothing at all.
      *
      * <p>Registered only when the nested outbox configuration did not produce one. Spring processes
@@ -161,7 +150,7 @@ public class ExportPersistenceAutoConfiguration {
     @ConditionalOnBean(ExecutionPlanner.class)
     public ExportRunExecutor exportRunExecutor(ExecutionPlanner planner, ReportRunEngine engine,
                                                ExportRunService lifecycle,
-                                               ExportReportRunRepository runs, ExportAuditSink audit,
+                                               ExportReportRunRepository runs, AuditSink audit,
                                                ExportMetrics metrics, ExportProperties properties,
                                                JobInstanceIdentity identity,
                                                ObjectProvider<Clock> clock,

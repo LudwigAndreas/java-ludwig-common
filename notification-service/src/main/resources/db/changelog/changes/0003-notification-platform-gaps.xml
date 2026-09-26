@@ -6,10 +6,23 @@
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
 
     <!--
-        The two capabilities the platform does not have yet, plus the cluster-wide rate limiter.
-        Kept in their own changeset file because all three are candidates to move into a shared
-        starter - see "Promotion candidates" in the README - and a promotion should be able to lift
-        this file rather than pick rows out of a larger one.
+        HISTORY. Both of the capabilities this file added have since been promoted out of this service, and
+        the changesets below are kept unchanged because a changeset that has run is a fact rather than a
+        document: editing one would either be ignored (Liquibase checks the checksum) or would fail every
+        existing deployment.
+
+        What happened to each:
+          - notification-020-idempotency created notification_idempotency, now idempotency_claim in
+            idempotency-spring-boot-starter. The rows were moved by that module's own changeset and the table
+            is dropped by 0006-fold-idempotency-into-starter.xml, which runs after it;
+          - notification-021-lock created notification_lock, now job_run_lock in job-core, dropped by
+            0005-fold-lock-into-job-core.xml;
+          - notification-022-rate-limit-window and notification-023-template-revision are still this
+            service's own. The rate limiter is cluster-wide and could be promoted; the template revision
+            table is about FreeMarker sources this service owns and is not a platform concern.
+
+        Keeping the three in one file did what it was written to do: a promotion lifted a table rather than
+        picking rows out of a larger changeset.
     -->
 
     <changeSet id="notification-020-idempotency" author="ludwig-notification">
