@@ -24,6 +24,13 @@ Do these in order. They are cheap and nothing else works without them.
 3. **The verification gate**, in full, for every change:
 
    ```bash
+   scripts/gate.sh --change <change> <module> [<module>...]   # runs all of the below
+   scripts/gate.sh --list <module>                            # or just print the commands
+   ```
+
+   which is, by hand:
+
+   ```bash
    scripts/manifest.sh build          # only if a POM changed
    mvn -q validate                    # Checkstyle, every module
    mvn -pl <touched-module> -am verify
@@ -31,9 +38,11 @@ Do these in order. They are cheap and nothing else works without them.
    openspec validate <change>
    ```
 
-   The dependents step is not optional: `scripts/manifest.sh module <path>` prints the exact list
-   and the exact commands. `mvn test` alone does **not** run integration tests — see the test
-   naming rule below.
+   The dependents step is not optional — `-am` builds a module's *dependencies*, and dependents are
+   the direction that catches a breaking change. `mvn test` alone does **not** run integration
+   tests; see the test naming rule below. A change to `ludwig-bom` or `ludwig-service-parent` has
+   no narrower gate than `mvn clean install`, and `gate.sh` says so rather than letting you run a
+   partial one.
 
 4. **Restrictions.** Do not edit anything under `target/`, `generated-sources/`, or
    `.flattened-pom.xml` (build output). Do not edit `.mvn/maven.config` unless you are doing a
@@ -48,8 +57,16 @@ Do these in order. They are cheap and nothing else works without them.
    change introduces a rule, add the check that fails the build when it is violated, or write a
    comment at the point of the rule saying why no check is possible.
 
-Further reading: `docs/code-index.md` (navigation), `docs/agent-operations.md` (the shared agent
-protocol).
+6. **Durable state.** A change's `openspec/changes/<name>/state.json` is the record, not the
+   conversation. Write its `contract` block before the first edit and never edit it afterwards;
+   append to `decisions` and `failures` and never rewrite them; read it first when resuming. Three
+   attempts per task, then stop and report — never widen the scope or weaken a rule to make
+   progress. Contract and schema: `docs/agent-state.md`.
+
+Further reading: `docs/code-index.md` (navigation and the index's limits),
+`docs/agent-operations.md` (the shared agent protocol, injected for every agent),
+`docs/agent-state.md` (state and receipt files), `openspec/specs/` (the cross-module contracts a
+change deltas against).
 
 ## What this repository is
 

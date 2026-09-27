@@ -212,6 +212,24 @@ rules:
 operations:
   apply:
     guidance:
+      - Read `openspec/changes/<name>/state.json` **first**, before anything else, including on a
+        fresh session with no history. Its `contract` block says what done means, `current_task`
+        says where to continue, and `decisions` and `failures` say what not to revisit. The full
+        contract is in `docs/agent-state.md`.
+      - Write the `contract` block before the first edit - goal, output, constraints, and
+        `done_when` as the actual gate commands (`scripts/gate.sh --list <module>` prints them).
+        Never edit it afterwards except as an explicit scope change logged in `decisions`. A task
+        with no contract can be completed as a different, easier task and still look successful.
+      - Update `state.json` at every task boundary. `decisions` and `failures` are **append-only**
+        - never rewritten, never pruned. A decision recorded once is not re-argued next session;
+        a failure recorded once is not rediscovered.
+      - Three attempts per task, then stop. Each attempt must change something identifiable; a
+        repeat of the same edit is not an attempt. On the third failure, append the gap to
+        `state.json` `failures` and report it.
+      - Never make progress by lowering the bar. Do not widen the scope, weaken a Checkstyle or
+        ArchUnit rule, delete or disable a failing test, or narrow the change to the part that
+        passes. A blocked task reported honestly is a useful outcome; a green build that hid the
+        problem is not.
       - Bootstrap the code index before the first query - `set_project_path` then
         `build_deep_index`. Never skip it; the "file not found in index" error means you skipped
         it, not that the file is missing.
@@ -219,11 +237,18 @@ operations:
         having actually run - never on "this looks done".
       - Quote real command output. Do not paraphrase a build result, and never report a gate as
         passing without the output that shows it.
-      - The verification gate, in full, at the end - `mvn -q validate`, then
-        `mvn -pl <module> -am verify` for each touched module, then `mvn -pl <dependent> -am
-        verify` for **every in-repo dependent** named by `scripts/manifest.sh module <path>`, then
-        `openspec validate <change>`.
-      - If any POM changed, re-run `scripts/manifest.sh build` before the gate.
+      - The verification gate, in full, at the end. `scripts/gate.sh --change <name> <module>...`
+        runs it and works out the dependents for you; `--list` prints the commands without
+        running them. By hand it is `mvn -q validate`, then `mvn -pl <module> -am verify` for each
+        touched module, then `mvn -pl <dependent> -am verify` for **every in-repo dependent** named
+        by `scripts/manifest.sh module <path>`, then `openspec validate <change>`. `mvn test`
+        alone runs no integration test.
+      - If any POM changed, `scripts/manifest.sh build` before the gate. `gate.sh` does this for
+        you when the manifest is stale.
+      - Write `openspec/changes/<name>/receipt.json` once at the end, per `docs/agent-state.md` -
+        the model, the index version, the modules touched, the real gate results, test counts,
+        retries, the rollback commit and anything unresolved. Fill in `retries` and `unresolved`
+        accurately even when they are unflattering; they are the fields the receipt exists for.
       - Report partials honestly. A change that implemented four of six tasks is a four-of-six
         report, not a success with caveats.
   archive:
