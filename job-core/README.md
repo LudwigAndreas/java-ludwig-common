@@ -184,6 +184,10 @@ a horizontally-scalable queue becomes a single-threaded one. What needs a lock i
 *set* of rows rather than over each row independently: a digest collapsing many rows into one message,
 a retention purge, a compaction over an expiry boundary.
 
+The contract this section describes is specified as the `run-lock` capability in
+`openspec/specs/run-lock/spec.md`; a change to the lock's behaviour updates that spec first,
+because seven modules depend on this one and the spec is what they were promised.
+
 A **lease**, not a lock. A lock held by a process that has died is a lock held forever, and "the job
 silently stopped running after a pod was killed" is not something anything alerts on: the schedule
 keeps firing, every tick declines, and the backlog grows behind a metric nobody is watching. Every

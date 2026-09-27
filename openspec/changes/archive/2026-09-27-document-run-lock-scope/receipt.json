@@ -1,0 +1,26 @@
+{
+  "change": "document-run-lock-scope",
+  "model": "claude-opus-5 (tasks 1.1, 3.1, 3.2); a cold sonnet session with no conversation history resumed and completed task 2.1, as the deliverable-8 resume test",
+  "index_version": "0665e28ffa69a979b74da19c17b7c6d4766df5bba89512de1b0d20448b313552",
+  "modules_touched": [
+    "job-core"
+  ],
+  "gate": {
+    "validate": "pass",
+    "verify": "pass - job-core plus all 7 in-repo dependents, 10 commands, BUILD SUCCESS each",
+    "openspec_validate": "pass"
+  },
+  "tests": {
+    "added": 0,
+    "passed": 0,
+    "failed": 0,
+    "note": "documentation-only; the gate ran every existing test of job-core and its seven dependents, all passing and all coverage checks met, but this change added none"
+  },
+  "retries": 0,
+  "human_corrections": 0,
+  "rollback_point": "61d5940b65ba0659610101187a265fc5e81c6293",
+  "unresolved": [
+    "the pointer exists in 1 module README of 29; the other 28 modules have no capability spec to point at yet",
+    "nothing checks that a module README links its capability spec, and a check would currently fail on 28 modules"
+  ]
+}

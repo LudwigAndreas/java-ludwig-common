@@ -1,0 +1,39 @@
+{
+  "change": "document-run-lock-scope",
+  "contract": {
+    "goal": "job-core's README points at the run-lock capability spec, in both locales, so the next person to change the lock's contract learns a spec describes it",
+    "output": "one sentence at the end of 'What it is not for' in job-core/README.md and its translation in job-core/README.ru.md",
+    "constraints": [
+      "no code, no POM, no behaviour change",
+      "both locales move together",
+      "do not modify openspec/specs/run-lock",
+      "do not add the pointer to other modules"
+    ],
+    "done_when": [
+      "mvn -q validate",
+      "mvn -pl job-core -am verify",
+      "mvn -pl audit-spring-boot-starter -am verify",
+      "mvn -pl export-spring-boot-starter -am verify",
+      "mvn -pl file-ingest-spring-boot-starter -am verify",
+      "mvn -pl idempotency-spring-boot-starter -am verify",
+      "mvn -pl notification-service -am verify",
+      "mvn -pl outbox-spring-boot-starter -am verify",
+      "mvn -pl reconciliation-spring-boot-starter -am verify",
+      "openspec validate document-run-lock-scope"
+    ]
+  },
+  "current_task": "complete",
+  "decisions": [
+    "skip_specs: true in .openspec.yaml - openspec validate rejects a zero-delta change without it, and inventing a requirement to satisfy the validator is what the template explicitly warns against",
+    "design.md written as an explicit 'not required, and here is why' rather than omitted, so a reader does not have to wonder whether it was skipped by accident",
+    "2.1 done: translated pointer sentence inserted into job-core/README.ru.md at the end of the first paragraph of '### \u0414\u043b\u044f \u0447\u0435\u0433\u043e \u043e\u043d\u0430 \u043d\u0435 \u043d\u0443\u0436\u043d\u0430' (the RU equivalent of 'What it is not for'), matching the EN placement; grep -c 'openspec/specs/run-lock' job-core/README.ru.md returns 1",
+    "3.1 done: scripts/manifest.sh stale exits 0 (project-index.json current, POM-set SHA 0665e28ffa69a979) - no POM touched by this change, as expected",
+    "task 3.2 (scripts/gate.sh --change document-run-lock-scope job-core) and the receipt not run in this session per an explicit operator instruction to never invoke mvn or the gate - left for the process handling build verification",
+    "the gate was re-run after the Russian README landed rather than reused from the earlier run; a Markdown-only edit cannot change a build result, but reporting a gate that did not cover the final content is the habit the protocol exists to prevent"
+  ],
+  "failures": [],
+  "open_questions": [],
+  "pending_human": [],
+  "rollback_point": "61d5940b65ba0659610101187a265fc5e81c6293",
+  "index_version": "0665e28ffa69a979b74da19c17b7c6d4766df5bba89512de1b0d20448b313552"
+}
