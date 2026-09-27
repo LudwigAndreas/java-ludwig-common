@@ -65,7 +65,8 @@ Do these in order. They are cheap and nothing else works without them.
 
 Further reading: `docs/code-index.md` (navigation and the index's limits),
 `docs/agent-operations.md` (the shared agent protocol, injected for every agent),
-`docs/agent-state.md` (state and receipt files), `openspec/specs/` (the cross-module contracts a
+`docs/agent-state.md` (state and receipt files), `docs/harness-enforcement.md` (which of these rules
+is actually checked and which is only written down), `openspec/specs/` (the cross-module contracts a
 change deltas against).
 
 ## What this repository is

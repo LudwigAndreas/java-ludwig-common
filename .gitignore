@@ -46,3 +46,7 @@ build/
 # Fallback location for the code index state, used only when $TMPDIR is unwritable.
 # It is a rebuildable ~6.5MB SQLite cache, never a source file. See docs/code-index.md.
 .code_indexer/
+
+### Claude Code
+# Personal overrides. The committed harness is .claude/settings.json.
+.claude/settings.local.json

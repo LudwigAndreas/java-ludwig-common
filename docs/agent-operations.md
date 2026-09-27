@@ -217,6 +217,11 @@ literal version into a POM, and never change the revision as part of a feature c
 - Never edit `.mvn/maven.config` unless the current conversation is about a release. It is the single
   source of the version.
 
+Which of these are mechanically enforced, and which are guide-only, is written down in
+`docs/harness-enforcement.md`. Read it before assuming a rule will stop you: several of these will
+not, and knowing which is which is the difference between relying on the harness and relying on
+yourself.
+
 ## 7. The verification gate
 
 Before reporting a change complete, run — and quote the real output of:
