@@ -41,3 +41,8 @@ build/
 # It is the POM that actually gets installed/deployed (with ${revision} resolved), a build
 # output rather than a source file.
 .flattened-pom.xml
+
+### code-index MCP server
+# Fallback location for the code index state, used only when $TMPDIR is unwritable.
+# It is a rebuildable ~6.5MB SQLite cache, never a source file. See docs/code-index.md.
+.code_indexer/

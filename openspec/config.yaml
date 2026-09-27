@@ -1,0 +1,237 @@
+schema: spec-driven
+
+# ---------------------------------------------------------------------------------------------
+# Project context. Shown to the agent whenever it creates an artifact.
+#
+# Condensed from CLAUDE.md and the module READMEs - deliberately NOT a copy of them. When this
+# and CLAUDE.md disagree, CLAUDE.md is the source and this block is the drift. Keep it short
+# enough that an agent reads it in full every time.
+# ---------------------------------------------------------------------------------------------
+context: |
+  ## What this repository is
+
+  `ludwig-common` is a 29-module Maven reactor (Java 17, Spring Boot 3.3.5, group
+  `ru.ludwigandreas`) publishing an internal platform: a BOM, a service parent POM, starters and
+  plain libraries, and two runnable services that consume them. Every module has a detailed
+  `README.md` + `README.ru.md` stating its design decisions. Read the module README before
+  proposing a change to that module.
+
+  ## Navigation - do not grep first
+
+  Bootstrap the `code-index` MCP server (`set_project_path`, then `build_deep_index`), then query
+  through it. `PROJECT_INDEX.md` / `project-index.json` / `scripts/manifest.sh module <path>`
+  answer the Maven questions the index cannot: module role, POM tier, in-repo dependency
+  direction both ways, and the verification gate. `rg` is the last rung and requires stating why
+  the index could not answer. Full ladder and the six known index limits: `docs/code-index.md`.
+
+  ## The three-POM split - the thing to get right
+
+  - `pom.xml` (root, artifact `common`) - reactor, and **parent of the library modules only**.
+    Imports `spring-boot-dependencies`. Never imports `ludwig-bom` (it is the BOM's parent -
+    circular).
+  - `ludwig-bom` - versions and nothing else, published parentless. Every module imports it
+    (`type=pom`, `scope=import`); consumers do the same.
+  - `ludwig-service-parent` - every build decision services inherit: compiler + annotation
+    processors in Lombok -> MapStruct -> QueryDSL order, surefire/failsafe split, enforced JaCoCo
+    gate (70% instruction / 60% branch), enforcer, Checkstyle, jib. Its parent is
+    `spring-boot-starter-parent`.
+
+  Consequences: a **library** is parented by the reactor root and imports `ludwig-bom`; a
+  **service** (`crud-service-example`, `notification-service`) is parented by
+  `ludwig-service-parent`. Third-party versions go in `ludwig-bom/pom.xml`, never the root POM.
+  Plugin versions and build config go in the root POM (libraries) or `ludwig-service-parent`
+  (services). `spring-boot.version` appears twice on purpose - a property in the root POM and a
+  literal in `ludwig-service-parent`'s `<parent>` (Maven does not interpolate there); move both
+  together. JUnit is deliberately unpinned - it comes from `spring-boot-dependencies`.
+
+  ## Version single-source
+
+  The version lives in exactly one place: `-Drevision=...` in `.mvn/maven.config`. Every POM says
+  `<version>${revision}</version>`; `flatten-maven-plugin` resolves it on install/deploy. Never
+  hard-code a version in a POM. A release is `mvn -Drevision=1.2.0 -Prelease -Pci deploy`;
+  `-Prelease` only enforces (no SNAPSHOT deps, concrete revision), it cannot set the version.
+
+  ## Dependency direction - check this before proposing any cross-module change
+
+  The reactor DAG must stay acyclic. Before a change adds an in-repo dependency, answer
+  explicitly: *does the module I am adding a dependency to already depend on this module, directly
+  or transitively?* `project-index.json` carries `inRepoDependencies` and `inRepoDependents` for
+  every module, which is what makes that answerable without a build.
+  `cache-spring-boot-starter` has **zero in-repo dependencies on purpose** - that is what lets
+  `security-spring-boot-starter` depend on it without a cycle, and `ModuleIndependenceTest` fails
+  the build if it is broken.
+
+  ## Module conventions
+
+  - Package root per module is `ru.ludwigandreas.<module>`. Starters register auto-configuration in
+    `src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`.
+  - Starters ship i18n under `src/main/resources/i18n/ludwig-<module>-messages[_ru].properties`,
+    and contribute exception mappers into `web-core`'s single RFC 9457 `ProblemDetail` pipeline
+    rather than shipping their own `@RestControllerAdvice`.
+  - **One audit mechanism.** `audit-core`'s single `AuditSink`. No module-local audit SPI, no
+    logger named `*.audit`, no second redaction mask (there is one, `Redaction.MASK`,
+    deliberately not configurable). Keep the typed event record as the authoring surface with a
+    `toAuditEvent()`. Never wrap `record` in try/catch - whether a sink failure fails the caller
+    is `AuditFailurePolicy`, resolved from configuration, and a catch in a library overrides it.
+  - **One long-running-operation contract.** `ru.ludwigandreas.webcore.operation` owns
+    `OperationStatus` (PENDING RUNNING SUCCEEDED FAILED CANCELLED EXPIRED), the `OperationResponse`
+    envelope, the header names and the builders. No module may declare a status enum restating
+    those six states. A richer domain lifecycle is fine and different: it maps onto the core and
+    stays visible in `OperationResponse.detail()`. There is deliberately **no shared operation
+    table**, and `web-core` must stay free of any persistence dependency - each module keeps its
+    own run table and maps at its edge. Build responses with `OperationResponses`. A cancel
+    endpoint answers **202, not 204**; cancelling an already-terminal operation returns the
+    envelope, not a 409.
+  - **One caching primitive.** `cache-spring-boot-starter`. No module-local `Caffeine` builder, no
+    second cache SPI. Declare a `CacheDefinition` bean and resolve it from `LudwigCacheRegistry`;
+    the deployment configures it under `ludwig.cache.caches.<name>`. The one thing the module must
+    get right is `CachePurpose`: `security` means the TTL is how long a revoked grant keeps
+    working (startup ceiling, no stale reads); `performance` means the TTL is a throughput knob
+    (minutes, stale-while-revalidate, load lease). That declaration is not inferable.
+  - Services follow `crud-service-example`: three model layers `web.dto` -> `service.model` ->
+    `repository.entity` wired by MapStruct; Lombok instead of boilerplate; transactions in the
+    service layer; Liquibase changelogs under `src/main/resources/db/changelog`.
+  - Every container image reference carries name, version **and** `sha256` digest. A bare tag is
+    not acceptable anywhere, including in READMEs and `docker run` examples.
+  - User-facing text is never hard-coded (Checkstyle `NonAsciiSourceText`); bundle key sets must
+    match across locales.
+
+  ## Data access: QueryDSL only, and the two carve-outs
+
+  **QueryDSL-JPA against generated Q-types only** - no JPQL/SQL strings, no derived query methods.
+  Exactly two carve-outs exist, each confined to one package and each enforced by that module's
+  own `SqlConfinementTest`:
+
+  1. `ru.ludwigandreas.ingest.bulk` in `file-ingest-spring-boot-starter` - Postgres `COPY` (via
+     `CopyManager`) and the set-based `INSERT ... SELECT ... ON CONFLICT DO UPDATE` that merges a
+     staging table into a target.
+  2. `ru.ludwigandreas.idempotency.sql` in `idempotency-spring-boot-starter` - the conditional
+     upsert that claims a key, `INSERT ... ON CONFLICT (scope, idempotency_key) DO UPDATE ...
+     RETURNING`. JPQL has neither `ON CONFLICT` nor `RETURNING`, and QueryDSL-JPA generates JPQL.
+
+  Conditions on both: the SQL stays in that one package, and each statement carries javadoc saying
+  why QueryDSL cannot express it. Nothing outside those packages has the exception - including
+  those modules' own other tables.
+
+  ## Tests - naming decides whether a test runs at all
+
+  Layout is `src/test/java/ru/ludwigandreas/<module>/{unit,integration,architecture}`. Surefire
+  runs unit tests and **excludes** `*IT.java` and `*IntegrationTest.java`; failsafe runs those at
+  `verify`. So an integration test must be named `...IT` or `...IntegrationTest` or it never runs,
+  and `mvn test` alone will not run it. `architecture-rules` is a test-scoped jar of toggleable
+  ArchUnit rule sets; a service enables it with a subclass of `ArchitectureRulesTest` annotated
+  `@AnalyzeArchitecture(...)` plus `src/test/resources/architecture-rules.properties`.
+
+  ## The enforcement triad - do not overlap it
+
+  Three tools split the work and must not overlap:
+
+  - `architecture-rules` (ArchUnit) owns **structure and dependencies**.
+  - `checkstyle-rules` owns **source text**. Runs at `validate` on every module.
+  - SonarQube owns **bugs and security**.
+
+  A new check belongs to exactly one of them. Do not add a Checkstyle rule for something ArchUnit
+  can see in bytecode, and do not add an ArchUnit rule for something that is a source-text fact.
+  Formatting mirrors **IntelliJ IDEA's out-of-the-box defaults** one for one - there is no code
+  style to import, and Reformat Code / Optimize Imports always produce a build-clean file. Never
+  introduce a custom formatting scheme.
+
+  Suppressions must always name the rule and give a reason. For any rule the config gives an `id`
+  (`NonAsciiSourceText`, `ConsoleOutput`, `SecondRedactionMask`, ...) use the id form -
+  `// SUPPRESS CHECKSTYLE ID <id> - reason` - because several checks share the
+  `RegexpSinglelineJava` class name and naming the class switches all of them off at once.
+
+  ## Encode every rule twice
+
+  A convention that exists only as prose is a convention that will be broken silently. For every
+  rule a change introduces, either add the mechanical check that fails the build when it is
+  violated, or state in a comment at the point of the rule why no check is possible. That is
+  already this repository's convention for checks bytecode analysis cannot express.
+
+  ## Credentials
+
+  No credential appears in any POM. jib and `deploy` resolve them from `~/.m2/settings.xml`
+  `<server>` entries, from `JIB_TARGET_USERNAME`/`JIB_TARGET_PASSWORD`, or from Docker credential
+  helpers. `-Pci` is never auto-activated from the environment.
+
+# ---------------------------------------------------------------------------------------------
+# Per-artifact rules. Each is meant to be checkable by reading the artifact.
+# ---------------------------------------------------------------------------------------------
+rules:
+  proposal:
+    - Name every affected module using its exact name from `project-index.json`. A module name
+      that does not appear there is a typo or an invented module.
+    - For each named module, state its POM tier - library (parented by the reactor root `common`)
+      or service (parented by `ludwig-service-parent`) or bom or parent. Get this from
+      `scripts/manifest.sh module <path>`, not from memory.
+    - Include a `## Non-goals` section. A proposal with no non-goals has not been scoped.
+    - State explicitly whether the change touches any shared contract in `openspec/specs/`, and
+      name which. "None" is an acceptable answer; silence is not.
+    - State the in-repo dependents of each touched module (from `project-index.json`
+      `inRepoDependents`), because those are what the verification gate has to run.
+
+  design:
+    - Required for any change that adds a module, crosses a module boundary, or changes a shared
+      contract in `openspec/specs/`. For a change confined to one module's internals, say so in
+      one line and skip the rest.
+    - Must contain the **dependency-direction check**, written out as the question and the answer,
+      not merely asserted - "Does <target> already depend on <source>, directly or transitively?
+      `project-index.json` inRepoDependents for <source> is [...], which does not contain <target>,
+      so no cycle." A design that adds an in-repo dependency without this section is incomplete.
+    - Must state which of the three POMs changes and why - `pom.xml` (root, libraries' build
+      config and plugin versions), `ludwig-bom` (third-party versions only), or
+      `ludwig-service-parent` (services' build decisions). "No POM changes" is a valid answer and
+      must be stated.
+    - For every new convention the design introduces, name the mechanical check that enforces it
+      (an ArchUnit rule in `architecture-rules`, a Checkstyle rule in `checkstyle-rules`, or an
+      enforcer rule) and which of the three tools owns it - or state why no check is possible.
+    - Must not propose a second implementation of anything the platform already centralises - the
+      audit sink, the operation envelope, the cache primitive, the ProblemDetail pipeline.
+
+  specs:
+    - Use `Requirement:` / `Scenario:` with explicit **WHEN** / **THEN** clauses.
+    - Every behavioural change gets at least one scenario. A requirement that no scenario can
+      express is a sign the requirement is vague - rewrite it until it can be.
+    - Write scenarios against observable behaviour (a status code, a header, a persisted row, a
+      build failure), not against implementation detail.
+    - Where a spec and the code disagree, **the code is the truth and the disagreement is a
+      finding**. Record it; never write the spec to describe what you wish were true, and never
+      change code to match a spec you just wrote.
+
+  tasks:
+    - Each task is independently verifiable and **names the command that proves it** - a concrete
+      `mvn -pl <module> ... ` or `openspec validate ...`, not "verify it works".
+    - No task spans more than one module unless the change is explicitly a cross-module refactor.
+    - The final task group is always the verification gate, in full.
+    - A task that only edits a README or a spec still names how it is checked (`openspec validate`,
+      or the bundle key-set parity check for i18n).
+
+# ---------------------------------------------------------------------------------------------
+# Per-operation guidance.
+# ---------------------------------------------------------------------------------------------
+operations:
+  apply:
+    guidance:
+      - Bootstrap the code index before the first query - `set_project_path` then
+        `build_deep_index`. Never skip it; the "file not found in index" error means you skipped
+        it, not that the file is missing.
+      - Implement task by task, in order. Tick a task only on that task's own named verification
+        having actually run - never on "this looks done".
+      - Quote real command output. Do not paraphrase a build result, and never report a gate as
+        passing without the output that shows it.
+      - The verification gate, in full, at the end - `mvn -q validate`, then
+        `mvn -pl <module> -am verify` for each touched module, then `mvn -pl <dependent> -am
+        verify` for **every in-repo dependent** named by `scripts/manifest.sh module <path>`, then
+        `openspec validate <change>`.
+      - If any POM changed, re-run `scripts/manifest.sh build` before the gate.
+      - Report partials honestly. A change that implemented four of six tasks is a four-of-six
+        report, not a success with caveats.
+  archive:
+    guidance:
+      - The specs must be updated to describe the world as it now is, not the world the change
+        proposed. Where implementation diverged from the proposal, the spec follows the code.
+      - Update the touched modules' `README.md` **and** `README.ru.md`. A README updated in only
+        one locale is an incomplete archive.
+      - If any POM changed, regenerate `PROJECT_INDEX.md` and `project-index.json` with
+        `scripts/manifest.sh build` and include them in the change.
+      - Verify `scripts/manifest.sh stale` exits 0 before archiving.

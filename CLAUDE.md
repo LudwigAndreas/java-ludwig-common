@@ -2,6 +2,55 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Start here (agent operating protocol)
+
+Do these in order. They are cheap and nothing else works without them.
+
+1. **Bootstrap the code index.** Call the `code-index` MCP server: `set_project_path` on the repo
+   root, then `build_deep_index`. ~15s, 2153 files, 10,233 symbols. Then query through it —
+   `find_files` → `get_file_summary` → `get_symbol_body` → `search_code_advanced`.
+   `PROJECT_INDEX.md` and `scripts/manifest.sh module <path>` answer the Maven questions the index
+   cannot (module role, POM tier, dependency direction both ways, the gate). `rg` is the last rung
+   and requires **stating in your response why the index could not answer**.
+   Read `docs/code-index.md` for the ladder and the six verified index limits — in particular
+   `called_by` is intra-file only and will tell you a method has no callers when it has 67.
+
+2. **Work through OpenSpec.** No code without a change. Artifact order is
+   `proposal` → `design` (when the change adds a module, crosses a module boundary, or touches a
+   shared contract) → `specs` → `tasks` → apply. Run `openspec validate <change>` before calling a
+   change ready. Project conventions reach the artifacts through `openspec/config.yaml`; the
+   cross-module contracts you are deltaing against live in `openspec/specs/`.
+
+3. **The verification gate**, in full, for every change:
+
+   ```bash
+   scripts/manifest.sh build          # only if a POM changed
+   mvn -q validate                    # Checkstyle, every module
+   mvn -pl <touched-module> -am verify
+   mvn -pl <each in-repo dependent> -am verify   # from scripts/manifest.sh module <path>
+   openspec validate <change>
+   ```
+
+   The dependents step is not optional: `scripts/manifest.sh module <path>` prints the exact list
+   and the exact commands. `mvn test` alone does **not** run integration tests — see the test
+   naming rule below.
+
+4. **Restrictions.** Do not edit anything under `target/`, `generated-sources/`, or
+   `.flattened-pom.xml` (build output). Do not edit `.mvn/maven.config` unless you are doing a
+   release — it is the single source of the version. Do not run `mvn deploy`, `jib:build`, or
+   anything with `-Pci`, and never `git push --force`. Do not introduce a second code index
+   (`universal-ctags`, `ast-grep`, `scip-java`, `semgrep`) — there is one, and it is the MCP
+   server. The platform-level "one mechanism" rules — one audit sink, one operation envelope, one
+   cache primitive, one ProblemDetail pipeline, one redaction mask — are enforced by ArchUnit and
+   Checkstyle and will fail your build; see the module conventions below.
+
+5. **Encode every rule twice.** A convention that exists only as prose gets broken silently. If a
+   change introduces a rule, add the check that fails the build when it is violated, or write a
+   comment at the point of the rule saying why no check is possible.
+
+Further reading: `docs/code-index.md` (navigation), `docs/agent-operations.md` (the shared agent
+protocol).
+
 ## What this repository is
 
 `ludwig-common` is a multi-module Maven reactor (Java 17, Spring Boot 3.3.5, group `ru.ludwigandreas`)
@@ -68,6 +117,38 @@ Consequences when editing POMs:
   (`SecondRedactionMask`) fail the build on the first two and the third respectively; the split is
   deliberate, because ArchUnit cannot see a string constant's value. User-facing text is never hard-coded (Checkstyle's
   `NonAsciiSourceText` enforces this); bundle key sets must match across locales.
+- **Long-running operations go through `web-core`'s one contract.** `ru.ludwigandreas.webcore.operation`
+  owns the vocabulary (`OperationStatus`: `PENDING RUNNING SUCCEEDED FAILED CANCELLED EXPIRED`), the
+  `OperationResponse` envelope, the header names and the builders. A module must not declare a status
+  enum that restates those six states - export's `RunStatus` and file-ingest's `IngestRunStatus` were
+  exactly that, and reconciling them cost a Liquibase changeset because `COMPLETED` was persisted. A
+  richer domain lifecycle is fine and is not the same thing: it maps onto the core and stays visible in
+  `OperationResponse.detail()`, which is what `reconciliation`'s `RemoteJobState` does. An ArchUnit rule
+  (`RuleGroup.OPERATIONS`) fails the build on the restatement; its javadoc states precisely what
+  separates the two, because the difference is the whole rule. There is deliberately **no shared
+  operation table** and `web-core` must stay free of any persistence dependency: each module keeps its
+  own run table and maps onto the envelope at its edge. Build the responses with `OperationResponses`
+  rather than by hand - it refuses a 202 with no status-resource header, a non-terminal poll with no
+  `Retry-After`, and a terminal success with no result link. A 202 *may* carry a terminal envelope:
+  notification fans a request out in the transaction that accepts it and still answers 202, because a
+  200 there would be a different promise. Cancellation is cooperative
+  (`Cancellation`), a cancel endpoint answers **202 not 204** because the stop is only requested, and
+  cancelling an already-terminal operation returns the envelope rather than a 409.
+- **Caching goes through `cache-spring-boot-starter`'s one primitive.** A module must not build a `Caffeine`
+  builder of its own and must not declare a cache SPI - `security`'s `AuthorityCache` and `user-settings`'
+  `SettingsCache` were the same three classes written twice, down to the `(Duration ttl, long maximumSize)`
+  constructor and the thundering-herd paragraph, and neither called `recordStats()`, so hit ratio was
+  unobservable platform-wide. A module declares a `CacheDefinition` bean (`AuthorityCaches`,
+  `SettingsCaches`) and resolves it from `LudwigCacheRegistry`; the deployment configures it under
+  `ludwig.cache.caches.<name>`. **The one thing a module must get right is `CachePurpose`**: `security`
+  means the TTL is how long a revoked grant keeps working, and it gets a startup ceiling and no stale reads;
+  `performance` means the TTL is a throughput knob, and it gets minutes, stale-while-revalidate and the load
+  lease. That declaration is not inferable and is the only mistake the module cannot detect for you. An
+  ArchUnit rule (`RuleGroup.CACHING`) fails the build on the builder and on a second SPI, with one exemption
+  named in the rule: `export`'s `EnrichmentCache` is scoped to one report run, so sharing it would be a
+  correctness change rather than a consolidation. `cache-spring-boot-starter` has **zero in-repo
+  dependencies** on purpose, which is what lets `security-spring-boot-starter` depend on it without a
+  reactor cycle; `ModuleIndependenceTest` fails the build if that is ever broken.
 - Services follow the reference shape in `crud-service-example`: three model layers
   `web.dto` → `service.model` → `repository.entity`, wired by MapStruct; Lombok instead of
   boilerplate; **QueryDSL-JPA against generated Q-types only** — no JPQL/SQL strings, no derived
