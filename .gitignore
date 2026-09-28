@@ -27,9 +27,10 @@ target/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+# NOTE: no bare `build/` ignore here, deliberately. `/build/` at the repo root is a SOURCE
+# directory holding ludwig-bom, ludwig-service-parent, checkstyle-rules and architecture-rules.
+# This is a Maven reactor - build output goes to target/, which is ignored above - so the
+# NetBeans/Gradle `build/` pattern that used to sit here was vestigial as well as harmful.
 
 ### VS Code ###
 .vscode/
@@ -41,3 +42,15 @@ build/
 # It is the POM that actually gets installed/deployed (with ${revision} resolved), a build
 # output rather than a source file.
 .flattened-pom.xml
+
+### code-index MCP server
+# Fallback location for the code index state, used only when $TMPDIR is unwritable.
+# It is a rebuildable ~6.5MB SQLite cache, never a source file. See docs/code-index.md.
+.code_indexer/
+
+### Claude Code
+# Personal overrides. The committed harness is .claude/settings.json.
+.claude/settings.local.json
+
+# Personal MCP server config for this checkout.
+.claude.json

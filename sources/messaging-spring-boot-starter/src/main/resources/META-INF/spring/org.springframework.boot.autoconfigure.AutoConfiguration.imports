@@ -1,0 +1,5 @@
+ru.ludwigandreas.messaging.config.MessagingDedupAutoConfiguration
+ru.ludwigandreas.messaging.config.MessagingMetricsAutoConfiguration
+ru.ludwigandreas.messaging.config.MessagingAutoConfiguration
+ru.ludwigandreas.messaging.config.MessagingRetryTopicAutoConfiguration
+ru.ludwigandreas.messaging.config.MessagingWebAutoConfiguration

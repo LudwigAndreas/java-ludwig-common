@@ -1,0 +1,37 @@
+{
+  "change": "reorganise-repository-layout",
+  "contract": {
+    "goal": "every module sits under build/, services/ or sources/ by role, so the three-POM split is visible in the tree and a module is findable by listing one directory",
+    "output": "29 module directories moved; root POM, 29 module POMs, Jenkinsfile, manifest generator, gate script, Stop hook and all path-bearing prose updated; a repository-layout spec and a --check-layout check added",
+    "constraints": [
+      "no artifact coordinate changes - same groupId, artifactId, version",
+      "no in-repo dependency edge changes; the regenerated manifest must show an identical graph",
+      "no behaviour change and no src/ change beyond path references in prose",
+      "every module parented by common gets an explicit relativePath ../../pom.xml",
+      "module selection moves to -pl :artifactId so a future move cannot break it"
+    ],
+    "done_when": [
+      "scripts/manifest.sh stale",
+      "scripts/manifest.sh --check-layout",
+      "rm -rf ~/.m2/repository/ru/ludwigandreas && mvn clean install",
+      "openspec validate reorganise-repository-layout"
+    ]
+  },
+  "current_task": "complete",
+  "decisions": [
+    "build/ + services/ + sources/ chosen over a flat sources/ for everything non-service: burying ludwig-bom and ludwig-service-parent among 21 starters hides the three-POM split, which CLAUDE.md calls the thing to get right. The user picked this layout from three options.",
+    "sources/ is NOT split into libs/ and starters/: it would make 'library or starter' a judgement call on every new module for one more level of nesting",
+    "the bare `build/` entry in .gitignore was removed before creating the directory - it is a NetBeans/Gradle pattern, vestigial in a Maven reactor where output goes to target/, and it would have silently ignored the entire new build/ tree",
+    "module selection switches from -pl <path> to -pl :<artifactId> rather than relearning paths, so the next layout change cannot break the gate or CI",
+    "the layout check lives in scripts/manifest.sh, not ArchUnit or Checkstyle: a directory's position is a filesystem fact that bytecode analysis and source-text analysis both cannot see",
+    "the Dockerfile's `-pl` and its jar path inside the builder stage were switched to :artifactId and services/ respectively; its 45 COPY paths were prefixed",
+    "the `db-core/web-core` phrase in idempotency's POM comment is prose meaning 'db-core or web-core', not a path, so the rewrite was scoped to module names followed by pom.xml/README/src/target rather than by any slash"
+  ],
+  "failures": [
+    "PRE-EXISTING, not caused by this change and not fixed by it: services/notification-service/Dockerfile copies 12 module POMs while the reactor declares 29, so `docker build` fails on 'a parent pom whose <modules> name a directory that is absent' - the failure its own comment predicts. At HEAD it was already 12 of 25; four modules added by earlier work (cache, messaging, test-support, test-support-security) widened the gap. Fixing it means deciding which modules the image's build actually needs, which is a separate change. jib is the supported image path and is unaffected."
+  ],
+  "open_questions": [],
+  "pending_human": [],
+  "rollback_point": "48dc1fc7ae8e2ecfd13caf055959474b80afb4e7",
+  "index_version": "0665e28ffa69a979b74da19c17b7c6d4766df5bba89512de1b0d20448b313552"
+}

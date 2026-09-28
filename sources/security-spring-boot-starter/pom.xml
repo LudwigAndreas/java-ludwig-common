@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>security-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Security Spring Boot starter</name>
+    <description>
+        Enterprise-ready authentication and authorization for Java 17 + Spring Boot microservices behind
+        an Envoy/nginx edge: one principal model covering browser users (session cookie exchanged for a
+        JWT at the edge), external partners (mTLS, identified from Envoy's x-forwarded-client-cert) and
+        internal service-to-service calls; roles resolved per service from a pluggable AuthorityResolver
+        rather than from JWT claims; and data-level authorization compiled into type-safe QueryDSL
+        predicates so a list endpoint's paging and counts stay correct, backed by a PermissionEvaluator
+        for single-object reads.
+    </description>
+
+    <!--
+        The JDK baseline and the spring-boot-dependencies import are inherited from the parent pom,
+        ru.ludwigandreas:common. Third-party versions are NOT: they moved to ludwig-bom, imported
+        below, so that a downstream service can get exactly the same set by importing one artifact
+        instead of copying a properties block it cannot see.
+
+        ludwig-bom is imported rather than inherited on purpose. Keeping ru.ludwigandreas:common as
+        the parent is what keeps this module usable by a service running a DIFFERENT Spring Boot
+        line - a library built against a fixed spring-boot-starter-parent bakes that line into
+        itself. For the same reason this module does not inherit ludwig-service-parent; see the
+        note in that file.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            The platform's audit envelope, sink SPI and redaction. audit-core has no in-repo
+            dependencies of its own, which is the property that makes it safe for a module this low in
+            the stack: the JPA sink, the outbox sink and the retention purge live in
+            audit-spring-boot-starter, which needs db-core and which this module must not take.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!-- Core Spring Security: SecurityContext, method security, PermissionEvaluator. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- JWT validation against the OIDC provider's JWKS (the token the edge mints from a session). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <!-- Servlet filter chain, RFC 7807 ProblemDetail rendering. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Data-level authorization compiles a DataScope into a QueryDSL BooleanExpression, so the
+            module needs the expression DSL - but deliberately NOT querydsl-jpa or any JPA type: the
+            predicate it hands back is transport-neutral and a consumer feeds it to whichever
+            QueryDSL backend it already uses.
+        -->
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-core</artifactId>
+        </dependency>
+
+        <!-- Optional: authentication/authorization decision metrics. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            The platform's one caching primitive. Not optional, and Caffeine is no longer named here at
+            all: the authority cache's TTL meaning, its stampede coalescing, its metrics and its eviction
+            fan-out are that module's, and this one declares only what the TTL means (AuthorityCaches).
+
+            cache-spring-boot-starter has zero in-repo dependencies, which is what makes this direction
+            possible - this module sits near the bottom of the reactor, and a caching module that depended
+            on web-core or audit-core could not be depended on from here.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>cache-spring-boot-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            Optional: the shared localized problem pipeline. When present, this module contributes
+            its message bundle and a mapper so that a 401/403 raised inside an MVC dispatch comes
+            back under the same codes its filter-chain handlers use - see SecurityProblemMapper.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

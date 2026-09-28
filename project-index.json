@@ -1,0 +1,2104 @@
+{
+  "index": {
+    "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
+    "generatedAt": "2026-09-28T06:31:54.158402Z",
+    "revision": "1.1.0-SNAPSHOT",
+    "moduleCount": 30,
+    "commit": "f1fdc5f6fa0d223f263f3df4f5b52f5ccdc1bf5b",
+    "commitShort": "f1fdc5f",
+    "branch": "agent-harness-config",
+    "freshness": {
+      "pomSetSha": "71c8c2e7cec3bcde2b3555a1106b704802094cb34f286b22bc9686e8f6c7e965",
+      "newestPom": "sources/odata-filter-spring-boot-starter/pom.xml",
+      "newestPomModified": "2026-09-28T06:31:40.592928Z"
+    }
+  },
+  "modules": [
+    {
+      "name": "ludwig-bom",
+      "dir": "build",
+      "path": "build/ludwig-bom",
+      "artifactId": "ludwig-bom",
+      "packaging": "pom",
+      "role": "bom",
+      "parentPom": "common",
+      "importsLudwigBom": false,
+      "packageRoot": null,
+      "inRepoDependencies": [],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 0
+      },
+      "pom": "build/ludwig-bom/pom.xml",
+      "readme": "build/ludwig-bom/README.md",
+      "readmeRu": "build/ludwig-bom/README.ru.md"
+    },
+    {
+      "name": "ludwig-service-parent",
+      "dir": "build",
+      "path": "build/ludwig-service-parent",
+      "artifactId": "ludwig-service-parent",
+      "packaging": "pom",
+      "role": "parent",
+      "parentPom": "spring-boot-starter-parent",
+      "importsLudwigBom": true,
+      "packageRoot": null,
+      "inRepoDependencies": [],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 0
+      },
+      "pom": "build/ludwig-service-parent/pom.xml",
+      "readme": "build/ludwig-service-parent/README.md",
+      "readmeRu": "build/ludwig-service-parent/README.ru.md"
+    },
+    {
+      "name": "odata-filter-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/odata-filter-spring-boot-starter",
+      "artifactId": "odata-filter-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.odatafilter",
+      "inRepoDependencies": [
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages.properties",
+        "sources/odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "integration": "sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration"
+      },
+      "testClasses": {
+        "surefire": 8,
+        "failsafe": 1
+      },
+      "pom": "sources/odata-filter-spring-boot-starter/pom.xml",
+      "readme": "sources/odata-filter-spring-boot-starter/README.md",
+      "readmeRu": "sources/odata-filter-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "audit-core",
+      "dir": "sources",
+      "path": "sources/audit-core",
+      "artifactId": "audit-core",
+      "packaging": "jar",
+      "role": "library",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.audit",
+      "inRepoDependencies": [],
+      "inRepoDependents": [
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/audit-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/audit-core/src/test/java/ru/ludwigandreas/audit/unit"
+      },
+      "testClasses": {
+        "surefire": 5,
+        "failsafe": 0
+      },
+      "pom": "sources/audit-core/pom.xml",
+      "readme": "sources/audit-core/README.md",
+      "readmeRu": "sources/audit-core/README.ru.md"
+    },
+    {
+      "name": "db-core",
+      "dir": "sources",
+      "path": "sources/db-core",
+      "artifactId": "db-core",
+      "packaging": "jar",
+      "role": "library",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.db.core",
+      "inRepoDependencies": [
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/db-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/db-core/src/main/resources/i18n/ludwig-db-messages.properties",
+        "sources/db-core/src/main/resources/i18n/ludwig-db-messages_ru.properties"
+      ],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "integration": "sources/db-core/src/test/java/ru/ludwigandreas/db/core/integration"
+      },
+      "testClasses": {
+        "surefire": 7,
+        "failsafe": 2
+      },
+      "pom": "sources/db-core/pom.xml",
+      "readme": "sources/db-core/README.md",
+      "readmeRu": "sources/db-core/README.ru.md"
+    },
+    {
+      "name": "audit-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/audit-spring-boot-starter",
+      "artifactId": "audit-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.audit.store",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/audit-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/audit-changelog.xml"
+      ],
+      "i18nBundles": [
+        "sources/audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages.properties",
+        "sources/audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "integration": "sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration"
+      },
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 1
+      },
+      "pom": "sources/audit-spring-boot-starter/pom.xml",
+      "readme": "sources/audit-spring-boot-starter/README.md",
+      "readmeRu": "sources/audit-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "job-core",
+      "dir": "sources",
+      "path": "sources/job-core",
+      "artifactId": "job-core",
+      "packaging": "jar",
+      "role": "library",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.job.core",
+      "inRepoDependencies": [
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/job-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml"
+      ],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/unit",
+        "integration": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/integration"
+      },
+      "testClasses": {
+        "surefire": 3,
+        "failsafe": 1
+      },
+      "pom": "sources/job-core/pom.xml",
+      "readme": "sources/job-core/README.md",
+      "readmeRu": "sources/job-core/README.ru.md"
+    },
+    {
+      "name": "idempotency-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/idempotency-spring-boot-starter",
+      "artifactId": "idempotency-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.idempotency",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/idempotency-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/idempotency-changelog.xml"
+      ],
+      "i18nBundles": [
+        "sources/idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages.properties",
+        "sources/idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/unit",
+        "integration": "sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/integration",
+        "architecture": "sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/architecture"
+      },
+      "testClasses": {
+        "surefire": 4,
+        "failsafe": 5
+      },
+      "pom": "sources/idempotency-spring-boot-starter/pom.xml",
+      "readme": "sources/idempotency-spring-boot-starter/README.md",
+      "readmeRu": "sources/idempotency-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "cache-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/cache-spring-boot-starter",
+      "artifactId": "cache-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.cache",
+      "inRepoDependencies": [
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/cache-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/unit",
+        "integration": "sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/integration",
+        "architecture": "sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/architecture"
+      },
+      "testClasses": {
+        "surefire": 8,
+        "failsafe": 1
+      },
+      "pom": "sources/cache-spring-boot-starter/pom.xml",
+      "readme": "sources/cache-spring-boot-starter/README.md",
+      "readmeRu": "sources/cache-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "messaging-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/messaging-spring-boot-starter",
+      "artifactId": "messaging-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.messaging",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/messaging-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/messaging-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-messages.properties",
+        "sources/messaging-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/unit",
+        "integration": "sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/integration",
+        "architecture": "sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/architecture"
+      },
+      "testClasses": {
+        "surefire": 12,
+        "failsafe": 1
+      },
+      "pom": "sources/messaging-spring-boot-starter/pom.xml",
+      "readme": "sources/messaging-spring-boot-starter/README.md",
+      "readmeRu": "sources/messaging-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "export-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/export-spring-boot-starter",
+      "artifactId": "export-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.export",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "object-storage-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/export-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/export-changelog.xml"
+      ],
+      "i18nBundles": [
+        "sources/export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages.properties",
+        "sources/export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/unit",
+        "integration": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/integration",
+        "architecture": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/architecture"
+      },
+      "testClasses": {
+        "surefire": 16,
+        "failsafe": 2
+      },
+      "pom": "sources/export-spring-boot-starter/pom.xml",
+      "readme": "sources/export-spring-boot-starter/README.md",
+      "readmeRu": "sources/export-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "object-storage-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/object-storage-spring-boot-starter",
+      "artifactId": "object-storage-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.storage",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/object-storage-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/object-storage-spring-boot-starter/src/main/resources/i18n/ludwig-storage-messages.properties",
+        "sources/object-storage-spring-boot-starter/src/main/resources/i18n/ludwig-storage-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/unit",
+        "integration": "sources/object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/integration",
+        "architecture": "sources/object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/architecture"
+      },
+      "testClasses": {
+        "surefire": 4,
+        "failsafe": 2
+      },
+      "pom": "sources/object-storage-spring-boot-starter/pom.xml",
+      "readme": "sources/object-storage-spring-boot-starter/README.md",
+      "readmeRu": "sources/object-storage-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "file-ingest-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/file-ingest-spring-boot-starter",
+      "artifactId": "file-ingest-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.ingest",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "object-storage-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": "sources/file-ingest-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/file-ingest-changelog.xml"
+      ],
+      "i18nBundles": [
+        "sources/file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages.properties",
+        "sources/file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages_ru.properties"
+      ],
+      "surfaces": [
+        "actuator"
+      ],
+      "testDirs": {
+        "unit": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/unit",
+        "integration": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/integration",
+        "architecture": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/architecture"
+      },
+      "testClasses": {
+        "surefire": 8,
+        "failsafe": 9
+      },
+      "pom": "sources/file-ingest-spring-boot-starter/pom.xml",
+      "readme": "sources/file-ingest-spring-boot-starter/README.md",
+      "readmeRu": "sources/file-ingest-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "outbox-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/outbox-spring-boot-starter",
+      "artifactId": "outbox-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.outbox",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/outbox-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/outbox-changelog.xml"
+      ],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit",
+        "integration": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration"
+      },
+      "testClasses": {
+        "surefire": 5,
+        "failsafe": 1
+      },
+      "pom": "sources/outbox-spring-boot-starter/pom.xml",
+      "readme": "sources/outbox-spring-boot-starter/README.md",
+      "readmeRu": "sources/outbox-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "reconciliation-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/reconciliation-spring-boot-starter",
+      "artifactId": "reconciliation-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.reconciliation",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": "sources/reconciliation-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml"
+      ],
+      "i18nBundles": [],
+      "surfaces": [
+        "actuator"
+      ],
+      "testDirs": {
+        "unit": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/unit",
+        "integration": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration"
+      },
+      "testClasses": {
+        "surefire": 7,
+        "failsafe": 3
+      },
+      "pom": "sources/reconciliation-spring-boot-starter/pom.xml",
+      "readme": "sources/reconciliation-spring-boot-starter/README.md",
+      "readmeRu": "sources/reconciliation-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "security-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/security-spring-boot-starter",
+      "artifactId": "security-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.security",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "cache-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/security-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages.properties",
+        "sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages_ru.properties"
+      ],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
+      },
+      "testClasses": {
+        "surefire": 15,
+        "failsafe": 0
+      },
+      "pom": "sources/security-spring-boot-starter/pom.xml",
+      "readme": "sources/security-spring-boot-starter/README.md",
+      "readmeRu": "sources/security-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "identity-projection-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/identity-projection-spring-boot-starter",
+      "artifactId": "identity-projection-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.identity",
+      "inRepoDependencies": [
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/identity-projection-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml"
+      ],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit"
+      },
+      "testClasses": {
+        "surefire": 1,
+        "failsafe": 0
+      },
+      "pom": "sources/identity-projection-spring-boot-starter/pom.xml",
+      "readme": "sources/identity-projection-spring-boot-starter/README.md",
+      "readmeRu": "sources/identity-projection-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "hot-reload-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/hot-reload-spring-boot-starter",
+      "artifactId": "hot-reload-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.hotreload",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/hot-reload-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 13,
+        "failsafe": 0
+      },
+      "pom": "sources/hot-reload-spring-boot-starter/pom.xml",
+      "readme": "sources/hot-reload-spring-boot-starter/README.md",
+      "readmeRu": "sources/hot-reload-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "web-core-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/web-core-spring-boot-starter",
+      "artifactId": "web-core-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.webcore",
+      "inRepoDependencies": [],
+      "inRepoDependents": [
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "object-storage-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/web-core-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages.properties",
+        "sources/web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/unit",
+        "integration": "sources/web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/integration"
+      },
+      "testClasses": {
+        "surefire": 11,
+        "failsafe": 2
+      },
+      "pom": "sources/web-core-spring-boot-starter/pom.xml",
+      "readme": "sources/web-core-spring-boot-starter/README.md",
+      "readmeRu": "sources/web-core-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "observability-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/observability-spring-boot-starter",
+      "artifactId": "observability-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.observability",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/observability-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit",
+        "integration": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration"
+      },
+      "testClasses": {
+        "surefire": 13,
+        "failsafe": 0
+      },
+      "pom": "sources/observability-spring-boot-starter/pom.xml",
+      "readme": "sources/observability-spring-boot-starter/README.md",
+      "readmeRu": "sources/observability-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "rest-client-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/rest-client-spring-boot-starter",
+      "artifactId": "rest-client-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.restclient",
+      "inRepoDependencies": [
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/rest-client-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/unit",
+        "integration": "sources/rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/integration"
+      },
+      "testClasses": {
+        "surefire": 11,
+        "failsafe": 8
+      },
+      "pom": "sources/rest-client-spring-boot-starter/pom.xml",
+      "readme": "sources/rest-client-spring-boot-starter/README.md",
+      "readmeRu": "sources/rest-client-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "user-settings-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/user-settings-spring-boot-starter",
+      "artifactId": "user-settings-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.usersettings",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "cache-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "notification-service",
+          "scope": "provided"
+        }
+      ],
+      "autoConfigImports": "sources/user-settings-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/user-settings-changelog.xml"
+      ],
+      "i18nBundles": [
+        "sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages.properties",
+        "sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/unit",
+        "integration": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/integration",
+        "architecture": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture"
+      },
+      "testClasses": {
+        "surefire": 12,
+        "failsafe": 2
+      },
+      "pom": "sources/user-settings-spring-boot-starter/pom.xml",
+      "readme": "sources/user-settings-spring-boot-starter/README.md",
+      "readmeRu": "sources/user-settings-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "architecture-rules",
+      "dir": "build",
+      "path": "build/architecture-rules",
+      "artifactId": "architecture-rules",
+      "packaging": "jar",
+      "role": "rules",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.archrules",
+      "inRepoDependencies": [],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "test"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "test"
+        },
+        {
+          "artifactId": "object-storage-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "test"
+        }
+      ],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 7,
+        "failsafe": 1
+      },
+      "pom": "build/architecture-rules/pom.xml",
+      "readme": "build/architecture-rules/README.md",
+      "readmeRu": "build/architecture-rules/README.ru.md"
+    },
+    {
+      "name": "test-support",
+      "dir": "sources",
+      "path": "sources/test-support",
+      "artifactId": "test-support",
+      "packaging": "jar",
+      "role": "test-support",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.testsupport",
+      "inRepoDependencies": [],
+      "inRepoDependents": [
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "cache-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "test"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "test"
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "object-storage-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "test"
+        }
+      ],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/test-support/src/test/java/ru/ludwigandreas/testsupport/unit",
+        "integration": "sources/test-support/src/test/java/ru/ludwigandreas/testsupport/integration"
+      },
+      "testClasses": {
+        "surefire": 1,
+        "failsafe": 1
+      },
+      "pom": "sources/test-support/pom.xml",
+      "readme": "sources/test-support/README.md",
+      "readmeRu": "sources/test-support/README.ru.md"
+    },
+    {
+      "name": "test-support-security",
+      "dir": "sources",
+      "path": "sources/test-support-security",
+      "artifactId": "test-support-security",
+      "packaging": "jar",
+      "role": "test-support",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.testsupport.security",
+      "inRepoDependencies": [
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "test"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "test"
+        }
+      ],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 0
+      },
+      "pom": "sources/test-support-security/pom.xml",
+      "readme": "sources/test-support-security/README.md",
+      "readmeRu": "sources/test-support-security/README.ru.md"
+    },
+    {
+      "name": "checkstyle-rules",
+      "dir": "build",
+      "path": "build/checkstyle-rules",
+      "artifactId": "checkstyle-rules",
+      "packaging": "jar",
+      "role": "rules",
+      "parentPom": "common",
+      "importsLudwigBom": false,
+      "packageRoot": null,
+      "inRepoDependencies": [],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 0
+      },
+      "pom": "build/checkstyle-rules/pom.xml",
+      "readme": "build/checkstyle-rules/README.md",
+      "readmeRu": "build/checkstyle-rules/README.ru.md"
+    },
+    {
+      "name": "jira-client",
+      "dir": "sources",
+      "path": "sources/jira-client",
+      "artifactId": "jira-client",
+      "packaging": "jar",
+      "role": "library",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.jira",
+      "inRepoDependencies": [],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/jira-client/src/test/java/ru/ludwigandreas/jira/unit"
+      },
+      "testClasses": {
+        "surefire": 10,
+        "failsafe": 0
+      },
+      "pom": "sources/jira-client/pom.xml",
+      "readme": "sources/jira-client/README.md",
+      "readmeRu": "sources/jira-client/README.ru.md"
+    },
+    {
+      "name": "crud-service-example",
+      "dir": "services",
+      "path": "services/crud-service-example",
+      "artifactId": "crud-service-example",
+      "packaging": "jar",
+      "role": "service",
+      "parentPom": "ludwig-service-parent",
+      "importsLudwigBom": false,
+      "packageRoot": "ru.ludwigandreas.example.catalog",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0001-catalog-schema.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0002-catalog-reference-data.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0003-catalog-security.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0004-catalog-watchers.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml"
+      ],
+      "i18nBundles": [
+        "services/crud-service-example/src/main/resources/i18n/messages.properties",
+        "services/crud-service-example/src/main/resources/i18n/messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/unit",
+        "integration": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/integration",
+        "architecture": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/architecture"
+      },
+      "testClasses": {
+        "surefire": 3,
+        "failsafe": 2
+      },
+      "pom": "services/crud-service-example/pom.xml",
+      "readme": "services/crud-service-example/README.md",
+      "readmeRu": "services/crud-service-example/README.ru.md"
+    },
+    {
+      "name": "notification-service",
+      "dir": "services",
+      "path": "services/notification-service",
+      "artifactId": "notification-service",
+      "packaging": "jar",
+      "role": "service",
+      "parentPom": "ludwig-service-parent",
+      "importsLudwigBom": false,
+      "packageRoot": "ru.ludwigandreas.notification",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "provided",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [
+        "services/notification-service/src/main/resources/db/changelog/changes/0001-notification-schema.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0002-notification-recipients.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0003-notification-platform-gaps.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0004-preferences-move-out.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0005-fold-lock-into-job-core.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0006-fold-idempotency-into-starter.xml",
+        "services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml"
+      ],
+      "i18nBundles": [
+        "services/notification-service/src/main/resources/i18n/notification-messages.properties",
+        "services/notification-service/src/main/resources/i18n/notification-messages_ru.properties"
+      ],
+      "surfaces": [
+        "actuator",
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "services/notification-service/src/test/java/ru/ludwigandreas/notification/unit",
+        "integration": "services/notification-service/src/test/java/ru/ludwigandreas/notification/integration",
+        "architecture": "services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture"
+      },
+      "testClasses": {
+        "surefire": 16,
+        "failsafe": 4
+      },
+      "pom": "services/notification-service/pom.xml",
+      "readme": "services/notification-service/README.md",
+      "readmeRu": "services/notification-service/README.ru.md"
+    },
+    {
+      "name": "jacoco-aggregate",
+      "dir": "build",
+      "path": "build/jacoco-aggregate",
+      "artifactId": "jacoco-aggregate",
+      "packaging": "pom",
+      "role": "aggregate",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": null,
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "cache-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "checkstyle-rules",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "jira-client",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "object-storage-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 0
+      },
+      "pom": "build/jacoco-aggregate/pom.xml",
+      "readme": "build/jacoco-aggregate/README.md",
+      "readmeRu": "build/jacoco-aggregate/README.ru.md"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+ru.ludwigandreas.cache.config.LudwigCacheAutoConfiguration
+ru.ludwigandreas.cache.config.LudwigCacheRedisAutoConfiguration

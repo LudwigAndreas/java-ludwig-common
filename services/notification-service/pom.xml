@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <!--
+        THE PARENT OF A SERVICE IS ludwig-service-parent, never the reactor root.
+
+        A service outside this repository writes this block as:
+
+            <parent>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-service-parent</artifactId>
+                <version>1.1.0</version>
+                <relativePath/>
+            </parent>
+
+        - a literal version, and an EMPTY <relativePath/>. The empty element is not decoration:
+        omitted, Maven looks for ../pom.xml, and in a service checked out on its own there is no
+        such file (or worse, there is an unrelated one), so the build fails with a confusing
+        "non-resolvable parent". See README, "Consuming the platform", which is the snippet to copy.
+
+        This module, living inside the platform's own reactor, must do it the other way round, and
+        the reason is a hard Maven rule rather than a preference: ${revision} is only substituted in
+        a <parent> block when Maven can read the parent POM from disk. With an empty <relativePath/>
+        it resolves the parent from the repository instead, and searches for an artifact whose
+        version is the literal seven characters "${revision}", which cannot exist. So a module that
+        wants the repository's single ci-friendly version has to point at the file, and a module that
+        wants the standalone shape has to repeat a literal version. Inside this reactor the first is
+        correct - one version, declared once, in .mvn/maven.config.
+    -->
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>ludwig-service-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../build/ludwig-service-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>notification-service</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Notification service</name>
+    <description>
+        The platform's single notification service: every other service asks this one to notify
+        somebody instead of talking to a mail server itself. Kafka and REST ingress converge on one
+        application service, requests fan out into per-recipient-per-channel deliveries held in a
+        Postgres work queue, and a poller renders a FreeMarker template and dispatches it through an
+        SPI channel (SMTP, internal chat, signed webhook), recording every transition.
+    </description>
+
+    <!--
+        NO VERSIONS BELOW - not on the platform's own modules, not on the third-party libraries, not
+        on a plugin. All of them come from ludwig-bom, which ludwig-service-parent imports. The
+        compiler, its four annotation processors, surefire, failsafe, jacoco, the enforcer and jib
+        are all configured in that parent too, which is why this file no longer has a <build>
+        section describing them.
+    -->
+
+    <properties>
+        <!--
+            The gate inherited from ludwig-service-parent is 0.70 instruction / 0.60 branch. This
+            service lowers it rather than switching it off, so the number it actually holds stays
+            visible and can be ratcheted up. The figures reflect the unit tests alone: the
+            lifecycle and Kafka-ingress integration tests are failsafe tests and need a Docker
+            daemon, and the merged number is substantially higher where one is available.
+        -->
+        <jacoco.instruction.coverage.minimum>0.14</jacoco.instruction.coverage.minimum>
+        <jacoco.branch.coverage.minimum>0.20</jacoco.branch.coverage.minimum>
+    </properties>
+
+    <dependencies>
+        <!-- Base entities, BaseRepository/BaseRepositoryImpl, Predicates, PageableUtils. Brings
+             spring-boot-starter-data-jpa, querydsl-jpa and the Postgres driver transitively. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+        </dependency>
+        <!--
+            The platform's distributed lock (RunLock/JdbcRunLock, table job_run_lock) plus the
+            instance identity written into it. This service used to ship its own leased lock; it was
+            folded into job-core so the platform has one, and one operational behaviour to learn -
+            see the README, "The distributed lock lives in job-core".
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+        </dependency>
+        <!--
+            The platform's work-dedup store. This service used to ship the primitive itself - an
+            IdempotencyStore, a Postgres implementation, an entity and three repositories - and its README
+            called it promotion candidate #1; it was folded into idempotency-spring-boot-starter so the
+            platform has one, and one operational behaviour to learn.
+
+            The store stays DIRECTLY callable here rather than being replaced by that module's HTTP filter,
+            and that is a deliberate decision rather than a half-finished migration: this service's batch
+            endpoint carries one key per item in the body, which a header-based filter cannot serve, and
+            NotificationRequestResponse.duplicate is a documented part of this service's API. See the
+            README, "Promoted: the work-dedup store now lives in idempotency-spring-boot-starter".
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>idempotency-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- The admin/history search endpoint's $filter/$orderby/$top/$skip. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>odata-filter-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- OUTBOUND LIFECYCLE EVENTS ONLY - never the delivery queue. See README section
+             "The delivery queue is not the outbox". -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbox-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- All error handling: LocalizedException, ExceptionProblemMapper, PageResponse. This
+             service ships no @RestControllerAdvice of its own. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- Authn/authz on the REST API, plus DataScope tenant isolation of delivery history. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- Existence, display name, tenant and active-status of a recipient given a user id. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>identity-projection-spring-boot-starter</artifactId>
+        </dependency>
+        <!--
+            OPTIONAL, AND COMPILE-TIME ONLY. READ THIS BEFORE CHANGING THE SCOPE.
+
+            The user's preferences - locale, timezone, quiet hours, digest, per-category opt-outs -
+            belong to the user, not to this service, and on this platform the account service owns
+            them and publishes them over Kafka. Until that stream exists, this service resolves
+            preferences from configuration instead and delivers perfectly well without the module.
+
+            'provided' is the scope because <optional>true</optional> would not do it. Optional only
+            stops a dependency reaching downstream consumers, and an application has none - the jar
+            would still be on this service's own runtime classpath, every @ConditionalOnClass
+            guarding it would match, and the module would be "optional" in name only. 'provided'
+            keeps the types available to javac and to the test classpath, so the adapter in
+            service.preference.usersettings compiles and stays covered by tests, while nothing that
+            runs depends on it.
+
+            The scope alone is still not sufficient, because spring-boot-maven-plugin:repackage
+            packages provided-scope dependencies on purpose. See the matching <excludes> in the build
+            section below - the two together are what make @ConditionalOnClass genuinely answer false
+            at runtime.
+
+            TO TURN IT ON, once the account service publishes its change stream: delete the <scope>
+            line below AND the exclusion below, uncomment ludwig.user-settings.* in application.yml,
+            and let the module apply its own Liquibase changelog
+            (ludwig.user-settings.liquibase.enabled defaults true - this service's master changelog
+            deliberately does not include it). Nothing on the dispatch path changes: see
+            RecipientPreferenceSource for the seam, and UserSettingsPreferenceConfig for the wiring.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>user-settings-spring-boot-starter</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- FreeMarker template hot reload, Vault-backed SMTP credentials, and the runtime
+             channel-enable/rate-limit view (RefreshableConfig). -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>hot-reload-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- Tracing, JSON logging with masking, correlation id across HTTP and Kafka, split probes,
+             graceful shutdown. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>observability-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Backs the security module's authority cache. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- The SMTP channel. JavaMailSender, multipart MIME, and the transport itself. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- hot-reload declares freemarker optional; template rendering is this service's core. -->
+        <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <!-- Schema migrations, including the outbox and identity changelogs shipped in their jars. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+        </dependency>
+        <!-- Primary ingress, and the transport the outbox dispatches lifecycle events over. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <!--
+            The platform's consumer wiring. Declared explicitly rather than taken transitively through the
+            outbox starter: this service uses ListenerContainerFactoryBuilder directly, and a compile-time
+            use of a transitive dependency is a break waiting for the day the intermediate module stops
+            needing it.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>messaging-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- OpenAPI, sharing the ProblemDetail schema web-core already produces. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Waiting for a broker to deliver a record is inherently asynchronous; Awaitility makes the
+             wait an explicit, bounded condition instead of a sleep chosen by guesswork. -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- A real SMTP server in-process, so the email channel is tested against SMTP rather than
+             against a mock of JavaMailSender. -->
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            The platform's container images, singleton containers and fixtures. One test-scoped
+            dependency; the digests live in its images.properties, not here.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+            <!--
+                The one opt-in. Checkstyle is configured in ludwig-service-parent but not activated
+                there - activating it would make that pom-packaging file resolve the checkstyle-rules
+                artifact it has no sources to check with. No version, no configuration: inherited.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+            </plugin>
+            <!--
+                This module uses the repository's ci-friendly ${revision} in its <parent> block, so
+                its installed POM has to have that resolved into a literal - an unflattened POM
+                saying "${revision}" is not resolvable by anyone. Version, configuration and
+                executions all come from ludwig-service-parent's pluginManagement.
+
+                A service with a literal version of its own does not need this.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+            </plugin>
+            <!--
+                Keeps the optional user-settings module out of the executable jar.
+
+                This exclusion is what makes the `provided` scope above mean what it says. Scope
+                alone is not enough: spring-boot-maven-plugin:repackage deliberately packages
+                provided-scope dependencies, because for a servlet deployment they are exactly the
+                things the container would have supplied. That is the right default and the wrong one
+                here - it would put the starter back on the runtime classpath, every
+                @ConditionalOnClass guarding it would match, and the optional dependency would be
+                optional only at the level of the POM.
+
+                So the scope keeps it off this module's own compile-time dependents, and this keeps it
+                out of what actually runs. Remove BOTH to switch the module on - see the dependency's
+                comment above.
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>ru.ludwigandreas</groupId>
+                            <artifactId>user-settings-spring-boot-starter</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
