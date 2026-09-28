@@ -10,6 +10,7 @@
 #
 #   scripts/manifest.sh build          regenerate project-index.json + PROJECT_INDEX.md; idempotent
 #   scripts/manifest.sh stale          non-zero if the manifest predates the current POMs
+#   scripts/manifest.sh layout         non-zero if any module is in the wrong directory for its role
 #   scripts/manifest.sh module <path>  which module owns a path, its dependencies both ways,
 #                                      and the verification gate for changing it
 #
@@ -41,6 +42,11 @@ cmd_stale() {
   python3 "$GENERATOR" --check
 }
 
+cmd_layout() {
+  require_python
+  python3 "$GENERATOR" --check-layout
+}
+
 cmd_module() {
   local target="${1:-}"
   [ -n "$target" ] || die "usage: manifest.sh module <path>"
@@ -54,13 +60,15 @@ root, target = sys.argv[1], sys.argv[2]
 with open(os.path.join(root, "project-index.json"), encoding="utf-8") as handle:
     data = json.load(handle)
 
-# Match on the longest module name that prefixes the path, so a path inside
-# test-support-security is not attributed to test-support.
+# Match on the longest module PATH that prefixes the target, so a path inside
+# sources/test-support-security is not attributed to sources/test-support. Modules live one
+# level down (build/, services/, sources/), so the bare name is not a path prefix any more.
 rel = os.path.relpath(os.path.abspath(target), root).replace(os.sep, "/")
 owner = None
 for module in data["modules"]:
-    if rel == module["name"] or rel.startswith(module["name"] + "/"):
-        if owner is None or len(module["name"]) > len(owner["name"]):
+    mp = module.get("path") or module["name"]
+    if rel == mp or rel.startswith(mp + "/"):
+        if owner is None or len(mp) > len(owner.get("path") or owner["name"]):
             owner = module
 if owner is None:
     sys.stderr.write("no module owns %s\n" % rel)
@@ -68,6 +76,7 @@ if owner is None:
 
 m = owner
 print("module      %s" % m["name"])
+print("directory   %s/" % (m.get("path") or m["name"]))
 print("artifactId  %s" % m["artifactId"])
 print("role        %s   packaging %s" % (m["role"], m["packaging"]))
 print("parent POM  %s%s" % (m["parentPom"],
@@ -92,9 +101,11 @@ if m["role"] in ("bom", "parent"):
           % m["name"])
     print("                             # narrower gate")
 else:
-    print("    mvn -pl %s -am verify" % m["name"])
+    # Selected by :artifactId, not by directory: a path is a layout decision and has moved
+    # once already, an artifactId is a published coordinate and does not.
+    print("    mvn -pl :%s -am verify" % m["artifactId"])
     for d in m["inRepoDependents"]:
-        print("    mvn -pl %s -am verify" % d["artifactId"])
+        print("    mvn -pl :%s -am verify" % d["artifactId"])
 PY
 }
 
@@ -103,6 +114,7 @@ usage() { sed -n '3,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 case "${1:-}" in
   build)  shift; cmd_build "$@" ;;
   stale)  shift; cmd_stale "$@" ;;
+  layout) shift; cmd_layout "$@" ;;
   module) shift; cmd_module "$@" ;;
   ""|-h|--help|help) usage ;;
   *)      printf 'manifest.sh: unknown subcommand %s\n\n' "$1" >&2; usage >&2; exit 2 ;;

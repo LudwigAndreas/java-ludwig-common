@@ -11,6 +11,10 @@
 # script is that nobody has to remember them. `-am` builds a module's DEPENDENCIES; the dependents
 # are the direction that catches a breaking change, and they are what gets skipped by hand.
 #
+# Modules are named to `mvn` as `:artifactId`, never as a directory. Module directories moved once
+# already (build/, services/, sources/) and every path-based command in the repository broke; an
+# artifactId is a published coordinate and does not move.
+#
 # EXIT CODES:
 #   0  every command passed
 #   1  a command failed (the first failure's output is on stdout and the command is named again at
@@ -56,6 +60,13 @@ if ! ./scripts/manifest.sh stale >/dev/null 2>&1; then
   ./scripts/manifest.sh build >&2 || die "could not regenerate the manifest" 3
 fi
 
+# A module in the wrong directory for its role is a defect the compiler cannot see, so it is
+# checked here where every change passes. Cheap: it reads the manifest that was just built.
+./scripts/manifest.sh layout >/dev/null || {
+  ./scripts/manifest.sh layout >&2
+  die "repository layout check failed" 1
+}
+
 COMMANDS=("mvn -q validate")
 
 if [ "$FULL" = 1 ]; then
@@ -79,7 +90,10 @@ if unknown:
 if any(by_name[n]["role"] in ("bom", "parent") for n in names):
     print("__FULL__")
     sys.exit(0)
-ordered = list(names)
+# Emit artifactIds, since that is what `mvn -pl :<id>` takes. A module's name and artifactId
+# are equal throughout this repository, but they are different concepts and only one of them is
+# what Maven selects on.
+ordered = [by_name[n]["artifactId"] for n in names]
 for n in names:
     for d in by_name[n]["inRepoDependents"]:
         if d["artifactId"] not in ordered:
@@ -95,7 +109,7 @@ PY
     printf '         gate is the whole reactor.\n'
     COMMANDS+=("mvn clean install")
   else
-    for m in "${EXPANDED[@]}"; do COMMANDS+=("mvn -pl $m -am verify"); done
+    for m in "${EXPANDED[@]}"; do COMMANDS+=("mvn -pl :$m -am verify"); done
   fi
 fi
 

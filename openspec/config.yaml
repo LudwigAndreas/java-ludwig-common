@@ -24,6 +24,18 @@ context: |
   direction both ways, and the verification gate. `rg` is the last rung and requires stating why
   the index could not answer. Full ladder and the six known index limits: `docs/code-index.md`.
 
+  ## Repository layout
+
+  Every module sits one level below the root, in the directory its role dictates: `build/` for
+  `ludwig-bom`, `ludwig-service-parent`, `checkstyle-rules` and `architecture-rules`; `services/`
+  for the two runnable services; `sources/` for all 23 libraries, starters and test-support
+  modules. Two consequences that bite: a module POM parented by `common` must declare
+  `<relativePath>../../pom.xml</relativePath>`, because Maven's `../pom.xml` default resolves to a
+  directory with no POM and it silently falls back to a stale `common` in `~/.m2` rather than
+  failing; and modules are selected as `-pl :<artifactId>`, never by directory.
+  `scripts/manifest.sh layout` checks placement and the gate runs it. See the `repository-layout`
+  capability.
+
   ## The three-POM split - the thing to get right
 
   - `pom.xml` (root, artifact `common`) - reactor, and **parent of the library modules only**.
@@ -38,7 +50,7 @@ context: |
 
   Consequences: a **library** is parented by the reactor root and imports `ludwig-bom`; a
   **service** (`crud-service-example`, `notification-service`) is parented by
-  `ludwig-service-parent`. Third-party versions go in `ludwig-bom/pom.xml`, never the root POM.
+  `ludwig-service-parent`. Third-party versions go in `build/ludwig-bom/pom.xml`, never the root POM.
   Plugin versions and build config go in the root POM (libraries) or `ludwig-service-parent`
   (services). `spring-boot.version` appears twice on purpose - a property in the root POM and a
   literal in `ludwig-service-parent`'s `<parent>` (Maven does not interpolate there); move both

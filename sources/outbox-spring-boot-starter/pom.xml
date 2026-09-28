@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>outbox-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Outbox Spring Boot starter</name>
+    <description>
+        Enterprise-ready transactional outbox implementation for Java 17 + PostgreSQL + Spring Boot
+        services: type-safe QueryDSL/Spring Data JPA repositories, FOR UPDATE SKIP LOCKED polling,
+        resilient scheduled publishing with retry/backoff and dead-letter handling, per-key ordering,
+        idempotency, Kafka and REST dispatch with configurable multi-destination routing, batch
+        publishing, message filtering, Micrometer metrics and an audit trail. Plug-and-play: add the
+        dependency, include the shipped Liquibase changelog, and start publishing events.
+    </description>
+
+    <!--
+        The JDK baseline and the spring-boot-dependencies import are inherited from the parent pom,
+        ru.ludwigandreas:common. Third-party versions are NOT: they moved to ludwig-bom, imported
+        below, so that a downstream service can get exactly the same set by importing one artifact
+        instead of copying a properties block it cannot see.
+
+        ludwig-bom is imported rather than inherited on purpose. Keeping ru.ludwigandreas:common as
+        the parent is what keeps this module usable by a service running a DIFFERENT Spring Boot
+        line - a library built against a fixed spring-boot-starter-parent bakes that line into
+        itself. For the same reason this module does not inherit ludwig-service-parent; see the
+        note in that file.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            The platform's audit envelope and sink. The Slf4jOutboxAuditLogger this module shipped is gone
+            into it; OutboxAuditLogger and PersistingOutboxAuditLogger stay, because outbox_status_history
+            is operational state the dispatcher reads and not only a trail.
+
+            Note the direction: this module depends on audit-core, and audit-spring-boot-starter depends on
+            this module for its optional outbox sink. That is acyclic precisely because audit-core has no
+            in-repo dependencies of its own.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!--
+            The wire header names KafkaOutboxDispatcher writes, shared with the consumer half so a rename
+            here is a compile error there rather than a silent no-op. THIS module depends on messaging, not
+            the other way round: messaging needs a KafkaTemplate to dead-letter with, not an outbox, and a
+            mutual dependency would be a reactor cycle regardless of scope - Maven's reactor DAG ignores it.
+
+            messaging-spring-boot-starter keeps spring-kafka and web-core optional precisely so that this
+            edge adds nothing to an outbox consumer's classpath beyond a constants class and two records.
+            If the edge ever has to reverse, the fallback recorded there is to split a zero-dependency
+            messaging-core out of ru.ludwigandreas.messaging.api and have both depend on that.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>messaging-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- job-core: backoff curve, self-scheduling lifecycle base, SKIP LOCKED claim, instance identity -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+        </dependency>
+
+        <!-- db-core: BaseRepository/GeneratedEntity/AuditedEntity/auditing infrastructure -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+        </dependency>
+
+        <!-- Hibernate + Spring Data JPA + jakarta.persistence-api -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- SmartLifecycle/TaskScheduler used by the self-scheduling poller -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Type-safe predicate construction, admin/requeue queries -->
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-jpa</artifactId>
+            <classifier>jakarta</classifier>
+        </dependency>
+
+        <!-- Payload/header JSON (de)serialization -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- Plug-and-play with Postgres, ships transitively to consumers -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Optional: schema delivered as a Liquibase changelog, only applied if the consumer uses Liquibase -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: Kafka dispatch, only wired if spring-kafka is on the consumer's classpath -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: REST dispatch via RestClient (part of spring-web) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: publishing/dispatch metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            The platform's container images, singleton containers and fixtures. One test-scoped
+            dependency; the digests live in its images.properties, not here.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>com.querydsl</groupId>
+                            <artifactId>querydsl-apt</artifactId>
+                            <classifier>jakarta</classifier>
+                        </path>
+                        <path>
+                            <groupId>jakarta.persistence</groupId>
+                            <artifactId>jakarta.persistence-api</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

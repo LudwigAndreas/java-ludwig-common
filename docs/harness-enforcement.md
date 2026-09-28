@@ -15,7 +15,7 @@ statement that none does and why. **The second list is the backlog**, and it is 
 | No `git push --force` / `-f` | `permissions.deny` in `.claude/settings.json` | rule present |
 | No `mvn deploy`, `jib:build`, `-Pci` | `permissions.deny` (four patterns) | rule present |
 | No `-Dcheckstyle.skip` / `-Djacoco.skip` / `-Denforcer.skip` **on a command line** | `permissions.deny` | rule present |
-| No edit under `**/target/**` | `permissions.deny` **and** `.claude/hooks/guard-edit.sh` | **yes** — a `Write` to `job-core/target/` was refused |
+| No edit under `**/target/**` | `permissions.deny` **and** `.claude/hooks/guard-edit.sh` | **yes** — a `Write` to `sources/job-core/target/` was refused |
 | No edit under `**/generated-sources/**` | `permissions.deny` and the same hook | hook pipe-tested |
 | No edit of `.flattened-pom.xml` | `permissions.deny` and the same hook | hook pipe-tested |
 | No edit under `openspec/changes/archive/**` | `permissions.deny` and the same hook | **yes** — a `Write` there was refused |

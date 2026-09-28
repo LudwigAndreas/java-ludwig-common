@@ -308,6 +308,29 @@ def pom_set_fingerprint(root):
     return digest.hexdigest(), (rel(root, newest_path) if newest_path else None), newest_iso
 
 
+# Which directory each role belongs in. A directory's position is a filesystem fact, which is
+# why this check lives here and not in ArchUnit (bytecode) or Checkstyle (source text).
+LAYOUT = {
+    "bom": "build",
+    "parent": "build",
+    "rules": "build",
+    "service": "services",
+    "library": "sources",
+    "starter": "sources",
+    "test-support": "sources",
+}
+
+
+def check_layout(modules):
+    """Return a list of (name, role, actual_dir, expected_dir) for misplaced modules."""
+    wrong = []
+    for m in modules:
+        expected = LAYOUT.get(m["role"])
+        if expected is not None and m.get("dir") != expected:
+            wrong.append((m["name"], m["role"], m.get("dir") or "<root>", expected))
+    return wrong
+
+
 def build(root):
     revision = read_revision(root)
     modules = []
@@ -319,8 +342,15 @@ def build(root):
         parent_artifact = text(parent, "artifactId") if parent is not None else None
         artifact_id = text(pom_root, "artifactId")
         packaging = text(pom_root, "packaging") or "jar"
+        # The root POM now declares modules as "<group>/<name>" (build/, services/, sources/).
+        # `name` stays the bare module name, because that is what every command, document and
+        # dependency list refers to; `dir` and `path` carry the layout, which is the part that
+        # may move again.
+        group, name = os.path.split(module_dir)
         record = {
-            "name": module_dir,
+            "name": name,
+            "dir": group,
+            "path": module_dir,
             "artifactId": artifact_id,
             "packaging": packaging,
             "role": classify(artifact_id, parent_artifact, packaging),
@@ -501,6 +531,7 @@ def render_markdown(data):
         lines.append("- role **%s**, packaging `%s`, parent `%s`, imports `ludwig-bom`: %s" % (
             m["role"], m["packaging"], m["parentPom"],
             "yes" if m["importsLudwigBom"] else "no"))
+        lines.append("- directory `%s/`" % m["path"])
         lines.append("- package root `%s`" % (m["packageRoot"] or "—"))
         readme = "[`%s`](%s)" % (m["readme"], m["readme"]) if m["readme"] else "—"
         readme_ru = "[`%s`](%s)" % (m["readmeRu"], m["readmeRu"]) if m["readmeRu"] else "—"
@@ -522,8 +553,8 @@ def render_markdown(data):
         if gate:
             lines.append("- **gate**: `%s`" % gate)
         else:
-            cmds = ["mvn -pl %s -am verify" % m["name"]]
-            cmds += ["mvn -pl %s -am verify" % d["artifactId"] for d in m["inRepoDependents"]]
+            cmds = ["mvn -pl :%s -am verify" % m["artifactId"]]
+            cmds += ["mvn -pl :%s -am verify" % d["artifactId"] for d in m["inRepoDependents"]]
             lines.append("- **gate**: `mvn -q validate`, then %s" % ", ".join("`%s`" % c for c in cmds))
         lines.append("")
     return "\n".join(lines) + "\n"
@@ -532,6 +563,18 @@ def render_markdown(data):
 def main(argv):
     root = repo_root()
     data = build(root)
+    if "--check-layout" in argv:
+        wrong = check_layout(data["modules"])
+        if wrong:
+            sys.stderr.write("modules are not in the directory their role requires:\n")
+            for name, role, actual, expected in wrong:
+                sys.stderr.write("  %-40s role %-12s in %-10s expected %s/\n"
+                                 % (name, role, actual + "/", expected))
+            sys.stderr.write("\nSee the repository-layout capability in openspec/specs/.\n")
+            return 1
+        sys.stdout.write("layout ok: %d modules, each in the directory its role requires\n"
+                         % len(data["modules"]))
+        return 0
     if "--check" in argv:
         # `stale`: recompute the fingerprint and compare with what the committed index claims.
         path = os.path.join(root, "project-index.json")

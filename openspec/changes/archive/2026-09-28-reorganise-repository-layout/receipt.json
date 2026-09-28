@@ -1,0 +1,26 @@
+{
+  "change": "reorganise-repository-layout",
+  "model": "claude-opus-5",
+  "index_version": "76ed6648c37d1f2780b47c7bc963e7c4baac62c34c13dc4c36c879371a3de14e",
+  "modules_touched": [
+    "all 29 - every module directory moved and every module POM gained or had corrected a <relativePath>"
+  ],
+  "gate": {
+    "validate": "pass",
+    "verify": "pass - `mvn clean install` over the full reactor after `rm -rf ~/.m2/repository/ru/ludwigandreas`, 30/30 SUCCESS in 4:24, all coverage checks met",
+    "openspec_validate": "pass"
+  },
+  "tests": {
+    "added": 0,
+    "passed": "the full reactor suite, unit and integration",
+    "failed": 0,
+    "note": "no test was added or changed; the move had to leave every existing test passing, and a clean-local-repo build is what proves no parent silently resolved from a stale artifact"
+  },
+  "retries": 2,
+  "human_corrections": 1,
+  "rollback_point": "48dc1fc7ae8e2ecfd13caf055959474b80afb4e7",
+  "unresolved": [
+    "services/notification-service/Dockerfile copies 12 of 29 module POMs and cannot build - pre-existing, see state.json failures",
+    "the two retries were both in the relativePath rewrite: an unanchored <parent> regex matched a block inside a documentation comment, twice, in different ways"
+  ]
+}

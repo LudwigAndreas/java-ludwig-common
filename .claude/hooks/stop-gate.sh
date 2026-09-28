@@ -26,22 +26,31 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] \
   exit 0
 fi
 
-# Filter to names that are actually modules. The first path component of a changed file is not
-# necessarily a module - `.idea/workspace.xml` and a root `README.md` both produce one - and a gate
+# Map each changed file to the module that owns it, via the manifest's module paths. Modules live
+# one level down (build/, services/, sources/), so the first path component is a group directory,
+# not a module - and `.idea/workspace.xml` or a root `README.md` belong to no module at all. A gate
 # command naming a non-module fails, which teaches the reader to ignore this hook.
-MODULES="$(printf '%s\n' "$CHANGED" | cut -d/ -f1 | sort -u | python3 -c '
+MODULES="$(printf '%s\n' "$CHANGED" | python3 -c '
 import json, os, sys
 root = sys.argv[1]
 try:
-    names = {m["name"] for m in json.load(open(os.path.join(root, "project-index.json")))["modules"]}
+    mods = json.load(open(os.path.join(root, "project-index.json")))["modules"]
 except Exception:
-    names = None
+    mods = []
+# Longest path first, so sources/test-support-security wins over sources/test-support.
+paths = sorted(((m.get("path") or m["name"]), m["name"]) for m in mods)
+paths.sort(key=lambda t: len(t[0]), reverse=True)
 out = []
 for line in sys.stdin:
-    n = line.strip()
-    if n and (names is None or n in names):
-        out.append(n)
-print(" ".join(out))' "$ROOT")"
+    f = line.strip()
+    if not f:
+        continue
+    for mp, name in paths:
+        if f == mp or f.startswith(mp + "/"):
+            if name not in out:
+                out.append(name)
+            break
+print(" ".join(sorted(out)))' "$ROOT")"
 
 # Nothing a gate could be run on - only root files or IDE noise changed.
 [ -n "${MODULES// /}" ] || exit 0

@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>cache-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Cache Spring Boot starter</name>
+    <description>
+        The platform's one caching primitive: named, typed, declaratively configured caches with a
+        local Caffeine tier, an optional shared Redis tier, per-key stampede coalescing, jittered
+        early refresh, negative caching that distinguishes "absent" from "failed", after-commit
+        eviction, versioned shared key namespaces and per-cache Micrometer metrics. Each named cache
+        declares whether its TTL is a security window or a performance knob, and the two are governed
+        differently.
+    </description>
+
+    <!--
+        ZERO in-repo dependencies, and that is a load-bearing property rather than an accident.
+
+        security-spring-boot-starter sits near the bottom of this reactor - identity-projection,
+        user-settings, web-core and every service depend on it - and it is one of the two modules
+        whose hand-written cache this module replaces. If this module depended on audit-core, on
+        web-core or on security itself, security could not depend on it and the consolidation would
+        be impossible. Everything here is Caffeine, spring-tx, spring-data-redis and Micrometer.
+
+        Caffeine's version comes from spring-boot-dependencies (Boot manages it for its own
+        CacheManager auto-configuration), so it is deliberately not pinned in ludwig-bom.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            Caffeine is NOT optional, unlike in the two modules this replaces. Both of them shipped a
+            Noop*Cache so that the module worked with Caffeine absent from the classpath - which meant
+            two always-miss implementations existed to protect against a dependency that a starter
+            named "cache" cannot sensibly be missing. The off switch here is
+            ludwig.cache.caches.<name>.enabled=false, which is a configuration decision rather than a
+            classpath accident, and it is served by one NoopCache in this module.
+        -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!--
+            spring-tx, for after-commit eviction. Not optional: AfterCommitEviction is half of what
+            this module is for, and a caller that cannot see TransactionSynchronizationManager cannot
+            evict correctly - it can only evict early, which is the bug that helper exists to prevent.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Micrometer core, not optional. Neither of the two caches this module replaces called
+            Caffeine's recordStats(), so hit ratio was unobservable across the entire platform - the
+            one number that says whether a cache is earning its TTL. Metrics are part of what this
+            module is; a service with no MeterRegistry on the context simply gets no-op meters.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            Optional: the shared tier. A cache is local-only unless it names `shared` in its tiers,
+            and the README says why that is the default - most caches in this platform front a
+            database that is already shared, so a shared tier buys less than it costs and adds a
+            failure mode (a failed remote eviction leaves EVERY replica stale, which is strictly
+            worse than the single-tier case).
+        -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- The digest-pinned Redis singleton, and the pin itself. test-support depends on no
+             sibling module, so this stays a test-scope leaf and closes no reactor cycle. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- Named explicitly: since JDK 23 javac no longer runs a processor it merely
+                         finds on the classpath, and the only symptom is a jar with no
+                         spring-configuration-metadata.json - i.e. no IDE completion for any of the
+                         ludwig.cache.* keys. -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <!-- The shared tier is covered by a Testcontainers Redis, so this module needs the
+                 unit/integration split that only job-core has needed among the libraries so far. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${maven-failsafe-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,21 +1,23 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-09-27T16:08:30.606712Z",
+    "generatedAt": "2026-09-27T21:55:25.115572Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 29,
-    "commit": "61879baa99f975530b556d2f3eb564d0b0f14f1a",
-    "commitShort": "61879ba",
-    "branch": "master",
+    "commit": "48dc1fc7ae8e2ecfd13caf055959474b80afb4e7",
+    "commitShort": "48dc1fc",
+    "branch": "agent-harness-config",
     "freshness": {
-      "pomSetSha": "0665e28ffa69a979b74da19c17b7c6d4766df5bba89512de1b0d20448b313552",
-      "newestPom": "user-settings-spring-boot-starter/pom.xml",
-      "newestPomModified": "2026-09-27T09:19:08.805574Z"
+      "pomSetSha": "76ed6648c37d1f2780b47c7bc963e7c4baac62c34c13dc4c36c879371a3de14e",
+      "newestPom": "build/ludwig-service-parent/pom.xml",
+      "newestPomModified": "2026-09-27T21:54:56.028918Z"
     }
   },
   "modules": [
     {
       "name": "ludwig-bom",
+      "dir": "build",
+      "path": "build/ludwig-bom",
       "artifactId": "ludwig-bom",
       "packaging": "pom",
       "role": "bom",
@@ -33,12 +35,14 @@
         "surefire": 0,
         "failsafe": 0
       },
-      "pom": "ludwig-bom/pom.xml",
-      "readme": "ludwig-bom/README.md",
-      "readmeRu": "ludwig-bom/README.ru.md"
+      "pom": "build/ludwig-bom/pom.xml",
+      "readme": "build/ludwig-bom/README.md",
+      "readmeRu": "build/ludwig-bom/README.ru.md"
     },
     {
       "name": "ludwig-service-parent",
+      "dir": "build",
+      "path": "build/ludwig-service-parent",
       "artifactId": "ludwig-service-parent",
       "packaging": "pom",
       "role": "parent",
@@ -56,12 +60,14 @@
         "surefire": 0,
         "failsafe": 0
       },
-      "pom": "ludwig-service-parent/pom.xml",
-      "readme": "ludwig-service-parent/README.md",
-      "readmeRu": "ludwig-service-parent/README.ru.md"
+      "pom": "build/ludwig-service-parent/pom.xml",
+      "readme": "build/ludwig-service-parent/README.md",
+      "readmeRu": "build/ludwig-service-parent/README.ru.md"
     },
     {
       "name": "odata-filter-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/odata-filter-spring-boot-starter",
       "artifactId": "odata-filter-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -98,28 +104,30 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [
-        "odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages.properties",
-        "odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages_ru.properties"
+        "sources/odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages.properties",
+        "sources/odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "integration": "odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration"
+        "integration": "sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration"
       },
       "testClasses": {
         "surefire": 8,
         "failsafe": 1
       },
-      "pom": "odata-filter-spring-boot-starter/pom.xml",
-      "readme": "odata-filter-spring-boot-starter/README.md",
-      "readmeRu": "odata-filter-spring-boot-starter/README.ru.md"
+      "pom": "sources/odata-filter-spring-boot-starter/pom.xml",
+      "readme": "sources/odata-filter-spring-boot-starter/README.md",
+      "readmeRu": "sources/odata-filter-spring-boot-starter/README.ru.md"
     },
     {
       "name": "audit-core",
+      "dir": "sources",
+      "path": "sources/audit-core",
       "artifactId": "audit-core",
       "packaging": "jar",
       "role": "library",
@@ -173,25 +181,27 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "audit-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/audit-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "unit": "audit-core/src/test/java/ru/ludwigandreas/audit/unit"
+        "unit": "sources/audit-core/src/test/java/ru/ludwigandreas/audit/unit"
       },
       "testClasses": {
         "surefire": 5,
         "failsafe": 0
       },
-      "pom": "audit-core/pom.xml",
-      "readme": "audit-core/README.md",
-      "readmeRu": "audit-core/README.ru.md"
+      "pom": "sources/audit-core/pom.xml",
+      "readme": "sources/audit-core/README.md",
+      "readmeRu": "sources/audit-core/README.ru.md"
     },
     {
       "name": "db-core",
+      "dir": "sources",
+      "path": "sources/db-core",
       "artifactId": "db-core",
       "packaging": "jar",
       "role": "library",
@@ -252,28 +262,30 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "db-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/db-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [
-        "db-core/src/main/resources/i18n/ludwig-db-messages.properties",
-        "db-core/src/main/resources/i18n/ludwig-db-messages_ru.properties"
+        "sources/db-core/src/main/resources/i18n/ludwig-db-messages.properties",
+        "sources/db-core/src/main/resources/i18n/ludwig-db-messages_ru.properties"
       ],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "integration": "db-core/src/test/java/ru/ludwigandreas/db/core/integration"
+        "integration": "sources/db-core/src/test/java/ru/ludwigandreas/db/core/integration"
       },
       "testClasses": {
         "surefire": 7,
         "failsafe": 2
       },
-      "pom": "db-core/pom.xml",
-      "readme": "db-core/README.md",
-      "readmeRu": "db-core/README.ru.md"
+      "pom": "sources/db-core/pom.xml",
+      "readme": "sources/db-core/README.md",
+      "readmeRu": "sources/db-core/README.ru.md"
     },
     {
       "name": "audit-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/audit-spring-boot-starter",
       "artifactId": "audit-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -318,30 +330,32 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "audit-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/audit-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "audit-spring-boot-starter/src/main/resources/db/changelog/audit/audit-changelog.xml"
+        "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/audit-changelog.xml"
       ],
       "i18nBundles": [
-        "audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages.properties",
-        "audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages_ru.properties"
+        "sources/audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages.properties",
+        "sources/audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "integration": "audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration"
+        "integration": "sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration"
       },
       "testClasses": {
         "surefire": 0,
         "failsafe": 1
       },
-      "pom": "audit-spring-boot-starter/pom.xml",
-      "readme": "audit-spring-boot-starter/README.md",
-      "readmeRu": "audit-spring-boot-starter/README.ru.md"
+      "pom": "sources/audit-spring-boot-starter/pom.xml",
+      "readme": "sources/audit-spring-boot-starter/README.md",
+      "readmeRu": "sources/audit-spring-boot-starter/README.ru.md"
     },
     {
       "name": "job-core",
+      "dir": "sources",
+      "path": "sources/job-core",
       "artifactId": "job-core",
       "packaging": "jar",
       "role": "library",
@@ -385,28 +399,30 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "job-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/job-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml"
+        "sources/job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml"
       ],
       "i18nBundles": [],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "unit": "job-core/src/test/java/ru/ludwigandreas/job/core/unit",
-        "integration": "job-core/src/test/java/ru/ludwigandreas/job/core/integration"
+        "unit": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/unit",
+        "integration": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/integration"
       },
       "testClasses": {
         "surefire": 3,
         "failsafe": 1
       },
-      "pom": "job-core/pom.xml",
-      "readme": "job-core/README.md",
-      "readmeRu": "job-core/README.ru.md"
+      "pom": "sources/job-core/pom.xml",
+      "readme": "sources/job-core/README.md",
+      "readmeRu": "sources/job-core/README.ru.md"
     },
     {
       "name": "idempotency-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/idempotency-spring-boot-starter",
       "artifactId": "idempotency-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -450,32 +466,34 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "idempotency-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/idempotency-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/idempotency-changelog.xml"
+        "sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/idempotency-changelog.xml"
       ],
       "i18nBundles": [
-        "idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages.properties",
-        "idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages_ru.properties"
+        "sources/idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages.properties",
+        "sources/idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/unit",
-        "integration": "idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/integration",
-        "architecture": "idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/architecture"
+        "unit": "sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/unit",
+        "integration": "sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/integration",
+        "architecture": "sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/architecture"
       },
       "testClasses": {
         "surefire": 4,
         "failsafe": 5
       },
-      "pom": "idempotency-spring-boot-starter/pom.xml",
-      "readme": "idempotency-spring-boot-starter/README.md",
-      "readmeRu": "idempotency-spring-boot-starter/README.ru.md"
+      "pom": "sources/idempotency-spring-boot-starter/pom.xml",
+      "readme": "sources/idempotency-spring-boot-starter/README.md",
+      "readmeRu": "sources/idempotency-spring-boot-starter/README.ru.md"
     },
     {
       "name": "cache-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/cache-spring-boot-starter",
       "artifactId": "cache-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -499,27 +517,29 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "cache-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/cache-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "unit": "cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/unit",
-        "integration": "cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/integration",
-        "architecture": "cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/architecture"
+        "unit": "sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/unit",
+        "integration": "sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/integration",
+        "architecture": "sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/architecture"
       },
       "testClasses": {
         "surefire": 8,
         "failsafe": 1
       },
-      "pom": "cache-spring-boot-starter/pom.xml",
-      "readme": "cache-spring-boot-starter/README.md",
-      "readmeRu": "cache-spring-boot-starter/README.ru.md"
+      "pom": "sources/cache-spring-boot-starter/pom.xml",
+      "readme": "sources/cache-spring-boot-starter/README.md",
+      "readmeRu": "sources/cache-spring-boot-starter/README.ru.md"
     },
     {
       "name": "messaging-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/messaging-spring-boot-starter",
       "artifactId": "messaging-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -571,30 +591,32 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "messaging-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/messaging-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [
-        "messaging-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-messages.properties",
-        "messaging-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-messages_ru.properties"
+        "sources/messaging-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-messages.properties",
+        "sources/messaging-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/unit",
-        "integration": "messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/integration",
-        "architecture": "messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/architecture"
+        "unit": "sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/unit",
+        "integration": "sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/integration",
+        "architecture": "sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/architecture"
       },
       "testClasses": {
         "surefire": 12,
         "failsafe": 1
       },
-      "pom": "messaging-spring-boot-starter/pom.xml",
-      "readme": "messaging-spring-boot-starter/README.md",
-      "readmeRu": "messaging-spring-boot-starter/README.ru.md"
+      "pom": "sources/messaging-spring-boot-starter/pom.xml",
+      "readme": "sources/messaging-spring-boot-starter/README.md",
+      "readmeRu": "sources/messaging-spring-boot-starter/README.ru.md"
     },
     {
       "name": "export-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/export-spring-boot-starter",
       "artifactId": "export-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -669,32 +691,34 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "export-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/export-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "export-spring-boot-starter/src/main/resources/db/changelog/export/export-changelog.xml"
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/export-changelog.xml"
       ],
       "i18nBundles": [
-        "export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages.properties",
-        "export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages_ru.properties"
+        "sources/export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages.properties",
+        "sources/export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/unit",
-        "integration": "export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/integration",
-        "architecture": "export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/architecture"
+        "unit": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/unit",
+        "integration": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/integration",
+        "architecture": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/architecture"
       },
       "testClasses": {
         "surefire": 16,
         "failsafe": 2
       },
-      "pom": "export-spring-boot-starter/pom.xml",
-      "readme": "export-spring-boot-starter/README.md",
-      "readmeRu": "export-spring-boot-starter/README.ru.md"
+      "pom": "sources/export-spring-boot-starter/pom.xml",
+      "readme": "sources/export-spring-boot-starter/README.md",
+      "readmeRu": "sources/export-spring-boot-starter/README.ru.md"
     },
     {
       "name": "object-storage-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/object-storage-spring-boot-starter",
       "artifactId": "object-storage-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -728,30 +752,32 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "object-storage-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/object-storage-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [
-        "object-storage-spring-boot-starter/src/main/resources/i18n/ludwig-storage-messages.properties",
-        "object-storage-spring-boot-starter/src/main/resources/i18n/ludwig-storage-messages_ru.properties"
+        "sources/object-storage-spring-boot-starter/src/main/resources/i18n/ludwig-storage-messages.properties",
+        "sources/object-storage-spring-boot-starter/src/main/resources/i18n/ludwig-storage-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/unit",
-        "integration": "object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/integration",
-        "architecture": "object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/architecture"
+        "unit": "sources/object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/unit",
+        "integration": "sources/object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/integration",
+        "architecture": "sources/object-storage-spring-boot-starter/src/test/java/ru/ludwigandreas/storage/architecture"
       },
       "testClasses": {
         "surefire": 4,
         "failsafe": 2
       },
-      "pom": "object-storage-spring-boot-starter/pom.xml",
-      "readme": "object-storage-spring-boot-starter/README.md",
-      "readmeRu": "object-storage-spring-boot-starter/README.ru.md"
+      "pom": "sources/object-storage-spring-boot-starter/pom.xml",
+      "readme": "sources/object-storage-spring-boot-starter/README.md",
+      "readmeRu": "sources/object-storage-spring-boot-starter/README.ru.md"
     },
     {
       "name": "file-ingest-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/file-ingest-spring-boot-starter",
       "artifactId": "file-ingest-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -801,32 +827,34 @@
         }
       ],
       "inRepoDependents": [],
-      "autoConfigImports": "file-ingest-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/file-ingest-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/file-ingest-changelog.xml"
+        "sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/file-ingest-changelog.xml"
       ],
       "i18nBundles": [
-        "file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages.properties",
-        "file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages_ru.properties"
+        "sources/file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages.properties",
+        "sources/file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages_ru.properties"
       ],
       "surfaces": [
         "actuator"
       ],
       "testDirs": {
-        "unit": "file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/unit",
-        "integration": "file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/integration",
-        "architecture": "file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/architecture"
+        "unit": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/unit",
+        "integration": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/integration",
+        "architecture": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/architecture"
       },
       "testClasses": {
         "surefire": 8,
         "failsafe": 9
       },
-      "pom": "file-ingest-spring-boot-starter/pom.xml",
-      "readme": "file-ingest-spring-boot-starter/README.md",
-      "readmeRu": "file-ingest-spring-boot-starter/README.ru.md"
+      "pom": "sources/file-ingest-spring-boot-starter/pom.xml",
+      "readme": "sources/file-ingest-spring-boot-starter/README.md",
+      "readmeRu": "sources/file-ingest-spring-boot-starter/README.ru.md"
     },
     {
       "name": "outbox-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/outbox-spring-boot-starter",
       "artifactId": "outbox-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -886,28 +914,30 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "outbox-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/outbox-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/outbox-changelog.xml"
+        "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/outbox-changelog.xml"
       ],
       "i18nBundles": [],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "unit": "outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit",
-        "integration": "outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration"
+        "unit": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit",
+        "integration": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration"
       },
       "testClasses": {
         "surefire": 5,
         "failsafe": 1
       },
-      "pom": "outbox-spring-boot-starter/pom.xml",
-      "readme": "outbox-spring-boot-starter/README.md",
-      "readmeRu": "outbox-spring-boot-starter/README.ru.md"
+      "pom": "sources/outbox-spring-boot-starter/pom.xml",
+      "readme": "sources/outbox-spring-boot-starter/README.md",
+      "readmeRu": "sources/outbox-spring-boot-starter/README.ru.md"
     },
     {
       "name": "reconciliation-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/reconciliation-spring-boot-starter",
       "artifactId": "reconciliation-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -947,28 +977,30 @@
         }
       ],
       "inRepoDependents": [],
-      "autoConfigImports": "reconciliation-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/reconciliation-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml"
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml"
       ],
       "i18nBundles": [],
       "surfaces": [
         "actuator"
       ],
       "testDirs": {
-        "unit": "reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/unit",
-        "integration": "reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration"
+        "unit": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/unit",
+        "integration": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration"
       },
       "testClasses": {
         "surefire": 7,
         "failsafe": 3
       },
-      "pom": "reconciliation-spring-boot-starter/pom.xml",
-      "readme": "reconciliation-spring-boot-starter/README.md",
-      "readmeRu": "reconciliation-spring-boot-starter/README.ru.md"
+      "pom": "sources/reconciliation-spring-boot-starter/pom.xml",
+      "readme": "sources/reconciliation-spring-boot-starter/README.md",
+      "readmeRu": "sources/reconciliation-spring-boot-starter/README.ru.md"
     },
     {
       "name": "security-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/security-spring-boot-starter",
       "artifactId": "security-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -1018,28 +1050,30 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "security-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/security-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [
-        "security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages.properties",
-        "security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages_ru.properties"
+        "sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages.properties",
+        "sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages_ru.properties"
       ],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "unit": "security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
+        "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
       },
       "testClasses": {
         "surefire": 15,
         "failsafe": 0
       },
-      "pom": "security-spring-boot-starter/pom.xml",
-      "readme": "security-spring-boot-starter/README.md",
-      "readmeRu": "security-spring-boot-starter/README.ru.md"
+      "pom": "sources/security-spring-boot-starter/pom.xml",
+      "readme": "sources/security-spring-boot-starter/README.md",
+      "readmeRu": "sources/security-spring-boot-starter/README.ru.md"
     },
     {
       "name": "identity-projection-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/identity-projection-spring-boot-starter",
       "artifactId": "identity-projection-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -1073,27 +1107,29 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "identity-projection-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/identity-projection-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml"
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml"
       ],
       "i18nBundles": [],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "unit": "identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit"
+        "unit": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit"
       },
       "testClasses": {
         "surefire": 1,
         "failsafe": 0
       },
-      "pom": "identity-projection-spring-boot-starter/pom.xml",
-      "readme": "identity-projection-spring-boot-starter/README.md",
-      "readmeRu": "identity-projection-spring-boot-starter/README.ru.md"
+      "pom": "sources/identity-projection-spring-boot-starter/pom.xml",
+      "readme": "sources/identity-projection-spring-boot-starter/README.md",
+      "readmeRu": "sources/identity-projection-spring-boot-starter/README.ru.md"
     },
     {
       "name": "hot-reload-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/hot-reload-spring-boot-starter",
       "artifactId": "hot-reload-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -1125,7 +1161,7 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "hot-reload-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/hot-reload-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [],
       "surfaces": [
@@ -1136,12 +1172,14 @@
         "surefire": 13,
         "failsafe": 0
       },
-      "pom": "hot-reload-spring-boot-starter/pom.xml",
-      "readme": "hot-reload-spring-boot-starter/README.md",
-      "readmeRu": "hot-reload-spring-boot-starter/README.ru.md"
+      "pom": "sources/hot-reload-spring-boot-starter/pom.xml",
+      "readme": "sources/hot-reload-spring-boot-starter/README.md",
+      "readmeRu": "sources/hot-reload-spring-boot-starter/README.ru.md"
     },
     {
       "name": "web-core-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/web-core-spring-boot-starter",
       "artifactId": "web-core-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -1207,29 +1245,31 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "web-core-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/web-core-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [
-        "web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages.properties",
-        "web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages_ru.properties"
+        "sources/web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages.properties",
+        "sources/web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/unit",
-        "integration": "web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/integration"
+        "unit": "sources/web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/unit",
+        "integration": "sources/web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/integration"
       },
       "testClasses": {
         "surefire": 11,
         "failsafe": 2
       },
-      "pom": "web-core-spring-boot-starter/pom.xml",
-      "readme": "web-core-spring-boot-starter/README.md",
-      "readmeRu": "web-core-spring-boot-starter/README.ru.md"
+      "pom": "sources/web-core-spring-boot-starter/pom.xml",
+      "readme": "sources/web-core-spring-boot-starter/README.md",
+      "readmeRu": "sources/web-core-spring-boot-starter/README.ru.md"
     },
     {
       "name": "observability-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/observability-spring-boot-starter",
       "artifactId": "observability-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -1275,26 +1315,28 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "observability-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/observability-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [],
       "surfaces": [
         "none"
       ],
       "testDirs": {
-        "unit": "observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit",
-        "integration": "observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration"
+        "unit": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit",
+        "integration": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration"
       },
       "testClasses": {
         "surefire": 13,
         "failsafe": 0
       },
-      "pom": "observability-spring-boot-starter/pom.xml",
-      "readme": "observability-spring-boot-starter/README.md",
-      "readmeRu": "observability-spring-boot-starter/README.ru.md"
+      "pom": "sources/observability-spring-boot-starter/pom.xml",
+      "readme": "sources/observability-spring-boot-starter/README.md",
+      "readmeRu": "sources/observability-spring-boot-starter/README.ru.md"
     },
     {
       "name": "rest-client-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/rest-client-spring-boot-starter",
       "artifactId": "rest-client-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -1332,26 +1374,28 @@
           "scope": "compile"
         }
       ],
-      "autoConfigImports": "rest-client-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/rest-client-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
       "i18nBundles": [],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/unit",
-        "integration": "rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/integration"
+        "unit": "sources/rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/unit",
+        "integration": "sources/rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/integration"
       },
       "testClasses": {
         "surefire": 11,
         "failsafe": 8
       },
-      "pom": "rest-client-spring-boot-starter/pom.xml",
-      "readme": "rest-client-spring-boot-starter/README.md",
-      "readmeRu": "rest-client-spring-boot-starter/README.ru.md"
+      "pom": "sources/rest-client-spring-boot-starter/pom.xml",
+      "readme": "sources/rest-client-spring-boot-starter/README.md",
+      "readmeRu": "sources/rest-client-spring-boot-starter/README.ru.md"
     },
     {
       "name": "user-settings-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/user-settings-spring-boot-starter",
       "artifactId": "user-settings-spring-boot-starter",
       "packaging": "jar",
       "role": "starter",
@@ -1426,32 +1470,34 @@
           "scope": "provided"
         }
       ],
-      "autoConfigImports": "user-settings-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "autoConfigImports": "sources/user-settings-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
-        "user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/user-settings-changelog.xml"
+        "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/user-settings-changelog.xml"
       ],
       "i18nBundles": [
-        "user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages.properties",
-        "user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages_ru.properties"
+        "sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages.properties",
+        "sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/unit",
-        "integration": "user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/integration",
-        "architecture": "user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture"
+        "unit": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/unit",
+        "integration": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/integration",
+        "architecture": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture"
       },
       "testClasses": {
         "surefire": 12,
         "failsafe": 2
       },
-      "pom": "user-settings-spring-boot-starter/pom.xml",
-      "readme": "user-settings-spring-boot-starter/README.md",
-      "readmeRu": "user-settings-spring-boot-starter/README.ru.md"
+      "pom": "sources/user-settings-spring-boot-starter/pom.xml",
+      "readme": "sources/user-settings-spring-boot-starter/README.md",
+      "readmeRu": "sources/user-settings-spring-boot-starter/README.ru.md"
     },
     {
       "name": "architecture-rules",
+      "dir": "build",
+      "path": "build/architecture-rules",
       "artifactId": "architecture-rules",
       "packaging": "jar",
       "role": "rules",
@@ -1496,12 +1542,14 @@
         "surefire": 7,
         "failsafe": 1
       },
-      "pom": "architecture-rules/pom.xml",
-      "readme": "architecture-rules/README.md",
-      "readmeRu": "architecture-rules/README.ru.md"
+      "pom": "build/architecture-rules/pom.xml",
+      "readme": "build/architecture-rules/README.md",
+      "readmeRu": "build/architecture-rules/README.ru.md"
     },
     {
       "name": "test-support",
+      "dir": "sources",
+      "path": "sources/test-support",
       "artifactId": "test-support",
       "packaging": "jar",
       "role": "test-support",
@@ -1574,19 +1622,21 @@
         "none"
       ],
       "testDirs": {
-        "unit": "test-support/src/test/java/ru/ludwigandreas/testsupport/unit",
-        "integration": "test-support/src/test/java/ru/ludwigandreas/testsupport/integration"
+        "unit": "sources/test-support/src/test/java/ru/ludwigandreas/testsupport/unit",
+        "integration": "sources/test-support/src/test/java/ru/ludwigandreas/testsupport/integration"
       },
       "testClasses": {
         "surefire": 1,
         "failsafe": 1
       },
-      "pom": "test-support/pom.xml",
-      "readme": "test-support/README.md",
-      "readmeRu": "test-support/README.ru.md"
+      "pom": "sources/test-support/pom.xml",
+      "readme": "sources/test-support/README.md",
+      "readmeRu": "sources/test-support/README.ru.md"
     },
     {
       "name": "test-support-security",
+      "dir": "sources",
+      "path": "sources/test-support-security",
       "artifactId": "test-support-security",
       "packaging": "jar",
       "role": "test-support",
@@ -1626,12 +1676,14 @@
         "surefire": 0,
         "failsafe": 0
       },
-      "pom": "test-support-security/pom.xml",
-      "readme": "test-support-security/README.md",
-      "readmeRu": "test-support-security/README.ru.md"
+      "pom": "sources/test-support-security/pom.xml",
+      "readme": "sources/test-support-security/README.md",
+      "readmeRu": "sources/test-support-security/README.ru.md"
     },
     {
       "name": "checkstyle-rules",
+      "dir": "build",
+      "path": "build/checkstyle-rules",
       "artifactId": "checkstyle-rules",
       "packaging": "jar",
       "role": "rules",
@@ -1649,12 +1701,14 @@
         "surefire": 0,
         "failsafe": 0
       },
-      "pom": "checkstyle-rules/pom.xml",
-      "readme": "checkstyle-rules/README.md",
-      "readmeRu": "checkstyle-rules/README.ru.md"
+      "pom": "build/checkstyle-rules/pom.xml",
+      "readme": "build/checkstyle-rules/README.md",
+      "readmeRu": "build/checkstyle-rules/README.ru.md"
     },
     {
       "name": "jira-client",
+      "dir": "sources",
+      "path": "sources/jira-client",
       "artifactId": "jira-client",
       "packaging": "jar",
       "role": "library",
@@ -1670,18 +1724,20 @@
         "none"
       ],
       "testDirs": {
-        "unit": "jira-client/src/test/java/ru/ludwigandreas/jira/unit"
+        "unit": "sources/jira-client/src/test/java/ru/ludwigandreas/jira/unit"
       },
       "testClasses": {
         "surefire": 10,
         "failsafe": 0
       },
-      "pom": "jira-client/pom.xml",
-      "readme": "jira-client/README.md",
-      "readmeRu": "jira-client/README.ru.md"
+      "pom": "sources/jira-client/pom.xml",
+      "readme": "sources/jira-client/README.md",
+      "readmeRu": "sources/jira-client/README.ru.md"
     },
     {
       "name": "crud-service-example",
+      "dir": "services",
+      "path": "services/crud-service-example",
       "artifactId": "crud-service-example",
       "packaging": "jar",
       "role": "service",
@@ -1743,34 +1799,36 @@
       "inRepoDependents": [],
       "autoConfigImports": null,
       "liquibaseChangelogs": [
-        "crud-service-example/src/main/resources/db/changelog/changes/0001-catalog-schema.xml",
-        "crud-service-example/src/main/resources/db/changelog/changes/0002-catalog-reference-data.xml",
-        "crud-service-example/src/main/resources/db/changelog/changes/0003-catalog-security.xml",
-        "crud-service-example/src/main/resources/db/changelog/changes/0004-catalog-watchers.xml",
-        "crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml"
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0001-catalog-schema.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0002-catalog-reference-data.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0003-catalog-security.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0004-catalog-watchers.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml"
       ],
       "i18nBundles": [
-        "crud-service-example/src/main/resources/i18n/messages.properties",
-        "crud-service-example/src/main/resources/i18n/messages_ru.properties"
+        "services/crud-service-example/src/main/resources/i18n/messages.properties",
+        "services/crud-service-example/src/main/resources/i18n/messages_ru.properties"
       ],
       "surfaces": [
         "rest"
       ],
       "testDirs": {
-        "unit": "crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/unit",
-        "integration": "crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/integration",
-        "architecture": "crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/architecture"
+        "unit": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/unit",
+        "integration": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/integration",
+        "architecture": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/architecture"
       },
       "testClasses": {
         "surefire": 3,
         "failsafe": 2
       },
-      "pom": "crud-service-example/pom.xml",
-      "readme": "crud-service-example/README.md",
-      "readmeRu": "crud-service-example/README.ru.md"
+      "pom": "services/crud-service-example/pom.xml",
+      "readme": "services/crud-service-example/README.md",
+      "readmeRu": "services/crud-service-example/README.ru.md"
     },
     {
       "name": "notification-service",
+      "dir": "services",
+      "path": "services/notification-service",
       "artifactId": "notification-service",
       "packaging": "jar",
       "role": "service",
@@ -1852,34 +1910,34 @@
       "inRepoDependents": [],
       "autoConfigImports": null,
       "liquibaseChangelogs": [
-        "notification-service/src/main/resources/db/changelog/changes/0001-notification-schema.xml",
-        "notification-service/src/main/resources/db/changelog/changes/0002-notification-recipients.xml",
-        "notification-service/src/main/resources/db/changelog/changes/0003-notification-platform-gaps.xml",
-        "notification-service/src/main/resources/db/changelog/changes/0004-preferences-move-out.xml",
-        "notification-service/src/main/resources/db/changelog/changes/0005-fold-lock-into-job-core.xml",
-        "notification-service/src/main/resources/db/changelog/changes/0006-fold-idempotency-into-starter.xml",
-        "notification-service/src/main/resources/db/changelog/db.changelog-master.xml"
+        "services/notification-service/src/main/resources/db/changelog/changes/0001-notification-schema.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0002-notification-recipients.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0003-notification-platform-gaps.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0004-preferences-move-out.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0005-fold-lock-into-job-core.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0006-fold-idempotency-into-starter.xml",
+        "services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml"
       ],
       "i18nBundles": [
-        "notification-service/src/main/resources/i18n/notification-messages.properties",
-        "notification-service/src/main/resources/i18n/notification-messages_ru.properties"
+        "services/notification-service/src/main/resources/i18n/notification-messages.properties",
+        "services/notification-service/src/main/resources/i18n/notification-messages_ru.properties"
       ],
       "surfaces": [
         "actuator",
         "rest"
       ],
       "testDirs": {
-        "unit": "notification-service/src/test/java/ru/ludwigandreas/notification/unit",
-        "integration": "notification-service/src/test/java/ru/ludwigandreas/notification/integration",
-        "architecture": "notification-service/src/test/java/ru/ludwigandreas/notification/architecture"
+        "unit": "services/notification-service/src/test/java/ru/ludwigandreas/notification/unit",
+        "integration": "services/notification-service/src/test/java/ru/ludwigandreas/notification/integration",
+        "architecture": "services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture"
       },
       "testClasses": {
         "surefire": 16,
         "failsafe": 4
       },
-      "pom": "notification-service/pom.xml",
-      "readme": "notification-service/README.md",
-      "readmeRu": "notification-service/README.ru.md"
+      "pom": "services/notification-service/pom.xml",
+      "readme": "services/notification-service/README.md",
+      "readmeRu": "services/notification-service/README.ru.md"
     }
   ]
 }

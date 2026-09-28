@@ -76,12 +76,16 @@ pipeline {
                 //
                 // -pl limits this to the modules that actually produce an image. The libraries are
                 // jars; asking jib to containerize them would be meaningless.
+                //
+                // Selected by :artifactId rather than by directory. A module's path is a layout
+                // decision and has already changed once (services moved under services/); its
+                // artifactId is a published coordinate and does not move.
                 withCredentials([usernamePassword(credentialsId: 'ludwig-registry',
                                                   usernameVariable: 'JIB_TARGET_USERNAME',
                                                   passwordVariable: 'JIB_TARGET_PASSWORD')]) {
                     sh '''
                         mvn $MAVEN_ARGS -Pci -DskipTests \
-                            -pl crud-service-example,notification-service \
+                            -pl :crud-service-example,:notification-service \
                             jib:build
                     '''
                 }

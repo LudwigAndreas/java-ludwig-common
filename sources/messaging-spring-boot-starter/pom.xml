@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>messaging-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Messaging Spring Boot starter</name>
+    <description>
+        The consumer half of the envelope outbox-spring-boot-starter produces: one canonical set of wire
+        header names shared by both halves, a typed inbound envelope that reads them back, and one
+        listener container factory builder that fixes the decisions three services had each made
+        differently - ErrorHandlingDeserializer around key and value, DefaultErrorHandler with
+        exponential backoff, deserialization failures registered non-retryable so a poison record goes
+        straight to the dead-letter topic, RECORD acknowledgement, a dead-letter topic per source topic,
+        the consumer-side dedup filter from idempotency-spring-boot-starter wired in when a deployment
+        asked for it, Micrometer consumer metrics including lag, and a silence signal for a topic that
+        has stopped delivering. Non-blocking retry topics are shipped and are per-topic opt-in, refused
+        at startup for any consumer that declares it cares about ordering.
+    </description>
+
+    <!--
+        The JDK baseline and the spring-boot-dependencies import are inherited from the parent pom,
+        ru.ludwigandreas:common. Third-party versions are NOT: they live in ludwig-bom, imported below.
+
+        ludwig-bom is imported rather than inherited on purpose, and ru.ludwigandreas:common stays the
+        parent rather than ludwig-service-parent: a library built against a fixed
+        spring-boot-starter-parent bakes that Boot line into itself and stops being usable by a service
+        running a different one.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            ===========================================================================================
+            THE DEPENDENCY DIRECTION - read this before adding a dependency here.
+
+            outbox-spring-boot-starter depends on THIS module, for ru.ludwigandreas.messaging.api's
+            header names. That direction is the only one that works: this module needs a KafkaTemplate to
+            dead-letter with, not an outbox, and a mutual dependency would be a reactor cycle regardless
+            of scope, because Maven's reactor DAG ignores scope.
+
+            The consequence is that every non-optional dependency here becomes a non-optional dependency
+            of every outbox consumer. That is why spring-kafka and web-core are optional below and why
+            there is no dependency on anything else in the repository except audit-core, which outbox
+            already has. Adding a non-optional dependency here changes outbox's footprint - check that
+            first.
+
+            THE FALLBACK, if that edge ever has to reverse: split a zero-dependency messaging-core out of
+            ru.ludwigandreas.messaging.api - MessageHeaders, InboundEnvelope, DeadLetterTopics, all of
+            which are constants and records with no Spring and no Kafka in their signatures - and have
+            both this module and outbox depend on that instead. audit-core exists because exactly that
+            split was forced there.
+            ===========================================================================================
+        -->
+
+        <!-- The platform's audit envelope and sink. A dead-letter send and an exhausted retry budget are
+             both events the trail should carry; audit-core rather than audit-spring-boot-starter, because
+             where the trail is written is a deployment's decision and this module needs only the seam.
+             Non-optional, and that is safe: outbox-spring-boot-starter already depends on it. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!--
+            Optional, and this is the deliberate difference from idempotency-spring-boot-starter, which
+            makes web-core non-optional and says why. Nothing this module throws reaches an HTTP
+            response: an unsupported event version is raised inside a deserializer on a listener thread
+            and its destination is the dead-letter topic. The bundle and the ExceptionProblemMapper exist
+            for the service that chooses to re-raise one of these from its own HTTP surface, and
+            MessagingWebAutoConfiguration is conditional on web-core being present, so a broker-only
+            deployment resolves neither. Making it non-optional would put web-core on the classpath of
+            every outbox consumer - see the dependency direction above.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional, for the same reason: outbox-spring-boot-starter keeps spring-kafka optional so a
+            REST-dispatching deployment does not carry a broker client, and inheriting it non-optionally
+            from here would silently put spring-kafka on that deployment's classpath - which is exactly
+            the classpath every @ConditionalOnClass(KafkaListener.class) in this repository keys on.
+
+            A service adopting this module brings spring-kafka itself, as all three current consumers
+            already do.
+        -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Optional: consumer-side dedup. The filter strategy is taken from the context by its
+            spring-kafka interface, so the wiring needs nothing from here; what this dependency buys is
+            reading IdempotencyProperties' claim mode at startup, so a TRANSACTIONAL claim without a
+            container transaction manager is refused instead of silently reserving keys for work that
+            rolled back. Compile-only in effect - MessagingDedupAutoConfiguration is conditional on the
+            class being present.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>idempotency-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- The envelope's payload is JSON and the shared deserializer is Jackson's. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Spring Boot autoconfiguration machinery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            The constraint annotations on MessagingProperties. The API only, not
+            spring-boot-starter-validation: a library has no business dragging Hibernate Validator into a
+            consumer, and Boot's configuration binding validates these only when the consumer has a
+            validator of its own - at which point the annotations are already here to be read.
+
+            OPTIONAL, unlike every other module in this repository that takes this dependency, and the
+            reason is the dependency direction at the top of this file. Non-optional, it reaches every
+            outbox consumer transitively - and jakarta.validation-api on a classpath WITHOUT
+            hibernate-validator is worse than neither: it satisfies web-core's
+            @ConditionalOnClass(jakarta.validation.Validator), which then tries to build a
+            LocalValidatorFactoryBean and fails with a NoClassDefFoundError on a hibernate-validator class.
+            That is not theoretical - it broke audit-spring-boot-starter's context, which reaches this
+            module through outbox and had never had the validation API on its test classpath.
+        -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: consumer lag, dead-letter sends, retries, and the silence gauge. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            A real Bean Validation provider, test-scope only. MessagingProperties is @Validated, and Boot
+            builds a validator for it whenever jakarta.validation.Validator is on the classpath - which in a
+            consumer means "when that consumer brought a provider". Without one here the context fails with
+            NoProviderFoundException, which is the failure a consumer would also see if it put the API on its
+            classpath without an implementation, so having it in this module's tests is what proves the
+            optional-API arrangement actually works.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            A real broker. Everything load-bearing in this module is how a container behaves when a
+            record cannot be handled - how many attempts, with what gaps, and where the record ends up -
+            and none of that is observable without a broker that actually has a dead-letter topic to
+            receive it. spring-kafka-test's embedded broker would prove the wiring compiles; a
+            Testcontainers broker proves the record arrives.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ArchUnit, for this module satisfying the KafkaRules group it contributes rules to. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            The platform's container images, singleton containers and fixtures. One test-scoped
+            dependency; the digests live in its images.properties, not here.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+                Failsafe, for the same reason idempotency-spring-boot-starter has it: the suite starts a
+                broker and waits out a real exponential backoff, which is not something `mvn test` should
+                do on every build of every module that depends on this one. Named *IT, run at `verify`.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

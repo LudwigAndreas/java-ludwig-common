@@ -39,35 +39,43 @@
     <modules>
         <!-- The published platform: a version registry and a build-configuration parent. Built
              first because every other module resolves ludwig-bom. -->
-        <module>ludwig-bom</module>
-        <module>ludwig-service-parent</module>
+        <module>build/ludwig-bom</module>
+        <module>build/ludwig-service-parent</module>
 
         <!-- Library modules: parented by this POM, consumed as jars. -->
-        <module>odata-filter-spring-boot-starter</module>
-        <module>audit-core</module>
-        <module>db-core</module>
-        <module>audit-spring-boot-starter</module>
-        <module>job-core</module>
-        <module>idempotency-spring-boot-starter</module>
-        <module>export-spring-boot-starter</module>
-        <module>object-storage-spring-boot-starter</module>
-        <module>file-ingest-spring-boot-starter</module>
-        <module>outbox-spring-boot-starter</module>
-        <module>reconciliation-spring-boot-starter</module>
-        <module>security-spring-boot-starter</module>
-        <module>identity-projection-spring-boot-starter</module>
-        <module>hot-reload-spring-boot-starter</module>
-        <module>web-core-spring-boot-starter</module>
-        <module>observability-spring-boot-starter</module>
-        <module>rest-client-spring-boot-starter</module>
-        <module>user-settings-spring-boot-starter</module>
-        <module>architecture-rules</module>
-        <module>checkstyle-rules</module>
-        <module>jira-client</module>
+        <module>sources/odata-filter-spring-boot-starter</module>
+        <module>sources/audit-core</module>
+        <module>sources/db-core</module>
+        <module>sources/audit-spring-boot-starter</module>
+        <module>sources/job-core</module>
+        <module>sources/idempotency-spring-boot-starter</module>
+        <!-- Zero in-repo dependencies on purpose, so that security-spring-boot-starter - which sits
+             near the bottom of this reactor - can depend on it without closing a cycle. -->
+        <module>sources/cache-spring-boot-starter</module>
+        <module>sources/messaging-spring-boot-starter</module>
+        <module>sources/export-spring-boot-starter</module>
+        <module>sources/object-storage-spring-boot-starter</module>
+        <module>sources/file-ingest-spring-boot-starter</module>
+        <module>sources/outbox-spring-boot-starter</module>
+        <module>sources/reconciliation-spring-boot-starter</module>
+        <module>sources/security-spring-boot-starter</module>
+        <module>sources/identity-projection-spring-boot-starter</module>
+        <module>sources/hot-reload-spring-boot-starter</module>
+        <module>sources/web-core-spring-boot-starter</module>
+        <module>sources/observability-spring-boot-starter</module>
+        <module>sources/rest-client-spring-boot-starter</module>
+        <module>sources/user-settings-spring-boot-starter</module>
+        <module>build/architecture-rules</module>
+        <!-- Test-scope infrastructure. test-support depends on no sibling on purpose, so that the
+             most upstream modules can use it without closing a reactor cycle; see its POM. -->
+        <module>sources/test-support</module>
+        <module>sources/test-support-security</module>
+        <module>build/checkstyle-rules</module>
+        <module>sources/jira-client</module>
 
         <!-- Services: parented by ludwig-service-parent, consumed as container images. -->
-        <module>crud-service-example</module>
-        <module>notification-service</module>
+        <module>services/crud-service-example</module>
+        <module>services/notification-service</module>
     </modules>
 
     <properties>
@@ -96,7 +104,7 @@
         <!--
             THIRD-PARTY VERSIONS NO LONGER LIVE HERE. QueryDSL, MapStruct, Olingo, Resilience4j,
             Testcontainers, Vault, FreeMarker, ArchUnit, springdoc, GreenMail and Lombok moved to
-            ludwig-bom/pom.xml, which every module in this repository imports and which a downstream
+            build/ludwig-bom/pom.xml, which every module in this repository imports and which a downstream
             service can import too. They were unreachable from outside this reactor while they were
             properties of this file, which is the problem the BOM exists to solve.
 
@@ -359,8 +367,8 @@
                             deployed artifact. A path inside a plugin <configuration> is resolved at
                             execution time and never reaches a published file.
                         -->
-                        <configLocation>${maven.multiModuleProjectDirectory}/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle.xml</configLocation>
-                        <suppressionsLocation>${maven.multiModuleProjectDirectory}/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle-suppressions.xml</suppressionsLocation>
+                        <configLocation>${maven.multiModuleProjectDirectory}/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle.xml</configLocation>
+                        <suppressionsLocation>${maven.multiModuleProjectDirectory}/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle-suppressions.xml</suppressionsLocation>
                         <!--
                             Passes the severity tier into the Checkstyle configuration, which
                             declares its own fallback, so the config also works when it is run

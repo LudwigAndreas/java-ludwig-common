@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>test-support-security</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Test support (security fixtures)</name>
+    <description>
+        The domain-free half of this platform's security test fixtures: a builder that mints a
+        LudwigPrincipal and wraps it in an authentication a MockMvc request can carry, and the
+        rejecting JwtDecoder that lets a context start without OIDC discovery. Each service keeps its
+        own constants naming its own roles and subjects.
+    </description>
+
+    <!--
+        ============================================================================================
+        WHY THIS IS A SECOND MODULE RATHER THAN A PACKAGE INSIDE test-support
+        ============================================================================================
+
+        This looks like over-engineering until you try the alternative, so the reason is recorded here
+        rather than left for the next reader to rediscover.
+
+        Maven builds its reactor DAG from *all* declared dependencies, whatever their scope - `test`,
+        `provided` and `optional` included. These fixtures need LudwigPrincipal, so they must depend on
+        security-spring-boot-starter. test-support must be consumable by *every* module, including the
+        most upstream ones: db-core and audit-core both have container tests. If the two halves were
+        one artifact, that artifact would depend on security-spring-boot-starter and be depended on by
+        db-core, and any test-scoped container dependency added to the security starter would close a
+        cycle that fails the entire reactor - not just the module that added it.
+
+        A single merged module would in fact build today, because security-spring-boot-starter
+        currently has only unit tests and so declares no dependency back on test-support. That is a
+        coincidence, not a design: the cycle appears the first time somebody gives the security starter
+        a container test, and the fix at that point is this same split, done under time pressure with a
+        red reactor. So it is done now, while it is free.
+
+        The split is also the honest description of the two halves. The container half is framework
+        infrastructure that knows nothing about this platform's domain; this half knows what a
+        principal is.
+    -->
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- The reason this module exists: LudwigPrincipal, LudwigAuthentication, PrincipalType. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
+            The container half. Declared so that a service adds one dependency and gets both, which is
+            how every consumer wants it - and harmless in the other direction, because nothing in
+            test-support points back here.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- SecurityMockMvcRequestPostProcessors.authentication(...) and RequestPostProcessor. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <!-- JwtDecoder and JwtException, for the rejecting decoder. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+        <!--
+            MockMvcBuilderCustomizer, for the optional default-caller bean. Part of Boot's test
+            autoconfigure module, which a service already has via spring-boot-starter-test.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!--
+        As in test-support: no JaCoCo execution is bound, because this module's code runs in the
+        services' suites rather than its own, and -Djacoco.skip is deliberately not set in a POM. See
+        sources/test-support/pom.xml for the full reasoning.
+    -->
+</project>

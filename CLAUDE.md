@@ -98,6 +98,31 @@ needs Docker or a registry. Use `mvn package jib:dockerBuild` for a local image 
 `git-commit-id-maven-plugin` populates the revision label) and `mvn -Pci jib:build` / `mvn -Pci deploy`
 to push. `-Pci` is never auto-activated from the environment — always pass it explicitly.
 
+## Repository layout
+
+Every module sits one level down, in the directory its role dictates. Nothing else is a module.
+
+| Directory | Holds | Count |
+|---|---|---|
+| `build/` | what every other module inherits, imports or is checked by: `ludwig-bom`, `ludwig-service-parent`, `checkstyle-rules`, `architecture-rules` | 4 |
+| `services/` | modules parented by `ludwig-service-parent`, shipped as container images | 2 |
+| `sources/` | every library, starter and test-support module, parented by the reactor root | 23 |
+
+Two consequences that bite:
+
+- **A module POM parented by `common` must declare `<relativePath>../../pom.xml</relativePath>`.**
+  Maven's default is `../pom.xml`, which from one level down is a directory with no POM — and Maven
+  does not fail, it silently resolves the parent from `~/.m2` instead and builds against a stale
+  `common`. Every existing module has it; a new one must too.
+- **Select modules by `-pl :<artifactId>`, never by directory.** A path is a layout decision and has
+  already moved once; an artifactId is a published coordinate. `scripts/gate.sh` and
+  `scripts/manifest.sh module <path>` print the `:` form.
+
+`scripts/manifest.sh layout` fails when a module is in the wrong directory for its role, and the
+gate runs it. The check lives there rather than in ArchUnit or Checkstyle because a directory's
+position is a filesystem fact, which bytecode and source-text analysis both cannot see. The spec is
+the `repository-layout` capability in `openspec/specs/`.
+
 ## The three-POM split (the thing to get right)
 
 | POM | Role |
@@ -109,7 +134,7 @@ to push. `-Pci` is never auto-activated from the environment — always pass it 
 Consequences when editing POMs:
 - A **library** module is parented by the reactor root and imports `ludwig-bom`. A **service**
   (`crud-service-example`, `notification-service`) is parented by `ludwig-service-parent`.
-- Third-party versions belong in `ludwig-bom/pom.xml`, not the root POM. Plugin versions and build
+- Third-party versions belong in `build/ludwig-bom/pom.xml`, not the root POM. Plugin versions and build
   configuration belong in the root POM (libraries) or `ludwig-service-parent` (services).
 - The version lives in exactly one place: `-Drevision=…` in `.mvn/maven.config`. Every POM says
   `<version>${revision}</version>`; `flatten-maven-plugin` resolves it on install/deploy. A release is

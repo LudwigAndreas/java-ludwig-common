@@ -71,7 +71,7 @@ your response, which rung you tried and what it failed to return.**
 Every one of these has bitten. The workaround is the point.
 
 **1. `get_symbol_body` needs a qualified name *and* the file path.** Both arguments are required:
-`file_path` = `job-core/src/main/java/…/JdbcRunLock.java` **and** `symbol_name` = `JdbcRunLock.tryAcquire`
+`file_path` = `sources/job-core/src/main/java/…/JdbcRunLock.java` **and** `symbol_name` = `JdbcRunLock.tryAcquire`
 — not `tryAcquire`. Omitting `file_path` fails validation outright; an unqualified `symbol_name`
 finds nothing. *Workaround:* `get_file_summary` first — it gives you both the qualified names and
 their line ranges.
@@ -88,9 +88,9 @@ their line ranges.
 limit, because the field is present and looks authoritative. Verified: `get_file_summary` on
 `JdbcRunLock.java` reports `called_by: []` for `tryAcquire`, while `search_code_advanced` for
 `tryAcquire` returns **67 matches**, including real callers in four other modules —
-`audit-spring-boot-starter/…/AuditRetentionPurge.java:105`,
-`export-spring-boot-starter/…/ExportRetentionPurge.java:79`,
-`…/ExportSubscriptionScheduler.java:89`, `idempotency-spring-boot-starter/…/RetentionPurgeIT.java:99`.
+`sources/audit-spring-boot-starter/…/AuditRetentionPurge.java:105`,
+`sources/export-spring-boot-starter/…/ExportRetentionPurge.java:79`,
+`…/ExportSubscriptionScheduler.java:89`, `sources/idempotency-spring-boot-starter/…/RetentionPurgeIT.java:99`.
 In the same output, `Handle.renew` lists *itself* as a caller. *Workaround:* for cross-module
 callers use `search_code_advanced`; **never conclude "nothing calls this" from `called_by`.** To
 actually prove a symbol has no callers, use the compiler: remove it and run the gate for the module

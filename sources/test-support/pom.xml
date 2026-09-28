@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>test-support</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Test support (containers, fixtures, clock)</name>
+    <description>
+        The one place this platform's digest-pinned container images are written down, the singleton
+        containers every module shares, and the fixtures (GreenMail, WireMock, a movable Clock) and
+        data-hygiene helpers that a container test needs. Added as a single test-scoped dependency.
+    </description>
+
+    <!--
+        Ordinary `jar` packaging, NOT `test-jar`, even though every consumer uses this at test scope.
+        A normal jar whose classes happen to be consumed from src/test is what this repository already
+        does for architecture-rules and checkstyle-rules, and it avoids the test-jar lifecycle
+        problems: a test-jar is built from src/test/java, so it would not exist until this module's own
+        tests had compiled, it needs the jar plugin bound to an extra execution, and consumers have to
+        remember <type>test-jar</type> on every declaration.
+    -->
+
+    <!--
+        ============================================================================================
+        THIS MODULE MUST DEPEND ON NOTHING IN THIS REPOSITORY. Do not add a sibling dependency here.
+        ============================================================================================
+
+        Maven builds its reactor DAG from *all* declared dependencies, whatever their scope. `test`,
+        `provided` and `optional` do not exempt a dependency from that graph. Eleven modules in this
+        repository have container tests, and they include the most upstream ones - db-core and
+        audit-core. The moment this module declares one of them, that module's own test-scoped
+        dependency on this one closes a cycle and the whole reactor fails to build, not just that
+        module.
+
+        architecture-rules is the precedent and proves the arrangement works: plain jar, parented by
+        the reactor root, imports ludwig-bom, depends on no sibling, consumed everywhere at test scope.
+
+        The security fixtures cannot obey this rule - they need LudwigPrincipal from
+        security-spring-boot-starter - which is exactly why they live in test-support-security instead.
+        See that module's POM.
+    -->
+
+    <!--
+        ludwig-bom is imported, not inherited: this module's parent stays ru.ludwigandreas:common so
+        that it keeps getting its Spring Boot line from there. The BOM supplies the Testcontainers and
+        AWS SDK lines, so no <version> appears below.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            ==== The core, which every consumer of this jar needs ====
+
+            These are compile scope rather than provided: this is a library whose consumers use it at
+            test scope, so its own compile-scope dependencies arrive on their test classpath, which is
+            where they are wanted. Every module that uses this already declared these by hand.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+        </dependency>
+        <!-- @TestConfiguration, @SpringBootTest and TestPropertyValues. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+        </dependency>
+        <!-- @ContextConfiguration and the initializer contract. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <!-- @ServiceConnection. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+        </dependency>
+        <!-- JdbcTemplate, for DatabaseCleaner. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+        </dependency>
+
+        <!--
+            ==== Optional, and deliberately so ====
+
+            A module that only wants Postgres should not acquire a Kafka client, the AWS SDK, a mail
+            server and an HTTP server simply by depending on this jar. Each of these is needed by one
+            class here, and `optional` means the consumer that touches that class declares it - which
+            is what the modules using these already do today.
+
+            The failure mode when a consumer forgets is a NoClassDefFoundError naming the missing
+            type, which is legible. The alternative - every module's test classpath carrying every
+            fixture's transitive tree - makes dependency convergence everybody's problem.
+            architecture-rules takes the same position with junit-jupiter-api.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>localstack</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail-junit5</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- The shaded artifact, as ludwig-bom's note requires. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ==== This module's own tests ==== -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            This module's own integration test boots a context, because the composed annotations in
+            ru.ludwigandreas.testsupport.junit cannot be proven any other way: whether @ServiceConnection
+            resolves against a digest-pinned image name is a fact about Spring's wiring, not about a method
+            this module wrote. Shipping three entry points that no test had ever started would be worse.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No JaCoCo execution is bound here, and that is a decision rather than an oversight.
+
+                This module is test-scope infrastructure: its classes run in every other module's
+                suite and in none of its own. A coverage gate measured against this module's unit
+                tests would be measuring the wrong thing - it would report near-zero for
+                Containers.postgres() while that method runs in eleven modules' builds. The gate that
+                matters for this code is that those eleven builds pass.
+
+                The library modules in this reactor inherit no enforced JaCoCo gate from the root POM
+                (the 70/60 gate lives in ludwig-service-parent and applies to services), so there is
+                nothing to switch off, and -Djacoco.skip is deliberately NOT set in this POM: a skip
+                flag in a POM is an escape hatch that outlives the reason for it. What this module has
+                instead is a real unit test for the one piece of logic that is genuinely its own and
+                genuinely load-bearing - that a digest-less pin is rejected. See ImagePinningTest.
+            -->
+        </plugins>
+    </build>
+</project>

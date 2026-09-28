@@ -19,7 +19,7 @@ The repository SHALL keep exactly three structural POMs with disjoint responsibi
 
 #### Scenario: A third-party version is added
 - **WHEN** a change needs to pin a third-party dependency version
-- **THEN** the version is declared in `ludwig-bom/pom.xml`, and not in the root POM
+- **THEN** the version is declared in `build/ludwig-bom/pom.xml`, and not in the root POM
 
 #### Scenario: A plugin version or build configuration is added
 - **WHEN** a change needs to configure a build plugin

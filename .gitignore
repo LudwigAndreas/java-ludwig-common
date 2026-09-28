@@ -27,9 +27,10 @@ target/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+# NOTE: no bare `build/` ignore here, deliberately. `/build/` at the repo root is a SOURCE
+# directory holding ludwig-bom, ludwig-service-parent, checkstyle-rules and architecture-rules.
+# This is a Maven reactor - build output goes to target/, which is ignored above - so the
+# NetBeans/Gradle `build/` pattern that used to sit here was vestigial as well as harmful.
 
 ### VS Code ###
 .vscode/
@@ -50,3 +51,6 @@ build/
 ### Claude Code
 # Personal overrides. The committed harness is .claude/settings.json.
 .claude/settings.local.json
+
+# Personal MCP server config for this checkout.
+.claude.json

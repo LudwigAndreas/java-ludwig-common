@@ -181,7 +181,16 @@ If yes, the answer is not a scope trick — it is a split into a lower module wi
 dependencies. Several modules here exist for exactly that reason. Getting this wrong fails the build in
 a way that is confusing to diagnose and easy to avoid.
 
-### 5.2 The three-POM split
+### 5.2 Repository layout
+
+Modules live one level down: `build/` (ludwig-bom, ludwig-service-parent, checkstyle-rules,
+architecture-rules), `services/` (the two runnable services), `sources/` (every library, starter
+and test-support module). A module POM parented by `common` **must** declare
+`<relativePath>../../pom.xml</relativePath>` — without it Maven silently resolves the parent from
+`~/.m2` and builds against a stale `common`. Select modules as `-pl :<artifactId>`, never by
+directory. `scripts/manifest.sh layout` checks placement and the gate runs it.
+
+### 5.3 The three-POM split
 
 | POM | Role |
 |---|---|
@@ -193,7 +202,7 @@ So: a library is parented by the root and imports `ludwig-bom`; a service is par
 `ludwig-service-parent`. Third-party versions go in `ludwig-bom`, never the root POM. Anything already
 managed by `spring-boot-dependencies` is not pinned again anywhere.
 
-### 5.3 The version lives in one place
+### 5.4 The version lives in one place
 
 `-Drevision=…` in `.mvn/maven.config`. Every POM says `<version>${revision}</version>`. Never write a
 literal version into a POM, and never change the revision as part of a feature change.
