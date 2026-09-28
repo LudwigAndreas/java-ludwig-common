@@ -76,6 +76,14 @@
         <!-- Services: parented by ludwig-service-parent, consumed as container images. -->
         <module>services/crud-service-example</module>
         <module>services/notification-service</module>
+
+        <!--
+            Last, and it has to be. It depends on every jar module above so that
+            jacoco:report-aggregate can build one report across all of them, which means Maven
+            orders it last from the dependency graph whatever this list says. Declaring it last
+            anyway is so a reader sees the intent instead of inferring it.
+        -->
+        <module>build/jacoco-aggregate</module>
     </modules>
 
     <properties>
@@ -239,6 +247,25 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
+            </plugin>
+            <!--
+                Coverage instrumentation, here for exactly the reason stated above: so that no
+                module has to remember to opt in.
+
+                It used to live in pluginManagement alone, which meant each module re-declared it
+                to be measured. Twenty did and five did not - object-storage, file-ingest,
+                test-support, test-support-security and checkstyle-rules produced no execution
+                data at all, and nothing failed, because an unmeasured module looks exactly like a
+                module with no code. The aggregate report in build/jacoco-aggregate would have
+                under-counted the platform by five modules and still been green.
+
+                Executions and version come from pluginManagement below; only the activation is
+                here. Services do not inherit this - they are parented by ludwig-service-parent,
+                which configures its own merged-exec report and the enforced thresholds.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
             </plugin>
         </plugins>
 

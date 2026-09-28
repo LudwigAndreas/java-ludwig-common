@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jacoco-aggregate</artifactId>
+    <packaging>pom</packaging>
+
+    <name>Coverage aggregate (JaCoCo)</name>
+    <description>
+        One coverage report over the whole platform. It has no sources of its own: its only content
+        is a dependency on every jar module in the reactor, which is what jacoco:report-aggregate
+        reads to build a combined report.
+    </description>
+
+    <!--
+        WHY THIS MODULE HAS NO CODE AND NO TESTS
+
+        jacoco:report-aggregate builds its report from the modules this project DEPENDS ON. The
+        dependency list below is therefore not boilerplate - it is the report's definition. A
+        module missing from it is a module missing from the platform's coverage number, and the
+        build stays green either way, which is the one failure mode worth knowing about here.
+        `build/jacoco-aggregate/README.md` says what to do when a module is added.
+
+        WHY IT IS BUILT LAST
+
+        Maven orders the reactor from the dependency graph, and this module depends on everything,
+        so it is built last without anyone arranging it. That matters: report-aggregate reads the
+        execution data files each module wrote during ITS build, so an aggregator built early would
+        read last run's numbers, or none at all. It is also listed last in the root POM's <modules>
+        so that a reader sees the intent rather than inferring it.
+
+        WHY IT IS NOT IN ludwig-bom
+
+        Nothing consumes it. The BOM is the version registry for artifacts somebody resolves, and a
+        coverage report is not one - see the deploy skip below.
+    -->
+
+    <properties>
+        <!--
+            Nothing here is publishable. The report is a build artifact that belongs to the build
+            that produced it; deploying an empty POM under these coordinates would put a permanent
+            entry in the repository that no consumer could ever have a use for.
+
+            install is NOT skipped: `mvn clean install` is this repository's full-reactor gate, and
+            a module that refuses to install turns the gate into a special case.
+        -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+
+        <!--
+            There is nothing to sign, no sources to attach and no javadoc to build.
+        -->
+        <maven.source.skip>true</maven.source.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${revision}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!--
+        Every jar module in the reactor. The two POM-packaged modules - ludwig-bom and
+        ludwig-service-parent - are deliberately absent: they contain no classes, so there is
+        nothing for a coverage report to measure.
+
+        Versions come from ludwig-bom for the 25 modules it manages. The two services are not in
+        the BOM - nothing resolves a service as a library - so they carry ${revision} explicitly.
+    -->
+    <dependencies>
+        <!-- build/ -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>checkstyle-rules</artifactId>
+        </dependency>
+
+        <!-- sources/ -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>cache-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>export-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>file-ingest-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>hot-reload-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>idempotency-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>identity-projection-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>jira-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>messaging-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>object-storage-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>observability-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>odata-filter-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbox-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>reconciliation-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>rest-client-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>user-settings-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
+            services/ - versioned explicitly, because ludwig-bom manages what consumers resolve and
+            nobody resolves a service.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>crud-service-example</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>notification-service</artifactId>
+            <version>${revision}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                The inherited jacoco activation from the reactor root would add prepare-agent,
+                report and check to this module. All three are meaningless here - there are no
+                classes to instrument and no tests to run - but they are also harmless, and
+                switching them off individually would be more configuration than leaving them.
+                What this block adds is the one execution that matters.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>aggregate-report</id>
+                        <!--
+                            verify, not package: the services' merged execution data is produced by
+                            ludwig-service-parent at verify, and a report bound earlier would read
+                            their unit-test data only and quietly under-report the two largest
+                            modules in the platform.
+                        -->
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report-aggregate</goal>
+                        </goals>
+                        <configuration>
+                            <title>Ludwig platform - aggregate coverage</title>
+                            <outputDirectory>${project.build.directory}/site/jacoco-aggregate</outputDirectory>
+                            <!--
+                                dataFileIncludes is deliberately NOT set, so the default applies:
+                                every *.exec under each dependency's target/. Library modules write
+                                one file; services write three - jacoco.exec, jacoco-it.exec and the
+                                jacoco-merged.exec that ludwig-service-parent merges from them.
+
+                                Reading all three is not double counting. JaCoCo merges execution
+                                data by class id and ORs the probe arrays, so a probe recorded in
+                                both jacoco.exec and jacoco-merged.exec is one covered probe. An
+                                explicit include list would buy nothing and would have to be kept in
+                                step with ludwig-service-parent's merge configuration forever.
+                            -->
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

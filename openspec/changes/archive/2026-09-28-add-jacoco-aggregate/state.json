@@ -1,0 +1,36 @@
+{
+  "change": "add-jacoco-aggregate",
+  "contract": {
+    "goal": "one report covering the whole platform's coverage, built on instrumentation that every module gets by inheritance rather than by remembering to opt in",
+    "output": "jacoco enabled in the root POM's active plugins; 20 redundant per-module declarations removed; new build/jacoco-aggregate module depending on all 27 jar modules and binding report-aggregate to verify",
+    "constraints": [
+      "no coverage threshold is introduced anywhere - the aggregate reports, the existing per-service gate enforces",
+      "no module's own jacoco configuration or thresholds change",
+      "ludwig-service-parent's configured jacoco declaration is not touched",
+      "the aggregator must not appear in any module's inRepoDependents, or every narrow gate becomes a full-reactor build",
+      "the aggregator publishes nothing and is not added to ludwig-bom",
+      "assert on report CONTENT, not on the build being green - an empty report builds green"
+    ],
+    "done_when": [
+      "scripts/manifest.sh stale",
+      "scripts/manifest.sh layout",
+      "mvn clean install",
+      "aggregate XML names all 27 jar modules and the 5 previously-uninstrumented ones have non-zero instruction counts",
+      "openspec validate add-jacoco-aggregate"
+    ]
+  },
+  "current_task": "complete",
+  "decisions": [
+    "activation moves to the root rather than adding the plugin to the 5 modules missing it: opting in per module is the defect, and fixing it per module leaves the trap armed for module thirty",
+    "dataFileIncludes is left at its default (every *.exec in target/). Services produce three exec files and loading all three is not double-counting - JaCoCo merges by class id and ORs probe arrays - so an explicit list would only be another thing to keep in step with ludwig-service-parent's merge config",
+    "no repository-wide threshold: it would fail on day one and the response would be to lower it until it passed",
+    "the content check initially failed on checkstyle-rules, reporting 0 instructions as an uninstrumented module. That was the check being wrong, not the build: checkstyle-rules is a resources-only jar with no .java at all, so zero is the correct answer. The check now separates 'no code to measure' from 'code that was not measured' - conflating them makes it cry wolf on its first run, which is how a check gets deleted.",
+    "removing the 20 bare declarations left two modules (hot-reload, odata-filter) with an empty <build><plugins></plugins></build>; both were removed since the jacoco entry had been their only content.",
+    "check_aggregate_report.py is wired into gate.sh only on the full-reactor path, because a narrow gate does not regenerate the report and would check a stale one."
+  ],
+  "failures": [],
+  "open_questions": [],
+  "pending_human": [],
+  "rollback_point": "f1fdc5f6fa0d223f263f3df4f5b52f5ccdc1bf5b",
+  "index_version": "76ed6648c37d1f2780b47c7bc963e7c4baac62c34c13dc4c36c879371a3de14e"
+}

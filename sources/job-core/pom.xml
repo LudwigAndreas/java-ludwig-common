@@ -141,10 +141,6 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-            </plugin>
 
             <!--
                 Failsafe, which the library modules in this repository do not normally have: they run

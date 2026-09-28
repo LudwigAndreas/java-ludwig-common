@@ -5,10 +5,10 @@
 | | |
 |---|---|
 | revision | `1.1.0-SNAPSHOT` |
-| modules | 29 |
-| commit | `48dc1fc` (`agent-harness-config`) |
-| generated | 2026-09-27T21:55:25.115572Z |
-| **freshness** | POM-set SHA `76ed6648c37d1f27` · newest POM `build/ludwig-service-parent/pom.xml` @ 2026-09-27T21:54:56.028918Z |
+| modules | 30 |
+| commit | `f1fdc5f` (`agent-harness-config`) |
+| generated | 2026-09-28T06:31:54.158402Z |
+| **freshness** | POM-set SHA `71c8c2e7cec3bcde` · newest POM `sources/odata-filter-spring-boot-starter/pom.xml` @ 2026-09-28T06:31:40.592928Z |
 
 The freshness row is how you tell this index is stale: `scripts/manifest.sh stale` recomputes the POM-set SHA and exits non-zero if it differs. It is content-based, not timestamp-based, so a checkout or a branch switch does not report a false stale.
 
@@ -225,6 +225,33 @@ notification-service                       -> security-spring-boot-starter
 notification-service                       -> test-support-security  [test]
 notification-service                       -> user-settings-spring-boot-starter  [provided]
 notification-service                       -> web-core-spring-boot-starter
+jacoco-aggregate                           -> architecture-rules
+jacoco-aggregate                           -> audit-core
+jacoco-aggregate                           -> audit-spring-boot-starter
+jacoco-aggregate                           -> cache-spring-boot-starter
+jacoco-aggregate                           -> checkstyle-rules
+jacoco-aggregate                           -> crud-service-example
+jacoco-aggregate                           -> db-core
+jacoco-aggregate                           -> export-spring-boot-starter
+jacoco-aggregate                           -> file-ingest-spring-boot-starter
+jacoco-aggregate                           -> hot-reload-spring-boot-starter
+jacoco-aggregate                           -> idempotency-spring-boot-starter
+jacoco-aggregate                           -> identity-projection-spring-boot-starter
+jacoco-aggregate                           -> jira-client
+jacoco-aggregate                           -> job-core
+jacoco-aggregate                           -> messaging-spring-boot-starter
+jacoco-aggregate                           -> notification-service
+jacoco-aggregate                           -> object-storage-spring-boot-starter
+jacoco-aggregate                           -> observability-spring-boot-starter
+jacoco-aggregate                           -> odata-filter-spring-boot-starter
+jacoco-aggregate                           -> outbox-spring-boot-starter
+jacoco-aggregate                           -> reconciliation-spring-boot-starter
+jacoco-aggregate                           -> rest-client-spring-boot-starter
+jacoco-aggregate                           -> security-spring-boot-starter
+jacoco-aggregate                           -> test-support
+jacoco-aggregate                           -> test-support-security
+jacoco-aggregate                           -> user-settings-spring-boot-starter
+jacoco-aggregate                           -> web-core-spring-boot-starter
 ```
 
 **No in-repo dependencies at all** (8 modules) — several of them deliberately, because a module with no sibling edge can be depended on from anywhere without closing a cycle: `architecture-rules`, `audit-core`, `checkstyle-rules`, `jira-client`, `ludwig-bom`, `ludwig-service-parent`, `test-support`, `web-core-spring-boot-starter`.
@@ -380,6 +407,16 @@ notification-service                       -> web-core-spring-boot-starter
 - test dirs: unit (`sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit`)
 - test classes: 1 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :notification-service -am verify`
+
+### `jacoco-aggregate`
+
+- role **aggregate**, packaging `pom`, parent `common`, imports `ludwig-bom`: yes
+- directory `build/jacoco-aggregate/`
+- package root `—`
+- README [`build/jacoco-aggregate/README.md`](build/jacoco-aggregate/README.md) · [`build/jacoco-aggregate/README.ru.md`](build/jacoco-aggregate/README.ru.md)
+- surfaces: 
+- test classes: 0 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- **gate**: `mvn -q validate`, then `mvn -pl :jacoco-aggregate -am verify`
 
 ### `jira-client`
 

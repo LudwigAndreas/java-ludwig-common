@@ -76,6 +76,11 @@ def classify(artifact_id, parent_artifact, packaging):
         return "bom"
     if artifact_id == "ludwig-service-parent":
         return "parent"
+    if artifact_id == "jacoco-aggregate":
+        # Build infrastructure, not a library: it has no sources and publishes nothing. Without
+        # its own role the name-based buckets below would call it a library and the layout check
+        # would demand it move to sources/.
+        return "aggregate"
     if parent_artifact == "ludwig-service-parent":
         return "service"
     if artifact_id.startswith("test-support"):
@@ -314,6 +319,7 @@ LAYOUT = {
     "bom": "build",
     "parent": "build",
     "rules": "build",
+    "aggregate": "build",
     "service": "services",
     "library": "sources",
     "starter": "sources",
@@ -372,6 +378,17 @@ def build(root):
 
     by_artifact = {m["artifactId"]: m for m in modules}
     for module in modules:
+        # jacoco-aggregate depends on every jar module so that report-aggregate can measure them,
+        # which would otherwise make it a dependent of ALL of them - and the verification gate for
+        # every single module would become a full-reactor build, which is the one thing a narrow
+        # gate exists to avoid. It is excluded here rather than filtered at each call site because
+        # a dependent list that is wrong in one consumer and right in another is worse than either.
+        #
+        # This is safe in a way a real dependent's exclusion would not be: the aggregator has no
+        # code, so no API change in a module can break its compilation. What it can break is the
+        # report's completeness, and that is not something -am verify would have caught anyway.
+        if module["role"] == "aggregate":
+            continue
         for dep in module["inRepoDependencies"]:
             target = by_artifact.get(dep["artifactId"])
             if target is not None:

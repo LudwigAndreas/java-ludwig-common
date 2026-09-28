@@ -259,10 +259,6 @@
                     </annotationProcessors>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-            </plugin>
 
             <!--
                 Failsafe, for the same reason idempotency-spring-boot-starter has it: the suite starts a

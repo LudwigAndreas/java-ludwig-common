@@ -377,10 +377,6 @@
                     <excludedGroups>${export.test.excluded.groups}</excludedGroups>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-            </plugin>
         </plugins>
     </build>
 </project>

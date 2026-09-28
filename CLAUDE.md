@@ -88,6 +88,11 @@ mvn -pl notification-service test -Dtest=ChannelDispatcherTest#rendersTemplate  
 mvn -pl crud-service-example verify   # unit (surefire) + integration (failsafe) + coverage gate
 mvn -pl crud-service-example spring-boot:run -Dspring-boot.run.profiles=local
 mvn javadoc:javadoc
+
+# Aggregate coverage across the whole platform. The report is written by the last module in the
+# reactor, so it needs a full build; a narrow `-pl` build does not produce it.
+mvn clean install && open build/jacoco-aggregate/target/site/jacoco-aggregate/index.html
+python3 scripts/check_aggregate_report.py   # asserts every jar module is actually in the report
 ```
 
 Escape hatches for a local loop only, never in a pipeline: `-Dcheckstyle.skip=true`, `-Djacoco.skip`,

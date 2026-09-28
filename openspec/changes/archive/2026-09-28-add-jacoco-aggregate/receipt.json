@@ -1,0 +1,44 @@
+{
+  "change": "add-jacoco-aggregate",
+  "model": "claude-opus-5",
+  "index_version": "71c8c2e7cec3bcde2b3555a1106b704802094cb34f286b22bc9686e8f6c7e965",
+  "modules_touched": [
+    "jacoco-aggregate (new)",
+    "common (root POM)",
+    "20 library modules - redundant jacoco declaration removed",
+    "hot-reload-spring-boot-starter, odata-filter-spring-boot-starter - empty build block removed"
+  ],
+  "gate": {
+    "validate": "pass",
+    "verify": "pass - mvn clean install over the full reactor, 31/31 SUCCESS in 52:19, aggregator built last",
+    "aggregate_report_content": "pass - 27/27 jar modules present, every module with Java has instructions counted",
+    "layout": "pass - 30 modules, each in the directory its role requires",
+    "openspec_validate": "pass"
+  },
+  "coverage": {
+    "instruction": "72.3% (107165 / 148146)",
+    "branch": "61.5% (6402 / 10415)",
+    "modules_measured": 27,
+    "newly_measured": {
+      "object-storage-spring-boot-starter": "77.4% of 2113 instructions",
+      "file-ingest-spring-boot-starter": "70.5% of 6547 instructions",
+      "test-support": "60.5% of 473 instructions",
+      "test-support-security": "84.6% of 136 instructions",
+      "note": "these four contributed nothing before this change - roughly 9269 instructions were invisible to any coverage number. checkstyle-rules was the fifth uninstrumented module and legitimately has no Java."
+    }
+  },
+  "tests": {
+    "added": 0,
+    "passed": "full reactor suite, unit and integration",
+    "failed": 0,
+    "note": "this change measures coverage; it does not add any"
+  },
+  "retries": 1,
+  "human_corrections": 0,
+  "rollback_point": "f1fdc5f6fa0d223f263f3df4f5b52f5ccdc1bf5b",
+  "unresolved": [
+    "Adding a module to the reactor does not add it to the aggregate report - it must also be added to build/jacoco-aggregate/pom.xml <dependencies>, and nothing enforces that. check_aggregate_report.py detects the symptom after a full build (the module is absent from the report), but there is no check at the point the module is added. Recorded as a gap in the repository-layout spec.",
+    "No platform-wide coverage threshold, deliberately. 72.3% instruction / 61.5% branch is the current baseline if one is ever introduced.",
+    "Unrelated: the full build took 52 minutes, with rest-client (19:04), export (19:43) and hot-reload (06:32) dominating. That is pre-existing and was not investigated here."
+  ]
+}
