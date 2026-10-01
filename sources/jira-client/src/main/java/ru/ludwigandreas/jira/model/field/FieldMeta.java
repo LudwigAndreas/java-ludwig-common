@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <p>{@code operations} lists what may be done to the field on this screen ({@code set}, {@code add},
  * {@code remove}, {@code edit}), which is the mechanism behind
- * {@link ru.ludwigandreas.jira.request.IssueUpdate}'s add/remove operations. {@code allowedValues} enumerates
+ * {@link ru.ludwigandreas.jira.request.IssueInput}'s add/remove operations. {@code allowedValues} enumerates
  * the legal options for a select, version or component field, and is what a UI should populate a dropdown
  * from rather than guessing.
  */

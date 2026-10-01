@@ -434,6 +434,29 @@ that the expiry means something; an emailed copy is forever.
 
 ---
 
+## The caller's timezone
+
+A report's instants are rendered in the caller's zone, resolved through `web-core`'s one
+caller-preference contract.
+
+`SecurityReportCaller.zone()` used to return a hard-coded `ZoneId.of("UTC")`, with a comment arguing -
+correctly - that the server's zone would be worse. Both halves of that were true and the conclusion
+was still a report five hours out on every row for a user in Yekaterinburg, because at the time there
+was nowhere to ask what zone the caller actually reads times in. There is now, so it asks:
+`ReportCaller` exposes `preferences()`, and `locale()` and `zone()` are defaults over it - one method,
+two views, so an implementation cannot report a pair that disagrees with the locale and zone it
+answers.
+
+UTC remains the answer when nothing resolves, because it is the configured default of the preference
+chain - which puts that choice in the deployment's configuration rather than in a source file.
+
+An explicit `timeZone` in the request body still wins. A report request naming a zone is an
+instruction about one file, not a change of preference.
+
+Because a run executes on a pooled thread where there is no ambient caller, the resolved pair travels
+with the request into `ReportRequest` and then into `RenderContext`, which is what it was always for.
+A worker that needs to rebind the caller's preferences uses `UserPreferences.bind()`.
+
 ## Partner call identity
 
 A stage's partner calls can go out under **this service's own credentials** or under **the

@@ -19,7 +19,7 @@ statement that none does and why. **The second list is the backlog**, and it is 
 | No edit under `**/generated-sources/**` | `permissions.deny` and the same hook | hook pipe-tested |
 | No edit of `.flattened-pom.xml` | `permissions.deny` and the same hook | hook pipe-tested |
 | No edit under `openspec/changes/archive/**` | `permissions.deny` and the same hook | **yes** — a `Write` there was refused |
-| No edit of `.mvn/maven.config` outside a release | `.claude/hooks/guard-edit.sh`, conditional on the session transcript mentioning a release | hook pipe-tested both ways |
+| No edit of `.mvn/maven.config`, ever | `permissions.deny` (four patterns) **and** `.claude/hooks/guard-edit.sh`, now unconditional — the transcript grep is gone, because a release is a tag and a deny that unlocks when the transcript says a word is not a deny | hook pipe-tested |
 | `clear_settings` on the code index | `permissions.deny` | rule present |
 | A stale manifest goes unnoticed | `scripts/manifest.sh stale` (content SHA over the POM set), the `SessionStart` hook, the `PostToolUse` hook on `pom.xml`, and `scripts/gate.sh` regenerating it | all pipe-tested |
 | The gate skips a module's in-repo dependents | `scripts/gate.sh` reads them from the manifest rather than accepting a list | **yes** — ran 10 commands for `job-core`, all passing |
@@ -28,11 +28,42 @@ statement that none does and why. **The second list is the backlog**, and it is 
 | One audit sink, no second audit SPI, no `*.audit` logger | ArchUnit `RuleGroup.AUDIT` | pre-existing |
 | No second redaction mask | Checkstyle `SecondRedactionMask` | pre-existing |
 | No second operation status vocabulary | ArchUnit `RuleGroup.OPERATIONS` | pre-existing |
-| No module-local Caffeine builder or second cache SPI | ArchUnit `RuleGroup.CACHING` | pre-existing |
+| No module-local Caffeine builder or second cache SPI | ArchUnit `RuleGroup.CACHING` | **was inert until this change** — it was written as `noClasses().should(notDependOnClassesThat(..))`, and `noClasses()` wraps the condition in ArchUnit's `never()`, which inverts each event; a helper that reports only violations therefore produces zero findings while the rule reports as passed. Measured against a fixture (0 violations over 5 classes that provably had the dependency), switched to `classes().should(..)`, and the same defect fixed in `KafkaRules.noPrivateDeadLetterRecoverer` |
+| Nothing presents a time or a number from a JVM default (`Locale.getDefault`, `TimeZone.getDefault`, `ZoneId.systemDefault`, `Clock.systemDefaultZone`) | ArchUnit `RuleGroup.PRESENTATION` / `noAmbientDefaultLocaleOrZone` | **yes** — `PresentationRulesTest` asserts it names the offending fixture class, not merely that the rule ran |
+| No second type holding the caller's locale-and-zone pair | ArchUnit `RuleGroup.PRESENTATION` / `noSecondCallerPreferenceType` | **yes** — the same test asserts it fires on the restated pair and stays silent on the per-subject shape and on a zone with no locale, in one run |
+| `UserPreferenceFormatter` declares two methods for one source/target pair | `UserPreferenceFormatterTest`, reflectively over its own surface | **yes** — ArchUnit cannot see that two methods are MapStruct-ambiguous and Checkstyle sees text rather than resolved types, so the check lives in the module that owns the class |
 | `cache-spring-boot-starter` has no in-repo dependencies | `ModuleIndependenceTest` | pre-existing |
 | SQL confined to two packages | a `SqlConfinementTest` in each of those two modules | pre-existing, **and incomplete — see below** |
 | Every test image pinned by digest | `ImagePinningTest` | pre-existing |
 | No hard-coded user-facing text | Checkstyle `NonAsciiSourceText` | pre-existing |
+| A published library's API breaks below a major increment | `revapi-maven-plugin` + the `revapi.semver.ignore` extension, at `verify`, for every module parented by the reactor root | armed (`failBuildOnProblemsFound` is `true`) but **not yet protecting anything**: with no `1.1.0` in the releases repository every module is compared against an *empty archive*, so a removal has nothing to be missing from. Arming it early did flush out three configuration artefacts that the acceptance step existed to find — see below. Real protection begins with the first build after the baseline is published |
+| An element is removed with no justified exemption | a `revapi.differences` entry naming the release that deprecated it, absent ⇒ failure | same — armed with the gate |
+| `@Deprecated` with no `since` / `forRemoval` | Checkstyle `DeprecationWithoutSince` | **yes** — it failed the build on its own test's constant before that constant was rewritten, and `DeprecationContractRulesTest` asserts it fires and does not over-fire |
+| `@Deprecated` with no Javadoc `@deprecated` tag | Checkstyle `MissingDeprecated` | **yes** — same test |
+| A plugin configured with no version | `maven-enforcer-plugin` `requirePluginVersions` in the reactor root **and** in `ludwig-service-parent`, with `banLatest`/`banRelease`/`banSnapshots`/`banTimestamps` | **yes** — it failed on five plugins Maven and Boot bound from their own super-POMs; all five are now pinned and the exclusion list is empty |
+| A release with no changelog entry | two `evaluateBeanshell` rules in the `-Prelease` profile, one per locale | **yes** — `mvn -q -Prelease -Drevision=9.9.9 validate` fails naming both `CHANGELOG.md` and `CHANGELOG.ru.md` |
+| `.mvn/maven.config` holding a non-SNAPSHOT | an unconditional `evaluateBeanshell` rule reading the file's text | **yes** — passes today, and the condition is on the file rather than on `${revision}`, which the command line overrides |
+| Malformed Javadoc in a published library | `maven-javadoc-plugin` `-Xdoclint:all,-missing` under `-Pci` | **yes** — it found 20 real defects across 11 modules on first run, all fixed |
+| A container image referenced by tag alone, anywhere | `scripts/check_image_pins.sh`, run first by `scripts/gate.sh` | **yes** — exits 0 on the tree, exits 1 naming file and line when a digest is removed |
+| An API baseline that is unresolvable rather than absent | `scripts/check_api_baseline.sh`, run by `scripts/gate.sh` | **yes** — both branches exercised, including with a temporary tag and an unreachable repository |
+
+### What the compatibility gate deliberately does not report
+
+Arming `failBuildOnProblemsFound` before the baseline existed turned the first three reactor builds
+red, none of them for a compatibility reason. Each one is now answered in the reactor root POM, and
+the answers are different on purpose:
+
+| Reported | Answer | Why that answer |
+|---|---|---|
+| `java.missing.newClass` for `jakarta.servlet.*` | **fixed at the cause** — `resolveTransitiveProvidedDependencies` | The classes were resolvable, just not resolved. revapi says outright that the analysis "may be incorrect" without them; ignoring a class it *could* have loaded turns an incorrect analysis into a quiet one |
+| `java.missing.newClass` for SAML2 / LDAP / OAuth2-client types | exempted, with justification | `HttpSecurity` declares `saml2Login()`, `ldapAuthentication()` and `oauth2Client()`; their types live in jars this platform does not depend on and must not start depending on to satisfy a checker. Absent from the old archive and the new one alike, so never a difference between two releases |
+| `java.class.externalClassExposedInAPI`, `java.class.nonPublicPartOfAPI` | exempted, with justification | revapi's API-*design* advisory family. Both are computed from the new archive alone, fire identically on a build with no source change, and would fire on a first release when there is nothing to be compatible with. Twenty-five Spring Boot starters cannot stop exposing Spring types |
+
+The distinction that matters, and the one to apply to the next entry anybody is tempted to add:
+**a code that compares two archives stays armed; a code computed from one archive is not a
+compatibility statement.** Every removal and signature-change code — `java.method.removed`,
+`java.method.parameterTypeChanged`, `java.method.addedToInterface`, `java.field.removed`,
+`java.class.removed`, `java.class.kindChanged` — is in the first group and is armed.
 
 ## Not enforced — the backlog
 
@@ -70,35 +101,57 @@ have a `SqlConfinementTest`. The other seven sites all carry justifying javadoc,
 package, or one repository-wide ArchUnit rule with a declared exemption list. See the `data-access`
 capability spec, which records the discrepancy rather than hiding it.
 
-**5. A cache declaring the wrong `CachePurpose`.** A security-relevant cache declared
+**5. A deprecated API surviving one minor release before it is removed.** The `api-evolution`
+capability requires it and **it genuinely cannot be mechanised.** revapi compares one build against
+one baseline, and two artifacts cannot say how many releases separate them: the baseline is
+whatever `RELEASE` resolves to today, not the sequence of everything ever published. Nothing in the
+build has the release history, and giving it one would mean a second source of truth about what was
+released, alongside the tags. It is recorded as a comment beside the revapi configuration in the
+reactor root POM, which is the correct treatment of an unmechanisable rule. What *is* checked is the
+adjacent, stronger thing: a removal must carry a `revapi.differences` entry whose justification
+names the release that deprecated it, so a removal nobody wrote a line for fails whatever the
+increment.
+
+**6. A version increment that is larger than the change needs.** The compatibility gate refuses an
+increment that is too SMALL and can never refuse one that is too large. A team that bumps the major
+every release makes the gate vacuous and no tool can see it — "this did not need to be a major" is
+a judgement about the change, not a property of the bytecode. Only the changelog catches it, and
+only a reader of the changelog. Stated in the `api-evolution` spec.
+
+**7. Whether a changelog entry describes the release accurately.** `-Prelease` checks that both
+locales carry a heading for the version, which is the failure that actually happens. Whether the
+text underneath it is true is not mechanisable, and the guidance lives in `openspec/config.yaml`'s
+archive step beside the both-locales README rule.
+
+**8. A cache declaring the wrong `CachePurpose`.** A security-relevant cache declared
 `performance` gets minutes of TTL, stale reads and the load lease, and lengthens a revocation
 window silently. **This one genuinely cannot be mechanised**: whether a cache's contents decide
 what a caller is allowed to do is a fact about meaning, not about structure, and no bytecode or
 source-text analysis can see it. It is recorded in the `cache-purpose` spec as the one mistake the
 module cannot detect for itself, which is the correct treatment of an unmechanisable rule.
 
-**6. Credentials in a POM, YAML or source file.** Deliberately not enforced here: SonarQube and
+**9. Credentials in a POM, YAML or source file.** Deliberately not enforced here: SonarQube and
 SCM secret scanning own bugs and security in this repository's division of labour, and adding a
 third opinion would be exactly the triad overlap the rules forbid. Recorded so that its absence
 reads as a decision rather than an oversight.
 
-**7. "Never commit or push unless asked."** Not mechanised, and should not be: a deny on `git
+**10. "Never commit or push unless asked."** Not mechanised, and should not be: a deny on `git
 commit` would also block the commits somebody explicitly asks for, and a harness that blocks the
 legitimate case gets switched off. Guide only.
 
-**8. "Never rewrite published history."** Only partly enforced. `--force` and `-f` are denied, but
+**11. "Never rewrite published history."** Only partly enforced. `--force` and `-f` are denied, but
 `git rebase` followed by an ordinary push to a rewritten branch is not.
 *What it would take:* a `PreToolUse` hook on `Bash` inspecting `git push` against the branch's
 upstream. Not done; the deny covers the common case.
 
-**9. A second code index, or a hand-edited manifest.** Guide only, in `docs/code-index.md`,
+**12. A second code index, or a hand-edited manifest.** Guide only, in `docs/code-index.md`,
 `CLAUDE.md` and `docs/agent-operations.md` §6. Nothing stops somebody adding `universal-ctags` back,
 or editing `PROJECT_INDEX.md` by hand — and a hand-edited manifest is the worse of the two, because
 `scripts/manifest.sh stale` compares POM content and would still report "current".
 *What it would take:* a generated-file marker checked by the gate, and a grep for the retired tools
 in `scripts/**`. Both easy; neither done.
 
-**10. An agent's own scope limits.** `spec-author` must not edit source and `implementer` must not
+**13. An agent's own scope limits.** `spec-author` must not edit source and `implementer` must not
 edit specs, and **neither restriction is mechanical.** A tool allowlist grants `Write` and `Edit`
 wholesale; it cannot scope them to a path. So the separation that makes the spec an independent
 check — the property the brief calls more important than the agent roster — rests on the agent
@@ -108,9 +161,35 @@ mechanically confined, because they were given no write tool at all.
 supports for the session (`Edit(path)`) but which agent definitions express only as a tool list. A
 `PreToolUse` hook keyed on the active agent would close it.
 
+**A mapper that renders an instant in a fixed zone instead of the caller's.** `RuleGroup.PRESENTATION`
+forbids the JVM defaults, and a mapper writing `instant.atOffset(ZoneOffset.UTC)` calls no forbidden
+method and is still wrong. ArchUnit *could* forbid `ZoneOffset.UTC` outright and must not: it is
+correct in a persistence mapping, a test fixture, an audit record and a Kafka envelope, which together
+are the large majority of its uses, so the rule would be wrong more often than right.
+*What it would take:* nothing mechanical that is worth having. It is recorded as a scenario in the
+`user-preference-context` capability so a review has something to point at rather than a recollection.
+
+**A service that wanted stored preferences and forgot to declare the settings.**
+`WellKnownSettings` registers nothing automatically, on purpose, so a service that never contributed
+`LOCALE` and `TIMEZONE` as a `SettingDefinitionSource` behaves exactly like one that never wanted
+them: headers and configuration, no error, no warning, and a user whose saved timezone is silently
+ignored. The difference is an *absent bean*, and an absent bean is indistinguishable from a deliberate
+choice at build time.
+*Mitigated, not solved:* `StoredUserPreferenceSource` is registered anyway and abstains out loud -
+`sourceName()` names which dimensions it can answer and the startup line prints it - so the gap is
+visible in a log rather than only in a surprised user.
+
+**Whether the configured `default-zone` is the right zone for the deployment.** An operator who set
+`UTC` because the business runs on UTC and one who set it because it was in the example produce
+identical configuration.
+*What it would take:* nothing. It is a statement about the business, and no artifact a build can read
+contains it.
+
 ## The shape of the gap
 
-Eight of the ten are the same failure: **the harness is good at stopping an agent from touching the
+Three of the thirteen — the removal window, an over-large version increment, and whether a
+changelog entry is true — are genuinely unmechanisable, and are listed so that their absence reads
+as a decision. Of the rest, most are the same failure: **the harness is good at stopping an agent from touching the
 wrong file, and poor at stopping it from changing the rules.** Path rules are positional and a deny
 list expresses them exactly. "Do not make the check weaker" is a statement about intent, and the
 only mechanical form it has is a golden list that makes weakening visible rather than impossible.

@@ -345,6 +345,52 @@
         </module>
 
         <!--
+            A deprecation that does not say WHEN it happened or WHETHER the element is going
+            away is a deprecation nobody can plan around: a consumer reading
+            `@Deprecated` alone cannot tell whether they have one release or five, and the
+            compiler's own removal warning (-Xlint:removal) never fires without forRemoval.
+            Both members are therefore mandatory, `forRemoval = false` included - stating "not
+            yet" explicitly is the point, because the default is silence.
+
+            This is the source-text half of the deprecation contract. The other half - that an
+            element is not actually REMOVED unless the published baseline already carried
+            `forRemoval = true` - is a comparison against a previous release, which no
+            source-text tool can make. It belongs to revapi; see the reactor root POM.
+
+            KNOWN LIMIT, stated here rather than left to be discovered: RegexpSinglelineJava
+            matches one line at a time, so an annotation whose members are split across lines
+            is invisible to it. That is acceptable because this repository's formatting mirrors
+            IntelliJ IDEA's out-of-the-box defaults, which keep annotation members on the
+            declaration line; it is not acceptable as a silent hole, which is why it is written
+            down. A multi-line formulation would need a custom TreeWalker check, and the
+            repository has no custom Checkstyle Java code by design.
+
+            SECOND KNOWN LIMIT: RegexpSinglelineJava matches the file's text, and `ignoreComments`
+            is the only thing it can exclude - it has no notion of a string literal. A source file
+            that writes the annotation's name inside a string therefore trips the rule, which is
+            why DeprecationContractRulesTest spells its expected message without the leading
+            at-sign. Suppress with the ID form in the rare case where the literal is the point.
+
+            Suppress with the ID form, because several checks share the RegexpSinglelineJava
+            class name and naming the class switches all of them off at once:
+                // SUPPRESS CHECKSTYLE ID DeprecationWithoutSince - reason
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="DeprecationWithoutSince"/>
+            <!--
+                Matches @Deprecated unless it is immediately followed by a parenthesised member
+                list that names both `since` and `forRemoval`. The two lookaheads are anchored
+                inside one argument list by [^)]*, so a later annotation on the same line cannot
+                lend its members to this one.
+            -->
+            <property name="format"
+                      value="@Deprecated(?!\s*\((?=[^)]*\bsince\s*=)(?=[^)]*\bforRemoval\s*=))"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="@Deprecated must declare both `since` (the version that deprecated it) and `forRemoval` explicitly - e.g. @Deprecated(since = &quot;1.2.0&quot;, forRemoval = false). A deprecation with neither cannot be planned around, and without forRemoval the compiler never warns about the removal."/>
+        </module>
+
+        <!--
             A `@author` tag records who typed the file, which git already knows and which is
             wrong the moment someone else edits it. Ownership belongs in CODEOWNERS.
         -->
@@ -1002,6 +1048,19 @@
             <property name="checkEmptyJavadoc" value="true"/>
             <property name="severity" value="${docs.severity}" default="warning"/>
         </module>
+
+        <!--
+            `@Deprecated` and the Javadoc `@deprecated` tag must appear together. The annotation
+            is what the compiler and every IDE act on; the tag is the only one of the two that
+            can say what to use instead, and a deprecation that does not name a replacement
+            moves the problem to whoever reads it.
+
+            This is an error rather than part of the ${docs.severity} presence tier: the tier
+            exists so that adopting the configuration does not require writing a documentation
+            backlog first, and a deprecation is not backlog - it is being introduced now, by
+            someone who knows the answer now.
+        -->
+        <module name="MissingDeprecated"/>
 
         <!-- `@param foo` with nothing after it is a tag that satisfies a tool and no reader. -->
         <module name="NonEmptyAtclauseDescription"/>

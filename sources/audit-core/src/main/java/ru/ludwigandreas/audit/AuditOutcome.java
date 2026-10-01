@@ -3,9 +3,9 @@ package ru.ludwigandreas.audit;
 /**
  * How the thing an audit event describes turned out.
  *
- * <p>Four values rather than a boolean. {@link #DENIED} and {@link #FAILURE} are the distinction an
+ * <p>Four values rather than a boolean. {@link Status#DENIED} and {@link Status#FAILURE} are the distinction an
  * incident responder needs first - "we refused them" and "we broke" look identical in a
- * {@code granted=false} column and lead to opposite investigations - and {@link #PARTIAL} exists
+ * {@code granted=false} column and lead to opposite investigations - and {@link Status#PARTIAL} exists
  * because this platform has real operations that half-succeed and are recorded as successes today:
  * an export run whose enrichment stage degraded, an ingest pass that quarantined some records and
  * merged the rest.

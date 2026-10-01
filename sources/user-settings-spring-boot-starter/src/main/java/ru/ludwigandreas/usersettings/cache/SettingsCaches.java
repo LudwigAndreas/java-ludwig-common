@@ -83,7 +83,7 @@ public final class SettingsCaches {
     /**
      * Evicts a subject across every tenant they are cached under.
      *
-     * <h2>This walks the whole key set, and the name is where that is said</h2>
+     * <h4>This walks the whole key set, and the name is where that is said</h4>
      *
      * <p>The previous API offered it as {@code evict(PrincipalRef)}, an innocuous-looking overload sitting
      * beside the O(1) {@code evict(SettingsSubject)}, with the cost buried in the implementation's javadoc. A

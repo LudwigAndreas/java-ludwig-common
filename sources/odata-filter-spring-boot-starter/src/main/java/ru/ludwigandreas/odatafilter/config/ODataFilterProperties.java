@@ -104,8 +104,13 @@ public class ODataFilterProperties {
          * Off by default: resolving a filter into a controller parameter means naming the JPA
          * entity in the controller's signature and executing a predicate built in the web layer.
          * Parse in the repository with {@code ODataFilterService} instead.
+         *
+         * @deprecated together with {@code ODataQueryArgumentResolver}, whose Javadoc states why
+         *     the resolver cannot be used without breaking this platform's layering. Replacement:
+         *     take the OData options as {@code @RequestParam} strings, pass them down unparsed and
+         *     call {@code ODataFilterService.parse} in the repository.
          */
-        @Deprecated(since = "1.1.0")
+        @Deprecated(since = "1.1.0", forRemoval = false)
         private boolean argumentResolverEnabled = false;
 
         /** Whether to register the {@code @RestControllerAdvice} that maps our exceptions to {@code ProblemDetail}. */
@@ -114,12 +119,26 @@ public class ODataFilterProperties {
         /** If true, only {@code $filter}/{@code $top}/... are read; the non-prefixed aliases are ignored. */
         private boolean dollarPrefixedParametersOnly = false;
 
-        @Deprecated(since = "1.1.0")
+        /**
+         * Whether the deprecated argument resolver is registered.
+         *
+         * @return the current setting
+         * @deprecated together with {@link #argumentResolverEnabled}. Replacement:
+         *     {@code ODataFilterService.parse} called from the repository.
+         */
+        @Deprecated(since = "1.1.0", forRemoval = false)
         public boolean isArgumentResolverEnabled() {
             return argumentResolverEnabled;
         }
 
-        @Deprecated(since = "1.1.0")
+        /**
+         * Sets whether the deprecated argument resolver is registered.
+         *
+         * @param argumentResolverEnabled the new setting
+         * @deprecated together with {@link #argumentResolverEnabled}. Replacement:
+         *     {@code ODataFilterService.parse} called from the repository.
+         */
+        @Deprecated(since = "1.1.0", forRemoval = false)
         public void setArgumentResolverEnabled(boolean argumentResolverEnabled) {
             this.argumentResolverEnabled = argumentResolverEnabled;
         }

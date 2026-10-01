@@ -2,17 +2,18 @@
 #
 # PreToolUse on Edit|Write: refuse an edit to something that is not a source file.
 #
-# The flat path rules (target/, generated-sources/, .flattened-pom.xml, the OpenSpec archive) are
-# ALSO expressed as `deny` permission rules in settings.json, which is the declarative and more
-# reliable statement. This hook exists for the one rule permissions cannot express, because it is
-# conditional rather than positional:
+# Every rule here is ALSO a `deny` permission rule in settings.json, which is the declarative and
+# more reliable statement. The hook repeats them so that a refusal arrives with a reason a reader
+# can act on rather than as a bare "not permitted".
 #
-#   .mvn/maven.config carries -Drevision, the single source of the project version. Editing it is
-#   correct during a release and wrong at every other time. So the hook allows it only when the
-#   session has actually been talking about a release, which it reads from the transcript.
-#
-# The flat rules are repeated here anyway, because a hook that only fires on one exotic case is a
-# hook nobody believes is running.
+# .mvn/maven.config USED TO BE CONDITIONAL - allowed when the session transcript mentioned a
+# release, denied otherwise - and it is now an unconditional deny. The reason the condition
+# existed has gone: the version is computed by GitVersion from the git history and passed in as
+# -Drevision, and a release is a tag. That file now holds nothing but the tag-less local fallback,
+# which must stay a SNAPSHOT (an enforcer rule in the reactor root fails the build if it does
+# not), so there is no longer any task for which editing it is the right move. A conditional deny
+# that can be unlocked by saying the word "release" is also the weakest rule in this harness: the
+# transcript is input, and input is not authorisation.
 set -uo pipefail
 
 INPUT="$(cat)"
@@ -47,15 +48,7 @@ case "$FILE" in
   */openspec/changes/archive/*|openspec/changes/archive/*)
     decide deny "$FILE is in the OpenSpec archive - the historical record of completed changes. Create a new change instead." ;;
   */.mvn/maven.config|.mvn/maven.config)
-    TRANSCRIPT="$(printf '%s' "$INPUT" | python3 -c '
-import json,sys
-try: print((json.load(sys.stdin).get("transcript_path") or ""))
-except Exception: print("")')"
-    if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] \
-       && grep -qiE 'releas(e|ing)|-Prelease|bump the version' "$TRANSCRIPT" 2>/dev/null; then
-      decide allow ".mvn/maven.config edit allowed: this session is about a release."
-    fi
-    decide deny ".mvn/maven.config is the single source of the project version (-Drevision). Editing it is a release action, and nothing in this session mentions a release. If this IS a release, say so explicitly first." ;;
+    decide deny ".mvn/maven.config is not edited, in any session, for any reason - including a release. A release is a tag: GitVersion computes the version from the git history and the pipeline passes it in as -Drevision, which beats this file. What is left here is the fallback for a checkout with no tags, it must stay a -SNAPSHOT, and an enforcer rule in the reactor root fails the build if it stops being one. If you are trying to publish a version, tag the commit." ;;
 esac
 
 decide allow "not a protected path"

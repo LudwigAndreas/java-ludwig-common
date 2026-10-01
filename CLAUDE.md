@@ -45,8 +45,9 @@ Do these in order. They are cheap and nothing else works without them.
    partial one.
 
 4. **Restrictions.** Do not edit anything under `target/`, `generated-sources/`, or
-   `.flattened-pom.xml` (build output). Do not edit `.mvn/maven.config` unless you are doing a
-   release — it is the single source of the version. Do not run `mvn deploy`, `jib:build`, or
+   `.flattened-pom.xml` (build output). Do not edit `.mvn/maven.config` **at all** — the version
+   is computed by GitVersion and passed in as `-Drevision`, a release is a tag, and that file now
+   holds only the tag-less local fallback, which must stay a `-SNAPSHOT`. Do not run `mvn deploy`, `jib:build`, or
    anything with `-Pci`, and never `git push --force`. Do not introduce a second code index
    (`universal-ctags`, `ast-grep`, `scip-java`, `semgrep`) — there is one, and it is the MCP
    server. The platform-level "one mechanism" rules — one audit sink, one operation envelope, one
@@ -63,7 +64,9 @@ Do these in order. They are cheap and nothing else works without them.
    attempts per task, then stop and report — never widen the scope or weaken a rule to make
    progress. Contract and schema: `docs/agent-state.md`.
 
-Further reading: `docs/code-index.md` (navigation and the index's limits),
+Further reading: `docs/runbook.md` (the human-facing development and release process — branching,
+IFT, how a feature, a fix, a hotfix and a release each actually happen),
+`docs/code-index.md` (navigation and the index's limits),
 `docs/agent-operations.md` (the shared agent protocol, injected for every agent),
 `docs/agent-state.md` (state and receipt files), `docs/harness-enforcement.md` (which of these rules
 is actually checked and which is only written down), `openspec/specs/` (the cross-module contracts a
@@ -141,10 +144,15 @@ Consequences when editing POMs:
   (`crud-service-example`, `notification-service`) is parented by `ludwig-service-parent`.
 - Third-party versions belong in `build/ludwig-bom/pom.xml`, not the root POM. Plugin versions and build
   configuration belong in the root POM (libraries) or `ludwig-service-parent` (services).
-- The version lives in exactly one place: `-Drevision=…` in `.mvn/maven.config`. Every POM says
-  `<version>${revision}</version>`; `flatten-maven-plugin` resolves it on install/deploy. A release is
-  `mvn -Drevision=1.2.0 -Prelease -Pci deploy` — `-Prelease` only enforces (no SNAPSHOT deps,
-  concrete revision), it cannot set the version.
+- The version is expressed in exactly one way — `${revision}` in every POM, resolved by
+  `flatten-maven-plugin` on install/deploy — and it is **computed, not written**: GitVersion reads
+  the git history and CI passes `-Drevision=<computed>` on the command line. `.mvn/maven.config`
+  keeps a `-Drevision` value as the fallback for a checkout with no tags, and a command-line user
+  property beats it. **A release is a tag** (`v1.2.0` on `master`), not an edit to that file; an
+  enforcer rule fails the build if it ever holds a non-SNAPSHOT, and the hook refuses to edit it.
+  The pipeline then runs `mvn -Drevision=1.2.0 -Prelease -Pci deploy` — `-Prelease` only enforces
+  (no SNAPSHOT deps, concrete revision, a changelog heading in both locales), it cannot set the
+  version.
 - `spring-boot.version` appears twice on purpose: as a property in the root POM and as a literal in
   `ludwig-service-parent`'s `<parent>` (Maven does not interpolate there). Move both together.
 - JUnit is deliberately unpinned anywhere — it comes from `spring-boot-dependencies`.
@@ -197,6 +205,24 @@ Consequences when editing POMs:
   correctness change rather than a consolidation. `cache-spring-boot-starter` has **zero in-repo
   dependencies** on purpose, which is what lets `security-spring-boot-starter` depend on it without a
   reactor cycle; `ModuleIndependenceTest` fails the build if that is ever broken.
+- **Caller preferences go through `web-core`'s one contract.** `ru.ludwigandreas.webcore.preference` owns
+  the caller's locale and zone: `UserPreferences` (two dimensions, with everything derivable from them a
+  method on it rather than a field beside it), the `UserPreferenceSource` SPI, the ambient
+  `UserPreferences.current()`, the `bind()` scope for a worker thread, and `UserPreferenceFormatter`,
+  which a mapper names in `@Mapper(uses = ...)` so MapStruct selects the conversions by type with no
+  signature change. A module must not call `Locale.getDefault()`, `TimeZone.getDefault()`,
+  `ZoneId.systemDefault()` or `Clock.systemDefaultZone()` - the JVM default is the container's, which is
+  UTC in the datacentre and the developer's own zone on a laptop, so the defect is invisible exactly
+  where it would be caught - and must not declare a second type holding the pair. Both are failed by
+  ArchUnit's `RuleGroup.PRESENTATION`. **There is deliberately no preference storage here**: as with the
+  operation contract, `web-core` stays free of any persistence dependency, the SPI is declared there and
+  implemented in `user-settings-spring-boot-starter`, whose `StoredUserPreferenceSource` answers only for
+  a `SettingLayer` more specific than `PLATFORM` - a setting nobody has touched resolves from the
+  `DEFAULT` layer, and answering from that would make every caller UTC and make the header and
+  configuration sources unreachable. The *caller's* ambient preferences and a *subject's* stored
+  preferences are different things and must stay so: notification's `RecipientPreferences` is resolved
+  per recipient on a worker with no caller, the restatement rule is written not to fire on that shape,
+  and its javadoc states the distinction because the distinction is the rule.
 - Services follow the reference shape in `crud-service-example`: three model layers
   `web.dto` → `service.model` → `repository.entity`, wired by MapStruct; Lombok instead of
   boilerplate; **QueryDSL-JPA against generated Q-types only** — no JPQL/SQL strings, no derived

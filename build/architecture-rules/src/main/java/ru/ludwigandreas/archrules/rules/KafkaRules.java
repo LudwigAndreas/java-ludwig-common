@@ -253,7 +253,10 @@ public final class KafkaRules implements ArchitectureRuleSet {
         DescribedPredicate<JavaClass> recoverer = DescribedPredicate.describe(
                 "Spring Kafka's DeadLetterPublishingRecoverer - dead-lettering is the platform's",
                 javaClass -> DEAD_LETTER_RECOVERER.equals(javaClass.getName()));
-        return ArchRuleDefinition.noClasses()
+        // classes(), not noClasses(), for the reason written out in PresentationRules: noClasses() inverts
+        // the condition's events, and notDependOnClassesThat reports only violations, so this rule was
+        // reporting nothing. Measured, not reasoned about.
+        return ArchRuleDefinition.classes()
                 .that(ArchitecturePredicates.residingOutsideOf(List.of(MESSAGING_MODULE_PACKAGE)))
                 .should(ArchitectureConditions.notDependOnClassesThat(recoverer,
                         "a dead-letter publisher of their own")

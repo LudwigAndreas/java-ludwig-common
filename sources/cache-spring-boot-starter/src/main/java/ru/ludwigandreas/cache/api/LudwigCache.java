@@ -43,7 +43,7 @@ public interface LudwigCache<K, V> {
     /**
      * Resolves through the cache, loading on a miss.
      *
-     * <h2>Why the loader form rather than get-then-put</h2>
+     * <h4>Why the loader form rather than get-then-put</h4>
      *
      * <p>Because it lets the cache coalesce concurrent misses for the same key. Without that, every
      * expiry of a hot key releases one load per in-flight request at once - a self-inflicted thundering
@@ -119,7 +119,7 @@ public interface LudwigCache<K, V> {
     /**
      * Drops every key matching a predicate, by <b>scanning the whole key set</b>.
      *
-     * <h2>The cost is in the name on purpose</h2>
+     * <h4>The cost is in the name on purpose</h4>
      *
      * <p>This is O(n) in the number of entries, because Caffeine has one map and no secondary index.
      * {@code user-settings} needs it - a support tool that has a principal but not a tenant has to evict
@@ -128,7 +128,7 @@ public interface LudwigCache<K, V> {
      * {@code evict(SettingsSubject)}. A generic method that is secretly O(n) is a performance bug
      * waiting for its second caller, so the method that scans says that it scans.
      *
-     * <h2>It is refused for the shared tier, at startup</h2>
+     * <h4>It is refused for the shared tier, at startup</h4>
      *
      * <p>A cache must declare {@code scan-eviction: true} to use this at all, and the startup validator
      * <b>fails the context</b> if a cache declares both {@code scan-eviction: true} and the shared tier.

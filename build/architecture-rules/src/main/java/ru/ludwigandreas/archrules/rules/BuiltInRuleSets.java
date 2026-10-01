@@ -35,7 +35,8 @@ public final class BuiltInRuleSets {
             new MapperConventionRules(),
             new AuditRules(),
             new OperationVocabularyRules(),
-            new CachingRules());
+            new CachingRules(),
+            new PresentationRules());
 
     private BuiltInRuleSets() {
     }

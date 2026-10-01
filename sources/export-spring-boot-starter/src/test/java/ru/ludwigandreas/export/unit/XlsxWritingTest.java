@@ -73,7 +73,7 @@ class XlsxWritingTest {
         Path target = tempDirectory.resolve(UUID.randomUUID() + ".xlsx");
         WriterContext context = new WriterContext(UUID.randomUUID(), StandardReportFormats.XLSX,
                 target, sheets, MultiSheetStrategy.REJECT,
-                new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")), metadata, Map.of(), totals, null);
+                RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")), metadata, Map.of(), totals, null);
         try (XlsxReportWriter writer = new XlsxReportWriter(context, 100, true, !metadata.isEmpty(),
                 Optional.empty(), EngineFixtures.MESSAGES)) {
             body.accept(writer);
@@ -395,7 +395,7 @@ class XlsxWritingTest {
         Path target = tempDirectory.resolve("rollover.xlsx");
         SheetSpec spec = SheetSpec.single("data", "Orders", COLUMNS);
         WriterContext context = new WriterContext(UUID.randomUUID(), tiny, target, List.of(spec),
-                MultiSheetStrategy.REJECT, new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")),
+                MultiSheetStrategy.REJECT, RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")),
                 List.of(), Map.of(), false, null);
 
         try (XlsxReportWriter writer = new XlsxReportWriter(context, 100, true, false,
@@ -438,7 +438,7 @@ class XlsxWritingTest {
         SheetSpec spec = SheetSpec.single("data", "Data", COLUMNS);
         WriterContext context = new WriterContext(UUID.randomUUID(), StandardReportFormats.XLSX,
                 target, List.of(spec), MultiSheetStrategy.REJECT,
-                new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")), List.of(), Map.of(), false,
+                RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")), List.of(), Map.of(), false,
                 "branding");
         XlsxTemplateSource source = new DirectoryXlsxTemplateSource(tempDirectory);
 

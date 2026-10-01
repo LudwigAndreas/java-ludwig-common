@@ -15,8 +15,8 @@ import ru.ludwigandreas.messaging.api.MessageHeaders;
 /**
  * Everything a deployment may say about how this platform consumes.
  *
- * <p>Two levels, and no more: {@link #getDefaults()} is what every consumer gets, and
- * {@link #getConsumers()} is a per-consumer override keyed by the name the consumer's container factory
+ * <p>Two levels, and no more: {@code getDefaults()} is what every consumer gets, and
+ * {@code getConsumers()} is a per-consumer override keyed by the name the consumer's container factory
  * was built under. A third level - per topic - was considered and left out: a consumer already owns its
  * topics, and a setting that could differ between two topics of one listener would have to be resolved
  * per record rather than per container, which is not something a container factory can express.

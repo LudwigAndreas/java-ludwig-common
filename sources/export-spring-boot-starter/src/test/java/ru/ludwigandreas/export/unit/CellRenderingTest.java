@@ -41,7 +41,7 @@ class CellRenderingTest {
 
     private static String text(CellValue value, CellFormat format, CellTextFormatter.Style style,
                                Locale locale, ZoneId zone) {
-        return new CellTextFormatter(format, style, new RenderContext(locale, zone),
+        return new CellTextFormatter(format, style, RenderContext.of(locale, zone),
                 EngineFixtures.MESSAGES).format(value);
     }
 
@@ -51,7 +51,7 @@ class CellRenderingTest {
         Instant at = Instant.parse("2026-03-01T23:30:00Z");
         ZoneId moscow = ZoneId.of("Europe/Moscow");
         CellValue cell = DefaultCellRenderers.resolve(CellFormat.dateTime())
-                .render(at, new RenderContext(Locale.ENGLISH, moscow));
+                .render(at, RenderContext.of(Locale.ENGLISH, moscow));
 
         assertThat(cell).isInstanceOf(CellValue.DateTime.class);
         assertThat(((CellValue.DateTime) cell).zone()).isEqualTo(moscow);
@@ -106,7 +106,7 @@ class CellRenderingTest {
     void formatsDurations() {
         CellValue cell = DefaultCellRenderers.resolve(CellFormat.duration())
                 .render(Duration.ofHours(30).plusMinutes(5).plusSeconds(6),
-                        new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")));
+                        RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")));
 
         assertThat(cell).isInstanceOf(CellValue.Number.class);
         // Thirty hours is thirty hours, not six: an elapsed time does not wrap at a day.
@@ -155,7 +155,7 @@ class CellRenderingTest {
     @DisplayName("a null value follows the column's null policy")
     void honoursTheNullPolicy() {
         Row row = new Row(null, null, null, null, null);
-        RenderContext context = new RenderContext(Locale.ENGLISH, ZoneId.of("UTC"));
+        RenderContext context = RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC"));
 
         List<Column<Row, ?>> columns = List.of(
                 Column.<Row, String>of("empty", String.class).extractor(Row::name)
@@ -180,7 +180,7 @@ class CellRenderingTest {
                 Column.<Row, String>of("required", String.class).extractor(Row::name)
                         .headerKey("h").nullPolicy(NullPolicy.FAIL).build());
         RowRenderer<Row> renderer = new RowRenderer<>(columns,
-                new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")), EngineFixtures.MESSAGES);
+                RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")), EngineFixtures.MESSAGES);
 
         assertThatThrownBy(() -> renderer.render(row, 7))
                 .isInstanceOf(RequiredValueMissingException.class)
@@ -191,7 +191,7 @@ class CellRenderingTest {
     @DisplayName("an enum renders as its constant name, not its toString")
     void rendersEnumsByName() {
         CellValue cell = DefaultCellRenderers.resolve(CellFormat.text())
-                .render(Style.LOUD, new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")));
+                .render(Style.LOUD, RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")));
 
         assertThat(cell).isEqualTo(new CellValue.Text("LOUD"));
     }

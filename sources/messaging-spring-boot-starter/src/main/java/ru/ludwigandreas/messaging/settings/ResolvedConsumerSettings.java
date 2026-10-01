@@ -48,7 +48,7 @@ public record ResolvedConsumerSettings(
         int minEventVersion,
         int maxEventVersion) {
 
-    /** Per-record acknowledgement - see {@link ConsumerSettings#getAckMode()}. */
+    /** Per-record acknowledgement - see {@code ConsumerSettings.getAckMode()}. */
     public static final ContainerProperties.AckMode DEFAULT_ACK_MODE = ContainerProperties.AckMode.RECORD;
 
     /** The producer promises same-key order, so a consumer is assumed to rely on it until it says not. */
@@ -69,7 +69,7 @@ public record ResolvedConsumerSettings(
     /** Four attempts including the first: 1s, 3s, 9s, then out. */
     public static final int DEFAULT_MAX_ATTEMPTS = 4;
 
-    /** Blocking retries, for the ordering reason on {@link ConsumerSettings.Retry#getNonBlocking()}. */
+    /** Blocking retries, for the ordering reason on {@code ConsumerSettings.Retry.getNonBlocking()}. */
     public static final boolean DEFAULT_NON_BLOCKING = false;
 
     /** A dead-letter topic exists unless a deployment names a reason it should not. */

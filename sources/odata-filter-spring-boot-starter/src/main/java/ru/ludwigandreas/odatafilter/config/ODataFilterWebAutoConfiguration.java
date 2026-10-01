@@ -53,12 +53,14 @@ public class ODataFilterWebAutoConfiguration {
      * straight into a controller parameter cannot be done without naming a JPA entity at the REST
      * boundary.
      *
-     * @deprecated together with the resolver it registers
+     * @deprecated together with the resolver it registers. Replacement: take the OData options as
+     *     {@code @RequestParam} strings and call {@link ODataFilterService#parse} in the
+     *     repository, which is the layer that owns the entity.
      */
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "odata.filter.web", name = "argument-resolver-enabled", havingValue = "true")
-    @Deprecated(since = "1.1.0")
+    @Deprecated(since = "1.1.0", forRemoval = false)
     public ODataQueryArgumentResolver odataQueryArgumentResolver(
             ODataFilterService filterService, ODataFilterProperties properties) {
         return new ODataQueryArgumentResolver(filterService, properties);
@@ -101,10 +103,18 @@ public class ODataFilterWebAutoConfiguration {
         return new ODataFilterExceptionHandler();
     }
 
-    /** @deprecated together with the resolver it installs */
+    /**
+     * Installs the deprecated argument resolver into Spring MVC when it is present.
+     *
+     * @param resolver the deprecated resolver to install
+     * @return a configurer that registers it
+     * @deprecated together with the resolver it installs. Replacement: take the OData options as
+     *     {@code @RequestParam} strings and call {@link ODataFilterService#parse} in the
+     *     repository.
+     */
     @Bean
     @ConditionalOnBean(ODataQueryArgumentResolver.class)
-    @Deprecated(since = "1.1.0")
+    @Deprecated(since = "1.1.0", forRemoval = false)
     public WebMvcConfigurer odataFilterWebMvcConfigurer(ODataQueryArgumentResolver resolver) {
         return new WebMvcConfigurer() {
             @Override

@@ -384,7 +384,7 @@ class ReportLoadTest {
                 .sheetDefinitions(definition.getSheets())
                 .sheetSpecs(List.of(sheet))
                 .outputs(outputs)
-                .render(new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")))
+                .render(RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")))
                 .principalId("load-test")
                 .authorities(Set.of())
                 .correlationId("load")

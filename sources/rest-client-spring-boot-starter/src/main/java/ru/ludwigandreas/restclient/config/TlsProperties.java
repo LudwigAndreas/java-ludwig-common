@@ -9,7 +9,7 @@ import lombok.Setter;
  *
  * <p>Left entirely unset, the client uses the JVM's default trust material, which is the right
  * answer for a public endpoint and the wrong one for an internal PKI - hence
- * {@link #getTruststorePath()}.
+ * {@code getTruststorePath()}.
  */
 @Getter
 @Setter

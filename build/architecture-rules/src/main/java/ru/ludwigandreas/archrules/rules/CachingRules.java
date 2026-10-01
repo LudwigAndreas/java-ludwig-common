@@ -138,7 +138,11 @@ public final class CachingRules implements ArchitectureRuleSet {
         DescribedPredicate<JavaClass> caffeine = DescribedPredicate.describe(
                 "Caffeine's builder - caching is the platform's",
                 javaClass -> CAFFEINE_BUILDER.equals(javaClass.getName()));
-        return ArchRuleDefinition.noClasses()
+        // classes(), not noClasses(): noClasses() wraps the condition in ArchUnit's never(), which inverts
+        // every event - and notDependOnClassesThat reports only violations, so under noClasses() this rule
+        // reported nothing at all. It was inert from the day it was written until PresentationRules was
+        // added and the polarity was measured against a fixture. See PresentationRules.
+        return ArchRuleDefinition.classes()
                 .that(ArchitecturePredicates.residingOutsideOf(List.of(CACHE_PACKAGES)))
                 .and(DescribedPredicate.not(exempt()))
                 .should(ArchitectureConditions.notDependOnClassesThat(caffeine,

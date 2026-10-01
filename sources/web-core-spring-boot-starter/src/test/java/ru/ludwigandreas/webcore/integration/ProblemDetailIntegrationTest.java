@@ -56,11 +56,18 @@ class ProblemDetailIntegrationTest {
         }
 
         @Test
-        @DisplayName("answer in the caller's language")
+        @DisplayName("answer in the caller's language, keeping the region the caller asked for")
         void translatesToRequestLocale() throws Exception {
+            // Content-Language is `ru-RU` and not `ru`, and this expectation changed deliberately when
+            // the caller-preference contract replaced the AcceptHeaderLocaleResolver. The resolver used
+            // to narrow a requested locale to the supported one; it now answers the caller's own tag
+            // when the LANGUAGE is supported, because the region is not decoration - the JDK carries
+            // first-day-of-week and the number separators as region data, so narrowing ru-RU to ru hands
+            // a Russian user an American calendar. The body is still rendered from the `ru` bundle,
+            // which MessageSource falls back to on its own, so nothing about the translation changed.
             mockMvc.perform(get("/test/business").header(HttpHeaders.ACCEPT_LANGUAGE, RUSSIAN))
                     .andExpect(status().isNotFound())
-                    .andExpect(header().string(HttpHeaders.CONTENT_LANGUAGE, "ru"))
+                    .andExpect(header().string(HttpHeaders.CONTENT_LANGUAGE, "ru-RU"))
                     .andExpect(jsonPath("$.title").value("Вещь не найдена"))
                     .andExpect(jsonPath("$.detail")
                             .value("Вещь с идентификатором 00000000-0000-0000-0000-0000000000ff не существует."));

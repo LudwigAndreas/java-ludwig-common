@@ -204,8 +204,12 @@ managed by `spring-boot-dependencies` is not pinned again anywhere.
 
 ### 5.4 The version lives in one place
 
-`-Drevision=…` in `.mvn/maven.config`. Every POM says `<version>${revision}</version>`. Never write a
-literal version into a POM, and never change the revision as part of a feature change.
+`${revision}` in every POM, and never a literal. What SETS it is the git history: GitVersion
+computes the number and CI passes `-Drevision=<computed>` on the command line, where a user
+property beats everything. `.mvn/maven.config` is the fallback for a checkout with no tags and for
+a laptop with no GitVersion, it must stay a `-SNAPSHOT`, and it is **never edited** — not for a
+release either, because a release is a tag. Never write a literal version into a POM, and never
+change the revision as part of a feature change.
 
 ## 6. Restrictions — never, without an explicit instruction in the current conversation
 
@@ -223,8 +227,10 @@ literal version into a POM, and never change the revision as part of a feature c
 - Never introduce a second code index (`universal-ctags`, `ast-grep`, `scip-java`, `semgrep`) or a
   second manifest generator. `project-index.json` and `PROJECT_INDEX.md` are generated only by
   `scripts/manifest.sh build` — never hand-edited.
-- Never edit `.mvn/maven.config` unless the current conversation is about a release. It is the single
-  source of the version.
+- Never edit `.mvn/maven.config`, in any session, for any reason. This used to be conditional on
+  the conversation being about a release; it is now unconditional, because a release is a tag and
+  the version reaches Maven from GitVersion as `-Drevision`. Denied in `.claude/settings.json` and
+  by `.claude/hooks/guard-edit.sh`.
 
 Which of these are mechanically enforced, and which are guide-only, is written down in
 `docs/harness-enforcement.md`. Read it before assuming a rule will stop you: several of these will

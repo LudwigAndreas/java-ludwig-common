@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-09-28T06:31:54.158402Z",
+    "generatedAt": "2026-09-29T06:39:19.494714Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 30,
-    "commit": "f1fdc5f6fa0d223f263f3df4f5b52f5ccdc1bf5b",
-    "commitShort": "f1fdc5f",
-    "branch": "agent-harness-config",
+    "commit": "d1e343cf63677bb52b0bc44bc395603347ad0070",
+    "commitShort": "d1e343c",
+    "branch": "develop",
     "freshness": {
-      "pomSetSha": "71c8c2e7cec3bcde2b3555a1106b704802094cb34f286b22bc9686e8f6c7e965",
-      "newestPom": "sources/odata-filter-spring-boot-starter/pom.xml",
-      "newestPomModified": "2026-09-28T06:31:40.592928Z"
+      "pomSetSha": "8a9ad98573b7bc3e01f7717b1c90f5cca458acf4d6adc5e99b7ad24b898fef65",
+      "newestPom": "build/ludwig-service-parent/pom.xml",
+      "newestPomModified": "2026-09-29T06:33:05.802173Z"
     }
   },
   "modules": [
@@ -1688,17 +1688,19 @@
       "packaging": "jar",
       "role": "rules",
       "parentPom": "common",
-      "importsLudwigBom": false,
-      "packageRoot": null,
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.checkstyle.unit",
       "inRepoDependencies": [],
       "inRepoDependents": [],
       "autoConfigImports": null,
       "liquibaseChangelogs": [],
       "i18nBundles": [],
       "surfaces": [],
-      "testDirs": {},
+      "testDirs": {
+        "unit": "build/checkstyle-rules/src/test/java/ru/ludwigandreas/checkstyle/unit"
+      },
       "testClasses": {
-        "surefire": 0,
+        "surefire": 1,
         "failsafe": 0
       },
       "pom": "build/checkstyle-rules/pom.xml",

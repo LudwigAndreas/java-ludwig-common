@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>ru.ludwigandreas</groupId>
-    <artifactId>common</artifactId>
-    <!--
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>ru.ludwigandreas</groupId>
+  <artifactId>common</artifactId>
+  <!--
         ${revision} is defined once, in .mvn/maven.config, and nowhere else in this repository.
 
         It is a user property rather than a <properties> entry on purpose: ludwig-service-parent's
@@ -17,82 +14,69 @@
         flatten-maven-plugin (below) rewrites this into a literal in every POM that is installed or
         deployed - a published POM still containing the text "${revision}" is not consumable.
     -->
-    <version>${revision}</version>
-    <packaging>pom</packaging>
-
-    <name>Ludwig common framework</name>
-    <description>
-        Reactor root for the Ludwig platform. This POM aggregates the build and is the parent of the
-        library modules; it is no longer the registry of dependency versions (that is ludwig-bom) and
-        it is not what a microservice inherits (that is ludwig-service-parent).
-    </description>
-
+  <version>${revision}</version>
+  <packaging>pom</packaging>
+  <name>Ludwig common framework</name>
+  <description>Reactor root for the Ludwig platform. This POM aggregates the build and is the parent of the library modules; it is no longer the registry of dependency versions (that is ludwig-bom) and it is not what a microservice inherits (that is ludwig-service-parent).</description>
+  <url>https://github.com/ludwigandreas/common</url>
+  <scm>
+    <connection>scm:git:https://github.com/ludwigandreas/common.git</connection>
+    <developerConnection>scm:git:git@github.com:ludwigandreas/common.git</developerConnection>
     <url>https://github.com/ludwigandreas/common</url>
-
-    <scm>
-        <connection>scm:git:https://github.com/ludwigandreas/common.git</connection>
-        <developerConnection>scm:git:git@github.com:ludwigandreas/common.git</developerConnection>
-        <url>https://github.com/ludwigandreas/common</url>
-        <tag>HEAD</tag>
-    </scm>
-
-    <modules>
-        <!-- The published platform: a version registry and a build-configuration parent. Built
+    <tag>HEAD</tag>
+  </scm>
+  <modules>
+    <!-- The published platform: a version registry and a build-configuration parent. Built
              first because every other module resolves ludwig-bom. -->
-        <module>build/ludwig-bom</module>
-        <module>build/ludwig-service-parent</module>
-
-        <!-- Library modules: parented by this POM, consumed as jars. -->
-        <module>sources/odata-filter-spring-boot-starter</module>
-        <module>sources/audit-core</module>
-        <module>sources/db-core</module>
-        <module>sources/audit-spring-boot-starter</module>
-        <module>sources/job-core</module>
-        <module>sources/idempotency-spring-boot-starter</module>
-        <!-- Zero in-repo dependencies on purpose, so that security-spring-boot-starter - which sits
+    <module>build/ludwig-bom</module>
+    <module>build/ludwig-service-parent</module>
+    <!-- Library modules: parented by this POM, consumed as jars. -->
+    <module>sources/odata-filter-spring-boot-starter</module>
+    <module>sources/audit-core</module>
+    <module>sources/db-core</module>
+    <module>sources/audit-spring-boot-starter</module>
+    <module>sources/job-core</module>
+    <module>sources/idempotency-spring-boot-starter</module>
+    <!-- Zero in-repo dependencies on purpose, so that security-spring-boot-starter - which sits
              near the bottom of this reactor - can depend on it without closing a cycle. -->
-        <module>sources/cache-spring-boot-starter</module>
-        <module>sources/messaging-spring-boot-starter</module>
-        <module>sources/export-spring-boot-starter</module>
-        <module>sources/object-storage-spring-boot-starter</module>
-        <module>sources/file-ingest-spring-boot-starter</module>
-        <module>sources/outbox-spring-boot-starter</module>
-        <module>sources/reconciliation-spring-boot-starter</module>
-        <module>sources/security-spring-boot-starter</module>
-        <module>sources/identity-projection-spring-boot-starter</module>
-        <module>sources/hot-reload-spring-boot-starter</module>
-        <module>sources/web-core-spring-boot-starter</module>
-        <module>sources/observability-spring-boot-starter</module>
-        <module>sources/rest-client-spring-boot-starter</module>
-        <module>sources/user-settings-spring-boot-starter</module>
-        <module>build/architecture-rules</module>
-        <!-- Test-scope infrastructure. test-support depends on no sibling on purpose, so that the
+    <module>sources/cache-spring-boot-starter</module>
+    <module>sources/messaging-spring-boot-starter</module>
+    <module>sources/export-spring-boot-starter</module>
+    <module>sources/object-storage-spring-boot-starter</module>
+    <module>sources/file-ingest-spring-boot-starter</module>
+    <module>sources/outbox-spring-boot-starter</module>
+    <module>sources/reconciliation-spring-boot-starter</module>
+    <module>sources/security-spring-boot-starter</module>
+    <module>sources/identity-projection-spring-boot-starter</module>
+    <module>sources/hot-reload-spring-boot-starter</module>
+    <module>sources/web-core-spring-boot-starter</module>
+    <module>sources/observability-spring-boot-starter</module>
+    <module>sources/rest-client-spring-boot-starter</module>
+    <module>sources/user-settings-spring-boot-starter</module>
+    <module>build/architecture-rules</module>
+    <!-- Test-scope infrastructure. test-support depends on no sibling on purpose, so that the
              most upstream modules can use it without closing a reactor cycle; see its POM. -->
-        <module>sources/test-support</module>
-        <module>sources/test-support-security</module>
-        <module>build/checkstyle-rules</module>
-        <module>sources/jira-client</module>
-
-        <!-- Services: parented by ludwig-service-parent, consumed as container images. -->
-        <module>services/crud-service-example</module>
-        <module>services/notification-service</module>
-
-        <!--
+    <module>sources/test-support</module>
+    <module>sources/test-support-security</module>
+    <module>build/checkstyle-rules</module>
+    <module>sources/jira-client</module>
+    <!-- Services: parented by ludwig-service-parent, consumed as container images. -->
+    <module>services/crud-service-example</module>
+    <module>services/notification-service</module>
+    <!--
             Last, and it has to be. It depends on every jar module above so that
             jacoco:report-aggregate can build one report across all of them, which means Maven
             orders it last from the dependency graph whatever this list says. Declaring it last
             anyway is so a reader sees the intent instead of inferring it.
         -->
-        <module>build/jacoco-aggregate</module>
-    </modules>
-
-    <properties>
-        <!-- Single source of truth for the JDK baseline every module compiles against. -->
-        <java.version>17</java.version>
-        <maven.compiler.release>${java.version}</maven.compiler.release>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-        <!--
+    <module>build/jacoco-aggregate</module>
+  </modules>
+  <properties>
+    <!-- Single source of truth for the JDK baseline every module compiles against. -->
+    <java.version>17</java.version>
+    <maven.compiler.release>${java.version}</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!--
             The platform's Spring Boot baseline, used by the dependencyManagement import below and
             inherited by ludwig-bom, which imports the same BOM for its consumers.
 
@@ -100,16 +84,14 @@
             because Maven does not interpolate arbitrary properties there. The two must be moved
             together - see the comment on that file's <parent>.
         -->
-        <spring-boot.version>3.3.5</spring-boot.version>
-
-        <!--
+    <spring-boot.version>3.3.5</spring-boot.version>
+    <!--
             Default mode for the inherited flatten execution: resolve ${revision} and change nothing
             else. ludwig-bom overrides this single property to `bom`, which is what lets it be
             published as a standalone, parentless POM without declaring a <build> section.
         -->
-        <flatten.mode>resolveCiFriendliesOnly</flatten.mode>
-
-        <!--
+    <flatten.mode>resolveCiFriendliesOnly</flatten.mode>
+    <!--
             THIRD-PARTY VERSIONS NO LONGER LIVE HERE. QueryDSL, MapStruct, Olingo, Resilience4j,
             Testcontainers, Vault, FreeMarker, ArchUnit, springdoc, GreenMail and Lombok moved to
             build/ludwig-bom/pom.xml, which every module in this repository imports and which a downstream
@@ -118,76 +100,144 @@
 
             What remains here is configuration of the build itself, not of what the build depends on.
         -->
-
-        <!--
+    <!--
             Code style. maven-checkstyle-plugin ships with an old Checkstyle engine bundled, so the
             engine is pinned separately from the plugin and overridden in the plugin's own
             <dependencies> below - a Checkstyle that does not understand records, sealed types or
             switch expressions reports parse errors as violations.
         -->
-        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
-        <checkstyle.version>10.21.4</checkstyle.version>
-        <!-- 3.13.0+ is required for annotationProcessorPathsUseDepMgmt, which is what lets the
+    <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+    <checkstyle.version>10.21.4</checkstyle.version>
+    <!-- 3.13.0+ is required for annotationProcessorPathsUseDepMgmt, which is what lets the
              modules below name their annotation processors without repeating a version. -->
-        <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
-        <!--
+    <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
+    <!--
             Only job-core binds failsafe (see its POM); the version is managed here because plugin
             versions for the library modules belong in this file, and a second module that ever needs
             the unit/integration split should get the same one.
         -->
-        <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
-        <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
-        <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
-        <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
-        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-        <!--
+    <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
+    <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+    <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
+    <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+    <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+    <!--
+            maven-jar-plugin is pinned even though no module in this repository binds it explicitly:
+            architecture-rules configures it (for the Implementation-Version manifest entry its JSON
+            report reads back), and a <plugin> block with no version made Maven report the whole
+            model as "problems ... threaten the stability of your build" on every single build. The
+            enforcer's requirePluginVersions below is what stops the next one appearing.
+        -->
+    <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
+    <!--
+            Maven's own default lifecycle bindings, pinned so that the version of `clean`,
+            `install`, `deploy` and `site` is a property of this project rather than of whichever
+            Maven the build happened to run on. See the pluginManagement entries below.
+        -->
+    <maven-resources-plugin.version>3.4.0</maven-resources-plugin.version>
+    <maven-clean-plugin.version>3.2.0</maven-clean-plugin.version>
+    <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
+    <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
+    <maven-site-plugin.version>3.12.1</maven-site-plugin.version>
+    <!--
+            Javadoc. Attached only under -Pci (see that profile); the version is managed here so the
+            plugin is pinned whether or not the profile is active - requirePluginVersions checks the
+            effective model, not the active one.
+        -->
+    <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+    <!--
+            Delombok, and why it exists at all.
+
+            Four public methods in this reactor declare a Lombok-@Builder-generated type as their
+            RETURN type: export's ReportDefinition.of, Column.of and EnrichmentStage.of, and
+            user-settings' SettingDefinition.of. Lombok writes those types into bytecode and never
+            into source, so javadoc cannot resolve them and fails with `cannot find symbol` - a
+            javac error, not a doclint category, so no `-Xdoclint:-group` silences it and only
+            <failOnError>false</failOnError> would, which would silence the broken-{@link} gate
+            this change exists to add. Three alternatives were measured and all three fail:
+            javadoc refuses -processorpath outright ("invalid flag"), a second class-path option
+            replaces the first rather than extending it, and prepending target/classes to the one
+            classpath does not help because javac prefers the source on the sourcepath over the
+            class file, and the nested builder is not in that source.
+
+            So the documentation is rendered from a delomboked copy of the sources, under -Pci
+            only. Nothing compiles from that copy - addOutputDirectory is false below, so it is
+            not a source root - and a default build never produces it.
+        -->
+    <lombok-maven-plugin.version>1.18.20.0</lombok-maven-plugin.version>
+    <!--
+            THE THIRD AND LAST PLACE Lombok's version appears, and the only one that is a PLUGIN
+            dependency. lombok-maven-plugin 1.18.20.0 bundles Lombok 1.18.20, which predates
+            JDK 17 support and dies with the "TypeTag :: UNKNOWN" error this platform already
+            documents twice; the plugin's own dependency is therefore overridden below. It cannot
+            read the number from ludwig-bom - a BOM manages DEPENDENCY versions and Maven resolves
+            a plugin's dependencies on the plugin classpath, which no BOM import reaches.
+
+            Move this together with ludwig-bom's <lombok.version> and ludwig-service-parent's, for
+            the reason stated on both: a bytecode tool has to understand the compiler it runs
+            under, and a delombok that disagrees with the compiler produces sources the compiler
+            never saw.
+        -->
+    <lombok.version>1.18.38</lombok.version>
+    <!--
+            API compatibility. The plugin and its extensions are PLUGIN configuration, so they are
+            pinned here and not in ludwig-bom, which holds third-party *dependency* versions only.
+            revapi-java is the API analyser; revapi-basic-features supplies BOTH extensions this
+            configuration uses - `revapi.semver.ignore` (org.revapi.basic.SemverIgnoreTransform) and
+            `revapi.differences` (org.revapi.basic.DifferencesTransform). Verified against the
+            jars actually resolved: revapi-basic-features 0.13.1 declares both in
+            META-INF/services/org.revapi.DifferenceTransform and ships
+            META-INF/semver-ignore-schema.json, whose `versionIncreaseAllows` is the option used
+            below. The three versions move together.
+        -->
+    <revapi-maven-plugin.version>0.15.1</revapi-maven-plugin.version>
+    <revapi-java.version>0.28.4</revapi-java.version>
+    <revapi-basic-features.version>0.13.1</revapi-basic-features.version>
+    <!--
             Javadoc *presence* (a public type or method with no Javadoc at all) reports as a
             warning so that adopting the configuration does not require writing a documentation
             backlog first; Javadoc that is present but wrong is always an error. Raise this to
             `error` - here or with -Dcheckstyle.docs.severity=error - once the public API of a
             module is covered. Set it to `ignore` to switch the tier off entirely.
         -->
-        <checkstyle.docs.severity>warning</checkstyle.docs.severity>
-        <!--
+    <checkstyle.docs.severity>warning</checkstyle.docs.severity>
+    <!--
             Whether every package must carry a package-info.java. Off by default: adopting it
             means adding one file per package in a single sweep, which is a decision to take
             deliberately rather than something the build should start nagging about. Set to
             `warning` or `error` to turn it on.
         -->
-        <checkstyle.package.info.severity>ignore</checkstyle.package.info.severity>
-        <!-- JUnit (jupiter + platform) is deliberately NOT pinned, here or in ludwig-bom: it comes
+    <checkstyle.package.info.severity>ignore</checkstyle.package.info.severity>
+    <!-- JUnit (jupiter + platform) is deliberately NOT pinned, here or in ludwig-bom: it comes
              from the imported spring-boot-dependencies BOM, which keeps the whole JUnit 5 stack
              internally consistent. Pinning it independently caused a Jupiter/Platform version-skew
              bug -->
-
-        <!--
+    <!--
             Where this platform publishes. Both are properties so the same POM works against Nexus,
             Artifactory or GitHub Packages: override -Dludwig.repo.releases.url=... (and the
             snapshot URL), or set them in a settings.xml profile, without editing this file. The
             <id>s below are what a settings.xml <server> entry must match to supply credentials -
             which is the only place credentials ever appear.
         -->
-        <ludwig.repo.releases.id>ludwig-releases</ludwig.repo.releases.id>
-        <ludwig.repo.releases.url>https://nexus.example.internal/repository/maven-releases/</ludwig.repo.releases.url>
-        <ludwig.repo.snapshots.id>ludwig-snapshots</ludwig.repo.snapshots.id>
-        <ludwig.repo.snapshots.url>https://nexus.example.internal/repository/maven-snapshots/</ludwig.repo.snapshots.url>
-    </properties>
-
-    <distributionManagement>
-        <repository>
-            <id>${ludwig.repo.releases.id}</id>
-            <name>Ludwig releases</name>
-            <url>${ludwig.repo.releases.url}</url>
-        </repository>
-        <snapshotRepository>
-            <id>${ludwig.repo.snapshots.id}</id>
-            <name>Ludwig snapshots</name>
-            <url>${ludwig.repo.snapshots.url}</url>
-        </snapshotRepository>
-    </distributionManagement>
-
-    <!--
+    <ludwig.repo.releases.id>ludwig-releases</ludwig.repo.releases.id>
+    <ludwig.repo.releases.url>https://nexus.example.internal/repository/maven-releases/</ludwig.repo.releases.url>
+    <ludwig.repo.snapshots.id>ludwig-snapshots</ludwig.repo.snapshots.id>
+    <ludwig.repo.snapshots.url>https://nexus.example.internal/repository/maven-snapshots/</ludwig.repo.snapshots.url>
+  </properties>
+  <distributionManagement>
+    <repository>
+      <id>${ludwig.repo.releases.id}</id>
+      <name>Ludwig releases</name>
+      <url>${ludwig.repo.releases.url}</url>
+    </repository>
+    <snapshotRepository>
+      <id>${ludwig.repo.snapshots.id}</id>
+      <name>Ludwig snapshots</name>
+      <url>${ludwig.repo.snapshots.url}</url>
+    </snapshotRepository>
+  </distributionManagement>
+  <!--
         Imported once here rather than per-module: every child inherits this dependencyManagement
         automatically (standard Maven parent/child inheritance - no re-import needed), so all modules
         resolve the same version of every Spring Boot-managed transitive dependency (Micrometer,
@@ -204,38 +254,36 @@
         module imports ludwig-bom itself instead; it is six lines and it keeps the direction of
         resolution obvious.
     -->
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
-    <build>
-        <extensions>
-            <extension>
-                <groupId>kr.motd.maven</groupId>
-                <artifactId>os-maven-plugin</artifactId>
-                <version>1.7.1</version>
-            </extension>
-        </extensions>
-
-        <!--
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+  <build>
+    <extensions>
+      <extension>
+        <groupId>kr.motd.maven</groupId>
+        <artifactId>os-maven-plugin</artifactId>
+        <version>1.7.1</version>
+      </extension>
+    </extensions>
+    <!--
             Declared here rather than in each module so that every module - and every module
             added later - is checked without anyone having to remember to opt in. Configuration
             and version come from pluginManagement below.
         -->
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-            </plugin>
-            <!--
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+      </plugin>
+      <!--
                 Inherited by every library module and by ludwig-bom, because all of them carry
                 ${revision} in their <parent> block and an installed POM that still says
                 "${revision}" cannot be resolved by anyone.
@@ -244,11 +292,11 @@
                 (flatten.mode) - which is how it manages to be flattened into a standalone,
                 parentless POM while containing no <build> section of its own.
             -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>flatten-maven-plugin</artifactId>
-            </plugin>
-            <!--
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+      </plugin>
+      <!--
                 Coverage instrumentation, here for exactly the reason stated above: so that no
                 module has to remember to opt in.
 
@@ -263,27 +311,113 @@
                 here. Services do not inherit this - they are parented by ludwig-service-parent,
                 which configures its own merged-exec report and the enforced thresholds.
             -->
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+      <!--
+                The API-compatibility gate, active for every library module without any of them
+                opting in - the same reasoning as Checkstyle and JaCoCo above. `verify`, so it
+                runs after the tests and never slows down `mvn test`. Version, extensions and the
+                whole configuration come from pluginManagement below; only the binding is here.
+            -->
+      <plugin>
+        <groupId>org.revapi</groupId>
+        <artifactId>revapi-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>api-compatibility</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!--
+                Build integrity. This is the only enforcer execution the LIBRARY modules run in a
+                default build - the `release` profile below adds a second one, and
+                ludwig-service-parent carries the equivalent for services.
 
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-antrun-plugin</artifactId>
-                    <version>1.8</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>${maven-compiler-plugin.version}</version>
-                    <configuration>
-                        <release>${maven.compiler.release}</release>
-                        <encoding>${project.build.sourceEncoding}</encoding>
-                        <!--
+                requirePluginVersions is here and not in any of the three analysis tools on purpose:
+                ArchUnit and Checkstyle read Java, SonarQube reads Java, and none of them can see a
+                POM. An unpinned plugin is a build-reproducibility fact, so it belongs to the
+                enforcer, which is the only thing in the build that reads the effective model.
+            -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>enforce-build-integrity</id>
+            <!-- validate: an unpinned plugin is reported in seconds, before the
+                             compiler has spent minutes on a build that was never acceptable. -->
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <!--
+                                    Maven's own answer to an unpinned plugin is a warning, and that
+                                    warning has been printed on every build of this repository
+                                    without anyone acting on it. This turns it into a failure.
+
+                                    banLatest/banRelease/banSnapshots: "LATEST", "RELEASE" and a
+                                    SNAPSHOT are versions that change under a build that has
+                                    already been reviewed, which is the same defect as no version
+                                    at all one step further along.
+                                -->
+                <requirePluginVersions>
+                  <message>Every plugin must declare a version. Add it to this POM's pluginManagement, not to the plugin block.</message>
+                  <banLatest>true</banLatest>
+                  <banRelease>true</banRelease>
+                  <banSnapshots>true</banSnapshots>
+                  <banTimestamps>true</banTimestamps>
+                </requirePluginVersions>
+                <!--
+                                    .mvn/maven.config is the tag-less FALLBACK and nothing else.
+                                    Since the version is computed by GitVersion and passed as
+                                    -Drevision on the command line, a concrete version sitting in
+                                    that file is a trap: it is what a local `mvn install` produces,
+                                    so a developer silently builds and installs artifacts that
+                                    claim to be a release. Requiring a SNAPSHOT there makes the
+                                    trap impossible rather than documented.
+
+                                    Unconditional - not inside -Prelease - because the mistake it
+                                    catches is made on an ordinary branch, long before anybody
+                                    runs a release.
+
+                                    Read as text rather than through ${revision}, deliberately:
+                                    ${revision} is whatever the command line supplied, so checking
+                                    it would pass on exactly the release build where the file is
+                                    wrong and fail on every release build where it is right.
+                                -->
+                <evaluateBeanshell>
+                  <condition>new java.util.Scanner(new java.io.File("${maven.multiModuleProjectDirectory}/.mvn/maven.config"), "UTF-8").useDelimiter("\\A").next().matches("(?s).*-Drevision=\\S*-SNAPSHOT.*")</condition>
+                  <message>.mvn/maven.config must hold a -SNAPSHOT revision: it is the fallback for a checkout with no tags, not the release version. A release is a tag, and the version reaches Maven as -Drevision from GitVersion.</message>
+                </evaluateBeanshell>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-antrun-plugin</artifactId>
+          <version>1.8</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven-compiler-plugin.version}</version>
+          <configuration>
+            <release>${maven.compiler.release}</release>
+            <encoding>${project.build.sourceEncoding}</encoding>
+            <!--
                             Keeps method parameter names in the bytecode. Spring reads them to bind
                             a @RequestParam/@PathVariable without the name being repeated in the
                             annotation, and a parameter-level constraint violation can only name the
@@ -292,47 +426,293 @@
                             flag for the same reasons; the library modules do not inherit from it
                             (ludwig-service-parent does, and services get it from there).
                         -->
-                        <compilerArgs>
-                            <arg>-parameters</arg>
-                        </compilerArgs>
-                        <!--
+            <compilerArgs>
+              <arg>-parameters</arg>
+            </compilerArgs>
+            <!--
                             Annotation-processor versions come from the imported ludwig-bom rather
                             than from a <version> on every <path> in every module. Before this flag
                             existed, each module repeated ${lombok.version} and ${querydsl.version}
                             in its processor paths, which is how the Lombok used to COMPILE a module
                             drifts from the Lombok whose processor GENERATES its code.
                         -->
-                        <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>${maven-surefire-plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>${maven-failsafe-plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-enforcer-plugin</artifactId>
-                    <version>${maven-enforcer-plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-source-plugin</artifactId>
-                    <version>${maven-source-plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>flatten-maven-plugin</artifactId>
-                    <version>${flatten-maven-plugin.version}</version>
-                    <configuration>
-                        <!-- Replace the POM that gets installed/deployed with the flattened one. -->
-                        <updatePomFile>true</updatePomFile>
-                        <!--
+            <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven-surefire-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${maven-failsafe-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${maven-enforcer-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-source-plugin</artifactId>
+          <version>${maven-source-plugin.version}</version>
+        </plugin>
+        <!--
+                    Managed, not bound. Every jar module runs maven-jar-plugin through the default
+                    lifecycle anyway; managing the version here is what removes Maven's
+                    "'build.plugins.plugin.version' for org.apache.maven.plugins:maven-jar-plugin is
+                    missing" model warning from architecture-rules, which configures the plugin to
+                    get Implementation-Version into its manifest.
+                -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${maven-jar-plugin.version}</version>
+        </plugin>
+        <!--
+                    The four plugins nothing in this repository declares and every build runs:
+                    Maven binds them into the default lifecycle from its own super-POM, so their
+                    versions are a property of the MAVEN INSTALLATION rather than of this project -
+                    `mvn install` on 3.9.16 and on 3.9.4 runs a different maven-install-plugin, and
+                    nothing in the build says so.
+
+                    requirePluginVersions reports exactly these four. The alternative was to name
+                    them in <unCheckedPluginList> and move on; pinning them is the same amount of
+                    text and actually fixes what the rule is complaining about, so the exclusion
+                    list stays empty and stays that way. The values are the ones Maven 3.9.16 binds
+                    today, so adopting the pin changed no behaviour - only who decides it.
+                -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>${maven-resources-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-clean-plugin</artifactId>
+          <version>${maven-clean-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-install-plugin</artifactId>
+          <version>${maven-install-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>${maven-deploy-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-site-plugin</artifactId>
+          <version>${maven-site-plugin.version}</version>
+        </plugin>
+        <!--
+                    Javadoc. doclint=all,-missing is the whole decision: malformed documentation (a
+                    broken {@link}, an unknown tag, an @param naming a parameter that does not
+                    exist) fails the build, and documentation that is simply absent does not -
+                    that stays the Checkstyle warning tier governed by ${checkstyle.docs.severity}.
+                    Gating completeness would mean writing a documentation backlog before this
+                    configuration could be adopted at all.
+
+                    detectJavaApiLink=false: without it the plugin tries to fetch the JDK's
+                    element-list over the network to build @see links, which fails a build on a
+                    disconnected agent for no benefit to an internal jar.
+
+                    The `jar` goal is attached in the `ci` profile only, beside maven-source-plugin,
+                    so the local loop never renders documentation nobody is about to read.
+                -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>${maven-javadoc-plugin.version}</version>
+          <configuration>
+            <doclint>all,-missing</doclint>
+            <detectJavaApiLink>false</detectJavaApiLink>
+            <detectOfflineLinks>false</detectOfflineLinks>
+            <quiet>true</quiet>
+            <failOnWarnings>false</failOnWarnings>
+            <source>${maven.compiler.release}</source>
+            <!--
+                            Documentation is rendered from the delomboked copy, not from
+                            src/main/java - see ${lombok-maven-plugin.version} for why. The
+                            annotation-processor output is on the path beside it because QueryDSL's
+                            Q-types ARE real source and several modules name them in a signature;
+                            dropping that entry brings back "cannot find symbol: QXxxEntity".
+
+                            Configured here rather than in the `ci` profile so that
+                            `mvn lombok:delombok javadoc:jar` reproduces exactly what CI renders.
+                            The profile adds the BINDING and nothing else.
+                        -->
+            <sourcepath>${project.build.directory}/generated-sources/delombok${path.separator}${project.build.directory}/generated-sources/annotations</sourcepath>
+          </configuration>
+        </plugin>
+        <!--
+                    ============================================================================
+                    API COMPATIBILITY
+
+                    Declared here, in the parent of the LIBRARY modules, and nowhere else. That is
+                    the scoping mechanism: every jar module parented by this POM gets the gate by
+                    inheritance, and the two services - which inherit ludwig-service-parent - can
+                    never get it, with no exclude list to keep in step.
+
+                    Why a fourth tool at all, when the enforcement triad says a check belongs to
+                    exactly one of ArchUnit, Checkstyle or SonarQube: revapi is the only one that
+                    reads TWO versions of the code. ArchUnit analyses the classes on the current
+                    classpath and cannot see the previous release, so "AuditSink.record existed in
+                    1.2.0" is not a statement it is able to make. The boundary, stated here and in
+                    architecture-rules' RuleGroup javadoc: a rule about how the API differs from a
+                    published baseline belongs to revapi, and ArchUnit must not grow a rule about
+                    API removal.
+
+                    THE RULE THAT CANNOT BE CHECKED. The api-evolution capability requires that a
+                    deprecated API survive at least one MINOR release before it is removed. No
+                    configuration here can check that, and none is attempted: this plugin compares
+                    one build against one baseline, and two artifacts cannot say how many releases
+                    separate them - the baseline is whatever `RELEASE` resolves to today, not the
+                    sequence of everything published. What IS checked is the adjacent, stronger
+                    thing: a removal must carry an entry in `revapi.differences` with a
+                    justification naming the release that deprecated it, so a removal nobody wrote
+                    a line for fails the build whatever the version increment.
+                    ============================================================================
+                -->
+        <plugin>
+          <groupId>org.revapi</groupId>
+          <artifactId>revapi-maven-plugin</artifactId>
+          <version>${revapi-maven-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.revapi</groupId>
+              <artifactId>revapi-java</artifactId>
+              <version>${revapi-java.version}</version>
+            </dependency>
+            <dependency>
+              <groupId>org.revapi</groupId>
+              <artifactId>revapi-basic-features</artifactId>
+              <version>${revapi-basic-features.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <!--
+                            RELEASE is the plugin's own default and is named anyway, because it is
+                            the whole comparison: the newest release of these coordinates in
+                            ludwig.repo.releases. alwaysCheckForReleaseVersion (also the default)
+                            re-resolves it every build rather than caching a stale answer.
+                        -->
+            <oldVersion>RELEASE</oldVersion>
+            <newVersion>${project.version}</newVersion>
+            <alwaysCheckForReleaseVersion>true</alwaysCheckForReleaseVersion>
+            <!--
+                            OFF for now, and this is a migration state rather than a decision.
+                            Nothing is published yet, so there is no baseline and no gate can be
+                            meaningful; the plugin lands reporting only. Task 8.4 flips this to
+                            true once 1.1.0 is published and a build against it reports zero
+                            differences. Do not flip it before that acceptance step - the first
+                            gated build failing on a configuration artefact is how a gate gets
+                            switched off again permanently.
+                        -->
+            <failBuildOnProblemsFound>true</failBuildOnProblemsFound>
+            <!--
+                            false: an ABSENT baseline is not a failure. A module released for the
+                            first time has nothing to be compared against, and the spec requires
+                            that to read as a logged non-comparison rather than as a skip that
+                            looks like a passing check.
+
+                            An UNRESOLVABLE baseline - one that exists but cannot be fetched - is
+                            a failure, and the plugin cannot tell the two apart: both arrive as an
+                            unresolved artifact. scripts/check_api_baseline.sh makes the
+                            distinction outside the build and scripts/gate.sh runs it. See that
+                            script for how.
+                        -->
+            <failOnUnresolvedArtifacts>false</failOnUnresolvedArtifacts>
+            <failOnUnresolvedDependencies>false</failOnUnresolvedDependencies>
+            <!--
+                Both true, and the second is NOT the plugin's default.
+
+                A starter's API is full of types it never declares directly: odata-filter's
+                resolver names jakarta.servlet.HttpServletRequest, which arrives transitively
+                and at `provided` scope by way of tomcat-embed-core. Without the transitive
+                flag revapi cannot load them and reports
+
+                    java.missing.newClass: missing-class jakarta.servlet.ServletContext ...
+                    It has been detected as contributing to the API and thus the analysis
+                    results MAY BE INCORRECT.
+
+                That last sentence is why this is a configuration fix and not another entry in
+                the exemption list below. Ignoring a missing class does not make the analysis
+                correct - it makes an incorrect analysis quiet, which is a compatibility gate
+                that reports nothing because it can see nothing.
+            -->
+            <resolveProvidedDependencies>true</resolveProvidedDependencies>
+            <resolveTransitiveProvidedDependencies>true</resolveTransitiveProvidedDependencies>
+            <analysisConfiguration><![CDATA[
+                            {
+                              "revapi": {
+                                "semver": {
+                                  "ignore": {
+                                    "enabled": true,
+                                    "versionIncreaseAllows": {
+                                      "major": "breaking",
+                                      "minor": "nonBreaking",
+                                      "patch": "equivalent"
+                                    }
+                                  }
+                                },
+                                "differences": {
+                                  "ignore": true,
+                                  "differences": [
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.missing\\.(new|old)Class",
+                                      "justification": "A TYPE THAT IS ABSENT FROM BOTH ARCHIVES, NOT A DIFFERENCE BETWEEN THEM, and the narrower half of this problem was fixed at its cause rather than listed here. Two kinds of missing class showed up on the first gated build. The first was jakarta.servlet.HttpServletRequest and friends in odata-filter: resolvable, just not resolved, because they arrive transitively at `provided` scope - that is fixed above with resolveTransitiveProvidedDependencies, and it is fixed there and not here on purpose, because ignoring a class revapi COULD have loaded turns an incorrect analysis into a quiet one. The second kind cannot be fixed that way: spring-security-config's HttpSecurity declares saml2Login(), ldapAuthentication() and oauth2Client(), whose types live in spring-security-saml2-service-provider, spring-security-ldap and spring-security-oauth2-client - jars this platform does not depend on and should not start depending on to satisfy a checker. Twenty-three of them, reachable only through Spring's own types, which the design-advisory exemption below already covers. They are absent from the old archive and the new one alike, so they can never constitute a difference between two releases; what they would do armed is fail every build forever. If a type of OURS ever goes missing that is java.class.removed, which stays armed."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.class\\.(externalClassExposedInAPI|nonPublicPartOfAPI)",
+                                      "justification": "THE ONLY BLANKET EXEMPTION IN THIS FILE, AND IT IS NOT A COMPATIBILITY DIFFERENCE. These two codes are the whole of revapi's API-DESIGN advisory family, and both are computed from the NEW archive ALONE: they fire identically on a build with no source change at all, and they would fire on the very first release, when there is nothing to be compatible with. Nothing they report is a statement about how this release differs from the last one, which is the only question this gate exists to ask. Concretely, externalClassExposedInAPI named several hundred Spring types - ApplicationContext, ResolvableType, TypeDescriptor, Environment - all reached transitively from one @Bean method returning a LocalValidatorFactoryBean, and nonPublicPartOfAPI named package-private WireMock and Testcontainers internals reached from test-support's fixture accessors. Twenty-five Spring Boot starters whose purpose is to hand Spring types to a Spring application, and a test-support jar whose purpose is to hand out configured containers, cannot answer either; the only 'fix' would be to stop exposing the libraries they exist to expose. Left armed, they failed the fourth and the twenty-second module of the first gated build for reasons unrelated to compatibility, which is exactly how a gate gets switched off and never switched back on. Every code that IS a compatibility statement - java.method.removed, java.method.parameterTypeChanged, java.method.addedToInterface, java.class.kindChanged, java.field.removed, java.class.removed and the rest - stays fully armed and is governed by the semver rule above."
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                            ]]></analysisConfiguration>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.projectlombok</groupId>
+          <artifactId>lombok-maven-plugin</artifactId>
+          <version>${lombok-maven-plugin.version}</version>
+          <configuration>
+            <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+            <outputDirectory>${project.build.directory}/generated-sources/delombok</outputDirectory>
+            <encoding>${project.build.sourceEncoding}</encoding>
+            <!--
+                            false, and it matters: the default adds the delomboked tree as a
+                            compile source root, which would compile every class twice and fail
+                            on the duplicate. Nothing compiles from this copy - javadoc reads it
+                            and nothing else does.
+                        -->
+            <addOutputDirectory>false</addOutputDirectory>
+          </configuration>
+          <dependencies>
+            <!-- Replaces the Lombok the plugin bundles; see ${lombok.version} above. -->
+            <dependency>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+              <version>${lombok.version}</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>flatten-maven-plugin</artifactId>
+          <version>${flatten-maven-plugin.version}</version>
+          <configuration>
+            <!-- Replace the POM that gets installed/deployed with the flattened one. -->
+            <updatePomFile>true</updatePomFile>
+            <!--
                             resolveCiFriendliesOnly: resolve ${revision} in this project's version
                             and in its <parent> version, and change NOTHING else. The published POM
                             of a library must keep its parent, its dependencies and its
@@ -341,39 +721,39 @@
 
                             ludwig-bom overrides this to `bom` via the flatten.mode property.
                         -->
-                        <flattenMode>${flatten.mode}</flattenMode>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <id>flatten</id>
-                            <phase>process-resources</phase>
-                            <goals>
-                                <goal>flatten</goal>
-                            </goals>
-                        </execution>
-                        <execution>
-                            <id>flatten-clean</id>
-                            <phase>clean</phase>
-                            <goals>
-                                <goal>clean</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-checkstyle-plugin</artifactId>
-                    <version>${maven-checkstyle-plugin.version}</version>
-                    <dependencies>
-                        <!-- Replaces the engine bundled with the plugin; see the property above. -->
-                        <dependency>
-                            <groupId>com.puppycrawl.tools</groupId>
-                            <artifactId>checkstyle</artifactId>
-                            <version>${checkstyle.version}</version>
-                        </dependency>
-                    </dependencies>
-                    <configuration>
-                        <!--
+            <flattenMode>${flatten.mode}</flattenMode>
+          </configuration>
+          <executions>
+            <execution>
+              <id>flatten</id>
+              <phase>process-resources</phase>
+              <goals>
+                <goal>flatten</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>flatten-clean</id>
+              <phase>clean</phase>
+              <goals>
+                <goal>clean</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-checkstyle-plugin</artifactId>
+          <version>${maven-checkstyle-plugin.version}</version>
+          <dependencies>
+            <!-- Replaces the engine bundled with the plugin; see the property above. -->
+            <dependency>
+              <groupId>com.puppycrawl.tools</groupId>
+              <artifactId>checkstyle</artifactId>
+              <version>${checkstyle.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <!--
                             The reactor reads the configuration straight off checkstyle-rules'
                             source tree, not off its jar. Maven resolves plugin dependencies from
                             the local repository and not from the reactor, so a jar-based reference
@@ -381,7 +761,7 @@
                             first. A downstream service, where the artifact is published, uses the
                             jar - ludwig-service-parent is configured that way.
                         -->
-                        <!--
+            <!--
                             maven.multiModuleProjectDirectory is the repository root, resolved by
                             Maven from the .mvn directory beside this pom, so these paths are
                             correct no matter which module the build was started from (`mvn test`
@@ -394,114 +774,123 @@
                             deployed artifact. A path inside a plugin <configuration> is resolved at
                             execution time and never reaches a published file.
                         -->
-                        <configLocation>${maven.multiModuleProjectDirectory}/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle.xml</configLocation>
-                        <suppressionsLocation>${maven.multiModuleProjectDirectory}/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle-suppressions.xml</suppressionsLocation>
-                        <!--
+            <configLocation>${maven.multiModuleProjectDirectory}/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle.xml</configLocation>
+            <suppressionsLocation>${maven.multiModuleProjectDirectory}/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle-suppressions.xml</suppressionsLocation>
+            <!--
                             Passes the severity tier into the Checkstyle configuration, which
                             declares its own fallback, so the config also works when it is run
                             straight from an IDE plugin with no Maven properties in sight.
                         -->
-                        <propertyExpansion>
-                            docs.severity=${checkstyle.docs.severity}
-                            package.info.severity=${checkstyle.package.info.severity}
-                        </propertyExpansion>
+            <!--
+                THE LINE BREAK HERE IS SEMANTIC, AND IT IS WRITTEN AS &#10; ON PURPOSE.
+                maven-checkstyle-plugin feeds this string to java.util.Properties.load, which is
+                line-oriented: one `key=value` per line. Written as two real lines it survives
+                until somebody reformats this POM - an IDE's XML formatter collapses whitespace
+                inside element text, joins the two onto one line, and Properties.load then reads a
+                SINGLE key `docs.severity` whose value is "warning package.info.severity=ignore".
+                The build fails with
 
-                        <!--
+                    No enum constant com.puppycrawl.tools.checkstyle.api.SeverityLevel.WARNING
+                    PACKAGE.INFO.SEVERITY=IGNORE
+
+                which names neither this element nor the reformat that caused it. That has now
+                happened once. A numeric character reference is not whitespace to a formatter and
+                is a newline to the XML parser, so the value reaches Checkstyle correctly however
+                this file is laid out. Do not "tidy" it back into two lines.
+            -->
+            <propertyExpansion>docs.severity=${checkstyle.docs.severity}&#10;package.info.severity=${checkstyle.package.info.severity}</propertyExpansion>
+            <!--
                             Explicit source directories rather than the compile source roots: the
                             roots include target/generated-sources, where QueryDSL's Q-types and
                             MapStruct's mapper implementations live. Those are machine-written and
                             unfixable, so the only sane thing is not to look at them.
                         -->
-                        <sourceDirectories>
-                            <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
-                        </sourceDirectories>
-                        <testSourceDirectories>
-                            <testSourceDirectory>${project.basedir}/src/test/java</testSourceDirectory>
-                        </testSourceDirectories>
-                        <!-- Tests are production code for the purposes of style. -->
-                        <includeTestSourceDirectory>true</includeTestSourceDirectory>
-
-                        <!--
+            <sourceDirectories>
+              <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+            </sourceDirectories>
+            <testSourceDirectories>
+              <testSourceDirectory>${project.basedir}/src/test/java</testSourceDirectory>
+            </testSourceDirectories>
+            <!-- Tests are production code for the purposes of style. -->
+            <includeTestSourceDirectory>true</includeTestSourceDirectory>
+            <!--
                             Resources are scanned for the i18n bundle checks (duplicate keys, and
                             a locale bundle whose key set has drifted from the default one).
                         -->
-                        <includeResources>true</includeResources>
-                        <includeTestResources>true</includeTestResources>
-                        <resourceIncludes>**/*.properties</resourceIncludes>
-
-                        <!--
+            <includeResources>true</includeResources>
+            <includeTestResources>true</includeTestResources>
+            <resourceIncludes>**/*.properties</resourceIncludes>
+            <!--
                             failsOnError: a malformed configuration or an unparseable file fails
                             the build instead of being silently reported as zero violations.
                             violationSeverity=error: the warning tier is reported but does not
                             break the build.
                         -->
-                        <failOnViolation>true</failOnViolation>
-                        <failsOnError>true</failsOnError>
-                        <violationSeverity>error</violationSeverity>
-                        <consoleOutput>true</consoleOutput>
-                        <logViolationsToConsole>true</logViolationsToConsole>
-                        <!-- No xref report is generated in this build, so don't link to one. -->
-                        <linkXRef>false</linkXRef>
-                        <cacheFile>${project.build.directory}/checkstyle-cachefile</cacheFile>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <id>checkstyle-validate</id>
-                            <!--
+            <failOnViolation>true</failOnViolation>
+            <failsOnError>true</failsOnError>
+            <violationSeverity>error</violationSeverity>
+            <consoleOutput>true</consoleOutput>
+            <logViolationsToConsole>true</logViolationsToConsole>
+            <!-- No xref report is generated in this build, so don't link to one. -->
+            <linkXRef>false</linkXRef>
+            <cacheFile>${project.build.directory}/checkstyle-cachefile</cacheFile>
+          </configuration>
+          <executions>
+            <execution>
+              <id>checkstyle-validate</id>
+              <!--
                                 validate, not verify: style feedback arrives in seconds, before
                                 the compiler and the test suite have spent minutes on code that
                                 is going to be sent back anyway. Skippable for a throwaway local
                                 run with -Dcheckstyle.skip=true.
                             -->
-                            <phase>validate</phase>
-                            <goals>
-                                <goal>check</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
-                    <groupId>org.jacoco</groupId>
-                    <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>${jacoco-maven-plugin.version}</version>
-                    <executions>
-                        <execution>
-                            <id>default-prepare-agent</id>
-                            <goals>
-                                <goal>prepare-agent</goal>
-                            </goals>
-                        </execution>
-                        <execution>
-                            <id>default-report</id>
-                            <phase>prepare-package</phase>
-                            <goals>
-                                <goal>report</goal>
-                            </goals>
-                        </execution>
-                        <execution>
-                            <id>default-check</id>
-                            <goals>
-                                <goal>check</goal>
-                            </goals>
-                            <configuration>
-                                <!--
+              <phase>validate</phase>
+              <goals>
+                <goal>check</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco-maven-plugin.version}</version>
+          <executions>
+            <execution>
+              <id>default-prepare-agent</id>
+              <goals>
+                <goal>prepare-agent</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>default-report</id>
+              <phase>prepare-package</phase>
+              <goals>
+                <goal>report</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>default-check</id>
+              <goals>
+                <goal>check</goal>
+              </goals>
+              <configuration>
+                <!--
                                     No threshold for the library modules: coverage here is reported,
                                     not gated. The enforced gate lives in ludwig-service-parent and
                                     applies to services, whose coverage is a delivery decision -
                                     see the jacoco block there.
                                 -->
-                                <rules>
-                                </rules>
-                            </configuration>
-                        </execution>
-                    </executions>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-    </build>
-
-    <profiles>
-        <!--
+                <rules></rules>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+  <profiles>
+    <!--
             CI. Activated explicitly with -Pci and never from an environment marker: a build that
             behaves differently depending on whether env.JENKINS_URL happens to be set is a
             debugging hazard, and the flag is greppable in the Jenkinsfile.
@@ -511,28 +900,68 @@
             `ci` profile of ludwig-service-parent - services do not inherit this file, and Maven
             activates the profile of that id in whichever POM each module actually inherits.
         -->
-        <profile>
-            <id>ci</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-source-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>attach-sources</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>jar-no-fork</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
+    <profile>
+      <id>ci</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <!--
+                        Renders a copy of the sources with Lombok's annotations already expanded,
+                        for javadoc to read. generate-sources, so it is ready long before
+                        `package`. See ${lombok-maven-plugin.version} in the root properties for
+                        why javadoc cannot read src/main/java directly.
+                    -->
+          <plugin>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>delombok-for-javadoc</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>delombok</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <!--
+                        Beside the sources jar and for the same reason: a consumer resolving this
+                        platform from the repository gets something they can read and step
+                        through. Only here, never in the default build - rendering documentation
+                        nobody is about to read is minutes off every local `mvn install`.
 
-        <!--
+                        Configuration (doclint=all,-missing and the rest) is in pluginManagement,
+                        so a module that ever needs to override it has one place to look.
+                    -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-javadoc</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <!--
             Release. Invoked as:  mvn -Drevision=1.2.0 -Prelease -Pci deploy
 
             The version is passed on the command line rather than set here. A profile CANNOT
@@ -542,37 +971,72 @@
             used without a concrete -Drevision, which is the mistake the "set it in the profile"
             arrangement was meant to prevent.
         -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-enforcer-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>enforce-release-rules</id>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>enforce</goal>
-                                </goals>
-                                <configuration>
-                                    <rules>
-                                        <requireReleaseVersion>
-                                            <message>-Prelease requires a concrete version: pass -Drevision=X.Y.Z</message>
-                                        </requireReleaseVersion>
-                                        <!-- A released library must not depend on a SNAPSHOT: the
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>enforce-release-rules</id>
+                <phase>validate</phase>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireReleaseVersion>
+                      <message>-Prelease requires a concrete version: pass -Drevision=X.Y.Z</message>
+                    </requireReleaseVersion>
+                    <!-- A released library must not depend on a SNAPSHOT: the
                                              thing it was tested against can be replaced afterwards. -->
-                                        <requireReleaseDeps>
-                                            <message>A release must not depend on a SNAPSHOT.</message>
-                                        </requireReleaseDeps>
-                                    </rules>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
+                    <requireReleaseDeps>
+                      <message>A release must not depend on a SNAPSHOT.</message>
+                    </requireReleaseDeps>
+                    <!--
+                                            A release with no changelog entry is a release nobody
+                                            downstream can read. Two rules rather than one, so the
+                                            failure names the locale that is missing rather than
+                                            saying "a changelog" - the same treatment README.md
+                                            and README.ru.md already get.
+
+                                            Whether the entry DESCRIBES the release accurately is
+                                            not mechanisable and is deliberately not attempted;
+                                            what is mechanised is that there is one at all, which
+                                            is the failure that actually happens.
+
+                                            BOTH CONDITIONS SHORT-CIRCUIT ON A SNAPSHOT, and that
+                                            is not a loophole. `-Prelease` without `-Drevision`
+                                            leaves the version at the .mvn/maven.config fallback,
+                                            and requireReleaseVersion above already fails on
+                                            exactly that with the message that says what to do.
+                                            Without the short-circuit these two rules fire as
+                                            well, demanding a "## [1.1.0-SNAPSHOT]" heading -
+                                            three errors for one mistake, two of them telling the
+                                            reader to write a changelog entry for a version that
+                                            can never be released. One mistake gets one message.
+
+                                            The rule still cannot be dodged: a SNAPSHOT never
+                                            reaches the releases repository, so there is no
+                                            version a consumer can pin that these let through.
+                                        -->
+                    <evaluateBeanshell>
+                      <condition>"${project.version}".endsWith("-SNAPSHOT") || new java.util.Scanner(new java.io.File("${maven.multiModuleProjectDirectory}/CHANGELOG.md"), "UTF-8").useDelimiter("\\A").next().contains("## [${project.version}]")</condition>
+                      <message>CHANGELOG.md has no "## [${project.version}]" heading. Add the entry before tagging the release.</message>
+                    </evaluateBeanshell>
+                    <evaluateBeanshell>
+                      <condition>"${project.version}".endsWith("-SNAPSHOT") || new java.util.Scanner(new java.io.File("${maven.multiModuleProjectDirectory}/CHANGELOG.ru.md"), "UTF-8").useDelimiter("\\A").next().contains("## [${project.version}]")</condition>
+                      <message>CHANGELOG.ru.md has no "## [${project.version}]" heading. Both locales carry the same heading set; the Russian one is missing this release.</message>
+                    </evaluateBeanshell>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

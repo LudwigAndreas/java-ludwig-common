@@ -137,7 +137,7 @@ public class DefaultExecutionPlanner implements ExecutionPlanner {
             Set<String> authorities, boolean onRequestThread) {
         List<Column<R, ?>> columns = selectColumns(definition, request, authorities);
         List<SortKey> sort = resolveSort(definition, request);
-        RenderContext render = new RenderContext(request.locale(), request.zone());
+        RenderContext render = RenderContext.of(request.locale(), request.zone());
         List<SheetSpec> sheets = resolveSheets(definition, columns, render.locale());
         List<OutputTarget> outputs = resolveOutputs(definition, request, sheets);
 

@@ -13,7 +13,7 @@ import ru.ludwigandreas.webcore.problem.ProblemStatus;
  * somebody else right now. 409 with {@code Retry-After} says exactly that and is the only one of the
  * three a client library will treat as "try again shortly" without also treating it as success.
  *
- * <p>{@link #getRetryAfter()} is derived from the holder's lease rather than from a constant: the
+ * <p>{@code getRetryAfter()} is derived from the holder's lease rather than from a constant: the
  * honest earliest moment to retry is when the holder would have lost its lease if it died, because
  * until then either the work finishes and the retry gets a replay, or it does not and the key becomes
  * claimable.

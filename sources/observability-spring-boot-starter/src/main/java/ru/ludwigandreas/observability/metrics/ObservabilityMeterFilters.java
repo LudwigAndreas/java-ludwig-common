@@ -79,7 +79,7 @@ public final class ObservabilityMeterFilters {
     /**
      * Publishes a latency histogram with explicit SLO buckets for {@code http.server.requests}.
      *
-     * <h2>Why a histogram and not client-side percentiles</h2>
+     * <h4>Why a histogram and not client-side percentiles</h4>
      *
      * <p>Micrometer can compute a p99 inside the process and export it as a gauge. That number is
      * correct for one replica and mathematically meaningless once aggregated: the average of four

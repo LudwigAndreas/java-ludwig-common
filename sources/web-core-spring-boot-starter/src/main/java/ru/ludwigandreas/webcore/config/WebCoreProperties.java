@@ -26,6 +26,9 @@ public class WebCoreProperties {
     @NestedConfigurationProperty
     private final I18n i18n = new I18n();
 
+    @NestedConfigurationProperty
+    private final Preferences preferences = new Preferences();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -40,6 +43,10 @@ public class WebCoreProperties {
 
     public I18n getI18n() {
         return i18n;
+    }
+
+    public Preferences getPreferences() {
+        return preferences;
     }
 
     /** RFC 9457 problem rendering: {@code ludwig.web.problem.*}. */
@@ -295,6 +302,91 @@ public class WebCoreProperties {
 
         public void setConfigureValidator(boolean configureValidator) {
             this.configureValidator = configureValidator;
+        }
+    }
+
+    /**
+     * Caller-preference resolution: {@code ludwig.web.preferences.*}.
+     *
+     * <p>The default <em>locale</em> is deliberately not here. It is
+     * {@code ludwig.web.i18n.default-locale}, which already exists and already drives the
+     * {@code MessageSource}; a second property naming the same thing is how two answers to "what
+     * language does this service speak" come to disagree.
+     */
+    public static class Preferences {
+
+        /**
+         * Whether caller preferences are resolved at all.
+         *
+         * <p>Switching it off restores exactly the behaviour this starter had before the contract
+         * existed: an {@code AcceptHeaderLocaleResolver}, no zone in
+         * {@code LocaleContextHolder}, and {@code UserPreferences.current()} answering the
+         * configured defaults everywhere. It is a property rather than a profile check because this
+         * reaches every response in the service, and a change of that size should be revertible by
+         * a deployment without a rollback.
+         */
+        private boolean enabled = true;
+
+        /**
+         * The zone a caller's times are rendered in when nothing else answers.
+         *
+         * <p>UTC, not the container's zone. A server-zone default is invisible in development, where
+         * the two coincide, and wrong in production for every caller who is not in the datacentre's
+         * timezone - and it changes meaning when the service is deployed elsewhere. An operator who
+         * genuinely wants the host's zone names it here, in a file that can be reviewed.
+         */
+        private String defaultZone = "UTC";
+
+        /**
+         * The request header carrying the caller's timezone. Blank to consult none.
+         *
+         * <p>There is no standardised header for this - {@code Accept-Language} has RFC 9110 and a
+         * timezone has nothing - and the conventions in the wild disagree ({@code X-Timezone},
+         * {@code X-Time-Zone}, {@code X-TZ}, a cookie, a query parameter). So this is a convention
+         * with a default, not a constant presented as a standard: a deployment behind a gateway that
+         * already injects one renames it here.
+         */
+        private String timeZoneHeader = "X-Time-Zone";
+
+        /**
+         * Whether {@code Accept-Language} is consulted.
+         *
+         * <p>A deployment that resolves locale solely from stored settings switches this off rather
+         * than relying on clients not to send the header, which is not something it can rely on: a
+         * browser always sends one.
+         */
+        private boolean acceptLanguage = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getDefaultZone() {
+            return defaultZone;
+        }
+
+        public void setDefaultZone(String defaultZone) {
+            this.defaultZone = defaultZone;
+        }
+
+        public String getTimeZoneHeader() {
+            return timeZoneHeader;
+        }
+
+        public void setTimeZoneHeader(String timeZoneHeader) {
+            this.timeZoneHeader = timeZoneHeader;
+        }
+
+        public boolean isAcceptLanguage() {
+            return acceptLanguage;
+        }
+
+        public void setAcceptLanguage(boolean acceptLanguage) {
+            this.acceptLanguage = acceptLanguage;
         }
     }
 }

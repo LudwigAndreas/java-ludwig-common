@@ -6,9 +6,9 @@
 |---|---|
 | revision | `1.1.0-SNAPSHOT` |
 | modules | 30 |
-| commit | `f1fdc5f` (`agent-harness-config`) |
-| generated | 2026-09-28T06:31:54.158402Z |
-| **freshness** | POM-set SHA `71c8c2e7cec3bcde` · newest POM `sources/odata-filter-spring-boot-starter/pom.xml` @ 2026-09-28T06:31:40.592928Z |
+| commit | `d1e343c` (`develop`) |
+| generated | 2026-09-29T06:39:19.494714Z |
+| **freshness** | POM-set SHA `8a9ad98573b7bc3e` · newest POM `build/ludwig-service-parent/pom.xml` @ 2026-09-29T06:33:05.802173Z |
 
 The freshness row is how you tell this index is stale: `scripts/manifest.sh stale` recomputes the POM-set SHA and exits non-zero if it differs. It is content-based, not timestamp-based, so a checkout or a branch switch does not report a false stale.
 
@@ -111,7 +111,7 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
 | **architecture-rules** | `common` | `ru.ludwigandreas.archrules` | rest | — | `crud-service-example`, `file-ingest-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `user-settings-spring-boot-starter` |
-| **checkstyle-rules** | `common` | `—` |  | — | — |
+| **checkstyle-rules** | `common` | `ru.ludwigandreas.checkstyle.unit` |  | — | — |
 
 ## Dependency graph
 
@@ -308,12 +308,13 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 
 ### `checkstyle-rules`
 
-- role **rules**, packaging `jar`, parent `common`, imports `ludwig-bom`: no
+- role **rules**, packaging `jar`, parent `common`, imports `ludwig-bom`: yes
 - directory `build/checkstyle-rules/`
-- package root `—`
+- package root `ru.ludwigandreas.checkstyle.unit`
 - README [`build/checkstyle-rules/README.md`](build/checkstyle-rules/README.md) · [`build/checkstyle-rules/README.ru.md`](build/checkstyle-rules/README.ru.md)
 - surfaces: 
-- test classes: 0 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- test dirs: unit (`build/checkstyle-rules/src/test/java/ru/ludwigandreas/checkstyle/unit`)
+- test classes: 1 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :checkstyle-rules -am verify`
 
 ### `crud-service-example`

@@ -7,7 +7,7 @@ import ru.ludwigandreas.outbox.exception.OutboxRoutingException;
 import java.util.Map;
 
 /**
- * Resolution order: {@link OutboxEvent#getRoute()} (explicit override, looked up in
+ * Resolution order: {@code OutboxEvent.getRoute()} (explicit override, looked up in
  * {@code ludwig.outbox.routes}), then the first {@code ludwig.outbox.routes} entry whose
  * {@code event-types} contains the event's type, then {@code ludwig.outbox.default-route}.
  */

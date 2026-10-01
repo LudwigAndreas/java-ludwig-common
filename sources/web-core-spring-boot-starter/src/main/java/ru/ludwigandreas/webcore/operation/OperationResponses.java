@@ -48,7 +48,7 @@ public final class OperationResponses {
     /**
      * {@code 202 Accepted}, with a header pointing at its status resource.
      *
-     * <h2>A 202 may carry a terminal envelope, and that is deliberate</h2>
+     * <h4>A 202 may carry a terminal envelope, and that is deliberate</h4>
      *
      * <p>An earlier version of this method refused one, on the reasoning that a {@code 202} for
      * something already finished tells a client to poll for nothing. Notification showed that to be
@@ -177,7 +177,7 @@ public final class OperationResponses {
     /**
      * {@code 202 Accepted} for a cancellation request.
      *
-     * <h2>202, not 204</h2>
+     * <h4>202, not 204</h4>
      *
      * <p>Cancellation on this platform is cooperative - see {@link Cancellation} - so all a cancel
      * endpoint can truthfully report is that the request was recorded; the operation stops when it

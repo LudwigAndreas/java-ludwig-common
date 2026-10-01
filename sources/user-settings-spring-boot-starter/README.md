@@ -696,6 +696,37 @@ tenant's start time and get a window nobody configured.
 
 ---
 
+### Contributing the caller's locale and zone to `web-core`
+
+`LOCALE` and `TIMEZONE` are the two settings every presentation path in the platform needs, and
+declaring them used to mean reading them yourself. `StoredUserPreferenceSource` contributes them to
+`web-core`'s one caller-preference contract, so a service that declares them gets every `Instant` in
+every response rendered in the user's zone, with no mapper change anywhere. The dependency direction
+is the one that already exists: this module depends on `web-core`, the SPI is declared there and
+implemented here, and `web-core` acquires no persistence dependency.
+
+It abstains, per dimension, unless the resolved value's `SettingLayer` is **more specific than
+`PLATFORM`** - that is, `USER`, `ROLE` or `TENANT`. This is the one detail everything else in that
+chain rests on. `getAll` always answers for a declared definition, so a user who has never opened a
+settings screen resolves `UTC` and `en` from `SettingLayer.DEFAULT`; a source answering from that -
+while sitting first in the chain - would make every caller in the platform UTC, ignore every
+`Accept-Language` header ever sent, and leave the request-header and configuration sources permanently
+unreachable. `PLATFORM` abstains for the same reason one step up: it is supplied by deployment
+configuration, and `web-core`'s `ConfiguredPreferenceSource` already *is* the deployment's answer,
+sitting below the headers where a deployment-wide default belongs.
+
+A service that has not declared `LOCALE` and `TIMEZONE` still gets the bean, and it abstains out loud -
+`sourceName()` names which dimensions it can answer, and the startup line prints it. That is the
+opposite of the obvious design, and it is chosen deliberately: a `@Conditional` cannot inspect a
+`SettingDefinitionRegistry` that has not been built yet, and a silently absent bean is
+indistinguishable from a deliberate choice, which leaves "my saved timezone does nothing" with no
+visible cause.
+
+No cache is added here. `DefaultSettingsLookup` already holds a `LudwigCache`, so a per-request read
+is a cache hit; a cache of its own would be a second cache primitive, which `RuleGroup.CACHING` fails
+the build over. `ludwig.user-settings.preferences.enabled=false` switches the contribution off without
+switching off the module.
+
 ## Platform integration
 
 | Module | What this one uses it for |

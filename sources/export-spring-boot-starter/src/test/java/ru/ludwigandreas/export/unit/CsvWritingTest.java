@@ -57,7 +57,7 @@ class CsvWritingTest {
         Path target = tempDirectory.resolve(UUID.randomUUID() + ".csv");
         SheetSpec sheet = SheetSpec.single("data", "Data", List.of(TEXT_COLUMN));
         WriterContext context = new WriterContext(UUID.randomUUID(), StandardReportFormats.CSV, target,
-                List.of(sheet), MultiSheetStrategy.REJECT, new RenderContext(locale, ZoneId.of("UTC")),
+                List.of(sheet), MultiSheetStrategy.REJECT, RenderContext.of(locale, ZoneId.of("UTC")),
                 List.of(), Map.of(), false, null);
         try (ReportWriter writer = new CsvReportWriter(context, profile, EngineFixtures.MESSAGES)) {
             writer.beginSheet(sheet);
@@ -200,7 +200,7 @@ class CsvWritingTest {
         SheetSpec sheet = SheetSpec.single("data", "Data", columns);
         WriterContext context = new WriterContext(UUID.randomUUID(), StandardReportFormats.CSV, target,
                 List.of(sheet), MultiSheetStrategy.REJECT,
-                new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")), List.of(), Map.of(), false, null);
+                RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")), List.of(), Map.of(), false, null);
 
         try (ReportWriter writer = new CsvReportWriter(context, rfc4180(), EngineFixtures.MESSAGES)) {
             writer.beginSheet(sheet);
@@ -223,7 +223,7 @@ class CsvWritingTest {
         SheetSpec sheet = SheetSpec.single("data", "Data", List.of(TEXT_COLUMN));
         WriterContext context = new WriterContext(UUID.randomUUID(), StandardReportFormats.CSV, target,
                 List.of(sheet), MultiSheetStrategy.REJECT,
-                new RenderContext(Locale.ENGLISH, ZoneId.of("UTC")), List.of(), Map.of(), false, null);
+                RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC")), List.of(), Map.of(), false, null);
 
         try (ReportWriter writer = new CsvReportWriter(context, rfc4180(), EngineFixtures.MESSAGES)) {
             assertThatThrownBy(() -> writer.writeRow(RenderedRow.of(List.of(CellValue.Empty.INSTANCE))))
