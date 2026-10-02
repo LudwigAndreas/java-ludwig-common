@@ -130,6 +130,12 @@
         <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
         <jib-maven-plugin.version>3.5.2</jib-maven-plugin.version>
         <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+        <!--
+            The one default lifecycle binding spring-boot-starter-parent does NOT pin. Its version
+            is otherwise a property of whichever Maven the build ran on, which requirePluginVersions
+            below refuses. Pinned rather than excluded, so the rule's exclusion list stays empty.
+        -->
+        <maven-site-plugin.version>3.12.1</maven-site-plugin.version>
 
         <!--
             maven-checkstyle-plugin ships with an old Checkstyle engine bundled, so the engine is
@@ -470,6 +476,14 @@
                     </executions>
                 </plugin>
 
+                <!-- See ${maven-site-plugin.version}: the one lifecycle binding Boot's parent
+                     leaves unpinned, and therefore the one requirePluginVersions reports. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-site-plugin</artifactId>
+                    <version>${maven-site-plugin.version}</version>
+                </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-enforcer-plugin</artifactId>
@@ -502,6 +516,28 @@
                                     <!-- The same groupId:artifactId listed twice in one POM: the
                                          second silently wins and the first is a lie. -->
                                     <banDuplicatePomDependencyVersions/>
+                                    <!--
+                                        A plugin with no version builds differently on two
+                                        machines and Maven only warns about it. Here it fails.
+                                        The reactor root carries the same rule for the library
+                                        modules; this copy is what reaches a SERVICE, which
+                                        inherits this file and not that one.
+
+                                        unCheckedPluginList is deliberately empty and should stay
+                                        empty: spring-boot-starter-parent already pins Maven's
+                                        default lifecycle bindings, so a report from this rule is
+                                        a plugin somebody added without a version rather than
+                                        noise from the installation.
+                                    -->
+                                    <requirePluginVersions>
+                                        <message>Every plugin must declare a version. Add it to
+                                            this POM's pluginManagement, or to the service's own,
+                                            not to the plugin block.</message>
+                                        <banLatest>true</banLatest>
+                                        <banRelease>true</banRelease>
+                                        <banSnapshots>true</banSnapshots>
+                                        <banTimestamps>true</banTimestamps>
+                                    </requirePluginVersions>
                                 </rules>
                             </configuration>
                         </execution>
@@ -535,10 +571,21 @@
                             declares its own fallback, so the config also works when it is run
                             straight from an IDE plugin with no Maven properties in sight.
                         -->
-                        <propertyExpansion>
-                            docs.severity=${checkstyle.docs.severity}
-                            package.info.severity=${checkstyle.package.info.severity}
-                        </propertyExpansion>
+                        <!--
+                            THE LINE BREAK IS SEMANTIC AND IS WRITTEN AS &#10; ON PURPOSE.
+                            maven-checkstyle-plugin feeds this to java.util.Properties.load,
+                            which is line-oriented. Written as two real lines it survives until
+                            somebody reformats this POM: an XML formatter collapses the
+                            whitespace, joins them, and Properties.load then reads a single key
+                            whose value is "warning package.info.severity=ignore". The build
+                            fails with "No enum constant ...SeverityLevel.WARNING
+                            PACKAGE.INFO.SEVERITY=IGNORE", which names neither this element nor
+                            the reformat that caused it. That has already happened once, to the
+                            identical block in the reactor root. A numeric character reference
+                            is not whitespace to a formatter and is a newline to the parser.
+                            Do not "tidy" it back into two lines.
+                        -->
+                        <propertyExpansion>docs.severity=${checkstyle.docs.severity}&#10;package.info.severity=${checkstyle.package.info.severity}</propertyExpansion>
                         <!--
                             Explicit source directories rather than the compile source roots: the
                             roots include target/generated-sources, where QueryDSL's Q-types and

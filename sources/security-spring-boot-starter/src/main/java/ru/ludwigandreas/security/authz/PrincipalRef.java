@@ -3,7 +3,7 @@ package ru.ludwigandreas.security.authz;
 import ru.ludwigandreas.security.principal.PrincipalType;
 
 /**
- * The lookup key an {@link AuthorityResolver} resolves and an {@link AuthorityCache} is keyed on.
+ * The lookup key an {@link AuthorityResolver} resolves and the cache {@link AuthorityCaches} defines is keyed on.
  *
  * <p>Type is part of the key, not decoration: subject namespaces are independent, and a partner id
  * that happens to equal some user's {@code sub} must never collide into the same cache entry and

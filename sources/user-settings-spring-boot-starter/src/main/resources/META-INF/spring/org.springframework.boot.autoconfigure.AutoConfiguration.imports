@@ -7,3 +7,4 @@ ru.ludwigandreas.usersettings.config.UserSettingsKafkaAutoConfiguration
 ru.ludwigandreas.usersettings.config.UserSettingsWebAutoConfiguration
 ru.ludwigandreas.usersettings.config.UserSettingsRetentionAutoConfiguration
 ru.ludwigandreas.usersettings.config.UserSettingsLiquibaseAutoConfiguration
+ru.ludwigandreas.usersettings.config.UserSettingsPreferenceAutoConfiguration

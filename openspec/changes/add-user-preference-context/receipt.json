@@ -1,0 +1,56 @@
+{
+  "change": "add-user-preference-context",
+  "model": "claude-opus-5",
+  "modules_touched": [
+    "web-core-spring-boot-starter",
+    "user-settings-spring-boot-starter",
+    "export-spring-boot-starter",
+    "architecture-rules"
+  ],
+  "gate": {
+    "manifest_build": "not run, and deliberately - no POM changed. Every type the change names is in java.base, spring-core, spring-context or spring-webmvc, all already declared; spring-webmvc was already <optional>true</optional> in web-core, which is the only dependency the new LocaleContextResolver needs. design.md states this and tasks.md says why the step is absent.",
+    "check_image_pins": "pass - 4 image reference(s), all pinned by digest",
+    "check_api_baseline": "FAIL, pre-existing and environmental, not caused by this change. A v1.1.0 tag exists locally, so the script expects every module in that tag to have a resolvable jar; distributionManagement points at the placeholder https://nexus.example.internal/, which does not exist, so all 25 are reported UNRESOLVED. This is the same blockage the previous change recorded as unresolved task 8.2: the baseline was never published because -Pci and deploy are denied to agents and there are no credentials. The script is behaving correctly - an unresolvable baseline is not an absent one.",
+    "validate": "pass - mvn -q validate exits 0 across every module",
+    "install": "pass, CLEAN - `mvn clean install` with no flags and no exclusions, Docker running, so the Testcontainers-backed integration tests ran: BUILD SUCCESS across all 31 reactor entries.",
+    "aggregate_report": "pass - python3 scripts/check_aggregate_report.py: 27 of 27 jar modules present, 72.5% instruction / 61.7% branch. web-core-spring-boot-starter is at 85.2%.",
+    "openspec_validate": "pass - Change 'add-user-preference-context' is valid",
+    "architecture_rules": "both new rules RUN and PASS in every module using the shared suite. Read out of target/architecture-report.json rather than inferred from a green build: presentation.no-ambient-default-locale-or-zone and presentation.no-second-caller-preference-type are 'passed, 0 violations' in notification-service (55 rules), user-settings (60), crud-service-example/catalog-service (46), and the group is active in messaging (37), object-storage (45) and file-ingest (50)."
+  },
+  "tests": {
+    "added": 48,
+    "passed": "2255 tests, 0 failures, 0 errors, 0 skipped across the whole reactor, integration tests included",
+    "failed": 0,
+    "added_detail": "web-core: UserPreferencesTest 12, UserPreferenceResolutionTest 8, UserPreferenceSourceTest 9, UserPreferenceLocaleContextResolverTest 5, UserPreferenceFormatterTest 5, WebCorePreferenceAutoConfigurationTest 7, UserPreferenceContextIntegrationTest 5 (failsafe). user-settings: StoredUserPreferenceSourceTest 9, StoredUserPreferenceRegistrationTest 5, StoredPreferencePrecedenceIntegrationTest 4 (failsafe). architecture-rules: PresentationRulesTest 3."
+  },
+  "retries": 4,
+  "human_corrections": 0,
+  "rollback_point": "d1e343cf63677bb52b0bc44bc395603347ad0070",
+  "findings_outside_the_change": [
+    "TWO PRE-EXISTING ARCHUNIT RULES WERE INERT. noClasses().should(<a condition that reports only violations>) checks nothing: ArchUnit wraps the condition in never(), which inverts each event, so an ArchitectureConditions.notXxx helper produces zero findings while the rule still reports as passed. Measured, not reasoned about - probed against the bad.presentation fixture, where notDependOnClassesThat(Locale) and notCallMethods(ZoneId.systemDefault) each returned 0 violations over 5 classes that provably had both. CachingRules.noPrivateCaffeineCache (the one-caching-primitive guard) and KafkaRules.noPrivateDeadLetterRecoverer were written that way and were inert from the day they were written. Both now use classes().should(..), with the reason at each site. Both pass now that they check - so arming them revealed no hidden violation, which is only reassuring because PresentationRulesTest demonstrates the new rules CAN fail.",
+    "The 20 other call sites of those helpers were checked and are all classes()/methods(), so they were never affected."
+  ],
+  "deviations_from_the_plan": [
+    "tasks.md 1.7 described making the AcceptHeaderLocaleResolver conditional. Not needed: WebCorePreferenceAutoConfiguration is declared before WebCoreLocalizationAutoConfiguration and registers the localeResolver bean name, and the existing bean is already @ConditionalOnMissingBean(name = \"localeResolver\"). ludwig.web.preferences.enabled=false then restores the old resolver with no further wiring.",
+    "tasks.md 3.2 described editing DefaultExecutionPlanner. Not needed: it already built RenderContext from request.locale()/request.zone(), and ReportRunController.toRequest already fell back to caller.locale()/caller.zone(), so fixing SecurityReportCaller fixed the render context too.",
+    "Task 2.2's spec scenario was rewritten. The stored source is registered whenever a SettingsLookup exists and abstains per dimension by asking SettingDefinitionRegistry, rather than being kept out by a @Conditional - a condition cannot inspect a registry that has not been built yet, and a silently absent bean is indistinguishable from a deliberate choice.",
+    "RenderContext was consolidated onto UserPreferences, which the task list did not contain. It was the clearest restatement of the new contract in the repository, and it is NOT reached by the new rule either way because export runs its own ExportArchitectureTest rather than the shared suite - which is exactly why leaving it would have made the design's one-mechanism claim untrustworthy."
+  ],
+  "retries_detail": [
+    "4.2 noAmbientDefaultLocaleOrZone: two attempts. The first used noClasses() and reported nothing against a fixture that provably broke it; that failure is what surfaced the inert-rule finding above.",
+    "4.3 noSecondCallerPreferenceType: two attempts. The first asked only that both a Locale field and a ZoneId field be present, with an exemption for a subject-like field name, and the FULL REACTOR BUILD reported two violations in legitimate code - notification-service's RecipientPreferences and StoredPreferences, which carry the pair beside QuietHours, DigestMode and OptOutMatrix and have no subject-named field. The same rule would also have flagged export's ReportRequest. Discriminator narrowed to 'the declared non-static instance fields are exactly a Locale and a ZoneId and nothing else', and a SubjectPreferences fixture modelled on RecipientPreferences now asserts the rule stays silent.",
+    "1.1 UserPreferencesTest: two assertions of mine were wrong about the JDK, not about the code. WeekFields.of(Locale.forLanguageTag(\"ru\")) is SUNDAY and only ru-RU is MONDAY, because first-day-of-week is REGION data; and the comma is Russian's DECIMAL separator, not its grouping separator. The first finding changed the implementation, not just the test - see behaviour_changes.",
+    "RenderContext consolidation: one self-inflicted retry. A blanket perl replacement of `new RenderContext(` also rewrote the call inside RenderContext.of itself, which failed to compile. Caught by the build, fixed, re-verified: export 198 tests green."
+  ],
+  "behaviour_changes_for_consumers": [
+    "LocaleContextHolder.getTimeZone() now answers the caller's zone on a request thread, where it previously answered TimeZone.getDefault() - the container's zone. ANYTHING that formatted a date from Spring's holder changes output: a @JsonFormat without an explicit zone, a @DateTimeFormat conversion, a date argument interpolated into a message. This is the intended fix and it is still a behaviour change. ludwig.web.preferences.enabled=false restores the previous behaviour exactly.",
+    "Content-Language is now ru-RU where it was ru. Resolution answers the caller's own tag when its LANGUAGE is supported rather than narrowing to the supported tag, because the JDK carries first-day-of-week and the number separators as region data - narrowing ru-RU to ru hands a Russian user an American calendar. This changed an existing pinned assertion in ProblemDetailIntegrationTest, which was updated WITH the reasoning in a comment rather than silently; the body is still rendered from the ru bundle, which MessageSource falls back to on its own.",
+    "ReportCaller gains preferences(); locale() and zone() become default methods over it. Source-compatible for a caller, and a method an implementor of that interface must now supply.",
+    "export's RenderContext is now record RenderContext(UserPreferences). locale() and zone() are unchanged as accessors, so a renderer is unaffected; a caller constructing one uses RenderContext.of(locale, zone)."
+  ],
+  "unresolved": [
+    "check_api_baseline.sh fails, pre-existing: the v1.1.0 baseline has never been published because the releases repository is a placeholder host and -Pci/deploy are denied to agents. Carried forward from the previous change's unresolved task 8.2. It is not a compatibility failure and it is not caused by this change, but it does mean revapi's verdict on THIS change is 'no differences against an empty archive', which is the weaker statement.",
+    "Three rules in this area deliberately cannot be mechanised, and are recorded in docs/harness-enforcement.md as backlog rather than omitted: (1) a mapper that writes instant.atOffset(ZoneOffset.UTC) instead of using the resolved preferences calls no forbidden method and is still wrong, and forbidding ZoneOffset.UTC would be wrong more often than right; (2) a service that wanted stored preferences and forgot the SettingDefinitionSource bean is a difference of an absent bean, mitigated only by the source abstaining out loud in the startup line; (3) whether the configured default-zone is the right zone for the deployment is a statement about the business.",
+    "UserPreferenceFormatter's one-method-per-type-pair rule has no build-time check outside its own module's reflective test: ArchUnit cannot know that two methods are MapStruct-ambiguous and Checkstyle sees text rather than resolved types. Breaking it fails the CONSUMING module's build with a message naming both candidates, which is the acceptable half of the trade."
+  ]
+}

@@ -72,7 +72,11 @@
       "Edit(**/.flattened-pom.xml)",
       "Write(**/.flattened-pom.xml)",
       "Edit(openspec/changes/archive/**)",
-      "Write(openspec/changes/archive/**)"
+      "Write(openspec/changes/archive/**)",
+      "Edit(.mvn/maven.config)",
+      "Write(.mvn/maven.config)",
+      "Edit(**/.mvn/maven.config)",
+      "Write(**/.mvn/maven.config)"
     ]
   },
   "hooks": {

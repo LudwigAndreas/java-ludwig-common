@@ -12,7 +12,7 @@ import java.util.Optional;
  * outside one is a bug (it would silently break the atomicity guarantee the whole pattern exists for)
  * and throws {@link org.springframework.transaction.IllegalTransactionStateException}.
  * <p>
- * <b>Idempotency caveat:</b> when {@link OutboxEvent#getIdempotencyKey()} is set, a sequential republish
+ * <b>Idempotency caveat:</b> when {@code OutboxEvent.getIdempotencyKey()} is set, a sequential republish
  * of the same key returns the already-persisted row. Under a genuine concurrent double-publish of the
  * same key, the second call's flush hits the unique constraint and throws
  * {@link org.springframework.dao.DataIntegrityViolationException} - which aborts the caller's ambient

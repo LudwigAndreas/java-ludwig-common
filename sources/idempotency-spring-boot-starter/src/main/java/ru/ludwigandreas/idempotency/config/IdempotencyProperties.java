@@ -17,7 +17,7 @@ import ru.ludwigandreas.idempotency.api.ClaimMode;
  * Everything a deployment decides about work-dedup.
  *
  * <p>The one number here that is a <b>correctness</b> parameter rather than a tuning knob is
- * {@link #getTtl()}, and the README says so twice. It is the window in which a retry is recognised:
+ * {@code getTtl()}, and the README says so twice. It is the window in which a retry is recognised:
  * shortening it converts duplicates into double executions, not into disk savings.
  */
 @Getter
@@ -96,9 +96,7 @@ public class IdempotencyProperties {
     }
 
     /**
-     * A per-scope override.
-     *
-     * @see IdempotencyProperties#getScopes()
+     * A per-scope override, held in the map {@code getScopes()} returns.
      */
     @Getter
     @Setter

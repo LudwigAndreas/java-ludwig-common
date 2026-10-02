@@ -100,6 +100,18 @@ context: |
     get right is `CachePurpose`: `security` means the TTL is how long a revoked grant keeps
     working (startup ceiling, no stale reads); `performance` means the TTL is a throughput knob
     (minutes, stale-while-revalidate, load lease). That declaration is not inferable.
+  - **One caller-preference contract.** `ru.ludwigandreas.webcore.preference` owns the caller's
+    locale and zone - `UserPreferences` (two dimensions; anything derivable from them is a method on
+    it, anything not is a `SettingDefinition` elsewhere), the `UserPreferenceSource` SPI, the ambient
+    `UserPreferences.current()`, `bind()` for a worker thread, and `UserPreferenceFormatter` for a
+    `@Mapper(uses = ...)`. No module may call `Locale.getDefault()`, `TimeZone.getDefault()`,
+    `ZoneId.systemDefault()` or `Clock.systemDefaultZone()`, or declare a second type holding the
+    pair; ArchUnit's `RuleGroup.PRESENTATION` fails both. There is deliberately **no preference
+    storage in `web-core`** - the SPI is implemented by `user-settings-spring-boot-starter`, which
+    answers only for a `SettingLayer` more specific than `PLATFORM`, because a setting nobody has
+    touched resolves from `DEFAULT` and answering from it would make every caller UTC. A *caller's*
+    ambient preferences and a *subject's* stored preferences are different things; notification's
+    `RecipientPreferences` is the latter and is not to be consolidated.
   - Services follow `crud-service-example`: three model layers `web.dto` -> `service.model` ->
     `repository.entity` wired by MapStruct; Lombok instead of boilerplate; transactions in the
     service layer; Liquibase changelogs under `src/main/resources/db/changelog`.
@@ -269,6 +281,12 @@ operations:
         proposed. Where implementation diverged from the proposal, the spec follows the code.
       - Update the touched modules' `README.md` **and** `README.ru.md`. A README updated in only
         one locale is an incomplete archive.
+      - Add the change to the `## [Unreleased]` section of `CHANGELOG.md` **and** `CHANGELOG.ru.md`,
+        under `Added`, `Changed`, `Deprecated`, `Removed` or `Fixed`, describing what changed for a
+        consumer of the platform rather than what was done to the repository. Both locales carry
+        the same `##` heading set. The build can only check that a release has an entry at all
+        (`-Prelease` fails without one); whether the entry is accurate is not mechanisable, which
+        is why it is written here.
       - If any POM changed, regenerate `PROJECT_INDEX.md` and `project-index.json` with
         `scripts/manifest.sh build` and include them in the change.
       - Verify `scripts/manifest.sh stale` exits 0 before archiving.

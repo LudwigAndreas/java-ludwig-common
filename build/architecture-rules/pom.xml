@@ -121,6 +121,14 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
+            <!--
+                No <version> here on purpose: it is managed in the reactor root's pluginManagement,
+                which is where plugin versions for the library modules belong. Until that entry
+                existed this block had no version anywhere in the model, and Maven answered with
+                "problems were encountered while building the effective model ... 'version' for
+                maven-jar-plugin is missing" on every build of the whole reactor. The enforcer's
+                requirePluginVersions now fails the build rather than warning if that recurs.
+            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>

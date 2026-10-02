@@ -9,7 +9,7 @@ import java.time.Duration;
  *
  * <p>The only class in this module that references Micrometer, which is what allows the dependency to be
  * {@code optional}: a consumer that never calls
- * {@link ru.ludwigandreas.jira.JiraClientBuilder#meterRegistry(MeterRegistry)} never loads this class and
+ * {@link ru.ludwigandreas.jira.JiraClientBuilder#metrics(JiraClientMetrics)} never loads this class and
  * therefore never needs Micrometer on the classpath.
  *
  * <p>Meters published:

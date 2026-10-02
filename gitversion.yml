@@ -1,0 +1,84 @@
+# GitVersion configuration - what computes ${revision}.
+#
+# The pipeline reads ONE variable out of this, MajorMinorPatch, and decides the suffix itself:
+#
+#   HEAD carries a tag  ->  <MajorMinorPatch>              a release, the only kind that gets -Prelease
+#   HEAD carries no tag ->  <MajorMinorPatch>-SNAPSHOT     every branch, including master
+#
+# GitVersion's own pre-release labels are deliberately switched off on every branch below
+# (`label: ''`). `1.3.0-alpha.4` is valid SemVer and is NOT a Maven snapshot: Maven would publish
+# it to the RELEASES repository as an immutable artifact and it would satisfy `requireReleaseDeps`
+# in a consumer, while being an untested branch build. Maven's two-repository model is the
+# constraint here, and a label that reads as a pre-release to a human and as a release to Maven is
+# the worst of both. See the `release-versioning` capability.
+#
+# GitVersion needs the full history and the tags. The Jenkins checkout therefore drops `shallow`
+# and fetches tags; without that GitVersion fails and the build stops, which is what the spec
+# requires rather than a version derived from a truncated history.
+#
+# Nothing here is read by Maven. A developer with no GitVersion and no network runs
+# `mvn clean install` and gets the fallback in .mvn/maven.config.
+
+mode: ContinuousDelivery
+
+# Accept `v1.2.0` and `1.2.0`. The repository's convention is the `v` prefix - it is what
+# scripts/check_api_baseline.sh looks for - but a tag written without it should still be seen
+# rather than silently ignored, which would compute a version from an older tag.
+tag-prefix: '[vV]?'
+
+branches:
+
+  # The publishing branch. A commit on master after v1.2.0 computes 1.2.1; a fix that needs a
+  # minor or a major says so with a `+semver:` message or a tag, rather than by this file
+  # guessing from the diff.
+  main:
+    regex: ^master$|^main$
+    increment: Patch
+    label: ''
+    is-main-branch: true
+
+  # The integration branch. Commits here are heading for the next MINOR, so that a snapshot on
+  # develop sorts above the last release rather than colliding with the next patch of it.
+  develop:
+    regex: ^dev(elop)?(ment)?$
+    increment: Minor
+    label: ''
+    source-branches:
+      - main
+
+  # A feature inherits whatever its source branch would have produced. It never publishes a
+  # release, so the number only has to be unique and ordered, not meaningful.
+  feature:
+    regex: ^features?[/-]
+    increment: Inherit
+    label: ''
+    source-branches:
+      - main
+      - develop
+
+  # A fix going straight onto master.
+  hotfix:
+    regex: ^hotfix(es)?[/-]
+    increment: Patch
+    label: ''
+    source-branches:
+      - main
+      - develop
+
+  # A stabilisation branch holds the number it was cut with; the increment already happened.
+  release:
+    regex: ^releases?[/-]
+    increment: None
+    label: ''
+    source-branches:
+      - main
+      - develop
+
+  # A pull request build. Same rule as a feature branch: no label, no publish.
+  pull-request:
+    regex: ^(pull|pull\-requests|pr)[/-]
+    increment: Inherit
+    label: ''
+    source-branches:
+      - main
+      - develop

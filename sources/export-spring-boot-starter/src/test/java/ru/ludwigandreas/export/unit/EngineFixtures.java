@@ -73,7 +73,7 @@ final class EngineFixtures {
         default -> key;
     };
 
-    static final RenderContext EN = new RenderContext(Locale.ENGLISH, ZoneId.of("UTC"));
+    static final RenderContext EN = RenderContext.of(Locale.ENGLISH, ZoneId.of("UTC"));
 
     /**
      * A format that is CSV in every respect except that it declares it can carry a totals row.

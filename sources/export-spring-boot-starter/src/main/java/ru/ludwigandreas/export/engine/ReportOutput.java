@@ -6,7 +6,7 @@ import ru.ludwigandreas.export.api.StoredOutput;
  * One file a run produced, as it was stored.
  *
  * <p>A run can produce several of these in one pass over the rows - see
- * {@link ExecutionPlan#outputs()} - so the format id is part of the identity rather than a property
+ * {@link ExecutionPlan#getOutputs()} - so the format id is part of the identity rather than a property
  * of the run.
  *
  * @param formatId  which format, matching {@code ReportFormat.id()}

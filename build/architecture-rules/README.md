@@ -627,9 +627,18 @@ are recorded so nobody re-derives them:
 | Ad-hoc object mapping written inline in a service | No structural signal separates legitimate conversion code from "should have been MapStruct". A code-review judgment, not a bytecode pattern |
 | Methods returning `null` instead of `Optional` | Dataflow analysis across method bodies. Sonar, NullAway, ErrorProne. The `optional` group checks declared types only |
 | Naming, formatting and security rules | Already covered by Checkstyle, SonarQube and SCM policy. This library stays on structure and dependencies |
+| How the API differs from a PUBLISHED baseline - a removed method, a widened parameter type, a deleted enum constant | ArchUnit analyses the classes on the current classpath and has no access to the previous release, so "`AuditSink.record` existed in 1.2.0" is not a statement it can make. A group added here could only check the shape of what is present, which is a different question that reads like the same one. revapi, configured in the reactor root POM and running at `verify` for every published library. **This library must not grow a rule about API removal** - the sentence is also on `RuleGroup`'s javadoc, where somebody would otherwise cross it |
 
 The two scope limits are stated in code as well, on `OptionalUsageRules` and `MapperConventionRules`,
-so the next person to open the class finds the boundary before extending it.
+so the next person to open the class finds the boundary before extending it, and the revapi
+boundary is on `RuleGroup` for the same reason.
+
+A note on the enforcement triad, because revapi makes it four tools: `architecture-rules` owns
+structure and dependencies, `checkstyle-rules` owns source text, SonarQube owns bugs and security,
+and revapi owns **the difference between two versions of the code**. It overlaps none of the three
+because it is the only one that reads more than one version. The rule revapi in turn cannot check -
+that a deprecated API survive one minor release before it is removed - is recorded beside its
+configuration rather than smuggled in here.
 
 ## Per-module rules
 

@@ -35,7 +35,7 @@ import ru.ludwigandreas.odatafilter.exception.FilterSyntaxException;
  *     entity. Disabled by default; set {@code odata.filter.web.argument-resolver-enabled=true} to
  *     keep using it.
  */
-@Deprecated(since = "1.1.0")
+@Deprecated(since = "1.1.0", forRemoval = false)
 public class ODataQueryArgumentResolver implements HandlerMethodArgumentResolver {
 
     private final ODataFilterService filterService;

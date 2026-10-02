@@ -12,7 +12,9 @@ Each module provides a focused set of utilities or functionality and can be reus
 ```text
 ludwig-common/
 │
-├── .mvn/maven.config        # -Drevision=… — the ONLY place the version is declared
+├── .mvn/maven.config        # -Drevision=… — the tag-less FALLBACK. CI computes the real one
+├── gitversion.yml           # …from the git history. A release is a tag, not an edit
+├── CHANGELOG.md             # One changelog for the reactor; CHANGELOG.ru.md is its pair
 ├── pom.xml                  # Reactor root: modules, build config, scm, distributionManagement.
 │                            #   Parent of the LIBRARY modules only.
 ├── Jenkinsfile              # How the platform ships: build, verify, deploy, push images
@@ -94,7 +96,9 @@ Each module has:
 ### Prerequisites
 
 - Java 17+
-- Maven 3.6+
+- Maven 3.9+
+- **Docker, running.** Every integration test in this reactor is Testcontainers-backed. Without a
+  daemon they do not skip, they *error*, and `mvn clean install` fails on `test-support`.
 
 ### Cloning the Project
 
@@ -337,24 +341,63 @@ mvn -Pci -Dludwig.repo.snapshots.url=https://maven.pkg.github.com/acme/repo depl
 
 ### Versions and releasing
 
-The repository version is declared **once**, in `.mvn/maven.config`:
+**A release is a tag.** Push `v1.2.0` onto `master` and the pipeline does the rest:
 
-```
--Drevision=1.1.0-SNAPSHOT
+```bash
+git tag -a v1.2.0 -m 'Release 1.2.0' && git push origin v1.2.0
 ```
 
 Every POM says `<version>${revision}</version>`; `flatten-maven-plugin` rewrites it to a literal in
-every POM that is installed or deployed, so nothing unresolvable is ever published. A release passes
-a concrete value on the command line:
+every POM that is installed or deployed, so nothing unresolvable is ever published. What *sets*
+`${revision}` is the git history: GitVersion (configured in `gitversion.yml`, run from a
+digest-pinned container in the `Version` stage of the `Jenkinsfile`) computes `MajorMinorPatch`, and
+the pipeline adds the suffix itself — a bare `x.y.z` on a tagged commit, `x.y.z-SNAPSHOT` on every
+other build, so Maven's release/snapshot repository split keeps deciding where an artifact lands. A
+GitVersion pre-release label such as `1.3.0-alpha.4` is deliberately not used: Maven would treat it
+as a release.
+
+`.mvn/maven.config` still carries a `-Drevision`, and it is now **only** the fallback for a checkout
+with no tags and a laptop with no GitVersion. It must stay a `-SNAPSHOT`, an enforcer rule fails the
+build if it does not, and **it is not edited to cut a release** — a value in it that disagrees with
+the history is a trap for the next local build.
+
+The command the pipeline runs, reproducible by hand because no profile is ever activated
+implicitly:
 
 ```bash
 mvn -Drevision=1.2.0 -Prelease -Pci deploy
 ```
 
 `-Prelease` does not *set* the version - it cannot, because `${revision}` arrives as a user property
-and user properties beat any profile's `<properties>`. Instead it enforces the invariant:
-`requireReleaseVersion` fails the build if you used `-Prelease` without `-Drevision`, and
-`requireReleaseDeps` fails it if anything being released depends on a SNAPSHOT.
+and user properties beat any profile's `<properties>`. Instead it enforces the invariants:
+`requireReleaseVersion` fails the build if you used `-Prelease` without `-Drevision`,
+`requireReleaseDeps` fails it if anything being released depends on a SNAPSHOT, and two
+`evaluateBeanshell` rules fail it unless **both** `CHANGELOG.md` and `CHANGELOG.ru.md` carry a
+`## [1.2.0]` heading - naming whichever locale is missing.
+
+### What a published library ships
+
+Under `-Pci`, every jar module parented by the reactor root publishes its jar, its flattened POM, a
+`-sources` jar and a `-javadoc` jar. A default `mvn clean install` builds none of the last two, so
+the local loop stays fast. Javadoc *correctness* is gated - a broken `{@link}` or an unknown tag
+fails the build - while Javadoc *completeness* stays the existing Checkstyle warning tier. The
+documentation is rendered from a delomboked copy of the sources, because four public methods return
+a Lombok-`@Builder` generated type that exists only in bytecode.
+
+The two services publish neither: they are consumed as images, not as dependencies.
+
+### API compatibility
+
+From `v1.1.0` onwards, `revapi` compares every published library against the newest release of the
+same coordinates and the version increment decides what is allowed: a **major** permits a
+binary-breaking difference, a **minor** a non-breaking one, a **patch** only an equivalent API. The
+gate refuses an increment that is too small and can never refuse one that is too large - only the
+changelog can catch a team that bumps the major every release.
+
+`@Deprecated` must declare `since` and `forRemoval` and carry a Javadoc `@deprecated` tag naming the
+replacement; Checkstyle enforces that half at `validate`. An element is not removed unless the
+published baseline already carried `forRemoval = true`, and a removal needs an entry in
+`revapi.differences` with a justification naming the release that deprecated it.
 
 ## Code style
 
@@ -396,13 +439,21 @@ For module-specific docs, navigate to the module directory and run the same comm
 
 ## Contributing
 
-This library is currently maintained as a personal toolkit. If you want to contribute or suggest improvements:
+**Start with [`docs/runbook.md`](docs/runbook.md).** It is the development and release process end to
+end: how to add a feature, how to write a fix, how versions are computed, where IFT sits, and how a
+minor, major and hotfix release each happen. A new developer should not need anything else to make
+their first change.
 
-- Fork the repo
-- Create a feature branch (feature/xyz)
-- Open a pull request
+The short version:
 
-> Guidelines: follow clean code practices and keep modules focused.
+- Branch from `develop` as `feature/…` or `fix/…`.
+- **Write the OpenSpec change before the code** — `openspec new change <name>`. No code without one.
+- Run `scripts/gate.sh --change <name> <module>`; it works out the in-repo dependents for you.
+- Open the PR against `develop`. Merging redeploys IFT.
+- A release is a **tag**, never an edit to a version file.
+
+> Guidelines: follow clean code practices and keep modules focused. What the code must look like is
+> in [`CLAUDE.md`](CLAUDE.md) and each module's own README.
 
 ## License
 

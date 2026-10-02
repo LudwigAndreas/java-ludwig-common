@@ -14,6 +14,21 @@ import java.util.Optional;
  * because they then simply have nothing to match and pass vacuously. {@link #DOMAIN_ISOLATION} is
  * the exception: it only makes sense for a service that keeps a domain model separate from its
  * persistence entities, so it is opt-in.
+ *
+ * <h2>The boundary with revapi: no group here may be about API removal</h2>
+ *
+ * <p><b>A rule about how the API differs from a published baseline belongs to revapi, and ArchUnit
+ * must not grow a rule about API removal.</b> The reason is not taste: ArchUnit analyses the
+ * classes on the current classpath and has no access to the previous release, so
+ * "{@code AuditSink.record} existed in 1.2.0" is not a statement it is able to make. A group added
+ * here to police removals could only ever check the shape of what is present, which is a different
+ * question that happens to read like the same one - and the version that would look checked is the
+ * one nobody checked.
+ *
+ * <p>revapi is configured in the reactor root POM and runs at {@code verify} for every published
+ * library. The removal window it in turn cannot check - that a deprecated API survive one minor
+ * release before it goes - is recorded beside that configuration, for the same reason this
+ * paragraph is recorded here: a limit that is only understood is a limit that is crossed.
  */
 public enum RuleGroup {
 
@@ -101,6 +116,16 @@ public enum RuleGroup {
      * deliberately leaves to the cache module's own startup validator and why.
      */
     CACHING("caching", true),
+
+    /**
+     * There is one answer to what locale and zone a caller reads in, and nobody asks the JVM.
+     *
+     * <p>On by default, and vacuous for a module that presents nothing - it then calls no JVM-default accessor
+     * and declares no preference type. See {@link ru.ludwigandreas.archrules.rules.PresentationRules} for what
+     * separates a second caller-preference type from a per-subject lookup, which is the distinction the second
+     * rule turns on, and for the two things in this area that deliberately cannot be checked.
+     */
+    PRESENTATION("presentation", true),
 
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);

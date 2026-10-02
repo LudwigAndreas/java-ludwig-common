@@ -39,7 +39,7 @@ public abstract class LocalizedException extends RuntimeException {
     private final String code;
 
     /**
-     * Message-format arguments for {@link #getCode()}. Transient because a message argument is an
+     * Message-format arguments for {@code getCode()}. Transient because a message argument is an
      * arbitrary domain object with no serialization contract; the code and the properties are what
      * carry meaning across a boundary.
      */
@@ -71,7 +71,7 @@ public abstract class LocalizedException extends RuntimeException {
     }
 
     /**
-     * Message-format arguments for {@link #getCode()}.
+     * Message-format arguments for {@code getCode()}.
      *
      * <p>Empty rather than null on an instance that has been through Java serialization: the
      * arguments and the properties are transient, so what survives a round trip is the outcome and

@@ -21,9 +21,12 @@
     </description>
 
     <!--
-        Resources only: no Java, no dependencies. A build-tooling artifact must not be able to
-        drag anything onto a consumer's classpath, and the maven-checkstyle-plugin only ever
-        reads these two files off its own plugin classpath.
+        Resources only in main: no Java there, and no compile-scope dependency. A build-tooling
+        artifact must not be able to drag anything onto a consumer's classpath, and the
+        maven-checkstyle-plugin only ever reads these two files off its own plugin classpath. The
+        two dependencies below are test-scoped and therefore reach nobody: they exist so the
+        configuration can be executed against fixture sources and asserted on, which is the only
+        way a rule in an XML file can have a test at all.
 
         This repository does NOT consume the jar - the root pom points the plugin straight at
         src/main/resources below. That is deliberate: Maven resolves plugin dependencies from
@@ -32,18 +35,64 @@
         where the artifact is already published, uses the jar. See README.md.
     -->
 
+    <!--
+        Imported like every other library module in the reactor, so that a test dependency added
+        here later resolves against the platform's version registry rather than against whatever
+        spring-boot-dependencies happens to carry. The root POM cannot import it - it is the BOM's
+        parent, and that would be circular.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            The engine the rules are executed on in the test below. The version is
+            ${checkstyle.version} from the reactor root - the SAME number the
+            maven-checkstyle-plugin's own <dependencies> override uses - on purpose: a test that
+            asserted the configuration's behaviour on a different engine from the one the build
+            runs would assert nothing about the build.
+        -->
+        <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Version from the imported spring-boot-dependencies; see the root POM on why JUnit is
+             deliberately unpinned. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <build>
         <plugins>
             <!--
-                Nothing here to check: the module has no Java sources, and the configuration
-                files themselves are validated by every other module that runs against them.
+                src/main is resources only, so there is nothing there to check; the test sources
+                added for CheckstyleConfigurationTest are ordinary Java and are checked like
+                everything else. The deliberately non-compliant FIXTURES are not: they live under
+                src/test/resources, which the plugin's sourceDirectories do not include, which is
+                exactly why they are resources rather than test sources.
             -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
-                <configuration>
-                    <skip>true</skip>
-                </configuration>
             </plugin>
         </plugins>
     </build>

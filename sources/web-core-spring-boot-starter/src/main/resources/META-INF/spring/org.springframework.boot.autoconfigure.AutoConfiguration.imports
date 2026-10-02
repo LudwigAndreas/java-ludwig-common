@@ -1,3 +1,4 @@
 ru.ludwigandreas.webcore.config.WebCoreLocalizationAutoConfiguration
+ru.ludwigandreas.webcore.config.WebCorePreferenceAutoConfiguration
 ru.ludwigandreas.webcore.config.WebCoreProblemAutoConfiguration
 ru.ludwigandreas.webcore.config.WebCoreWebMvcAutoConfiguration

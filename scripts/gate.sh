@@ -67,7 +67,15 @@ fi
   die "repository layout check failed" 1
 }
 
-COMMANDS=("mvn -q validate")
+# Two file-only checks, before Maven, because they cost milliseconds and catch a class of defect
+# the build cannot see:
+#
+#   check_image_pins     a container image referenced by tag alone. Not a Java fact and not a POM
+#                        fact, so neither the three analysis tools nor the enforcer can see it.
+#   check_api_baseline   an API baseline that is UNRESOLVABLE rather than absent. revapi treats
+#                        both as the same warning; the distinction is the difference between "no
+#                        comparison was possible" and "the comparison silently did nothing".
+COMMANDS=("scripts/check_image_pins.sh" "scripts/check_api_baseline.sh" "mvn -q validate")
 
 if [ "$FULL" = 1 ]; then
   COMMANDS+=("mvn clean install")

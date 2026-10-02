@@ -209,6 +209,129 @@ Keep the bundles in lockstep: a key present in one locale and absent in another 
 answering half in one language and half in another. A small test asserting identical key sets across
 bundles is worth the ten lines.
 
+## Caller preferences: language, timezone, and what a mapper does with them
+
+The locale resolution above answers half the question. `LocaleContextHolder.getLocale()` is correct on
+a request thread; `LocaleContextHolder.getTimeZone()` was **the container's zone**, because
+`AcceptHeaderLocaleResolver` extends `AbstractLocaleResolver` and never publishes a
+`TimeZoneAwareLocaleContext`. Every `@JsonFormat` without an explicit zone, every `@DateTimeFormat`
+conversion and every date argument interpolated into a message read that - UTC in the datacentre, the
+developer's own zone on a laptop. The defect is invisible exactly where it would be caught.
+
+`ru.ludwigandreas.webcore.preference` is the platform's one answer to "what language and zone does
+this caller read in".
+
+### What a mapper writes
+
+Nothing. Name the formatter in `uses` and MapStruct selects the conversions by type:
+
+```java
+@Mapper(componentModel = "spring", uses = UserPreferenceFormatter.class)
+public interface ProductMapper {
+    ProductResponse toResponse(Product product);   // Instant createdAt -> OffsetDateTime createdAt
+}
+```
+
+`Instant -> OffsetDateTime` and `Instant -> LocalDate` are resolved automatically, in the caller's
+zone. No mapping method signature changes and no `@Mapping` annotation is added. The constraint that
+makes this work is that `UserPreferenceFormatter` declares **exactly one method per source/target
+pair**: MapStruct selects an unannotated `uses` method by its types alone, and a second candidate for
+one pair is an ambiguity the consuming module would have to break with `qualifiedByName` - which would
+mean annotating the formatter with `org.mapstruct.Named` and making MapStruct a dependency of a module
+that is useful without it. A service needing a second rendering of the same pair writes its own
+`@Named` wrapper, which is where that annotation belongs.
+
+Outside a mapper, read `UserPreferences.current()`. It is a static read, for the same reason
+`SecurityPrincipals.require()` is one: the same lookup has to work from a generated mapper, a JPA
+listener and a repository fragment, none of which is a good place to thread a service through. It
+never returns null and never throws - an unresolved *presentation* preference has a correct
+conservative answer, and throwing would turn a cosmetic gap into a 500 on a path that was formatting a
+date. `currentIfResolved()` returns empty instead, for code that must not claim a preference nobody
+expressed.
+
+### Where the answer comes from
+
+Each dimension is taken from the first source that answers for it, independently of the other - so a
+stored zone with no stored locale still lets `Accept-Language` decide the language:
+
+| Order | Source | Answers from |
+|---|---|---|
+| 100 | `StoredUserPreferenceSource` (in `user-settings-spring-boot-starter`) | `user.locale` / `user.timezone`, **only** when the resolved `SettingLayer` is more specific than `PLATFORM` |
+| 200 | `RequestHeaderPreferenceSource` | `Accept-Language`, and `ludwig.web.preferences.time-zone-header` |
+| last | `ConfiguredPreferenceSource` | `ludwig.web.i18n.default-locale`, `ludwig.web.preferences.default-zone` |
+
+Two decisions in that table are worth knowing about.
+
+**A stored choice beats a request header.** `Accept-Language` is a hint the *browser* sends; a stored
+locale is a choice the *user* made, usually precisely because the browser was sending the wrong one. A
+platform where the browser silently wins has a settings screen that does not work.
+
+**`PLATFORM` and `DEFAULT` layers abstain.** `SettingsLookup.getAll` always answers for a declared
+definition, so a user who has never opened a settings screen resolves `UTC` and `en` from
+`SettingLayer.DEFAULT`. A source answering from that - while sitting first in the chain - would make
+every caller UTC, ignore every `Accept-Language` header ever sent, and leave the two sources below it
+permanently unreachable. `PLATFORM` abstains one step up for the same reason: it is deployment
+configuration, and `ConfiguredPreferenceSource` already *is* the deployment's answer, sitting below
+the headers where a deployment-wide default belongs.
+
+A deployment that disagrees reorders the beans. The sources are ordered `@Bean`s and
+`UserPreferenceSource` publishes the three order constants, so a replacement is placed relative to
+them rather than at a magic number.
+
+There is **no standardised request header for a timezone** - `Accept-Language` has RFC 9110 and a
+timezone has nothing - so the name is configuration with a documented default rather than a constant
+presented as a standard. Both `Europe/Moscow` and `+03:00` are accepted, and an unusable value is
+ignored rather than rejected: a 400 there would fail an otherwise valid request over a hint the client
+did not have to send.
+
+### Off the request thread
+
+```java
+UserPreferences captured = UserPreferences.current();          // on the request thread
+...
+try (UserPreferences.Scope scope = captured.bind()) {          // on the worker
+    render(captured);
+}
+```
+
+Closing restores the thread's previous context, including when there was none - otherwise a pooled
+thread carries one caller's preferences into the next caller's task.
+
+### What this is not
+
+It is **not a preference store**. `user-settings-spring-boot-starter` owns storage, layering,
+validation, caching, audit and the `/me/settings` API; this package declares an SPI it implements, and
+`web-core` acquires no persistence dependency - the same construction, for the same reason, as the
+long-running-operation contract.
+
+It is **not a way to ask about somebody else**. This is the *ambient* context of the current caller.
+"What are user X's preferences" is `SettingsLookup.getAll(subject)`, it takes a subject because there
+is no ambient one, and it is what a queue worker fanning out to a hundred recipients must use.
+`notification-service`'s `RecipientPreferences` is that shape and is deliberately not consolidated
+into this one; `RuleGroup.PRESENTATION`'s `noSecondCallerPreferenceType` rule is written so that it
+does not fire on the per-subject shape.
+
+And it holds **two dimensions, not five**. Everything derivable from them is a method on
+`UserPreferences` - `numberFormat()`, `firstDayOfWeek()`, `dateTimeFormatter(FormatStyle)` - because a
+separately stored `firstDayOfWeek` can disagree with the stored locale, and then a calendar starts on
+Monday with Sunday's column highlighted. Anything not derivable is a `SettingDefinition` in the module
+that needs it.
+
+> One sharp edge worth knowing: the JDK carries first-day-of-week and the number separators as
+> **region** data, so `WeekFields.of(Locale.forLanguageTag("ru"))` answers `SUNDAY` while `ru-RU`
+> answers `MONDAY`. That is why resolution answers the caller's own tag when its *language* is
+> supported, rather than narrowing `ru-RU` to the supported `ru`: `MessageSource` falls back to the
+> `ru` bundle on its own, so the region costs nothing there and is load-bearing everywhere else. One
+> consequence for a consumer: `Content-Language` is now `ru-RU` where it used to be `ru`.
+
+Enforced by ArchUnit, in `RuleGroup.PRESENTATION`: `noAmbientDefaultLocaleOrZone` fails a build that
+calls `Locale.getDefault()`, `TimeZone.getDefault()`, `ZoneId.systemDefault()` or
+`Clock.systemDefaultZone()`, and `noSecondCallerPreferenceType` fails a second type holding the pair.
+What is deliberately **not** checked is a mapper that writes `instant.atOffset(ZoneOffset.UTC)`
+instead: it calls no forbidden method and is still wrong, and forbidding `ZoneOffset.UTC` would be a
+rule that is wrong more often than right, because it is correct in a persistence mapping, a test
+fixture and an audit record. That one is a review question.
+
 ## Paged responses
 
 ```java
@@ -360,6 +483,10 @@ second run.
 | `ludwig.web.i18n.fallback-to-system-locale` | `false` | whether the host's locale may be used |
 | `ludwig.web.i18n.cache-duration` | `-1` (forever) | positive values re-read changed bundles |
 | `ludwig.web.i18n.configure-validator` | `true` | binds Bean Validation to the `MessageSource` |
+| `ludwig.web.preferences.enabled` | `true` | resolves caller preferences and publishes the zone in `LocaleContextHolder`; off restores the plain `AcceptHeaderLocaleResolver` |
+| `ludwig.web.preferences.default-zone` | `UTC` | the zone when nothing else answers - never the container's |
+| `ludwig.web.preferences.time-zone-header` | `X-Time-Zone` | request header carrying the caller's zone; blank consults none. A convention, not a standard |
+| `ludwig.web.preferences.accept-language` | `true` | whether `Accept-Language` is consulted at all |
 
 ### Coexisting with your own advice
 
