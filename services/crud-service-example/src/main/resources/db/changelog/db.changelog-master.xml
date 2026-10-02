@@ -31,4 +31,16 @@
         Its changeset ids are namespaced (export-NNN/ludwig-export) for the same reason.
     -->
     <include file="classpath:db/changelog/export/export-changelog.xml" relativeToChangelogFile="false"/>
+
+    <!--
+        And for the file-action module's two tables (file_action_submission, file_action_row_reject) - see
+        ludwig.file-action.liquibase.enabled=false. Its changeset ids are namespaced
+        (file-action-NNN/ludwig-file-action) for the same reason.
+
+        The product-import action itself adds no changeset: it writes through ProductService into
+        catalog_product, which already exists. An import is a different way in to an action the service
+        already performs, not a second implementation of it with a table of its own.
+    -->
+    <include file="classpath:db/changelog/file-action/file-action-changelog.xml"
+             relativeToChangelogFile="false"/>
 </databaseChangeLog>

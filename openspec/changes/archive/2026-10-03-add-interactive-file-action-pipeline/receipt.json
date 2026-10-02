@@ -1,0 +1,45 @@
+{
+  "change": "add-interactive-file-action-pipeline",
+  "model": "claude-opus-5",
+  "index_version": "6327960242b17b53389b16372ab47edbfdf565bd151c2c64fea4b5e237641cd7",
+  "modules_touched": [
+    "file-action-spring-boot-starter",
+    "ludwig-bom",
+    "common",
+    "architecture-rules",
+    "crud-service-example",
+    "jacoco-aggregate"
+  ],
+  "gate": {
+    "manifest_build_stale_layout": "pass",
+    "check_image_pins": "pass - 6 image references, all pinned by digest",
+    "check_api_baseline": "fail, environmental and not attributable to this change - all 25 pre-existing modules report UNRESOLVED against https://nexus.example.internal, which is unreachable from this machine, including jira-client, checkstyle-rules and test-support which this change does not touch. file-action-spring-boot-starter is correctly absent from the list, having no published baseline. The script is working as designed: it exists to refuse an unresolvable baseline rather than let revapi compare against an empty archive and report nothing",
+    "validate": "pass - Checkstyle, every module",
+    "clean_install": "pass - 31 modules, 2570 test executions, 0 failures, 5m35s",
+    "verify_file_action_am": "pass",
+    "verify_crud_service_example_am": "pass",
+    "verify_architecture_rules_am": "pass",
+    "verify_architecture_rules_dependents": "pass - crud-service-example, file-ingest, messaging, notification-service, object-storage, user-settings",
+    "check_aggregate_report": "pass - 28 of 28 jar modules present, 73.4% instruction coverage overall; file-action-spring-boot-starter at 84.0% over 11507 instructions",
+    "openspec_validate": "pass"
+  },
+  "tests": {
+    "added": 35,
+    "added_detail": "31 test classes in file-action-spring-boot-starter (254 unit, 32 integration), ProductImportActionTest and ProductImportIntegrationTest in crud-service-example (10 + 10), UploadRulesTest in architecture-rules (3)",
+    "passed": 2570,
+    "failed": 0,
+    "excluded_by_tag": "LargeWorkbookHeapMeasurementIT (2 cases) behind @Tag(\"measurement\"); runs green on demand via -Dfile-action.test.excluded.groups="
+  },
+  "retries": 24,
+  "human_corrections": 0,
+  "rollback_point": "66808f46245276c7328c689a1772baaef180723b",
+  "unresolved": [
+    "check_api_baseline.sh cannot pass in this environment: the releases repository is unreachable, so every pre-existing module's baseline is UNRESOLVED. Nothing in this change caused it and nothing in this change can fix it. It must be re-run where the repository is reachable before the change is considered gate-clean on that step.",
+    "The four rules this change introduces that no tool can enforce are implemented as prose at the point of the rule and listed in docs/harness-enforcement.md as items 15-18: a RowHandler must be idempotent per row; a DocumentHandler must not call a partner inside the apply transaction; whether a declared commit-policy is right for the domain; whether a deployment's FileScanner actually scans.",
+    "ALL_OR_NOTHING reads the bound-row artifact inside its single transaction, so it holds a database connection for the whole traversal. Unavoidable given what the policy promises, documented at ApplyPass, and the reason a large file on that policy belongs on a DEFERRED action - but not mechanically prevented.",
+    "The annotated error report only annotates rows within the action's reject-sample bound (default 100). A submission with more rejects than that gets a partially annotated workbook. Recorded at RejectCollector; a submission in that state has almost certainly tripped its reject threshold and been refused whole anyway.",
+    "A reactive upload (FilePart, Flux<DataBuffer>) and an upload taken as a raw byte[] request body are both invisible to RuleGroup.UPLOADS. No module in this platform is reactive, and a rule flagging every InputStream parameter would be suppressed everywhere within a week. Both blind spots are named in the rule's javadoc."
+  ],
+  "decisions_recorded": 35,
+  "failures_recorded": 14
+}

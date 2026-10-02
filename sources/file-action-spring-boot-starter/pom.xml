@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>file-action-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>File action Spring Boot starter</name>
+    <description>
+        The platform's one path for a user-submitted file that performs a business action: a person
+        drops a spreadsheet and orders are created. Admission with a size and format budget, the bytes
+        persisted to the object store under their SHA-256 before anything parses them, an
+        UPLOADED/VALIDATED/APPLIED lifecycle mapped onto web-core's operation envelope so that
+        synchronous and deferred execution are one contract, bounded-memory reading of untrusted xlsx
+        and csv, rows addressed by sheet and column header name rather than by index, a commit policy
+        declared per action because no default is safe, row rejects served paged and downloadable as an
+        annotated workbook, and a template endpoint generated from the same binding the reader
+        validates against.
+    </description>
+
+    <!--
+        A library module: parented by the reactor root, importing ludwig-bom. Deliberately NOT
+        ludwig-service-parent - see the note in that file.
+
+        This is not "web-core with file processing", which is how it was first framed. web-core has zero
+        in-repo dependencies and must keep none to persistence - OperationResponse's own javadoc records
+        that a web-core -> db-core edge is a reactor cycle waiting for the first module that needs both -
+        and this module needs the database, the bucket and the job lock. So it sits above web-core, at
+        the same tier as export-spring-boot-starter, and is depended on only by a service.
+    -->
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            NOT optional, for the reason file-ingest gives: every failure a caller can see is rendered by
+            web-core's one RFC 9457 ProblemDetail pipeline, and this module also maps its lifecycle onto
+            web-core's one OperationResponse envelope and coerces cell values through that module's one
+            UserPreferences locale and zone. Three of the platform's single mechanisms live there; an
+            optional dependency would make writing a fourth the path of least resistance.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
+            NOT optional. The submitted bytes always go to the platform's one ObjectStore before
+            anything parses them - there is no "small file" path that skips it. See the README: a
+            request that has not persisted its input cannot be retried, cannot build an error report
+            that cites the original, and cannot survive the pod being evicted mid-parse.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>object-storage-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- db-core: GeneratedEntity/BaseRepository for this module's own two tables. There is
+             deliberately no shared operation table - see the long-running-operations capability. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+        </dependency>
+
+        <!-- job-core: the SkipLockedClaim a DEFERRED submission is claimed with, the lease that
+             releases it when a pod dies mid-apply, and the one RunLock the retention job holds. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+        </dependency>
+
+        <!--
+            NOT optional. A user double-clicking a drop zone is the normal case, not an edge case, and
+            without the claim it creates the orders twice. This module uses IdempotencyStore directly and
+            deliberately NOT IdempotencyFilter: that filter buffers the whole request body to fingerprint
+            it, and its own CachedBodyRequest javadoc says an endpoint receiving bodies large enough to
+            matter is not one where it should be reading them. A 25 MiB multipart is such a body.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>idempotency-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- The platform's audit envelope and its one AuditSink. Who uploaded what, what the scanner
+             said, and what was applied are all audit facts, and this module declares no SPI of its own. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!-- Optional: an action may declare a required-authority. A deployment with no security starter
+             and no authority configured is a valid deployment; one that configures an authority without
+             the starter is refused at startup rather than served unprotected. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: submission, reject and apply metrics. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>observability-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: "the file action finished" as an outbox event, so the event and the submission's
+             terminal state commit together. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbox-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Reading an untrusted workbook. poi-ooxml carries XSSFReader, ReadOnlySharedStringsTable and
+            XSSFSheetXMLHandler - the SAX path - and ZipSecureFile, whose inflate-ratio and entry-count
+            ceilings are set before a sheet is opened. poi carries the shared OOXML plumbing and the
+            SXSSF streaming writer used for the template and the annotated report. The two ship as a
+            pair and must never be split across versions; see the note in ludwig-bom.
+
+            PoiConfinementTest in this module's own test suite is what keeps the DOM readers -
+            XSSFWorkbook, HSSFWorkbook, WorkbookFactory - out of the module, because a DOM read of a
+            4 MB crafted workbook is a heap the size of the pod.
+        -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+        </dependency>
+
+        <!-- Reading CSV. See the note in ludwig-bom for why this is a dependency rather than a split(). -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+        </dependency>
+
+        <!-- Hibernate + Spring Data JPA + jakarta.persistence-api, for this module's two tables. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!--
+            Declared rather than inherited through web-core: this module ships a controller and takes a
+            MultipartFile, which is the one place in the platform that type may appear (RuleGroup.UPLOADS
+            fails the build anywhere else). A type a module names in its own public signatures belongs in
+            its own POM.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- A row record carries Bean Validation annotations and the engine runs the validator over it,
+             so this is compile scope rather than optional: a binding with no validator is a binding
+             whose constraints are silently not checked. -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+
+        <!--
+            Every query against this module's own two tables is a compile-time-checked QueryDSL
+            expression. This change introduces NO new SQL carve-out: the two that exist are
+            ru.ludwigandreas.ingest.bulk and ru.ludwigandreas.idempotency.sql, and NoSqlStringsTest in
+            this module's test suite fails the build if a third appears here.
+        -->
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-jpa</artifactId>
+            <classifier>jakarta</classifier>
+        </dependency>
+
+        <!-- The bound-row artifact a CONFIRM-mode action applies is newline-delimited JSON, so that
+             confirmation reads what validation showed the user rather than re-binding the workbook. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- Optional: schema delivered as a Liquibase changelog, applied only if the consumer uses
+             Liquibase and has not folded it into its own master history. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: submission, reject and apply metrics. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <properties>
+        <!--
+            The measurement tests, excluded from the default build.
+
+            Not because they are slow - they take seconds - but because a heap ratio measured in a JVM shared with
+            the other integration tests and instrumented by JaCoCo is not a reliable assertion. It passed alone and
+            failed in the full suite, which is a flaky test, and a flaky guarantee is worse than an honest tag: a
+            test that goes red for reasons unrelated to what it guards is one somebody eventually deletes, and the
+            guarantee goes with it.
+
+            The deterministic half of the same guarantee - that every row of a hundred-thousand-row workbook is read
+            and the last one is intact - is in LargeWorkbookHeapIT and runs on every build.
+
+            Run the measurement deliberately, in its own JVM, with a small heap so that the JVM itself fails if the
+            reader ever stops streaming:
+
+                mvn -pl :file-action-spring-boot-starter verify \
+                    -Dfile-action.test.excluded.groups= -Dit.test=LargeWorkbookHeapMeasurementIT \
+                    -DargLine="-Xmx256m"
+
+            A property rather than a literal, because a literal in the POM cannot be overridden from the command
+            line - which would make the exclusion permanent and the measurement unrunnable. Same arrangement, and
+            the same reasoning, as export-spring-boot-starter's load test.
+        -->
+        <file-action.test.excluded.groups>measurement</file-action.test.excluded.groups>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>com.querydsl</groupId>
+                            <artifactId>querydsl-apt</artifactId>
+                            <classifier>jakarta</classifier>
+                        </path>
+                        <path>
+                            <groupId>jakarta.persistence</groupId>
+                            <artifactId>jakarta.persistence-api</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <!--
+                Failsafe, for the reason file-ingest binds it: this module's integration suite starts a
+                container and generates a 25 MiB, 100,000-row workbook to assert the heap budget, which
+                is not something `mvn test` should do on every build of every module that depends on it.
+                Surefire's default includes never match `*IT.java`.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>${file-action.test.excluded.groups}</excludedGroups>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

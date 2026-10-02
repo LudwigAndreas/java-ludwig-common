@@ -136,6 +136,72 @@ ludwig:
   # bulkhead, so a slow notification service cannot consume the connections or the patience that
   # another dependency needs.
   # --- ludwig export ---------------------------------------------------------------------------
+  # The platform's one bucket client. This example uses the filesystem implementation, which is what makes
+  # the file-action module runnable without a bucket - object-storage ships both held to one contract by one
+  # test suite, so the filesystem one is a stand-in rather than a toy.
+  #
+  # The root must contain the prefixes ludwig.file-action.storage uses below: FilesystemObjectStore refuses
+  # a URI outside its root, which is correct - a store that silently reached outside it would not be a root -
+  # and the two being configured apart is the mistake it catches.
+  storage:
+    type: filesystem
+    filesystem:
+      root: ${FILE_ACTION_STORAGE_ROOT:/tmp/ludwig-catalog}
+
+  file-action:
+    # Same arrangement as export: the changelog ships inside the starter's jar and is included by this
+    # service's own master changelog, so the module must not also apply it as a second standalone
+    # SpringLiquibase.
+    liquibase:
+      enabled: false
+
+    # Where a submitted spreadsheet and the artifacts built from it live. No defaults exist for these, and
+    # deliberately: the only possible default is a local directory, which works on a laptop and silently
+    # writes a production deployment's uploads to a pod's ephemeral disk. The filesystem store is right for
+    # this example and wrong for a real deployment, which points these at a bucket.
+    storage:
+      uploads: file:///tmp/ludwig-catalog/file-action/uploads
+      artifacts: file:///tmp/ludwig-catalog/file-action/artifacts
+      retention: P7D
+
+    # This example ships no scanner, and says so out loud rather than leaving the requirement unmet. A real
+    # deployment supplies a FileScanner bean and deletes these two lines - at which point the default,
+    # `required`, means the application refuses to start if the bean ever goes away.
+    scanning:
+      mode: disabled
+
+    actions:
+      product-import:
+        # No default exists for this, because every candidate default is silently wrong for some domain.
+        # PER_ROW is right here: the rows of a product sheet are independent, and refusing four hundred
+        # products over one bad price is not what anybody uploading them wants.
+        commit-policy: PER_ROW
+
+        # The user sees what would happen and presses Confirm. For an action that creates catalogue records
+        # this is the only sensible mode: DIRECT would turn one wrong file into four hundred wrong products
+        # with no undo.
+        mode: CONFIRM
+
+        # Inline, because the ceiling below is well under ludwig.file-action.inline.max-rows and a person is
+        # waiting. An action sized larger than that ceiling does not start.
+        execution: INLINE
+        max-rows: 2000
+        max-size: 5MB
+
+        # The user gets their own sheet back with a Problems column, which is the form they can fix and
+        # re-upload as it stands.
+        error-report: ANNOTATED_WORKBOOK
+
+        # Checked through security-spring-boot-starter on every endpoint of the action, including the reads -
+        # a submission's envelope carries the filename and the row counts, and the rejects resource carries the
+        # contents of the user's own cells. An authority named while that starter is absent is a startup failure
+        # rather than an endpoint served unprotected.
+        #
+        # CATALOG_ADMIN rather than an invented name: this service's principals carry ROLE_CATALOG_ADMIN and
+        # ROLE_CATALOG_EDITOR, and an authority nothing grants is a 403 for everybody. The checker accepts the
+        # name with or without the ROLE_ prefix, which is the mistake every deployment makes once.
+        required-authority: CATALOG_ADMIN
+
   export:
     # The changelog ships inside the starter's jar and is included by this service's own master
     # changelog, so the module must not also apply it as a second, standalone SpringLiquibase.

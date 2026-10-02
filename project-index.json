@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-09-29T06:39:19.494714Z",
+    "generatedAt": "2026-10-02T17:52:04.838083Z",
     "revision": "1.1.0-SNAPSHOT",
-    "moduleCount": 30,
-    "commit": "d1e343cf63677bb52b0bc44bc395603347ad0070",
-    "commitShort": "d1e343c",
-    "branch": "develop",
+    "moduleCount": 31,
+    "commit": "66808f46245276c7328c689a1772baaef180723b",
+    "commitShort": "66808f4",
+    "branch": "feature/preference",
     "freshness": {
-      "pomSetSha": "8a9ad98573b7bc3e01f7717b1c90f5cca458acf4d6adc5e99b7ad24b898fef65",
-      "newestPom": "build/ludwig-service-parent/pom.xml",
-      "newestPomModified": "2026-09-29T06:33:05.802173Z"
+      "pomSetSha": "6327960242b17b53389b16372ab47edbfdf565bd151c2c64fea4b5e237641cd7",
+      "newestPom": "build/jacoco-aggregate/pom.xml",
+      "newestPomModified": "2026-10-02T17:52:04.458819Z"
     }
   },
   "modules": [
@@ -145,6 +145,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "file-ingest-spring-boot-starter",
           "scope": "compile"
         },
@@ -231,6 +235,10 @@
         },
         {
           "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -379,6 +387,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "file-ingest-spring-boot-starter",
           "scope": "compile"
         },
@@ -457,6 +469,10 @@
         }
       ],
       "inRepoDependents": [
+        {
+          "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile"
+        },
         {
           "artifactId": "messaging-spring-boot-starter",
           "scope": "compile"
@@ -748,6 +764,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "file-ingest-spring-boot-starter",
           "scope": "compile"
         }
@@ -852,6 +872,108 @@
       "readmeRu": "sources/file-ingest-spring-boot-starter/README.ru.md"
     },
     {
+      "name": "file-action-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/file-action-spring-boot-starter",
+      "artifactId": "file-action-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.fileaction",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "object-storage-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/file-action-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/file-action-changelog.xml"
+      ],
+      "i18nBundles": [
+        "sources/file-action-spring-boot-starter/src/main/resources/i18n/ludwig-file-action-messages.properties",
+        "sources/file-action-spring-boot-starter/src/main/resources/i18n/ludwig-file-action-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/file-action-spring-boot-starter/src/test/java/ru/ludwigandreas/fileaction/unit",
+        "integration": "sources/file-action-spring-boot-starter/src/test/java/ru/ludwigandreas/fileaction/integration",
+        "architecture": "sources/file-action-spring-boot-starter/src/test/java/ru/ludwigandreas/fileaction/architecture"
+      },
+      "testClasses": {
+        "surefire": 26,
+        "failsafe": 6
+      },
+      "pom": "sources/file-action-spring-boot-starter/pom.xml",
+      "readme": "sources/file-action-spring-boot-starter/README.md",
+      "readmeRu": "sources/file-action-spring-boot-starter/README.ru.md"
+    },
+    {
       "name": "outbox-spring-boot-starter",
       "dir": "sources",
       "path": "sources/outbox-spring-boot-starter",
@@ -899,6 +1021,10 @@
         },
         {
           "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1031,6 +1157,10 @@
         },
         {
           "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1205,6 +1335,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "file-ingest-spring-boot-starter",
           "scope": "compile"
         },
@@ -1259,8 +1393,8 @@
         "integration": "sources/web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/integration"
       },
       "testClasses": {
-        "surefire": 11,
-        "failsafe": 2
+        "surefire": 17,
+        "failsafe": 3
       },
       "pom": "sources/web-core-spring-boot-starter/pom.xml",
       "readme": "sources/web-core-spring-boot-starter/README.md",
@@ -1296,6 +1430,10 @@
       "inRepoDependents": [
         {
           "artifactId": "export-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1487,8 +1625,8 @@
         "architecture": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture"
       },
       "testClasses": {
-        "surefire": 12,
-        "failsafe": 2
+        "surefire": 14,
+        "failsafe": 3
       },
       "pom": "sources/user-settings-spring-boot-starter/pom.xml",
       "readme": "sources/user-settings-spring-boot-starter/README.md",
@@ -1508,6 +1646,10 @@
       "inRepoDependents": [
         {
           "artifactId": "crud-service-example",
+          "scope": "test"
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -1539,7 +1681,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 7,
+        "surefire": 9,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",
@@ -1572,6 +1714,10 @@
         },
         {
           "artifactId": "export-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -1658,6 +1804,10 @@
       "inRepoDependents": [
         {
           "artifactId": "crud-service-example",
+          "scope": "test"
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -1763,6 +1913,11 @@
           "optional": false
         },
         {
+          "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
           "artifactId": "identity-projection-spring-boot-starter",
           "scope": "compile",
           "optional": false
@@ -1820,8 +1975,8 @@
         "architecture": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/architecture"
       },
       "testClasses": {
-        "surefire": 3,
-        "failsafe": 2
+        "surefire": 4,
+        "failsafe": 3
       },
       "pom": "services/crud-service-example/pom.xml",
       "readme": "services/crud-service-example/README.md",
@@ -1989,6 +2144,11 @@
         },
         {
           "artifactId": "export-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "file-action-spring-boot-starter",
           "scope": "compile",
           "optional": false
         },

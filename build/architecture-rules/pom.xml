@@ -105,6 +105,18 @@
             <artifactId>jackson-databind</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!--
+            Test scope only, and only so that the bad.uploads fixture can name MultipartFile - the type
+            RuleGroup.UPLOADS has an opinion about. UploadRules itself names it as a string, for the same reason
+            the report writer is hand-rolled: a rules library that compiled against every framework it has an
+            opinion about would make every consuming service inherit all of them.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

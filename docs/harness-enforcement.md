@@ -46,6 +46,12 @@ statement that none does and why. **The second list is the backlog**, and it is 
 | Malformed Javadoc in a published library | `maven-javadoc-plugin` `-Xdoclint:all,-missing` under `-Pci` | **yes** — it found 20 real defects across 11 modules on first run, all fixed |
 | A container image referenced by tag alone, anywhere | `scripts/check_image_pins.sh`, run first by `scripts/gate.sh` | **yes** — exits 0 on the tree, exits 1 naming file and line when a digest is removed |
 | An API baseline that is unresolvable rather than absent | `scripts/check_api_baseline.sh`, run by `scripts/gate.sh` | **yes** — both branches exercised, including with a temporary tag and an unreachable repository |
+| No second upload path - `MultipartFile` outside `file-action-spring-boot-starter` | ArchUnit `RuleGroup.UPLOADS` / `noSecondUploadPath` | **yes** - `UploadRulesTest` asserts it names the offending fixture class and stays silent on the compliant package, in one run, and the full reactor stayed green when the rule was added |
+| A DOM workbook read (`XSSFWorkbook`, `HSSFWorkbook`, `WorkbookFactory`) in the file-action module | `PoiConfinementTest`, module-local | **yes** - verified red by temporarily adding a class calling `new XSSFWorkbook(in)`; 3 of 7 assertions failed naming the rule, and the probe was then deleted. Module-local rather than a platform `RuleGroup` because `export` legitimately DOM-reads an administrator-supplied template, so a platform-wide ban would be red on a module that is correct |
+| A user's file materialised into the heap (`readAllBytes`, `Files.readAllLines`, `MultipartFile.getBytes`, `IOUtils`) | `NoMaterialisationTest`, module-local | **yes** - verified red in the same run as above |
+| A third SQL carve-out appearing in `file-action-spring-boot-starter` | `NoSqlStringsTest`, module-local | **yes** - and its first version over-fired: `[^"]*` either side of the keyword spans newlines, so it matched the ordinary code between two unrelated string literals and failed on an entity's column declarations. Bounded to `[^"\n]*`; a rule that cries wolf is one that gets deleted |
+| The streaming XLSX reader stops bounding the heap | `LargeWorkbookHeapIT` (deterministic, every build) plus `LargeWorkbookHeapMeasurementIT` (`@Tag("measurement")`, excluded by the overridable `file-action.test.excluded.groups`) | **yes** - the measurement carries a case that performs a DOM read of the same file and asserts it retains at least five times more, so the budget is proven capable of failing. Tagged out of the default build because the ratio passed alone and failed in the full suite: a heap measurement in a JVM shared with other classes and instrumented by JaCoCo is not a reliable assertion, and a flaky guarantee is worse than an honest tag |
+| A file action with no declared `commit-policy`, a row-level policy on a `DocumentHandler`, an `INLINE` action above the inline ceiling, `scanning.mode: required` with no scanner, an authority with no security starter, or a problem code missing from a locale | `FileActionConfigurationValidator`, at startup | **yes** - `FileActionConfigurationValidatorTest` has one case per refusal, 16 in total, and `FileActionAutoConfigurationTest` asserts four of them fail a real `ApplicationContext`. Startup is the third enforcement point after ArchUnit and Checkstyle, and for a configuration fact it is the only one available |
 
 ### What the compatibility gate deliberately does not report
 
@@ -184,6 +190,40 @@ visible in a log rather than only in a surprised user.
 identical configuration.
 *What it would take:* nothing. It is a statement about the business, and no artifact a build can read
 contains it.
+
+**15. A `RowHandler` that is not idempotent per row.** A `DEFERRED` submission is claimed under a
+lease. If the pod dies after the transaction carrying rows 501-1000 committed but before the
+submission's progress was recorded, another instance resumes and re-applies those rows - so a handler
+that inserts unconditionally creates five hundred duplicate orders, once, on the day a node is
+drained. Nothing in bytecode can see whether a write is conditional on a natural key.
+*What it would take:* nothing mechanical. It is stated on `RowHandler.apply`, at the seam the author
+reads, and the module's README repeats it. An ArchUnit rule could at best forbid a bare `save` call
+in a handler, which would be wrong far more often than right.
+
+**16. A `DocumentHandler` that calls a partner service inside the apply transaction.** One
+transaction covers every row, so a partner call inside it holds a database connection for the
+partner's latency and exhausts the pool when the partner is slow - and if the transaction then rolls
+back, the partner has still been called. A bytecode rule cannot tell a partner call from any other
+method invocation.
+*What it would take:* nothing mechanical either. Stated on `DocumentHandler.apply`, with the
+`outbox-spring-boot-starter` alternative named there. A rule forbidding `rest-client` types inside a
+handler would be close, but a partner reached through a service bean of the author's own is
+indistinguishable from any other collaborator.
+
+**17. Whether a declared `commit-policy` is the *right* one for the domain.** The validator forces
+the declaration and refuses an action without one, which is the enforceable half. Whether
+`PER_ROW` is correct for an accounting import, or `ALL_OR_NOTHING` for a contact list, is a domain
+judgement - and both wrong answers present as applied business data rather than as a failure.
+*What it would take:* nothing. This is the `CachePurpose` situation exactly, and the module says so
+in the same words: it is the only mistake the module cannot detect for you.
+
+**18. Whether a deployment's `FileScanner` actually scans.** `scanning.mode` defaults to `required`
+and the application does not start without a bean, so a deployment cannot end up with no scanner by
+accident. A bean returning `ScanOutcome.safe(...)` unconditionally satisfies every rule here, and
+only a person reviewing it will notice.
+*What it would take:* nothing mechanical within this repository. An integration test in the
+consuming service that submits a known test signature - EICAR - and asserts the submission is
+`REJECTED` would catch it, and that belongs in the deployment rather than in the module.
 
 ## The shape of the gap
 

@@ -79,6 +79,17 @@
              are released together and must never be split across versions - poi-ooxml reaches into
              poi's internals and a mismatch surfaces as a NoSuchMethodError on the first write. -->
         <poi.version>5.4.1</poi.version>
+
+        <!--
+             Reading CSV, for file-action-spring-boot-starter. A lexer rather than a framework: quoted
+             fields containing the delimiter, embedded newlines inside quotes and doubled quotes are the
+             three things a hand-rolled split(",") gets wrong, and they arrive as a user's file rather
+             than as a test. Deliberately NOT accompanied by a new XLSX dependency: poi-ooxml above
+             already ships XSSFReader, ReadOnlySharedStringsTable and XSSFSheetXMLHandler, which are the
+             bounded-memory SAX path that module reads workbooks through, so a second XLSX library would
+             only add a second answer to "what does a malformed workbook do".
+        -->
+        <commons-csv.version>1.12.0</commons-csv.version>
         <!-- Converged, not chosen: POI 5.4.1 pulls 2.18.0, commons-compress 2.16.1 and Olingo's
              odata-server-core 2.13.0, so a service using both the export and the OData starters fails
              the enforcer's DependencyConvergence rule. 2.18.0 is the highest of the three and the one
@@ -161,6 +172,11 @@
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
                 <artifactId>web-core-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>file-action-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -411,6 +427,12 @@
                 <groupId>org.apache.poi</groupId>
                 <artifactId>poi-ooxml</artifactId>
                 <version>${poi.version}</version>
+            </dependency>
+            <!-- See the commons-csv.version note above. -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-csv</artifactId>
+                <version>${commons-csv.version}</version>
             </dependency>
             <!-- See the mockito.version note above: these three move together. -->
             <dependency>

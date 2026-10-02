@@ -120,6 +120,10 @@
         </dependency>
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
+            <artifactId>file-action-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
             <artifactId>hot-reload-spring-boot-starter</artifactId>
         </dependency>
         <dependency>
