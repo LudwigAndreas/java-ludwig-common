@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for file-action-spring-boot-starter. Changeset ids and author are namespaced
+      ("file-action-NNN", "ludwig-file-action") so they never collide with a consuming application's own
+      changesets in the shared DATABASECHANGELOG table - see FileActionLiquibaseAutoConfiguration, which
+      registers this changelog as an independent SpringLiquibase bean.
+
+      Two tables, and deliberately not three. There is no shared operation table - the
+      long-running-operations capability forbids one and gives the reasons - so this module keeps its own
+      submission row and maps it onto the envelope at its edge. And the rejects are a BOUNDED sample
+      rather than the full set: a hundred thousand rejects from one bad upload would be a hundred thousand
+      rows, and the full set already exists as an artifact in the object store, which is where something
+      that large belongs.
+    -->
+
+    <changeSet id="file-action-001-create-submission" author="ludwig-file-action">
+        <comment>
+            One user-submitted file and what became of it. The row is created before anything parses the
+            file, so that a submission which fails during the read is still a record of what was uploaded
+            and by whom - which is the question asked three days later when somebody disputes the result.
+        </comment>
+        <createTable tableName="file_action_submission">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_file_action_submission"/>
+            </column>
+            <!-- The configured action this submission belongs to. Part of every lookup, because the id
+                 alone would let a caller poll one action's submission through another's endpoint. -->
+            <column name="action" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- The stored object, as a full s3:// or file:// URI rather than a bucket and a key: ObjectUri
+                 is the one place that form is parsed, and splitting it here would be a second place. -->
+            <column name="object_uri" type="varchar(1024)">
+                <constraints nullable="false"/>
+            </column>
+            <!--
+              The content hash, which is also the idempotency key. Indexed and unique per action and
+              submitter, because a user double-clicking the drop zone is the normal case: without the
+              constraint the second request creates a second submission and the orders are created twice.
+            -->
+            <!--
+              varchar, not char(64), even though a SHA-256 hex digest is always exactly 64 characters. Postgres
+              implements char(n) as bpchar, which pads and which Hibernate's schema validation reports as a type
+              mismatch against the entity's String - so a consuming service with ddl-auto=validate refuses to
+              start. crud-service-example found that; the module's own tests did not, because they do not validate
+              the schema against the entities.
+            -->
+            <column name="content_sha256" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="size_bytes" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <!-- What the client said it was sending. Kept for the message and the audit record, and
+                 deliberately never used to choose a parser - see FormatSniffer. -->
+            <column name="declared_filename" type="varchar(512)"/>
+            <column name="declared_content_type" type="varchar(255)"/>
+            <!-- What the content actually turned out to be. -->
+            <column name="source_format" type="varchar(16)"/>
+            <column name="sheet" type="varchar(255)"/>
+            <!-- Who uploaded it. A subject string rather than a foreign key: identity is owned by
+                 identity-provider-service and a foreign key here would be a copy of it that goes stale. -->
+            <column name="submitted_by" type="varchar(255)"/>
+            <column name="submitted_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="started_at" type="timestamp with time zone"/>
+            <column name="finished_at" type="timestamp with time zone"/>
+            <!--
+              When a VALIDATED submission stops being confirmable, and when a terminal one's stored bytes
+              become collectable. One column for both because they are the same question - "after this
+              moment, this row's artifacts are gone" - and two columns would need a rule about which wins.
+            -->
+            <column name="expires_at" type="timestamp with time zone"/>
+            <!-- The caller's locale and zone at submission, so that a reject report produced later by a
+                 worker with no request renders in the language the person who uploaded it reads. -->
+            <column name="locale" type="varchar(35)"/>
+            <column name="zone" type="varchar(64)"/>
+            <column name="correlation_id" type="varchar(128)"/>
+            <!-- Counts, which are what the envelope's progress and the caller's summary are built from. -->
+            <column name="rows_read" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="rows_applied" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="rows_rejected" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="rows_skipped" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Why a REJECTED submission was refused: a message code from FileActionProblemCodes, resolved
+                 against the bundle when it is rendered. Never a formatted message - a row read back in a
+                 different locale from the one that wrote it must still render correctly. -->
+            <column name="failure_code" type="varchar(128)"/>
+            <column name="failure_args" type="text"/>
+            <!-- The bound-row artifact a CONFIRM-mode submission applies, and the reject report. Both are
+                 object URIs; both are null until there is something there. -->
+            <column name="bound_rows_uri" type="varchar(1024)"/>
+            <column name="error_report_uri" type="varchar(1024)"/>
+            <!--
+              The lease a DEFERRED submission is claimed under. Exactly the shape job-core's SkipLockedClaim
+              expects: a holder and an expiry, so that a pod dying mid-apply releases the submission to
+              another instance rather than wedging it until somebody notices.
+            -->
+            <column name="locked_by" type="varchar(255)"/>
+            <column name="lease_expires_at" type="timestamp with time zone"/>
+            <column name="attempts" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Cooperative cancellation: a flag the running apply checks, not an interrupt. A cancel
+                 endpoint answers 202 because of this column - the stop is requested, not achieved. -->
+            <column name="cancellation_requested" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone"/>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!--
+          The dedup constraint. Per action and per submitter, not global: two people legitimately uploading
+          the same price list are two submissions, and the same person uploading the same file to two
+          different actions is two submissions as well. Making it global would reject both.
+        -->
+        <createIndex tableName="file_action_submission" indexName="ux_file_action_submission_content"
+                     unique="true">
+            <column name="action"/>
+            <column name="content_sha256"/>
+            <column name="submitted_by"/>
+        </createIndex>
+
+        <!-- The claim query's index: the deferred worker looks for submissions of a given state whose lease
+             has expired, oldest first. Without this it is a sequential scan on every tick. -->
+        <createIndex tableName="file_action_submission" indexName="ix_file_action_submission_claim">
+            <column name="state"/>
+            <column name="lease_expires_at"/>
+            <column name="submitted_at"/>
+        </createIndex>
+
+        <!-- The retention job's index. -->
+        <createIndex tableName="file_action_submission" indexName="ix_file_action_submission_expiry">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="file-action-002-create-row-reject" author="ludwig-file-action">
+        <comment>
+            A bounded sample of the rows that were refused, for the paged rejects endpoint. Bounded because
+            the full set is an artifact in the object store: a ten-thousand-reject upload would otherwise put
+            ten thousand rows in here, on a table nobody queries except to show the first page of them.
+        </comment>
+        <createTable tableName="file_action_row_reject">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_file_action_row_reject"/>
+            </column>
+            <column name="submission_id" type="uuid">
+                <constraints nullable="false"
+                             foreignKeyName="fk_file_action_row_reject_submission"
+                             references="file_action_submission(id)"
+                             deleteCascade="true"/>
+            </column>
+            <column name="sheet" type="varchar(255)"/>
+            <!-- The row number as the spreadsheet displays it, 1-based and including the header. The
+                 off-by-one between this and a 0-based data-row ordinal is the single most common complaint
+                 about an import error report, which is why the column says which one it is. -->
+            <column name="displayed_row" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <!-- The column's header name as the binding declares it, never an index: an index is wrong the
+                 moment somebody inserts a column, and it is unactionable to a user either way. -->
+            <column name="column_header" type="varchar(255)"/>
+            <column name="code" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- The message arguments, newline-separated. Not a formatted message, for the same reason the
+                 submission's failure_code is not: a reject is rendered when it is read, in the reader's
+                 locale, which may not be the locale that produced it. -->
+            <column name="args" type="text"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="file_action_row_reject" indexName="ix_file_action_row_reject_submission">
+            <column name="submission_id"/>
+            <column name="displayed_row"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

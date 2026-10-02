@@ -44,6 +44,7 @@
     <module>sources/export-spring-boot-starter</module>
     <module>sources/object-storage-spring-boot-starter</module>
     <module>sources/file-ingest-spring-boot-starter</module>
+    <module>sources/file-action-spring-boot-starter</module>
     <module>sources/outbox-spring-boot-starter</module>
     <module>sources/reconciliation-spring-boot-starter</module>
     <module>sources/security-spring-boot-starter</module>

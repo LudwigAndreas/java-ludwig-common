@@ -23,6 +23,7 @@ top of them looks like.
 | Reliable events | Every write records its event in the transactional outbox in the same transaction |
 | Resource-level access | `@PreAuthorize` per endpoint; roles come from the local projection of the OIDC user stream, never from token claims |
 | Data-level access | A caller's scope is ANDed into the search query and re-checked on every load by id - one `DataScopeMapping` bean is the only security code this service writes |
+| A user-submitted file performing an action | One `RowBinding`, one `RowHandler` and a block of YAML; the file-action starter owns the upload edge, the bounded spreadsheet reader, the confirm step, the reject report and the operation envelope |
 
 ## Architecture test
 
@@ -204,6 +205,66 @@ localized `title`/`detail`, so clients can branch on the code and show the text.
 ordering key per product (a product's own events stay in order) and an idempotency key of
 `id:eventType:version` (a retried transaction re-uses the row instead of emitting the change twice).
 Routing, dispatch, retry/backoff and dead-lettering are the outbox module's job - see its README.
+
+## Importing a spreadsheet
+
+A user drags a product sheet into the browser and the products are created. The whole of what this
+service writes for it is a row record, a binding and a handler -
+`service/fileaction/ProductImportHandler.java` - plus the `ludwig.file-action.actions.product-import`
+block in `application.yml`. There is no controller, no multipart handling, no error-report code and no
+polling endpoint, because those belong to
+[`file-action-spring-boot-starter`](../../sources/file-action-spring-boot-starter).
+
+```
+POST /api/v1/file-actions/product-import   (multipart, CATALOG_ADMIN)
+   -> 202 + Operation-Location, state VALIDATED, rowsRead 400, rowsApplied 0
+POST /api/v1/file-actions/product-import/{id}/confirm
+   -> 200, state APPLIED, rowsApplied 398, rowsRejected 2
+GET  /api/v1/file-actions/product-import/{id}/rejects
+   -> row 14, column SKU, "A product with SKU A-7 already exists..."
+GET  /api/v1/file-actions/product-import/{id}/error-report
+   -> the submitted workbook with a Problems column
+GET  /api/v1/file-actions/product-import/template
+   -> a blank workbook whose headings the reader accepts
+```
+
+Three things about this action are worth reading the handler for, because each is a decision a real
+import has to make and none of them is obvious.
+
+**It writes through `ProductService`, not into a table of its own.** An import is a different *way in*
+to an action the service already performs, not a second implementation of it - so the products it
+creates get the same validation, the same outbox event and the same audit trail as one created through
+the REST API. There is consequently no new Liquibase changeset for this action.
+
+**It is idempotent per row, deliberately.** `RowHandler.apply`'s javadoc states the rule that nothing
+can check: a deferred submission is claimed under a lease, so a pod dying after a batch committed but
+before progress was recorded means another instance re-applies that batch. The handler looks the SKU up
+first and *skips* a row whose product already exists, so applying a row twice applies it once. A handler
+calling `create` unconditionally would create duplicates on the day a node is drained, with the build
+green.
+
+**A SKU already in the catalogue is a skip; the same SKU twice in one file is a reject.** The first is
+not a mistake the user has to fix - and counting it as a reject would push a re-applied submission over
+its reject threshold. The second is two rows claiming to be one product, and only the person who made
+the sheet knows which is right.
+
+The action is `CONFIRM` mode and `PER_ROW`, and both are choices rather than defaults.
+`commit-policy` has no default at all - the module refuses to start an action without one, because
+`PER_ROW` would silently apply two thirds of a journal entry and `ALL_OR_NOTHING` would refuse four
+hundred products over one typo, and which of those is wrong depends on the domain. `CONFIRM` is right
+for an action that creates catalogue records: `DIRECT` would turn one wrong file into four hundred wrong
+products with no undo.
+
+`required-authority: CATALOG_ADMIN` is checked on **every** endpoint of the action, including the reads -
+a submission's envelope carries the filename and the row counts, and the rejects resource carries the
+contents of the user's own cells.
+
+`ProductImportIntegrationTest` exercises all of it against a real multipart request, a real workbook and
+real rows in `catalog_product`. It is the reason the starter ships a reference consumer at all: four
+defects that no test inside the module could reach were found by this service standing the module up -
+a `char(64)` column Hibernate's schema validation rejected, an unqualified `Clock` bean that collided
+with `rest-client`'s, an ambiguous `TaskScheduler`, and a `required-authority` that was configured,
+documented and never actually checked.
 
 ## Security: two layers, two places
 

@@ -101,6 +101,16 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>export-spring-boot-starter</artifactId>
         </dependency>
+
+        <!--
+            The inbound counterpart of export: a user drops a spreadsheet and products are created. Wired here for
+            the reason the export reference report is - a starter that claims "out of the box" with no working
+            consumer is one whose first real consumer discovers the gaps.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>file-action-spring-boot-starter</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>

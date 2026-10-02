@@ -73,6 +73,8 @@
     <file url="file://$PROJECT_DIR$/sources/db-core/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/sources/export-spring-boot-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/sources/export-spring-boot-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/sources/file-action-spring-boot-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/sources/file-action-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/sources/file-ingest-spring-boot-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/sources/file-ingest-spring-boot-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/sources/hot-reload-spring-boot-starter/src/main/java" charset="UTF-8" />

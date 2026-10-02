@@ -36,7 +36,8 @@ public final class BuiltInRuleSets {
             new AuditRules(),
             new OperationVocabularyRules(),
             new CachingRules(),
-            new PresentationRules());
+            new PresentationRules(),
+            new UploadRules());
 
     private BuiltInRuleSets() {
     }

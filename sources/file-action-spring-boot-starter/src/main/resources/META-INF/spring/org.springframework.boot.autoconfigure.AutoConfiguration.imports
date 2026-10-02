@@ -1,0 +1,3 @@
+ru.ludwigandreas.fileaction.config.FileActionAutoConfiguration
+ru.ludwigandreas.fileaction.config.FileActionPersistenceAutoConfiguration
+ru.ludwigandreas.fileaction.config.FileActionLiquibaseAutoConfiguration

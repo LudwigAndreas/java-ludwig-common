@@ -127,6 +127,15 @@ public enum RuleGroup {
      */
     PRESENTATION("presentation", true),
 
+    /**
+     * There is one way a user-submitted file reaches the platform, and nobody writes a second one.
+     *
+     * <p>On by default, and vacuous for a module with no upload endpoint - it then has no
+     * {@code MultipartFile} to find. See {@link ru.ludwigandreas.archrules.rules.UploadRules} for what the
+     * rule covers and the three things it deliberately cannot check.
+     */
+    UPLOADS("uploads", true),
+
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);
 

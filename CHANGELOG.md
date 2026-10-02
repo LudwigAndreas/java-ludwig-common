@@ -21,6 +21,31 @@ either.
 
 ### Added
 
+- **`file-action-spring-boot-starter`: the platform's one path for a user-submitted file that performs a
+  business action.** A person drags a spreadsheet in and orders are created. A service writes a typed
+  `RowBinding`, one of two sealed handler shapes and a block of YAML; the module owns the upload edge, the
+  size ceiling enforced while the body is read, magic-byte format detection, storage before parsing, the
+  content-hash idempotency claim, the scanner seam, the bounded-memory spreadsheet reader, the
+  `UPLOADED/VALIDATED/APPLIED` lifecycle on `web-core`'s operation envelope, the commit policy, the paged
+  row rejects and downloadable annotated workbook, a generated template, deferred execution under a lease,
+  retention and audit. Reading an untrusted XLSX goes through POI's `XSSFReader` SAX path only, under
+  compression-ratio, entry-count and inflation ceilings decided from the ZIP directory before any XML is
+  parsed; `.xls` is refused, because `HSSFWorkbook` has no streaming mode and supporting it would make the
+  heap a function of a user-supplied file. Sized for an interactive upload - 25 MiB and 100,000 rows by
+  default - and a larger file is refused with a message naming `file-ingest-spring-boot-starter`.
+- **Two declarations a deployment must make for itself.** `commit-policy` has no default, because
+  `PER_ROW` would silently apply two thirds of a journal entry and `ALL_OR_NOTHING` would refuse four
+  hundred contacts over one mistyped address, and which is wrong depends on the domain; an action without
+  one does not start. `ludwig.file-action.scanning.mode` defaults to `required`, so an application with no
+  `FileScanner` bean does not start either - having no scanning is a choice to be made out loud rather than
+  a gap nobody notices.
+- **`RuleGroup.UPLOADS` in `architecture-rules`.** `MultipartFile` may appear only in
+  `file-action-spring-boot-starter`. Before this change there was not one in the repository, and the first
+  service to need an upload would have written the predictable mistakes: no ceiling before the body is
+  read, `getBytes()`, a DOM workbook read, and a 400 carrying three thousand row errors.
+- **A working `product-import` in `crud-service-example`.** A product sheet becomes products through
+  `ProductService` - an import is a different way in to an action the service already performs, not a
+  second implementation with a table of its own.
 - **One caller-preference contract in `web-core`.** `ru.ludwigandreas.webcore.preference` resolves the
   caller's locale and zone from their stored setting, then the request's headers, then configuration,
   and publishes both into `LocaleContextHolder`. A mapper reaches it by naming
