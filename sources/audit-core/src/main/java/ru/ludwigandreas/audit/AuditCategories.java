@@ -60,6 +60,18 @@ public final class AuditCategories {
     /** The audit subsystem's own events, which is how a purge is itself accountable. */
     public static final String AUDIT = "audit";
 
+    /**
+     * Long-lived credential lifecycle: a personal access token issued, rotated, revoked, expired or purged,
+     * and the security signals around its use.
+     *
+     * <p>Distinct from {@link #ACCESS}, which records authorization <em>decisions</em>. This records what
+     * happened to a <em>credential</em>, and the two answer different questions: "was alice allowed to do
+     * this" versus "when did that token come into existence and who asked for it". A revoked token presented
+     * during an incident is a fact about the credential; the request it was refused on is a fact about
+     * access, and an investigation normally needs to join them rather than find them merged.
+     */
+    public static final String CREDENTIAL = "credential";
+
     private AuditCategories() {
     }
 }

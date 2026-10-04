@@ -345,6 +345,47 @@
         </module>
 
         <!--
+            No broken digest algorithm is named anywhere in this platform.
+
+            Written for the personal-access-token work, where the digest IS the stored credential: a
+            PAT row holds sha256(secret) and nothing else, so the algorithm named at that call site is
+            the entire difference between a credential store and a list of credentials. But the rule is
+            deliberately platform-wide rather than scoped to that module, for two reasons. Checkstyle
+            has no way to scope a RegexpSinglelineJava to one module's call sites without a suppression
+            file listing every other module, which is a worse artifact than the rule. And the property
+            is not specific to PATs: MD5 and SHA-1 both have practical collisions, and there is no
+            remaining use in this repository for which either is the right answer. A survey at the time
+            this rule was added found zero occurrences in main or test sources across all 29 modules -
+            every existing digest call site is already SHA-256 - so the rule costs nothing today and
+            exists to keep it that way.
+
+            Why Checkstyle and not ArchUnit, since architecture-rules owns structure: the algorithm is
+            the VALUE of a string literal argument, and ArchUnit reads compiled bytecode where that is a
+            constant-pool entry its model does not expose. Exactly the division SecondRedactionMask and
+            SecondDeadLetterSuffix already follow. The structural half of the credential work -
+            no second credential store, no second seam, the fenced reveal accessor, the single
+            attenuation path, the carrier containment - is architecture-rules' RuleGroup.CREDENTIALS.
+
+            The pattern matches the algorithm name where an algorithm is being SELECTED - the argument
+            to a getInstance call, or a constant declared to hold one - and not every occurrence of the
+            string. A test asserting that a legacy fixture's `"MD5"` marker is rejected is a test of
+            this rule, not a violation of it; `MessageDigest.getInstance("MD5")` is the thing.
+
+            HMAC-SHA1 is deliberately NOT matched. It is not this digest: HMAC's security does not rest
+            on the collision resistance of its hash, HMAC-SHA1 has no practical break, and it is still
+            required by several external APIs - AWS SigV2 signing among them - where refusing it would
+            mean refusing to integrate rather than improving anything.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="WeakDigestAlgorithm"/>
+            <property name="format"
+                      value="(?i)getInstance\s*\(\s*&quot;(MD2|MD4|MD5|SHA-?0|SHA-?1)&quot;|(?i)\bstatic\s+final\s+String\s+\w*(DIGEST|HASH|ALGORITHM)\w*\s*=\s*&quot;(MD2|MD4|MD5|SHA-?0|SHA-?1)&quot;"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Do not name a broken digest algorithm. Use SHA-256. MD5 and SHA-1 both have practical collisions, and where a digest IS the stored credential - as it is for a personal access token, whose row holds sha256(secret) and nothing else - the algorithm named here is the whole difference between a credential store and a list of credentials. A deliberate interoperability exception uses the id form: // SUPPRESS CHECKSTYLE ID WeakDigestAlgorithm - &lt;reason&gt;."/>
+        </module>
+
+        <!--
             A deprecation that does not say WHEN it happened or WHETHER the element is going
             away is a deprecation nobody can plan around: a consumer reading
             `@Deprecated` alone cannot tell whether they have one release or five, and the

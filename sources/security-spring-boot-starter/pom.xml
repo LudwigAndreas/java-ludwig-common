@@ -55,6 +55,25 @@
             the stack: the JPA sink, the outbox sink and the retention purge live in
             audit-spring-boot-starter, which needs db-core and which this module must not take.
         -->
+        <!--
+            pat-core, for the one definition of the ludwig_pat claim and the attenuation set.
+
+            NOT optional, and the direction matters. This module reads the claim; pat-spring-boot-starter
+            writes it and depends on this module in turn. pat-core has zero in-repo dependencies precisely
+            so this edge can exist without a reactor cycle - the same property, for the same reason, as
+            cache-spring-boot-starter's.
+
+            Optional would defeat the point. If the claim definition could be absent at runtime, the
+            converter would have to fall back to treating a token-backed assertion as an ordinary one - which
+            resolves the owner's authorities with NO attenuation applied, a silent privilege escalation
+            produced by a missing jar.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>pat-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>audit-core</artifactId>

@@ -136,6 +136,29 @@ public enum RuleGroup {
      */
     UPLOADS("uploads", true),
 
+    /**
+     * There is one way a long-lived credential is stored, read and attenuated, and nobody writes a second one.
+     *
+     * <p>On by default, and vacuous for a module that issues no credential - it then has no secret carrier and
+     * no credential store to find. See {@link ru.ludwigandreas.archrules.rules.CredentialRules} for the four
+     * rules, for the two things in this area that deliberately cannot be checked, and for the check that is
+     * deliberately <em>deferred</em> rather than written as a rule whose matching set is empty.
+     *
+     * <h2>The distinction this group turns on</h2>
+     *
+     * <p>A second credential <b>format</b> is legitimate and expected: a deploy key, a signed webhook secret
+     * and a personal access token are different credentials with different lifetimes, different issuance
+     * authorities and different revocation stories, and collapsing them would be the mistake rather than the
+     * fix. What must not exist twice is the <b>mechanism</b> - the store a credential digest lives in, the
+     * seam a deployment implements to supply its own, and above all the code path that turns a credential
+     * into authority.
+     *
+     * <p>The group is therefore named for the concern and not for the feature. A future deploy-key module
+     * declares its own format in its own package and reuses this mechanism; it does not get its own rule
+     * group, and it does not get its own answer to "how does a credential become a principal".
+     */
+    CREDENTIALS("credentials", true),
+
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);
 

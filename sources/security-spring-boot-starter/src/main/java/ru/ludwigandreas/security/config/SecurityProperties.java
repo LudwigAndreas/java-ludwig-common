@@ -40,6 +40,11 @@ public class SecurityProperties {
     private final Audit audit = new Audit();
     private final Metrics metrics = new Metrics();
     private final SystemPrincipal systemPrincipal = new SystemPrincipal();
+    private final Pat pat = new Pat();
+
+    public Pat getPat() {
+        return pat;
+    }
 
     public enum DefaultAccess {
         /** Anything without a matching policy is denied. The only safe default. */
@@ -446,6 +451,98 @@ public class SecurityProperties {
 
         public void setLogGrants(boolean logGrants) {
             this.logGrants = logGrants;
+        }
+    }
+
+    /**
+     * How long a revoked personal access token can still work, declared so it can be refused.
+     *
+     * <p>Every value here is a term in one of two sums, and the sums are the point. Nobody multiplies out
+     * three independently configured TTLs in production, so the module does it at startup, logs both totals
+     * and refuses to start above the ceiling - the same mechanism and the same reasoning as the existing
+     * audience check, whose javadoc says a defect that cannot be discovered by testing is worth refusing to
+     * start over.
+     *
+     * <pre>
+     *   request/response callers:  assertion lifetime + edge cache lifetime + authority cache TTL
+     *   long-lived connections:    revalidation interval + authority cache TTL
+     * </pre>
+     *
+     * <p><b>Both are computed.</b> Computing only the first would be worse than computing neither: it would
+     * log a correct-looking number while being false for exactly the callers whose window is largest.
+     */
+    public static class Pat {
+
+        /**
+         * How long an exchanged assertion is valid. Set to match what the issuer actually mints - this
+         * module cannot read the issuer's configuration, so a wrong value here makes the computed window
+         * wrong in the dangerous direction.
+         */
+        private java.time.Duration assertionLifetime = java.time.Duration.ofMinutes(5);
+
+        /**
+         * How long the edge may reuse a cached assertion for one token and audience.
+         *
+         * <p>Declared here although the edge is not in this repository and no build can check it, because
+         * leaving it out of the sum would mean the computed window silently excludes the largest term for a
+         * correctly configured edge. See the module README for the edge's obligations.
+         */
+        private java.time.Duration edgeCacheLifetime = java.time.Duration.ofMinutes(5);
+
+        /**
+         * How often a service holding a long-lived connection open must re-derive the caller's authority.
+         *
+         * <p>Ships before any transport that needs it, so the knob exists before the first streaming
+         * transport does. There is deliberately no ArchUnit rule for the requirement: nothing in this
+         * repository holds a connection open, so a rule would pass vacuously and read as coverage. The
+         * enforcing test is a recorded obligation on the change that adds the first transport.
+         */
+        private java.time.Duration revalidationInterval = java.time.Duration.ofMinutes(1);
+
+        /** The ceiling. Startup fails when either composition exceeds it. */
+        private java.time.Duration maxRevocationWindow = java.time.Duration.ofMinutes(15);
+
+        /** Whether to compute, log and enforce the window at all. Off only for a test that wants it off. */
+        private boolean validateRevocationWindow = true;
+
+        public java.time.Duration getAssertionLifetime() {
+            return assertionLifetime;
+        }
+
+        public void setAssertionLifetime(java.time.Duration assertionLifetime) {
+            this.assertionLifetime = assertionLifetime;
+        }
+
+        public java.time.Duration getEdgeCacheLifetime() {
+            return edgeCacheLifetime;
+        }
+
+        public void setEdgeCacheLifetime(java.time.Duration edgeCacheLifetime) {
+            this.edgeCacheLifetime = edgeCacheLifetime;
+        }
+
+        public java.time.Duration getRevalidationInterval() {
+            return revalidationInterval;
+        }
+
+        public void setRevalidationInterval(java.time.Duration revalidationInterval) {
+            this.revalidationInterval = revalidationInterval;
+        }
+
+        public java.time.Duration getMaxRevocationWindow() {
+            return maxRevocationWindow;
+        }
+
+        public void setMaxRevocationWindow(java.time.Duration maxRevocationWindow) {
+            this.maxRevocationWindow = maxRevocationWindow;
+        }
+
+        public boolean isValidateRevocationWindow() {
+            return validateRevocationWindow;
+        }
+
+        public void setValidateRevocationWindow(boolean validateRevocationWindow) {
+            this.validateRevocationWindow = validateRevocationWindow;
         }
     }
 

@@ -113,6 +113,26 @@ public class ResourceServerAutoConfiguration {
                 environment.getProperty(ISSUER_URI_PROPERTY), audiences);
     }
 
+    /**
+     * Computes, logs and bounds how long a revoked personal access token keeps working.
+     *
+     * <p>A bean rather than a call inside another bean's factory method, so that it runs during context
+     * refresh and fails startup, in the same way and for the same reason as
+     * {@link #ludwigAudienceValidator}. A warning here would be read once and then scroll away; what this
+     * guards against is a window nobody computed, and nobody reads a log line about a number they never
+     * thought to ask for.
+     */
+    @Bean
+    public RevocationWindowValidator ludwigRevocationWindowValidator(
+            SecurityProperties properties,
+            ObjectProvider<ru.ludwigandreas.cache.config.CacheSettingsResolver> cacheSettings) {
+        RevocationWindowValidator validator = new RevocationWindowValidator(
+                properties.getPat(),
+                RevocationWindowValidator.authorityCacheTtl(cacheSettings.getIfAvailable()));
+        validator.validate();
+        return validator;
+    }
+
     @Bean
     @ConditionalOnMissingBean(SecurityFilterChain.class)
     public SecurityFilterChain ludwigSecurityFilterChain(

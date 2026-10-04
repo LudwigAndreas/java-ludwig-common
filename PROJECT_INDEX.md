@@ -5,10 +5,10 @@
 | | |
 |---|---|
 | revision | `1.1.0-SNAPSHOT` |
-| modules | 31 |
-| commit | `66808f4` (`feature/preference`) |
-| generated | 2026-10-02T17:52:04.838083Z |
-| **freshness** | POM-set SHA `6327960242b17b53` · newest POM `build/jacoco-aggregate/pom.xml` @ 2026-10-02T17:52:04.458819Z |
+| modules | 33 |
+| commit | `b5e0c8c` (`feature/file-input`) |
+| generated | 2026-10-04T14:17:53.602225Z |
+| **freshness** | POM-set SHA `014d3295e62ce2ec` · newest POM `build/ludwig-bom/pom.xml` @ 2026-10-04T14:17:53.420865Z |
 
 The freshness row is how you tell this index is stale: `scripts/manifest.sh stale` recomputes the POM-set SHA and exits non-zero if it differs. It is content-based, not timestamp-based, so a checkout or a branch switch does not report a false stale.
 
@@ -61,23 +61,24 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 |---|---|---|---|---|---|
 | **ludwig-service-parent** | `spring-boot-starter-parent` | `—` |  | — | — |
 
-### library (4)
+### library (5)
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
-| **audit-core** | `common` | `ru.ludwigandreas.audit` | none | — | `audit-spring-boot-starter`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `hot-reload-spring-boot-starter`, `idempotency-spring-boot-starter`, `messaging-spring-boot-starter`, `observability-spring-boot-starter`, `outbox-spring-boot-starter`, `reconciliation-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter` |
-| **db-core** | `common` | `ru.ludwigandreas.db.core` | none | `test-support` (test), `web-core-spring-boot-starter` | `audit-spring-boot-starter`, `crud-service-example`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `identity-projection-spring-boot-starter`, `notification-service`, `outbox-spring-boot-starter`, `reconciliation-spring-boot-starter`, `user-settings-spring-boot-starter` |
+| **audit-core** | `common` | `ru.ludwigandreas.audit` | none | — | `audit-spring-boot-starter`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `hot-reload-spring-boot-starter`, `idempotency-spring-boot-starter`, `messaging-spring-boot-starter`, `observability-spring-boot-starter`, `outbox-spring-boot-starter`, `pat-spring-boot-starter`, `reconciliation-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter` |
+| **db-core** | `common` | `ru.ludwigandreas.db.core` | none | `test-support` (test), `web-core-spring-boot-starter` | `audit-spring-boot-starter`, `crud-service-example`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `identity-projection-spring-boot-starter`, `notification-service`, `outbox-spring-boot-starter`, `pat-spring-boot-starter`, `reconciliation-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **job-core** | `common` | `ru.ludwigandreas.job.core` | none | `test-support` (test) | `audit-spring-boot-starter`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `notification-service`, `outbox-spring-boot-starter`, `reconciliation-spring-boot-starter` |
+| **pat-core** | `common` | `ru.ludwigandreas.pat` | none | — | `pat-spring-boot-starter`, `security-spring-boot-starter` |
 | **jira-client** | `common` | `ru.ludwigandreas.jira` | none | — | — |
 
-### starter (18)
+### starter (19)
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
 | **odata-filter-spring-boot-starter** | `common` | `ru.ludwigandreas.odatafilter` | rest | `test-support` (test), `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `notification-service`, `user-settings-spring-boot-starter` |
 | **audit-spring-boot-starter** | `common` | `ru.ludwigandreas.audit.store` | rest | `audit-core`, `db-core`, `job-core`, `outbox-spring-boot-starter`, `test-support` (test), `web-core-spring-boot-starter` | `user-settings-spring-boot-starter` |
 | **idempotency-spring-boot-starter** | `common` | `ru.ludwigandreas.idempotency` | rest | `audit-core`, `db-core`, `job-core`, `test-support` (test), `web-core-spring-boot-starter` | `file-action-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service` |
-| **cache-spring-boot-starter** | `common` | `ru.ludwigandreas.cache` | none | `test-support` (test) | `security-spring-boot-starter`, `user-settings-spring-boot-starter` |
+| **cache-spring-boot-starter** | `common` | `ru.ludwigandreas.cache` | none | `test-support` (test) | `pat-spring-boot-starter`, `security-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **messaging-spring-boot-starter** | `common` | `ru.ludwigandreas.messaging` | rest | `architecture-rules` (test), `audit-core`, `idempotency-spring-boot-starter`, `test-support` (test), `web-core-spring-boot-starter` | `identity-projection-spring-boot-starter`, `notification-service`, `outbox-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **export-spring-boot-starter** | `common` | `ru.ludwigandreas.export` | rest | `audit-core`, `db-core`, `hot-reload-spring-boot-starter`, `job-core`, `object-storage-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter`, `test-support` (test), `web-core-spring-boot-starter` | `crud-service-example` |
 | **object-storage-spring-boot-starter** | `common` | `ru.ludwigandreas.storage` | rest | `architecture-rules` (test), `test-support` (test), `web-core-spring-boot-starter` | `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter` |
@@ -85,10 +86,11 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 | **file-action-spring-boot-starter** | `common` | `ru.ludwigandreas.fileaction` | rest | `architecture-rules` (test), `audit-core`, `db-core`, `idempotency-spring-boot-starter`, `job-core`, `object-storage-spring-boot-starter`, `observability-spring-boot-starter`, `outbox-spring-boot-starter`, `security-spring-boot-starter`, `test-support` (test), `test-support-security` (test), `web-core-spring-boot-starter` | `crud-service-example` |
 | **outbox-spring-boot-starter** | `common` | `ru.ludwigandreas.outbox` | none | `audit-core`, `db-core`, `job-core`, `messaging-spring-boot-starter`, `test-support` (test) | `audit-spring-boot-starter`, `crud-service-example`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `notification-service`, `user-settings-spring-boot-starter` |
 | **reconciliation-spring-boot-starter** | `common` | `ru.ludwigandreas.reconciliation` | actuator | `audit-core`, `db-core`, `job-core`, `observability-spring-boot-starter`, `rest-client-spring-boot-starter`, `test-support` (test) | — |
-| **security-spring-boot-starter** | `common` | `ru.ludwigandreas.security` | none | `audit-core`, `cache-spring-boot-starter`, `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `identity-projection-spring-boot-starter`, `notification-service`, `test-support-security`, `user-settings-spring-boot-starter` |
+| **security-spring-boot-starter** | `common` | `ru.ludwigandreas.security` | none | `audit-core`, `cache-spring-boot-starter`, `pat-core`, `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `identity-projection-spring-boot-starter`, `notification-service`, `pat-spring-boot-starter`, `test-support-security`, `user-settings-spring-boot-starter` |
+| **pat-spring-boot-starter** | `common` | `ru.ludwigandreas.pat` | rest | `architecture-rules` (test), `audit-core`, `cache-spring-boot-starter`, `db-core`, `pat-core`, `security-spring-boot-starter`, `test-support` (test), `web-core-spring-boot-starter` | — |
 | **identity-projection-spring-boot-starter** | `common` | `ru.ludwigandreas.identity` | none | `db-core`, `messaging-spring-boot-starter`, `security-spring-boot-starter` | `crud-service-example`, `notification-service` |
 | **hot-reload-spring-boot-starter** | `common` | `ru.ludwigandreas.hotreload` | none | `audit-core` | `export-spring-boot-starter`, `notification-service`, `observability-spring-boot-starter`, `user-settings-spring-boot-starter` |
-| **web-core-spring-boot-starter** | `common` | `ru.ludwigandreas.webcore` | rest | — | `audit-spring-boot-starter`, `crud-service-example`, `db-core`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter`, `user-settings-spring-boot-starter` |
+| **web-core-spring-boot-starter** | `common` | `ru.ludwigandreas.webcore` | rest | — | `audit-spring-boot-starter`, `crud-service-example`, `db-core`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `pat-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **observability-spring-boot-starter** | `common` | `ru.ludwigandreas.observability` | none | `audit-core`, `hot-reload-spring-boot-starter`, `web-core-spring-boot-starter` | `export-spring-boot-starter`, `file-action-spring-boot-starter`, `notification-service`, `reconciliation-spring-boot-starter`, `rest-client-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **rest-client-spring-boot-starter** | `common` | `ru.ludwigandreas.restclient` | rest | `audit-core`, `observability-spring-boot-starter`, `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `reconciliation-spring-boot-starter` |
 | **user-settings-spring-boot-starter** | `common` | `ru.ludwigandreas.usersettings` | rest | `architecture-rules` (test), `audit-spring-boot-starter`, `cache-spring-boot-starter`, `db-core`, `hot-reload-spring-boot-starter`, `messaging-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `security-spring-boot-starter`, `test-support` (test), `web-core-spring-boot-starter` | `notification-service` |
@@ -104,14 +106,14 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
-| **test-support** | `common` | `ru.ludwigandreas.testsupport` | none | — | `audit-spring-boot-starter`, `cache-spring-boot-starter`, `db-core`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `job-core`, `messaging-spring-boot-starter`, `object-storage-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `reconciliation-spring-boot-starter`, `test-support-security`, `user-settings-spring-boot-starter` |
+| **test-support** | `common` | `ru.ludwigandreas.testsupport` | none | — | `audit-spring-boot-starter`, `cache-spring-boot-starter`, `db-core`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `job-core`, `messaging-spring-boot-starter`, `object-storage-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `pat-spring-boot-starter`, `reconciliation-spring-boot-starter`, `test-support-security`, `user-settings-spring-boot-starter` |
 | **test-support-security** | `common` | `ru.ludwigandreas.testsupport.security` | none | `security-spring-boot-starter`, `test-support` | `crud-service-example`, `file-action-spring-boot-starter`, `notification-service` |
 
 ### rules (2)
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
-| **architecture-rules** | `common` | `ru.ludwigandreas.archrules` | rest | — | `crud-service-example`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `user-settings-spring-boot-starter` |
+| **architecture-rules** | `common` | `ru.ludwigandreas.archrules` | rest | — | `crud-service-example`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `pat-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **checkstyle-rules** | `common` | `ru.ludwigandreas.checkstyle.unit` |  | — | — |
 
 ## Dependency graph
@@ -189,7 +191,16 @@ reconciliation-spring-boot-starter         -> rest-client-spring-boot-starter
 reconciliation-spring-boot-starter         -> test-support  [test]
 security-spring-boot-starter               -> audit-core
 security-spring-boot-starter               -> cache-spring-boot-starter
+security-spring-boot-starter               -> pat-core
 security-spring-boot-starter               -> web-core-spring-boot-starter
+pat-spring-boot-starter                    -> architecture-rules  [test]
+pat-spring-boot-starter                    -> audit-core
+pat-spring-boot-starter                    -> cache-spring-boot-starter
+pat-spring-boot-starter                    -> db-core
+pat-spring-boot-starter                    -> pat-core
+pat-spring-boot-starter                    -> security-spring-boot-starter
+pat-spring-boot-starter                    -> test-support  [test]
+pat-spring-boot-starter                    -> web-core-spring-boot-starter
 identity-projection-spring-boot-starter    -> db-core
 identity-projection-spring-boot-starter    -> messaging-spring-boot-starter
 identity-projection-spring-boot-starter    -> security-spring-boot-starter
@@ -260,6 +271,8 @@ jacoco-aggregate                           -> object-storage-spring-boot-starter
 jacoco-aggregate                           -> observability-spring-boot-starter
 jacoco-aggregate                           -> odata-filter-spring-boot-starter
 jacoco-aggregate                           -> outbox-spring-boot-starter
+jacoco-aggregate                           -> pat-core
+jacoco-aggregate                           -> pat-spring-boot-starter
 jacoco-aggregate                           -> reconciliation-spring-boot-starter
 jacoco-aggregate                           -> rest-client-spring-boot-starter
 jacoco-aggregate                           -> security-spring-boot-starter
@@ -269,7 +282,7 @@ jacoco-aggregate                           -> user-settings-spring-boot-starter
 jacoco-aggregate                           -> web-core-spring-boot-starter
 ```
 
-**No in-repo dependencies at all** (8 modules) — several of them deliberately, because a module with no sibling edge can be depended on from anywhere without closing a cycle: `architecture-rules`, `audit-core`, `checkstyle-rules`, `jira-client`, `ludwig-bom`, `ludwig-service-parent`, `test-support`, `web-core-spring-boot-starter`.
+**No in-repo dependencies at all** (9 modules) — several of them deliberately, because a module with no sibling edge can be depended on from anywhere without closing a cycle: `architecture-rules`, `audit-core`, `checkstyle-rules`, `jira-client`, `ludwig-bom`, `ludwig-service-parent`, `pat-core`, `test-support`, `web-core-spring-boot-starter`.
 
 ## Per-module detail
 
@@ -280,8 +293,8 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - package root `ru.ludwigandreas.archrules`
 - README [`build/architecture-rules/README.md`](build/architecture-rules/README.md) · [`build/architecture-rules/README.ru.md`](build/architecture-rules/README.ru.md)
 - surfaces: rest
-- test classes: 9 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :architecture-rules -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- test classes: 10 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
+- **gate**: `mvn -q validate`, then `mvn -pl :architecture-rules -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `audit-core`
 
@@ -293,7 +306,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - auto-configuration: `sources/audit-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - test dirs: unit (`sources/audit-core/src/test/java/ru/ludwigandreas/audit/unit`)
 - test classes: 5 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :audit-core -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :hot-reload-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`
+- **gate**: `mvn -q validate`, then `mvn -pl :audit-core -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :hot-reload-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`
 
 ### `audit-spring-boot-starter`
 
@@ -319,7 +332,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - auto-configuration: `sources/cache-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - test dirs: architecture (`sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/architecture`), integration (`sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/integration`), unit (`sources/cache-spring-boot-starter/src/test/java/ru/ludwigandreas/cache/unit`)
 - test classes: 8 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :cache-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- **gate**: `mvn -q validate`, then `mvn -pl :cache-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `checkstyle-rules`
 
@@ -329,7 +342,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`build/checkstyle-rules/README.md`](build/checkstyle-rules/README.md) · [`build/checkstyle-rules/README.ru.md`](build/checkstyle-rules/README.ru.md)
 - surfaces: 
 - test dirs: unit (`build/checkstyle-rules/src/test/java/ru/ludwigandreas/checkstyle/unit`)
-- test classes: 1 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 2 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :checkstyle-rules -am verify`
 
 ### `crud-service-example`
@@ -356,7 +369,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - i18n: `sources/db-core/src/main/resources/i18n/ludwig-db-messages.properties`, `sources/db-core/src/main/resources/i18n/ludwig-db-messages_ru.properties`
 - test dirs: integration (`sources/db-core/src/test/java/ru/ludwigandreas/db/core/integration`)
 - test classes: 7 surefire, 2 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :db-core -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- **gate**: `mvn -q validate`, then `mvn -pl :db-core -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `export-spring-boot-starter`
 
@@ -569,6 +582,31 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - test classes: 5 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
+### `pat-core`
+
+- role **library**, packaging `jar`, parent `common`, imports `ludwig-bom`: yes
+- directory `sources/pat-core/`
+- package root `ru.ludwigandreas.pat`
+- README [`sources/pat-core/README.md`](sources/pat-core/README.md) · [`sources/pat-core/README.ru.md`](sources/pat-core/README.ru.md)
+- surfaces: none
+- test dirs: unit (`sources/pat-core/src/test/java/ru/ludwigandreas/pat/unit`)
+- test classes: 7 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- **gate**: `mvn -q validate`, then `mvn -pl :pat-core -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`
+
+### `pat-spring-boot-starter`
+
+- role **starter**, packaging `jar`, parent `common`, imports `ludwig-bom`: yes
+- directory `sources/pat-spring-boot-starter/`
+- package root `ru.ludwigandreas.pat`
+- README [`sources/pat-spring-boot-starter/README.md`](sources/pat-spring-boot-starter/README.md) · [`sources/pat-spring-boot-starter/README.ru.md`](sources/pat-spring-boot-starter/README.ru.md)
+- surfaces: rest
+- auto-configuration: `sources/pat-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
+- Liquibase: `sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/pat-changelog.xml`
+- i18n: `sources/pat-spring-boot-starter/src/main/resources/i18n/ludwig-pat-messages.properties`, `sources/pat-spring-boot-starter/src/main/resources/i18n/ludwig-pat-messages_ru.properties`
+- test dirs: architecture (`sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/architecture`), integration (`sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/integration`), unit (`sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/unit`)
+- test classes: 7 surefire, 7 failsafe (`*IT` / `*IntegrationTest`)
+- **gate**: `mvn -q validate`, then `mvn -pl :pat-spring-boot-starter -am verify`
+
 ### `reconciliation-spring-boot-starter`
 
 - role **starter**, packaging `jar`, parent `common`, imports `ludwig-bom`: yes
@@ -604,8 +642,8 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - auto-configuration: `sources/security-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - i18n: `sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages.properties`, `sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages_ru.properties`
 - test dirs: unit (`sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit`)
-- test classes: 15 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :test-support-security -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- test classes: 20 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- **gate**: `mvn -q validate`, then `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :test-support-security -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `test-support`
 
@@ -616,7 +654,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - surfaces: none
 - test dirs: integration (`sources/test-support/src/test/java/ru/ludwigandreas/testsupport/integration`), unit (`sources/test-support/src/test/java/ru/ludwigandreas/testsupport/unit`)
 - test classes: 1 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :test-support -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :cache-spring-boot-starter -am verify`, `mvn -pl :db-core -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :job-core -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :test-support-security -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- **gate**: `mvn -q validate`, then `mvn -pl :test-support -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :cache-spring-boot-starter -am verify`, `mvn -pl :db-core -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :job-core -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :test-support-security -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `test-support-security`
 
@@ -653,5 +691,5 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - i18n: `sources/web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages.properties`, `sources/web-core-spring-boot-starter/src/main/resources/i18n/ludwig-web-messages_ru.properties`
 - test dirs: integration (`sources/web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/integration`), unit (`sources/web-core-spring-boot-starter/src/test/java/ru/ludwigandreas/webcore/unit`)
 - test classes: 17 surefire, 3 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :web-core-spring-boot-starter -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :db-core -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- **gate**: `mvn -q validate`, then `mvn -pl :web-core-spring-boot-starter -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :db-core -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 

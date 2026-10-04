@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-02T17:52:04.838083Z",
+    "generatedAt": "2026-10-04T14:17:53.602225Z",
     "revision": "1.1.0-SNAPSHOT",
-    "moduleCount": 31,
-    "commit": "66808f46245276c7328c689a1772baaef180723b",
-    "commitShort": "66808f4",
-    "branch": "feature/preference",
+    "moduleCount": 33,
+    "commit": "b5e0c8cbaf5ff37d94556db0f5c011ca7c5c1efa",
+    "commitShort": "b5e0c8c",
+    "branch": "feature/file-input",
     "freshness": {
-      "pomSetSha": "6327960242b17b53389b16372ab47edbfdf565bd151c2c64fea4b5e237641cd7",
-      "newestPom": "build/jacoco-aggregate/pom.xml",
-      "newestPomModified": "2026-10-02T17:52:04.458819Z"
+      "pomSetSha": "014d3295e62ce2ecb393c8be41aee4fd3353247f729330d99018549df2b8c493",
+      "newestPom": "build/ludwig-bom/pom.xml",
+      "newestPomModified": "2026-10-04T14:17:53.420865Z"
     }
   },
   "modules": [
@@ -173,6 +173,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "pat-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "reconciliation-spring-boot-starter",
           "scope": "compile"
         },
@@ -259,6 +263,10 @@
         },
         {
           "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "pat-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -524,6 +532,10 @@
         }
       ],
       "inRepoDependents": [
+        {
+          "artifactId": "pat-spring-boot-starter",
+          "scope": "compile"
+        },
         {
           "artifactId": "security-spring-boot-starter",
           "scope": "compile"
@@ -1124,6 +1136,44 @@
       "readmeRu": "sources/reconciliation-spring-boot-starter/README.ru.md"
     },
     {
+      "name": "pat-core",
+      "dir": "sources",
+      "path": "sources/pat-core",
+      "artifactId": "pat-core",
+      "packaging": "jar",
+      "role": "library",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.pat",
+      "inRepoDependencies": [],
+      "inRepoDependents": [
+        {
+          "artifactId": "pat-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/pat-core/src/test/java/ru/ludwigandreas/pat/unit"
+      },
+      "testClasses": {
+        "surefire": 7,
+        "failsafe": 0
+      },
+      "pom": "sources/pat-core/pom.xml",
+      "readme": "sources/pat-core/README.md",
+      "readmeRu": "sources/pat-core/README.ru.md"
+    },
+    {
       "name": "security-spring-boot-starter",
       "dir": "sources",
       "path": "sources/security-spring-boot-starter",
@@ -1141,6 +1191,11 @@
         },
         {
           "artifactId": "cache-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "pat-core",
           "scope": "compile",
           "optional": false
         },
@@ -1172,6 +1227,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "pat-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "test-support-security",
           "scope": "compile"
         },
@@ -1193,12 +1252,89 @@
         "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
       },
       "testClasses": {
-        "surefire": 15,
+        "surefire": 20,
         "failsafe": 0
       },
       "pom": "sources/security-spring-boot-starter/pom.xml",
       "readme": "sources/security-spring-boot-starter/README.md",
       "readmeRu": "sources/security-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "pat-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/pat-spring-boot-starter",
+      "artifactId": "pat-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.pat",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "cache-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "db-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "pat-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": "sources/pat-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/pat-changelog.xml"
+      ],
+      "i18nBundles": [
+        "sources/pat-spring-boot-starter/src/main/resources/i18n/ludwig-pat-messages.properties",
+        "sources/pat-spring-boot-starter/src/main/resources/i18n/ludwig-pat-messages_ru.properties"
+      ],
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "unit": "sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/unit",
+        "integration": "sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/integration",
+        "architecture": "sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/architecture"
+      },
+      "testClasses": {
+        "surefire": 7,
+        "failsafe": 7
+      },
+      "pom": "sources/pat-spring-boot-starter/pom.xml",
+      "readme": "sources/pat-spring-boot-starter/README.md",
+      "readmeRu": "sources/pat-spring-boot-starter/README.ru.md"
     },
     {
       "name": "identity-projection-spring-boot-starter",
@@ -1364,6 +1500,10 @@
         },
         {
           "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "pat-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1669,6 +1809,10 @@
           "scope": "test"
         },
         {
+          "artifactId": "pat-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "user-settings-spring-boot-starter",
           "scope": "test"
         }
@@ -1681,7 +1825,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 9,
+        "surefire": 10,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",
@@ -1746,6 +1890,10 @@
         },
         {
           "artifactId": "outbox-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "pat-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -1850,7 +1998,7 @@
         "unit": "build/checkstyle-rules/src/test/java/ru/ludwigandreas/checkstyle/unit"
       },
       "testClasses": {
-        "surefire": 1,
+        "surefire": 2,
         "failsafe": 0
       },
       "pom": "build/checkstyle-rules/pom.xml",
@@ -2209,6 +2357,16 @@
         },
         {
           "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "pat-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "pat-spring-boot-starter",
           "scope": "compile",
           "optional": false
         },

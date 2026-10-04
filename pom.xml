@@ -47,7 +47,16 @@
     <module>sources/file-action-spring-boot-starter</module>
     <module>sources/outbox-spring-boot-starter</module>
     <module>sources/reconciliation-spring-boot-starter</module>
+    <!--
+        pat-core before security-spring-boot-starter, and pat-spring-boot-starter after it. Maven
+        sorts the reactor by the dependency graph rather than by this list, so the order here is
+        documentation rather than instruction - but it is the order that makes the seam readable:
+        pat-core has no in-repo dependencies, security reads its claim, and only then does the
+        issuing starter depend on security.
+    -->
+    <module>sources/pat-core</module>
     <module>sources/security-spring-boot-starter</module>
+    <module>sources/pat-spring-boot-starter</module>
     <module>sources/identity-projection-spring-boot-starter</module>
     <module>sources/hot-reload-spring-boot-starter</module>
     <module>sources/web-core-spring-boot-starter</module>

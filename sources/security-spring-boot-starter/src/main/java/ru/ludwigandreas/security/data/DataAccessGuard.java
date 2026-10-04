@@ -162,6 +162,10 @@ public class DataAccessGuard {
                                         T target, Function<T, Object> idExtractor, DataScope scope,
                                         boolean granted, String reason) {
         Object id = target == null ? null : idExtractor.apply(target);
+        // The credential comes from the ambient authentication rather than from the principal, because a
+        // credential is a property of how this request authenticated and the principal is the identity. A
+        // data-scope denial is an authorization denial like any other and gets the same record.
+        var credential = ru.ludwigandreas.security.principal.SecurityPrincipals.currentCredential();
         return AccessDecision.builder()
                 .subject(principal.subject())
                 .principalType(principal.type())
@@ -169,6 +173,8 @@ public class DataAccessGuard {
                 .action(action)
                 .resourceId(id == null ? null : id.toString())
                 .scopeAccess(scope.access().name())
+                .credentialKind(credential.map(c -> c.kind().name()).orElse(null))
+                .credentialId(credential.flatMap(c -> c.credentialId()).orElse(null))
                 .granted(granted)
                 .reason(reason)
                 .build();

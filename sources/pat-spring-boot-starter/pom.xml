@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>pat-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Personal access token Spring Boot starter</name>
+    <description>
+        The issuing half of the platform's personal access tokens, as a drop-in: the token table and its
+        Liquibase changelog, the QueryDSL repository, the lifecycle service (issue, list, revoke,
+        rotate-with-overlap, expire, purge), the management REST API secured through
+        security-spring-boot-starter, the RFC 8693 token-exchange endpoint the edge calls, the typed audit
+        events, the CachePurpose.SECURITY verification cache, the ProblemDetail mappers and both locale
+        bundles. The identity provider adds this dependency and has a complete PAT subsystem.
+    </description>
+
+    <!--
+        Dependency direction, written out because it is the thing to get right here.
+
+        This module depends on security-spring-boot-starter; security depends on pat-core. The reverse
+        edge must never exist - security must not depend on this module - because this module brings JPA,
+        Liquibase and Postgres, and security-spring-boot-starter deliberately has no persistence
+        dependency at all. identity-projection-spring-boot-starter is the established precedent for
+        exactly this shape: a security concern that needs a table depends on security and adds JPA,
+        rather than the dependency going the other way.
+
+        No ludwig-bom change. Every third-party version below is already managed - by
+        spring-boot-dependencies, or by a ludwig-bom entry another module already consumes. That is
+        load-bearing for the verification gate: a ludwig-bom change has no narrower gate than
+        `mvn clean install`.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- The format, the claim definition and the problem types. Shared with the verifying side. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>pat-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+            Not optional. The management API's whole point is that only an authorized caller can mint a
+            token, and the credential guard that refuses a token-backed caller on this surface is what
+            stops a leaked token becoming a persistence mechanism. A module whose authorization could be
+            absent at runtime would be a module that sometimes lets anyone issue credentials.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>db-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+            The one caching primitive. Not optional: verification on every exchange would otherwise be a
+            database round trip per request, and the TTL here IS the revocation window - which is a
+            declaration (CachePurpose.SECURITY) that the cache module enforces a startup ceiling on and
+            refuses stale reads for. A hand-rolled cache would have neither.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>cache-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- The single RFC 9457 pipeline this module contributes mappers into. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.querydsl</groupId>
+            <artifactId>querydsl-jpa</artifactId>
+            <classifier>jakarta</classifier>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+        </dependency>
+
+        <!--
+            The signing side of the default assertion minter. A deployment that already runs an OIDC
+            provider replaces the minter and this goes unused, which is why it is here rather than
+            optional: an absent JOSE implementation would make the default minter fail at runtime on the
+            one endpoint that cannot fail.
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Owner-disabled revocation listens for the identity projection's event when Kafka is present. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                Annotation processors, in Lombok -> QueryDSL order.
+
+                The order matters and is the platform's convention: Lombok generates the getters that
+                QueryDSL's processor then reads off the entity, so reversing them produces a Q-type missing
+                every Lombok-generated accessor. MapStruct is deliberately absent from the processor list -
+                this module's mappers are hand-written, because there are three of them and they each do
+                something a generated mapper would not (split a scope set, hide a secret, choose what a
+                caller may see about somebody else's token).
+
+                No versions here: they come from ludwig-bom through
+                annotationProcessorPathsUseDepMgmt, which the root POM enables.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>com.querydsl</groupId>
+                            <artifactId>querydsl-apt</artifactId>
+                            <classifier>jakarta</classifier>
+                        </path>
+                        <path>
+                            <groupId>jakarta.persistence</groupId>
+                            <artifactId>jakarta.persistence-api</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                        <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+
+            <!--
+                Failsafe, for the reason the idempotency and job-core modules have it: the integration
+                suite starts a Postgres container, and that is not something `mvn test` should do on every
+                build of every module that depends on this one. Named *IT, run at `verify` - which is also
+                the only way these tests run at all, per the repository's surefire/failsafe split.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

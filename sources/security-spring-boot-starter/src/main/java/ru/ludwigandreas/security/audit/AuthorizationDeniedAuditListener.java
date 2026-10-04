@@ -10,6 +10,7 @@ import org.springframework.security.authorization.method.MethodInvocationResult;
 import org.springframework.security.core.Authentication;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
+import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
 
@@ -76,6 +77,8 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
     private AccessDecision decisionFor(AuthorizationDeniedEvent<?> event, String resourceType, String action) {
         String subject = UNKNOWN;
         PrincipalType principalType = null;
+        String credentialKind = null;
+        String credentialId = null;
         try {
             Authentication authentication = event.getAuthentication().get();
             if (authentication != null && authentication.getPrincipal() instanceof LudwigPrincipal principal) {
@@ -83,6 +86,15 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
                 principalType = principal.type();
             } else if (authentication != null) {
                 subject = authentication.getName();
+            }
+            // The credential, when there was a long-lived one. This is what stops the first investigation
+            // at the owner's demotion rather than at the token: a personal access token confers the
+            // intersection of its owner's LIVE authority and its own scopes, so it can stop working without
+            // anybody revoking it - which reads as a bug to whoever is paged unless the record says both
+            // which token was used and that the authority behind it was the thing that went away.
+            if (authentication instanceof LudwigAuthentication ludwig && ludwig.credential().isLongLived()) {
+                credentialKind = ludwig.credential().kind().name();
+                credentialId = ludwig.credential().credentialId().orElse(null);
             }
         } catch (RuntimeException e) {
             // The supplier throws when there is no authentication at all - itself a denial worth
@@ -96,6 +108,8 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
                 .resourceType(resourceType)
                 .action(action)
                 .scopeAccess("N/A")
+                .credentialKind(credentialKind)
+                .credentialId(credentialId)
                 .granted(false)
                 .reason("insufficient-authority")
                 .build();

@@ -22,6 +22,11 @@ import ru.ludwigandreas.security.principal.PrincipalType;
  * @param resourceId    the object a single-object check was about, or {@code null} for a query-level
  *                      decision where the answer was a predicate rather than a row
  * @param scopeAccess   {@code ALL}, {@code RESTRICTED} or {@code NONE} - how wide the grant turned out
+ * @param credentialKind what the caller presented, when it was not the credential their identity was
+ *                      established with. {@code null} for an ordinary request, which is most of them
+ * @param credentialId  the long-lived credential's id - a personal access token id, never a key id and never
+ *                      anything secret-adjacent. This is the field that turns "alice was denied" into "the
+ *                      CI token alice minted was denied", which are different investigations
  *
  * <p>Kept as this module's authoring surface after the audit consolidation, rather than replaced by
  * {@link AuditEvent}: a caller assembling eight positional components out of a
@@ -38,6 +43,8 @@ public record AccessDecision(
         String action,
         String resourceId,
         String scopeAccess,
+        String credentialKind,
+        String credentialId,
         boolean granted,
         String reason) {
 
@@ -64,6 +71,16 @@ public record AccessDecision(
         Map<String, Object> attributes = new LinkedHashMap<>();
         if (scopeAccess != null) {
             attributes.put("scopeAccess", scopeAccess);
+        }
+        // Recorded as attributes rather than as envelope components for the same reason scopeAccess is:
+        // "what credential was presented" is a fact about this platform's authentication model, not about
+        // auditing in general. The actor stays the human - they are who is accountable - and the credential
+        // sits beside them, which is the distinction an investigation needs first.
+        if (credentialKind != null) {
+            attributes.put("credentialKind", credentialKind);
+        }
+        if (credentialId != null) {
+            attributes.put("credentialId", credentialId);
         }
         return AuditEvent.builder()
                 .category(AuditCategories.ACCESS)

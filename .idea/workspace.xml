@@ -7,23 +7,31 @@
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CHANGELOG.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.ru.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PROJECT_INDEX.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_INDEX.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/architecture-rules/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/RuleGroup.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/RuleGroup.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/BuiltInRuleSets.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/BuiltInRuleSets.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/checkstyle-rules/src/main/resources/ru/ludwigandreas/checkstyle/checkstyle.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/harness-enforcement.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/harness-enforcement.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/project-index.json" beforeDir="false" afterPath="$PROJECT_DIR$/project-index.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages_ru.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages_ru.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/audit-core/src/main/java/ru/ludwigandreas/audit/AuditCategories.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/audit-core/src/main/java/ru/ludwigandreas/audit/AuditCategories.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityProjectionAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityProjectionAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/projection/IdentityProjectionService.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/projection/IdentityProjectionService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit/IdentityProjectionServiceTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit/IdentityProjectionServiceTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/audit/AccessDecision.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/audit/AccessDecision.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/audit/AuthorizationDeniedAuditListener.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/audit/AuthorizationDeniedAuditListener.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/authn/jwt/JwtPrincipalConverter.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/authn/jwt/JwtPrincipalConverter.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/config/ResourceServerAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/config/ResourceServerAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/config/SecurityProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/config/SecurityProperties.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/data/DataAccessGuard.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/data/DataAccessGuard.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/principal/LudwigAuthentication.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/principal/LudwigAuthentication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/principal/SecurityPrincipals.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/principal/SecurityPrincipals.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -117,13 +125,17 @@
     "Maven.common [clean,install].executor": "Run",
     "Maven.common [verify,-DskipITs].executor": "Run",
     "Maven.common [verify].executor": "Run",
+    "RequestMappingsPanelOrder0": "0",
+    "RequestMappingsPanelOrder1": "1",
+    "RequestMappingsPanelWidth0": "75",
+    "RequestMappingsPanelWidth1": "75",
     "RunOnceActivity.MCP Project settings loaded": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "Spring Boot.CatalogApplication.executor": "Debug",
     "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "feature/preference",
+    "git-widget-placeholder": "feature/file-input",
     "kotlin-language-version-configured": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
