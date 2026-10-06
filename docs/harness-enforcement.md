@@ -225,6 +225,32 @@ only a person reviewing it will notice.
 consuming service that submits a known test signature - EICAR - and asserts the submission is
 `REJECTED` would catch it, and that belongs in the deployment rather than in the module.
 
+**19. A `DocumentHandler` action configured with a non-zero `reject-threshold`.** A row that fails to
+bind is never written to the bound-row artifact, and the threshold - default `0.1` - decides whether
+such rows refuse the submission at all. So a four-hundred-line order with thirty unbindable lines is
+`0.075`, under the threshold, and the handler applies one order built from the three hundred and
+seventy survivors with no way to know the thirty existed. That is the "we created the first 38 lines
+of your order" outcome the handler split exists to prevent, arriving through the one property that
+is orthogonal to the commit policy.
+*What it would take:* a rule in `FileActionConfigurationValidator`, beside the existing refusal of a
+row-level commit policy on a `DocumentHandler` - the resolved handler and the resolved threshold are
+both already in hand at that point, so it is a two-line check and a message. This is the one item in
+this list that is cheaply enforceable and not yet enforced; it is written down on
+`DocumentHandler.apply` and in the module's README in the meantime.
+
+**20. A per-row validation rule implemented inside a handler rather than at bind time.** `ApplyPass`
+strips the `RowAddress` before calling a `DocumentHandler`, and one invocation returns one
+`RowOutcome`, so a rule evaluated per row in there reports its first failure with no location - and
+the symptom is not a failure but a worse error report, which nobody files a bug about. The same
+mistake in a `ConstraintValidator` is a stateful singleton: a validator accumulating seen keys in a
+field to spot duplicates leaks across submissions and corrupts concurrent ones, under load, never in
+a test.
+*What it would take:* for the stateful validator, an ArchUnit rule forbidding non-final instance
+fields on `ConstraintValidator` implementations would catch the common form and is worth writing. For
+the misplaced rule itself, nothing mechanical: a predicate over the row inside `apply` is
+indistinguishable from the cross-row fold that belongs there. Stated on `DocumentHandler.apply`, on
+`RowBinding`, and at length in the module's README under "Where a validation rule goes".
+
 ## The shape of the gap
 
 Three of the thirteen — the removal window, an over-large version increment, and whether a
