@@ -46,6 +46,28 @@ The same reasoning as `cache-spring-boot-starter`'s zero-dependency property, fo
 | `claim.PatClaims` | The single definition of the `ludwig_pat` claim |
 | `problem.PatProblemTypes` | The problem types and management location the **edge** renders |
 
+## Introspection, and why its field names look odd
+
+`introspection.PatIntrospectionResponse` is what the issuing service answers when a *service* asks about
+a token, rather than when the edge exchanges one. It exists because this platform's edge - a
+company-provided session gateway - cannot perform the exchange, so a service has to be able to
+authenticate an `lpat_` credential itself.
+
+Its components are named `sub`, `aud`, `exp` rather than `subject`, `audiences`, `expiresAt`. That is not
+a style choice. **This module has zero dependencies, which includes no Jackson**, so there is no
+`@JsonProperty` available to bridge a readable Java name to an RFC 7662 wire name — the component names
+*are* the wire names.
+
+An attempt to add Jackson here failed the build, and that is the zero-dependency property doing its job.
+It is what lets `security-spring-boot-starter` — which sits near the bottom of the reactor — depend on
+this module at all. The alternative, mapping readable names to wire names up in the starter, would have
+put the field names in two places, which is the one thing this type exists to prevent.
+
+It carries no secret, no digest and **no key id**. The last is the least obvious and is the same decision
+every other response here makes: a key id changes on rotation, so it is useless to a caller naming a
+token and would quietly become the identifier somebody built an integration on. `patId` survives a
+rotation.
+
 ## The invariant
 
 A personal access token is an **attenuation** of its owner's live authority:

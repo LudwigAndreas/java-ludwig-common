@@ -65,6 +65,24 @@ final class Fixtures {
         return List.of();
     }
 
+    /**
+     * One rule's own description, for an assertion about what the rule <em>names</em> rather than what it
+     * reports.
+     *
+     * <p>Needed where the interesting property is the fence itself - which type or package a rule is scoped
+     * to - and no fixture can demonstrate it, because the subject is the rule's configuration rather than
+     * the code under analysis.
+     */
+    static String ruleDescription(ArchitectureRulesConfiguration configuration, RuleId id) {
+        ArchitectureRuleSuite suite = ArchitectureRules.suite(configuration);
+        for (ResolvedRule rule : suite.rules()) {
+            if (rule.id().equals(id)) {
+                return rule.description();
+            }
+        }
+        return "";
+    }
+
     /** The ids of every enabled rule the given configuration does not satisfy. */
     static Set<String> failingRuleIds(ArchitectureRulesConfiguration configuration) {
         ArchitectureRuleSuite suite = ArchitectureRules.suite(configuration);

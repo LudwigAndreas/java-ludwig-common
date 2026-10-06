@@ -28,6 +28,16 @@ import java.util.Set;
  * <p>What stays data is the part that genuinely varies per deployment - the size budget, the commit
  * policy, the confirm TTL - and that lives in YAML.
  *
+ * <h2>The row record is also where a per-row validation rule belongs</h2>
+ *
+ * <p>Not only the column mapping. Bean Validation constraints on the record's components, a class-level
+ * constraint, and the record's compact constructor are all run by {@code RowMaterialiser} during the bind
+ * phase, before anything is applied: every problem with every row is collected rather than the first, and
+ * each is addressed at a sheet, a displayed row and a column header, which is what makes an import error
+ * report one a user can act on in a single pass. A rule needing a database lookup is still a per-row rule
+ * and still belongs here, as a {@code ConstraintValidator} bean. The alternative - checking the rule inside
+ * the handler - loses the address entirely for a {@link DocumentHandler}; see its javadoc for why.
+ *
  * <pre>{@code
  * public static final RowBinding<OrderLine> ORDER_LINES = RowBinding.of(OrderLine.class)
  *         .sheet("Orders")

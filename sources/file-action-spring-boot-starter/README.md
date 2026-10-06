@@ -253,6 +253,267 @@ happened to parse is never what anybody wanted, and a user who uploaded last yea
 be told. A deliberately skipped row does not count toward it - a file whose last two hundred rows are
 intentional duplicates is not the wrong file.
 
+## Where a validation rule goes
+
+A rule's home follows from one question: **can the module tell the user which row is wrong?** There are
+exactly two places a rule can live, and they differ in essentially nothing else.
+
+| | runs | produces | names the row | reaches the user as |
+|---|---|---|---|---|
+| **bind time** - coercion, Bean Validation, the record's compact constructor | once per row during the read, before anything is applied | a `RowProblem` per problem, **all of them** | yes: sheet, displayed row, column header | the paged `.../rejects` resource and the annotated report |
+| **the handler** - `RowHandler.apply`, `DocumentHandler.apply` | inside the apply transaction | one `RowOutcome` per invocation | a `RowHandler`'s yes, addressed by `ApplyPass` from the `BoundRow`. A `DocumentHandler`'s **no** | the same reject resource for a `RowHandler`; one failure code on the submission for a `DocumentHandler` |
+
+That last cell decides every question below. `ApplyPass.applyDocument` hands the handler
+`rows.map(BoundRow::payload)` - the address is stripped deliberately, because a `DocumentHandler`'s subject
+is the document, and "row 38 is wrong" from something that applies one business fact is a location the
+all-or-nothing contract has no use for. The consequence is a rule, not a preference:
+
+> **Every rule whose subject is one row belongs at bind time, whatever it costs to put it there.** A rule
+> evaluated per row inside a `DocumentHandler` can report its first failure only, with no location - which
+> is precisely the error report the reject pipeline exists to avoid.
+
+Three kinds of rule, three homes.
+
+### 1. A row rule with no lookup: on the record
+
+Everything decidable from the row's own cells. Three mechanisms, in increasing scope, and the choice
+between them is which cell the user should be pointed at:
+
+```java
+public record OrderLine(
+        @NotBlank @Pattern(regexp = "[A-Z]{3}-\\d{6}") String sku,
+        @Positive int quantity,
+        @DecimalMin("0.00") BigDecimal unitPrice,
+        @NotNull LocalDate deliverBy,
+        String comment) {
+
+    // Cross-field, still one row. A compact constructor is the right home when the rule needs two
+    // components at once and there is no single cell to blame.
+    public OrderLine {
+        if (quantity > BULK_THRESHOLD && unitPrice == null) {
+            throw new IllegalArgumentException("a bulk line needs an agreed unit price");
+        }
+    }
+}
+```
+
+```java
+// The third mechanism: a class-level constraint. Preferred over the compact constructor when the rule
+// should be named, reused across bindings, or unit-tested on its own.
+@DeliveryWindowIsReachable
+public record OrderLine(...) { }
+```
+
+| mechanism | addressed at | use when |
+|---|---|---|
+| a field constraint | that **column's cell** | the rule is about one value. The user is pointed at the exact cell in the annotated workbook |
+| a class-level constraint | the **row** | the rule spans components, and deserves a name and its own test |
+| the compact constructor | the **row** | the rule spans components and is too specific to the record to be worth a constraint annotation |
+
+`RowMaterialiser` guarantees three behaviours here that the rules themselves must not duplicate:
+
+- **Every problem is collected, never the first.** Each cell is coerced even after an earlier one failed,
+  so a row with four bad cells yields four `RowProblem`s. The whole value of an import report is that one
+  pass through it fixes the file.
+- **Bean Validation runs only on a record that could be constructed.** A constraint on a field whose text
+  would not coerce to its type has nothing to add to the coercion failure, which is the better message.
+- **A row with problems is never written to the bound-row artifact.** It therefore never reaches the
+  handler, in either shape. This is the behaviour the configuration note below is about.
+
+What not to write here: anything with an `if` that reads `context.dryRun()`, any I/O, and any cast of the
+row to something else. A row rule is a predicate over the row.
+
+### 2. A row rule that needs a lookup: a `ConstraintValidator` bean
+
+"This SKU exists", "this customer is active", "this price list covers this article on this date" are still
+rules **about one row**, so by the rule above they still belong at bind time - even though they need the
+database. Bean Validation is the seam, and in Boot the validator factory is Spring-aware, so a
+`ConstraintValidator` is an ordinary injectable bean:
+
+```java
+@Documented
+@Constraint(validatedBy = KnownSkuValidator.class)
+@Target({ElementType.RECORD_COMPONENT, ElementType.FIELD})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface KnownSku {
+    String message() default "{ru.ludwigandreas.orders.sku.unknown}";
+    Class<?>[] groups() default {};
+    Class<? extends Payload>[] payload() default {};
+}
+```
+
+```java
+@Component
+public class KnownSkuValidator implements ConstraintValidator<KnownSku, String> {
+
+    private final CatalogueLookup catalogue;   // a QueryDSL repository behind a cache; see below
+
+    @Override
+    public boolean isValid(String sku, ConstraintValidatorContext context) {
+        // Null is somebody else's problem: @NotBlank already reports it, and reporting it twice gives
+        // the user two rejects for one mistake.
+        return sku == null || catalogue.exists(sku);
+    }
+}
+```
+
+Four things decide whether this is correct or a production incident.
+
+**It is one query per row.** Four hundred rows is four hundred round trips during the read, and a hundred
+thousand rows is not a feature. Put a `CacheDefinition` behind the lookup through
+[`cache-spring-boot-starter`](../cache-spring-boot-starter) and resolve it from `LudwigCacheRegistry` -
+never a `Caffeine` builder of your own, which `RuleGroup.CACHING` fails the build on. The purpose is
+`PERFORMANCE`: reference data, where the TTL is a throughput knob. It is **not** `SECURITY` - no grant is
+being cached - and getting that declaration right is the one thing the cache module cannot infer for you.
+
+**It must be stateless.** A `ConstraintValidator` is a singleton, shared by every submission and every
+worker thread. A validator that accumulates seen keys in a field to spot duplicates will leak across
+submissions and corrupt concurrent ones - and the defect appears under load, never in a test. Duplicate
+detection is a cross-row rule; see the next section.
+
+**It runs outside the apply transaction, which is the point.** The read is not transactional, so a lookup
+here costs a connection for the lookup and nothing more. The same lookup moved into the handler would hold
+the apply transaction open for it. Keep these reads read-only, and do not write from a validator.
+
+**The message is interpolated when it validates, not when it renders.** `RowMaterialiser` stores
+`violation.getMessage()` as a string **argument** of its own `CONSTRAINT_VIOLATED` code. So unlike the
+module's own codes - stored as code plus arguments and rendered in the reader's language - a constraint
+message is fixed in the locale that validated it. Keep the wording in
+`ValidationMessages[_ru].properties` and accept that a reject produced by a worker renders in the worker's
+locale, or state the rule in a way that does not need translating.
+
+### 3. A cross-row rule: the `DocumentHandler`, and it is one message
+
+What is left is the set of rules with no single row as their subject: the lines must sum to a declared
+total, every line must name the same customer, no SKU may appear twice, the document must have at least
+one line. These are the rules a `DocumentHandler` exists for, and here one unaddressed code is the honest
+answer rather than a limitation - the failing thing really is the document.
+
+```java
+@FileAction("order-import")
+public class OrderImportHandler implements DocumentHandler<OrderLine> {
+
+    @Override
+    public RowBinding<OrderLine> binding() {
+        return OrderBindings.ORDER_LINES;
+    }
+
+    @Override
+    public RowOutcome apply(Stream<OrderLine> rows, FileActionContext context) {
+        Order order = Order.draft(context.submissionId());
+        Map<String, Integer> quantityBySku = new LinkedHashMap<>();
+
+        // One pass. Folded, never collected: a collect() here puts the whole file in the heap, which is
+        // the behaviour the streaming reader exists to avoid.
+        rows.forEach(line -> {
+            quantityBySku.merge(line.sku(), line.quantity(), Integer::sum);
+            order.addLine(line);
+        });
+
+        // Cross-row checks, evaluated after the fold and BEFORE the dry-run return, so that a CONFIRM
+        // action's preview tells the user about them instead of discovering them at apply.
+        if (order.lineCount() == 0) {
+            return RowOutcome.rejected("order.import.no-lines");
+        }
+        if (quantityBySku.size() != order.lineCount()) {
+            // No address to give, so the offending value goes in the arguments. "SKU ABC-000123 appears
+            // on more than one line" locates the problem for a person; "duplicate SKU" does not.
+            return RowOutcome.rejected("order.import.duplicate-sku", firstDuplicate(quantityBySku));
+        }
+        if (order.total().compareTo(creditLimit) > 0) {
+            return RowOutcome.rejected("order.import.over-credit-limit",
+                    order.total().toPlainString(), creditLimit.toPlainString());
+        }
+
+        if (context.dryRun()) {
+            return RowOutcome.applied();   // validated; nothing written
+        }
+        orders.save(order);
+        return RowOutcome.applied();
+    }
+}
+```
+
+Five obligations in that method, each of which the module cannot check:
+
+1. **Consume the stream once.** It reads from the bound-row artifact as it is traversed. If the logic
+   genuinely needs two passes, throw and put a size ceiling on the action - a hidden `toList()` is a heap
+   profile that depends on what a user uploads.
+2. **Do the fold before the `dryRun()` return.** Returning early on a dry run skips the cross-row checks,
+   and a `CONFIRM` action then shows the user a clean preview of a document that will be refused on
+   confirm. This is the most common mistake in this shape.
+3. **Change nothing when `dryRun()` is true.** True for a `VALIDATE_ONLY` action and for the validation
+   pass of a `CONFIRM` one. A handler ignoring it applies a submission nobody approved.
+4. **Put identifying values in the arguments.** It is the only locating information a document reject has.
+5. **No partner calls.** One transaction spans the whole traversal; publish through
+   [`outbox-spring-boot-starter`](../outbox-spring-boot-starter) so the call and the commit cannot
+   disagree.
+
+Return a reject rather than throwing. `ApplyPass` turns a non-applied outcome into `setRollbackOnly` plus
+`ApplyOutcome.documentRejected`, and the submission reaches `REJECTED` carrying the code. A throw is right
+only for a failure that is not about the document - the database is gone, a partner is unreachable.
+
+**A `RowHandler`'s cross-row rules are a different matter.** It is invoked per row, the module owns the
+batching, and it may be retried after a lease expiry - so accumulating state across invocations to check a
+cross-row invariant is wrong for the same reason a stateful `ConstraintValidator` is. If the action has
+cross-row invariants, the rows are not independent, and the shape is a `DocumentHandler`.
+
+### The configuration a document action needs
+
+A `DocumentHandler` forces `commit-policy: ALL_OR_NOTHING` - anything else is refused at startup. The
+other half of the declaration is **not** currently forced, and its default is wrong for this shape:
+
+```yaml
+ludwig:
+  file-action:
+    actions:
+      order-import:
+        commit-policy: ALL_OR_NOTHING   # the only policy a DocumentHandler may have
+        mode: CONFIRM                   # the user sees every reject, then approves
+        reject-threshold: 0             # <-- REQUIRED for a DocumentHandler; see below
+        execution: DEFERRED             # for a large document: one long transaction, off the request
+        error-report: ANNOTATED_WORKBOOK
+```
+
+**Why `reject-threshold: 0` is not optional here.** A rejected row is never written to the bound-row
+artifact, and the threshold - default `0.1` - decides whether rejects refuse the submission at all. On a
+four-hundred-line order with thirty unbindable lines:
+
+```
+30 rows reject          30 / 400 = 0.075, not over 0.1
+370 rows are bound      the thirty are simply absent from the artifact
+the handler applies     one order, with 370 lines, and no way to know thirty ever existed
+the submission is       APPLIED, with a reject count a client is free to ignore
+```
+
+An order silently missing thirty lines is exactly the "we created the first 38 lines of your order"
+outcome the handler split exists to prevent - but the threshold is orthogonal to the commit policy and
+does not know which shape it is serving. `exceedsThreshold` is `rejected / read > threshold`, so `0` makes
+a single reject refuse the whole submission, with every addressed problem already stored and downloadable.
+For a `RowHandler` the default remains the right one: there, a reject is one row, which is what the
+threshold was designed for.
+
+This is a rule the configuration validator could enforce and does not; it is item 19 in
+[`docs/harness-enforcement.md`](../../docs/harness-enforcement.md) rather than quietly omitted.
+
+### What this does not give you
+
+**Addressed per-row problems from a `DocumentHandler`.** If a rule is genuinely per-row but can only be
+evaluated set-based - one query over every SKU in the file, rather than four hundred cached lookups - there
+is no seam for it today: bind time cannot see the other rows, and the handler cannot name a row. The
+options, in order of preference:
+
+1. Make it a cached `ConstraintValidator` and measure it. Four hundred lookups against a
+   `PERFORMANCE`-purpose cache is usually a non-problem, and this needs no new API.
+2. Accept one document-level code with the offending values as arguments.
+3. Propose an OpenSpec change adding a validation method to `DocumentHandler` that returns
+   `List<RowProblem>` and is called during the bind phase over a stream of `BoundRow` - addresses intact,
+   feeding the same `RejectCollector`. That is the shape the module is missing; it is not a workaround to
+   be bolted on inside a handler.
+
+Nothing here is a reason to drop a per-row rule into a handler "for now". A rule that reports one
+unlocated failure for a file with thirty problems is a rule users will route around by trial and error.
+
 ## Reading an untrusted spreadsheet
 
 This is the part with teeth. An XLSX is a ZIP of XML chosen by a user.

@@ -55,9 +55,18 @@ public class PatExchangeAutoConfiguration {
     @Bean
     public PatExchangeConfigurationValidator ludwigPatExchangeConfigurationValidator(
             PatProperties properties,
-            ru.ludwigandreas.security.config.SecurityProperties securityProperties) {
+            ru.ludwigandreas.security.config.SecurityProperties securityProperties,
+            org.springframework.core.env.Environment environment) {
+        // The introspection path is read from the Environment rather than from PatProperties because the
+        // controller's own @PostMapping resolves it the same way - one spelling of the property, so the
+        // check cannot end up validating a path the endpoint is not actually mounted at. Null when the
+        // endpoint is disabled, which is what makes the check silent for a deployment not using it.
+        String introspectionPath = environment.getProperty("ludwig.pat.introspection.enabled",
+                Boolean.class, Boolean.TRUE)
+                ? environment.getProperty("ludwig.pat.introspection.path", "/introspect")
+                : null;
         PatExchangeConfigurationValidator validator = new PatExchangeConfigurationValidator(
-                properties.getExchange(), securityProperties.getPublicPaths());
+                properties.getExchange(), securityProperties.getPublicPaths(), introspectionPath);
         validator.validate();
         return validator;
     }
@@ -106,6 +115,39 @@ public class PatExchangeAutoConfiguration {
     public PatAssertionMinter ludwigPatAssertionMinter(RSAKey signingKey, PatProperties properties,
                                                         Clock clock) {
         return new JoseAssertionMinter(signingKey, properties.getExchange().getIssuer(), clock);
+    }
+
+    /**
+     * Registers the mixin that omits an inactive introspection response's null fields.
+     *
+     * <p>Scoped to the one class, so nothing else in the application's serialization changes. See
+     * {@link ru.ludwigandreas.pat.exchange.PatIntrospectionJsonMixin} for why the annotation cannot live
+     * on the record itself.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "ludwigPatIntrospectionJsonCustomizer")
+    public org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer
+            ludwigPatIntrospectionJsonCustomizer() {
+        return builder -> builder.mixIn(
+                ru.ludwigandreas.pat.introspection.PatIntrospectionResponse.class,
+                ru.ludwigandreas.pat.exchange.PatIntrospectionJsonMixin.class);
+    }
+
+    /**
+     * The introspection endpoint, which a service calls when it authenticates a token itself.
+     *
+     * <p><b>Not</b> conditional on a {@link PatAssertionMinter}, unlike the exchange controller. That is
+     * the point of this route: it returns facts rather than a signed assertion, so a deployment with no
+     * signing key at all can still serve it. On this platform that is the only route available, because
+     * the company-provided edge cannot perform the exchange.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "ludwig.pat.introspection", name = "enabled", matchIfMissing = true)
+    public ru.ludwigandreas.pat.exchange.PatIntrospectionController ludwigPatIntrospectionController(
+            PatVerifier verifier, PatMetrics metrics, ExchangeRateLimiter rateLimiter) {
+        return new ru.ludwigandreas.pat.exchange.PatIntrospectionController(
+                verifier, metrics, rateLimiter);
     }
 
     @Bean

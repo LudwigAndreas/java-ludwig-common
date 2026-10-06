@@ -31,15 +31,32 @@ revocation window and does not make the issuing service a per-request dependency
   does: a filter that overwrote an established identity would make the order of the chain a security
   decision rather than a plumbing one
 
-### Requirement: The filter runs after identity-header stripping and before the bearer-token filter
+### Requirement: The filter runs after identity-header stripping, and the resource server declines the credential
 
-The filter SHALL be placed after the identity-header-stripping filter and before the bearer-token
-filter.
+The filter SHALL be placed immediately after the identity-header-stripping filter, so nothing it reads
+can be a client-supplied identity header. The chain's ordering javadoc requires a fifth filter to
+justify its place, and that is the justification.
 
-After stripping, so nothing it reads can be a client-supplied identity header. Before the bearer
-filter, because **a PAT request carries no bearer JWT and the resource server would reject it before
-the token was ever looked at** - which is the same justification the mTLS filter already makes for the
-same position, and the chain's ordering javadoc requires a fifth filter to make one.
+The resource server SHALL be configured, **only when this filter is enabled**, with a bearer-token
+resolver that reports no token for an `lpat_`-prefixed credential.
+
+That resolver, not the filter's position, is what makes this path reachable. This requirement was
+written as "before the bearer-token filter" by analogy with the mTLS filter and that was wrong; the
+test asserting against the registered chain is what found it. Two facts:
+
+1. Spring Security orders `BearerTokenAuthenticationFilter` **ahead of** `BasicAuthenticationFilter`,
+   so `addFilterBefore(..., BasicAuthenticationFilter)` - the position every filter this module adds
+   uses, including the stripping filter - places a filter *after* the bearer filter.
+2. `BearerTokenAuthenticationFilter` does not check for an existing authentication. It resolves a
+   token, authenticates unconditionally, and on failure commences the entry point and returns without
+   continuing the chain. So moving the PAT filter earlier would not have worked either: the bearer
+   filter would still have handed the `lpat_` credential to the JWT decoder and answered `401`.
+
+The analogy failed because an mTLS request carries no `Authorization` header at all, so the resolver
+finds nothing and the bearer filter passes it through. A PAT request carries one.
+
+Declining to offer the credential to the JWT decoder is also correct independently of ordering: a
+decode failure is logged, metered and sometimes stack-traced, and the token is its input.
 
 #### Scenario: A forged identity header accompanies a PAT
 - **WHEN** a request carries both an `lpat_` credential and a client-supplied identity header
@@ -47,15 +64,57 @@ same position, and the chain's ordering javadoc requires a fifth filter to make 
   comes from the token alone
 
 #### Scenario: The chain order is inspected
-- **THEN** the filter is registered between the stripping filter and the bearer filter, asserted by a
-  test rather than by reading the configuration - the ordering is a fact about Spring's filter
-  registration and not about this module's intent
+- **THEN** the filter is registered after the stripping filter and before the authorization filter,
+  asserted against `SecurityFilterChain.getFilters()` rather than by reading the configuration - the
+  ordering is a fact about Spring's filter registration and not about this module's intent
+
+#### Scenario: An `lpat_` credential reaches the resource server's token resolver
+- **WHEN** the filter is enabled and a request carries `Authorization: Bearer lpat_...`
+- **THEN** the resolver reports no bearer token, the bearer filter passes the request through, and the
+  PAT filter authenticates it
+
+#### Scenario: The filter is not enabled
+- **THEN** bearer tokens resolve exactly as Spring Security resolves them by default
+
+### Requirement: The introspection endpoint is reachable by the calling service
+
+The introspection path SHALL be reachable without the caller presenting a credential of its own, and the
+issuing service SHALL warn at startup when the endpoint is mounted and the path is not in
+`ludwig.security.public-paths`.
+
+A service authenticating a token itself calls introspection with no credential of its own: the only
+credential involved is the token being asked about, which is the subject of the question rather than the
+caller's identity. Behind `anyRequest().authenticated()` the call receives a `401`, introspection fails
+closed, and every personal access token is refused.
+
+This is not a weakening. The exchange endpoint is already public on exactly this reasoning and the two must
+not disagree: a caller who could learn something from introspection can learn strictly more from the
+exchange, which takes the same credential, performs the same verification and returns a usable assertion.
+Both require the full secret, so neither is an enumeration oracle, and the rate limiter applies to both.
+"Public" means the application does not authenticate the caller; the endpoint is expected to be reachable
+only inside the mesh, which is a deployment control no build can assert. `PatCredentialGuard` still refuses
+a caller that *is* authenticated by a personal access token.
+
+A warning rather than a startup failure, for the reason the exchange's own check gives: this module cannot
+tell whether an application has published the path through its own `SecurityFilterChain`.
+
+#### Scenario: The endpoint is mounted and the path is not public
+- **THEN** startup logs a warning naming the path and the configured public paths, and explaining that the
+  caller carries no credential of its own
+
+#### Scenario: The endpoint is disabled
+- **THEN** nothing is warned about, because no caller needs to reach it
 
 ### Requirement: Introspection answers with facts and never with credential material
 
 The issuing service SHALL expose an RFC 7662-shaped introspection endpoint. A successful response
-SHALL carry the token's id, its owner's subject, its scopes, its audiences and its expiry. It SHALL
-NOT carry a secret, a digest, or a key id.
+SHALL carry the token's id, its owner's subject, its scopes, its audiences and its expiry, under the
+RFC's own field names where it defines one. It SHALL NOT carry a secret, a digest, or a key id.
+
+The token id has no RFC field name and is carried as `patId`. `pat-core` has no Jackson - that is what
+lets the security starter depend on it - so a record component name *is* the wire name, and spelling
+this one `pat_id` would have meant a component named `pat_id` and a Checkstyle naming suppression spent
+on the appearance of a field no standard defines.
 
 The key id is excluded for the reason it is excluded from the claim and from every read endpoint: it is
 secret-adjacent lookup material that changes on rotation, so it is useless to a caller naming a token

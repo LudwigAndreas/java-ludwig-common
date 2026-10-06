@@ -505,6 +505,89 @@ public class SecurityProperties {
         /** Whether to compute, log and enforce the window at all. Off only for a test that wants it off. */
         private boolean validateRevocationWindow = true;
 
+        private final Filter filter = new Filter();
+
+        public Filter getFilter() {
+            return filter;
+        }
+
+        /**
+         * Authenticating a personal access token directly, without an edge that can exchange it.
+         *
+         * <p><b>Scaffolding, and off by default.</b> The designed route is that the edge exchanges an
+         * {@code lpat_} credential for a short-lived assertion and this module reads the
+         * {@code ludwig_pat} claim off it. This path exists for a deployment whose edge cannot do that -
+         * a company-provided session gateway that does cookie-to-JWT only and cannot be extended - where
+         * otherwise a personal access token could not be used at all.
+         *
+         * <p>When the edge gains that ability, set {@link #enabled} to {@code false}. The claim reader is
+         * already shipped and tested, and the table, the management API, the attenuation and the audit
+         * trail are unchanged in both worlds. <b>No check can assert that a deployment did this</b>, which
+         * is recorded among the credential area's unmechanisable conventions; this paragraph is the whole
+         * mitigation.
+         *
+         * <p>Off by default because adding a starter must never silently open a second authentication
+         * path, and because a deployment whose edge can exchange should use the exchange - it has a longer
+         * revocation window and does not make the issuing service a per-request dependency.
+         */
+        public static class Filter {
+
+            private boolean enabled = false;
+
+            /**
+             * Where the issuing service lives, as a base URL.
+             *
+             * <p>Startup fails when the filter is enabled and this is blank: a filter that cannot reach
+             * the issuer authenticates nothing, and discovering that at the first request looks like
+             * "personal access tokens do not work" rather than like a missing property.
+             */
+            private String issuerBaseUrl;
+
+            /** The introspection path on that service. */
+            private String introspectionPath = "/introspect";
+
+            /**
+             * How long to wait for the issuer.
+             *
+             * <p>Two seconds. Short on purpose: this is on the request path, and a slow issuer has to
+             * degrade into a refused request rather than a hung one. A request that waits thirty seconds
+             * and then fails is worse for the caller than one that fails immediately.
+             */
+            private java.time.Duration timeout = java.time.Duration.ofSeconds(2);
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
+
+            public String getIssuerBaseUrl() {
+                return issuerBaseUrl;
+            }
+
+            public void setIssuerBaseUrl(String issuerBaseUrl) {
+                this.issuerBaseUrl = issuerBaseUrl;
+            }
+
+            public String getIntrospectionPath() {
+                return introspectionPath;
+            }
+
+            public void setIntrospectionPath(String introspectionPath) {
+                this.introspectionPath = introspectionPath;
+            }
+
+            public java.time.Duration getTimeout() {
+                return timeout;
+            }
+
+            public void setTimeout(java.time.Duration timeout) {
+                this.timeout = timeout;
+            }
+        }
+
         public java.time.Duration getAssertionLifetime() {
             return assertionLifetime;
         }

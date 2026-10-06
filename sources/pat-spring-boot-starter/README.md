@@ -111,10 +111,80 @@ rather than inventing one. **Disclose no cause.** Not which of eleven, not "revo
 
 **3. Strip the `lpat_` credential before forwarding.** The service receives the assertion, never the token.
 
+## Introspection: the route for a platform whose edge cannot exchange
+
+Everything above assumes an edge that calls `/oauth2/token` and replaces the caller's credential. If your
+edge cannot — a company-provided session gateway that only does cookie → JWT, cannot be extended, and
+redirects a request with no session to OIDC — then under the exchange-only design a personal access token
+cannot be used at all.
+
+`/introspect` is the other route. A **service** asks about the token itself:
+
+```
+POST /introspect                      ← requires an AUTHENTICATED caller, unlike the exchange
+Content-Type: application/x-www-form-urlencoded
+
+token=lpat_...&resource=deploy-service     ← resource is the CALLER's own audience:
+                                             "may this token be used *here*"
+```
+
+```json
+{ "active": true, "sub": "alice", "scope": "orders:read deploy:write",
+  "aud": ["deploy-service"], "patId": "pat-42", "exp": "2026-09-01T00:00:00Z" }
+```
+
+and for **every** failure, identically:
+
+```json
+{ "active": false }
+```
+
+`200`, not `401` — RFC 7662's model, where "this token is not usable" is a successful answer to a valid
+question. A `401` would read as *"your introspection call was unauthorized"* and send an operator to the
+wrong place.
+
+### Three things about it that are deliberate
+
+**It reuses `PatVerifier` unchanged.** The parse before any I/O, the checksum rejection before any
+database access, the indexed point read on either key id, the constant-time digest comparison, the
+revocation and expiry checks, the CIDR allowlist, the rotation overlap and the `CachePurpose.SECURITY`
+cache all apply exactly as they do to the exchange. A second verification path would be a second place
+for one of those to be subtly wrong.
+
+**It requires an authenticated caller, and the exchange does not.** Opposite, and the right way round: the
+exchange *consumes* a token as its subject so it must be reachable unauthenticated; introspection is one
+service asking another, so the asker authenticates with its workload identity. It is also behind the same
+credential guard as the management surface — a leaked token able to introspect could enumerate which
+tokens are live, which is reconnaissance the uniform failure elsewhere exists to deny.
+
+**It needs no signing key, no JWKS and no issuer identity.** That is the single largest simplification of
+this route, and it is why it works on a platform where you do not own the issuer.
+
+### It is scaffolding
+
+When the company gateway gains PAT support, the exchange is what it will call and the `ludwig_pat` claim
+reader in `security-spring-boot-starter` is what will consume the result — both already shipped and
+tested. Removal is one property on the consuming side (`ludwig.security.pat.filter.enabled=false`); this
+endpoint can then be switched off with `ludwig.pat.introspection.enabled=false` or simply left unused.
+
+What survives either way: the table, the management API, rotation, revocation, retention, every audit
+event, the attenuation, and the whole of `pat-core`.
+
 ## The exchange must be public
 
 `/oauth2/token` has to be reachable unauthenticated. It *consumes* a token as its subject; it does not
 accept one as the caller's credential — the same rule that keeps a token off the management surface.
+
+`/introspect` has to be reachable unauthenticated for the same reason, and that is less obvious. A service
+authenticating a token itself calls introspection with **no credential of its own** — the only credential
+involved is the token being asked about. Behind `anyRequest().authenticated()` the call receives a `401`,
+introspection fails closed, and every token is refused.
+
+It discloses strictly less than the exchange, which is already public: both require presenting the full
+secret, and the exchange hands back a usable assertion on top. Neither is an enumeration oracle, because
+what an attacker lacks is the token. "Public" here means the application does not authenticate the caller —
+the endpoint is expected to be reachable only inside the mesh, which is a deployment control no build can
+assert. `PatCredentialGuard` still refuses a caller that *is* authenticated by a personal access token.
 
 `PatExchangeConfigurationValidator` warns when the path is missing from `ludwig.security.public-paths`. A
 warning rather than a startup failure, because the failure mode is loud and safe: the edge receives a 401,
@@ -161,7 +231,8 @@ false for exactly the callers whose window is largest.
    `pat-secret-detection.properties`.
 2. Include `db/changelog/pat/pat-changelog.xml`, or let `PatLiquibaseAutoConfiguration` run it.
 3. Supply the signing key, or a `PatAssertionMinter` that delegates to your provider.
-4. Add `/oauth2/token` to `ludwig.security.public-paths`.
+4. Add `/oauth2/token` to `ludwig.security.public-paths`, and `/introspect` too if any service
+   authenticates tokens directly.
 5. Grant `pat:manage` to anyone who may hold a token, and `pat:manage:any` only to whoever may mint one for
    somebody else — that second one is how a credential outlives the person who created it.
 6. Alert on `ludwig.pat.exchange.failure{reason="revoked"}`. Presenting a revoked credential means something

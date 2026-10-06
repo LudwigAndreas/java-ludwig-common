@@ -18,8 +18,9 @@ import ru.ludwigandreas.pat.web.PatManagementController;
 /**
  * Mounts the management API and the credential guard in front of it.
  *
- * <p>The guard is registered for the management base path specifically, read from the same property the
- * controller's mappings use. Registering it for every path would make it an authentication-wide policy -
+ * <p>The guard is registered for the management base path and the introspection path specifically, read
+ * from the same properties the controllers' mappings use. Registering it for every path would make it
+ * an authentication-wide policy -
  * "no token-backed caller may reach any endpoint" - which is the opposite of the point: token-backed
  * callers are supposed to reach the rest of the application, that is what tokens are for. This one surface
  * is where they must not go.
@@ -40,6 +41,10 @@ public class PatWebAutoConfiguration {
     private static final String BASE_PATH_PROPERTY = "ludwig.pat.web.base-path";
 
     private static final String DEFAULT_BASE_PATH = "/api/v1/personal-access-tokens";
+
+    private static final String INTROSPECTION_PATH_PROPERTY = "ludwig.pat.introspection.path";
+
+    private static final String DEFAULT_INTROSPECTION_PATH = "/introspect";
 
     @Bean
     @ConditionalOnMissingBean
@@ -78,11 +83,21 @@ public class PatWebAutoConfiguration {
     @ConditionalOnProperty(prefix = "ludwig.pat.web", name = "enabled", matchIfMissing = true)
     public WebMvcConfigurer ludwigPatGuardRegistration(PatCredentialGuard guard, Environment environment) {
         String basePath = environment.getProperty(BASE_PATH_PROPERTY, DEFAULT_BASE_PATH);
+        String introspectionPath =
+                environment.getProperty(INTROSPECTION_PATH_PROPERTY, DEFAULT_INTROSPECTION_PATH);
         return new WebMvcConfigurer() {
             @Override
             public void addInterceptors(InterceptorRegistry registry) {
+                // The introspection endpoint is guarded alongside the management surface, and for the
+                // same reason: a credential that can ask about credentials is a step towards a credential
+                // that can mint them. A leaked token able to introspect could enumerate which tokens are
+                // live, which is reconnaissance the uniform failure elsewhere is designed to deny.
+                //
+                // Not a public path. The caller is a SERVICE authenticated by its workload identity, not
+                // an anonymous client - unlike the exchange, which consumes a token as its subject and
+                // therefore must be reachable unauthenticated.
                 registry.addInterceptor(guard)
-                        .addPathPatterns(basePath, basePath + "/**");
+                        .addPathPatterns(basePath, basePath + "/**", introspectionPath);
             }
         };
     }

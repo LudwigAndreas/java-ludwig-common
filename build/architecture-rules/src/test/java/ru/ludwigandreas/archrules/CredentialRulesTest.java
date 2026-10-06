@@ -66,6 +66,22 @@ class CredentialRulesTest {
                         CredentialRules.SECRET_CARRIER_STAYS_INSIDE.value());
     }
 
+    @Test
+    @DisplayName("the rule names one type, so a second caller cannot satisfy it by being added")
+    void theAttenuationFenceNamesOneType() {
+        // Asserted against the rule's own description rather than against a fixture, because the subject
+        // is which TYPE the fence names and that is not something a synthetic service can demonstrate.
+        //
+        // It matters because of how this rule was nearly weakened. When a second authentication path was
+        // added there were two options: append that path's package to the fence (widening it - two
+        // packages today, three next year) or extract the construction into one type and name that
+        // (narrowing it). The second was taken, and this assertion is what would fail if somebody
+        // reverted to a package fence while keeping every other test green.
+        assertThat(Fixtures.ruleDescription(
+                Fixtures.configurationFor("good").build(), CredentialRules.ONE_ATTENUATION_PATH))
+                .contains("exactly one place");
+    }
+
     /**
      * The three rules whose subjects do not exist in any fixture, shown to be vacuous rather than broken.
      *

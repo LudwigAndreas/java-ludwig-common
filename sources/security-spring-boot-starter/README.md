@@ -513,13 +513,18 @@ it as a refusal would let anyone deny service to a user by adding a junk claim u
 
 ### The revocation window is computed for you
 
-Three TTLs compose into the one number that matters, and nobody multiplies them out in production. Startup
-computes **both** paths, logs them, and refuses to start when either exceeds the ceiling:
+TTLs compose into the one number that matters, and nobody multiplies them out in production. Startup
+computes **all three** paths, logs them, and refuses to start when any one exceeds the ceiling:
 
 ```
 request/response:   assertion lifetime + edge cache lifetime + authority cache TTL
 long-lived:         revalidation interval + authority cache TTL
+direct filter:      introspection cache TTL + authority cache TTL
 ```
+
+The third is computed and logged **whether or not the direct filter is enabled** (it is zero when it is
+not), so a deployment that turns it on later reads a number it has already seen rather than meeting it for
+the first time at the moment it matters.
 
 ```yaml
 ludwig:
@@ -531,16 +536,17 @@ ludwig:
       max-revocation-window: 15m
 ```
 
-Both are computed on purpose. Computing only the first would log a correct-looking number while being false
-for exactly the callers whose window is largest. The mechanism is the same as the audience check, and so is
+All three are computed on purpose. Computing only the first would log a correct-looking number while being
+false for exactly the callers whose window is largest. The mechanism is the same as the audience check, and so is
 the reasoning: a revoked credential that keeps working cannot be found by testing, because everything works.
 
 ### Preconditions, including one this repository cannot check
 
-**PAT support requires an edge that performs the exchange.** A client presenting `Authorization: Bearer
-lpat_...` directly to a service is not authenticated - no service has a verifier for that format. That is
-the deliberate restriction of the topology, and it is what buys the property that makes it worth having: a
-`curl` sends one static header and never calls a token endpoint, tracks an expiry or refreshes anything.
+**The designed route requires an edge that performs the exchange.** A client presenting `Authorization:
+Bearer lpat_...` directly to a service is not authenticated unless the second path below is switched on -
+by default no service has a verifier for that format. That restriction is what buys the property that makes
+the topology worth having: a `curl` sends one static header and never calls a token endpoint, tracks an
+expiry or refreshes anything.
 
 The edge owes three things, none of which any build here can verify:
 
@@ -551,6 +557,70 @@ The edge owes three things, none of which any build here can verify:
    written and false a release later.
 3. Render a failed exchange as `401` with `WWW-Authenticate: Bearer error="invalid_token"` and the
    credential-rejected problem type from `pat-core`'s `PatProblemTypes` - disclosing no cause.
+
+### The second path: authenticating a PAT directly
+
+For a platform whose edge **cannot** exchange a token - a company-provided session gateway that does
+cookie-to-JWT only, cannot be extended, and redirects a request with no session to OIDC - a personal access
+token would otherwise be unusable. One property turns on a filter that authenticates it in-service:
+
+```yaml
+ludwig:
+  security:
+    pat:
+      filter:
+        enabled: true                               # off by default
+        issuer-base-url: https://idp.internal       # where the token table lives
+        introspection-path: /introspect
+        timeout: 2s
+```
+
+What it does: recognises the `lpat_` prefix, introspects the credential at the issuing service (RFC 7662),
+and builds the authentication through the same single construction site every other path uses - so the
+effective authority is still `authoritiesOf(owner, now) ∩ token.scopes()`, resolved live. It computes no
+authority of its own.
+
+**There is still exactly one token table and one revocation point.** No service holds a token row, a digest
+or a key id; a service asks. That is the property the direct path was designed around, and it is why this
+is not a second issuer: there is no second signing key, no second `issuer-uri`, and no new proxy.
+
+#### What it costs
+
+| | Edge exchange (designed) | Direct filter (this path) |
+|---|---|---|
+| Revocation window | assertion + edge cache + authority cache | introspection cache + authority cache (**shorter**) |
+| Issuer availability | needed at exchange, then cached for the assertion's life | needed on every introspection cache miss |
+| Edge requirement | must perform RFC 8693 exchange | none |
+
+The trade is availability for reach. When the issuer is unreachable, PATs stop authenticating within the
+introspection cache TTL - every failure fails closed, which is the only safe direction but is a real
+dependency the exchange route does not have. Everything else continues: ordinary JWT traffic is untouched.
+
+#### Why the resource server does not see the credential
+
+The bearer-token filter would otherwise try to decode `lpat_...` as a JWT, fail, and answer `401` before
+this filter ran - it authenticates unconditionally and does not continue the chain on failure. So when the
+filter is enabled, the resource server is given a bearer-token resolver that reports **no token** for an
+`lpat_` credential, which is true: it is not a JWT and is not addressed to it.
+
+This was originally written as "place the filter before the bearer filter", by analogy with the mTLS filter.
+That analogy is wrong, and the README says so because it reads as obviously right: an mTLS request carries
+no `Authorization` header at all, so the resolver finds nothing and the request passes through. A PAT
+request carries one. The test that found this asserts against `SecurityFilterChain.getFilters()`; one
+reading the configuration would have passed.
+
+#### It is scaffolding, and here is the removal
+
+Set `enabled: false`. The claim reader that handles the exchanged assertion is already shipped and tested,
+and `PatDirectAuthenticationIT` asserts both configurations in one suite - with the filter off, an `lpat_`
+credential is unauthenticated and an exchanged assertion authenticates with the same effective authority.
+What is deleted when the edge gains PAT support is one filter, one client, one endpoint and one property.
+What survives is the table, the management API, rotation, revocation, retention, every audit event, the
+attenuation and the whole of `pat-core`.
+
+**No check can assert that a deployment actually removed it.** That is recorded among the credential area's
+unmechanisable conventions in `build/architecture-rules/README.md`, and the property's own javadoc says it
+too; this paragraph is the whole mitigation.
 
 ### What a future streaming transport owes
 

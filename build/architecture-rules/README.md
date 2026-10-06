@@ -465,6 +465,38 @@ transport does.
 
 Whoever adds that transport owes this repository the test. That sentence is the enforcement.
 
+#### The attenuation fence names a type, not a package - and that was a near miss
+
+When a second authentication path was added (a filter that authenticates an `lpat_` credential directly,
+for a platform whose edge cannot perform the token exchange), `credentials.one-attenuation-path` came
+under pressure to **widen**: append the filter's package to the fence and move on. Two packages today,
+three next year, and the invariant is gone by increments with the rule green the whole way.
+
+Instead the attenuation and the principal construction were extracted into one type -
+`security.authn.attenuation.AttenuatedAuthentications` - and the rule was re-pointed at that type alone.
+The rule is now **stricter** than it was: it cannot be satisfied by adding a caller, only by routing
+through the type.
+
+So a change that adds a third authentication path has exactly one correct move, and a change that
+instead appends to `ATTENUATION_TYPE` is a finding rather than a fix. That sentence is in the constant's
+javadoc, where somebody would make the edit.
+
+#### The list is now eight, not six
+
+Two more conventions in the credential area cannot be checked by any build:
+
+7. **Machine traffic must bypass the company session gateway.** The edge in front of this platform is a
+   company-provided proxy that does session-cookie-to-JWT and nothing else; a request with no session is
+   redirected to OIDC, which is fatal for a `curl` or an MCP client. Whether a deployment routes machine
+   traffic around it is not in this repository, and not even a startup warning is available - a service
+   cannot tell how it was reached. The mitigation is the module README and the fact that the failure is
+   unmistakable: an OIDC redirect in answer to a `curl`.
+8. **The direct-authentication path is meant to be deleted.** It is scaffolding until the company gateway
+   gains PAT support, at which point the exchange endpoint and the `ludwig_pat` claim reader - both
+   already shipped - carry the traffic. No check can assert that a deployment removed the filter once its
+   edge could do the exchange. A deprecation note on the property is the whole mitigation, and it will be
+   read by whoever is already looking at the property rather than by whoever should be.
+
 ## Configuring the conventions
 
 Nothing in the rules hardcodes a package name. A service maps its own layout onto the library's

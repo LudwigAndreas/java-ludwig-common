@@ -42,8 +42,14 @@ import ru.ludwigandreas.archrules.support.ArchitecturePredicates;
  * <p>Prose cannot hold that. The intersection is one line, the union is also one line, and the difference
  * between them is invisible in review and invisible in every test that happens to use a principal whose
  * authority exceeds the token's scopes. What holds it is {@link #ONE_ATTENUATION_PATH}: if exactly one place
- * in the platform can construct a credential-backed principal, and that place intersects, then no second
- * place can get it wrong.
+ * in the platform can construct a credential-backed authentication, and that place intersects, then no
+ * second place can get it wrong.
+ *
+ * <p>That rule names a single <b>type</b> rather than a package, and it was narrowed to a type at the moment
+ * it came under pressure to widen - when a second authentication path was added, the alternative being to
+ * append that path's package to the fence. See {@link #ATTENUATION_TYPE} for why appending is a finding
+ * rather than a fix. A rule that grows a package each time a caller is added is a rule that expires
+ * quietly.
  *
  * <h2>What this checks, and what it deliberately does not</h2>
  *
@@ -104,13 +110,29 @@ public final class CredentialRules implements ArchitectureRuleSet {
     private static final List<String> CREDENTIAL_PACKAGES = List.of("ru.ludwigandreas.pat..");
 
     /**
-     * The one package that may construct a credential-backed principal.
+     * The one TYPE that may construct a credential-backed authentication.
      *
-     * <p>Narrower than the whole security starter on purpose. The converter package is where a token's claim
-     * is turned into authority, and it is the only place that has both halves of the intersection in hand -
-     * the owner's live authorities from the authority lookup, and the token's scopes from the claim.
+     * <p>A single class, not a package, and the difference is the whole point of this constant.
+     *
+     * <p>This used to name {@code ru.ludwigandreas.security.authn.jwt..}, because there was one caller - the
+     * claim reader - and a package was a close enough fence. When a second authentication path arrived
+     * (a filter that authenticates an {@code lpat_} credential directly, for a platform whose edge cannot
+     * perform the token exchange) there were two options, and they are not equivalent:
+     *
+     * <ul>
+     *   <li><b>Add the filter's package to this rule.</b> That <em>widens</em> it. Two packages today,
+     *       three next year, and the invariant is gone by increments without anybody deciding to give it
+     *       up. The rule would still be green the whole way.</li>
+     *   <li><b>Extract the construction into one type and name that.</b> That <em>narrows</em> it. The rule
+     *       can no longer be satisfied by adding a caller - only by routing through the type.</li>
+     * </ul>
+     *
+     * <p>The second was taken. So a change that adds a third authentication path has exactly one correct
+     * move available to it, and a change that instead appends to this constant is a finding rather than a
+     * fix. Said here because this constant is where somebody would make that edit.
      */
-    private static final String ATTENUATION_PACKAGE = "ru.ludwigandreas.security.authn.jwt..";
+    private static final String ATTENUATION_TYPE =
+            "ru.ludwigandreas.security.authn.attenuation.AttenuatedAuthentications";
 
     /** The secret carrier, named as a string so this jar does not depend on {@code pat-core}. */
     private static final String SECRET_CARRIER = "ru.ludwigandreas.pat.token.PatSecret";
@@ -266,9 +288,12 @@ public final class CredentialRules implements ArchitectureRuleSet {
      * through the two-argument constructor, and this rule sees all of them.
      */
     private static ArchRule oneAttenuationPath() {
+        DescribedPredicate<JavaClass> theConstructionType = DescribedPredicate.describe(
+                "the single attenuation construction type",
+                javaClass -> ATTENUATION_TYPE.equals(javaClass.getName()));
         return ArchRuleDefinition.classes()
-                .that(ArchitecturePredicates.residingOutsideOf(
-                        List.of(ATTENUATION_PACKAGE, "ru.ludwigandreas.pat..")))
+                .that(ArchitecturePredicates.residingOutsideOf(List.of("ru.ludwigandreas.pat..")))
+                .and(DescribedPredicate.not(theConstructionType))
                 .should(notConstructCredentialBackedAuthentication())
                 .as("A credential-backed authentication is constructed in exactly one place");
     }

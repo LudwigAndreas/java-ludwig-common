@@ -14,12 +14,17 @@ import ru.ludwigandreas.security.exception.SecurityConfigurationException;
  * every dashboard is green - which is the same category of defect as a skipped audience check, and is handled
  * the same way here: by refusing to start rather than by warning.
  *
- * <p><b>Two compositions, both computed.</b> A request/response caller's window is bounded by the assertion's
+ * <p><b>Three compositions, all computed.</b> A request/response caller's window is bounded by the assertion's
  * lifetime plus how long the edge reuses it plus the authority cache's TTL. A caller holding a long-lived
  * connection has a different window entirely - the connection was authenticated once, so what bounds it is
  * how often the service re-derives authority, plus the same cache TTL. Computing only the first would log a
  * correct-looking number while being false for exactly the callers whose window is largest, which is worse
  * than computing neither.
+ *
+ * <p>A caller authenticated by the direct filter has a third window again: that connection was authenticated
+ * from an introspection result, so what bounds it is how long that result is cached, plus the same authority
+ * cache TTL. Computed whether or not the filter is enabled, so that a deployment turning it on later does not
+ * meet its window for the first time at that point.
  *
  * <p>The authority cache TTL is read from the cache module rather than duplicated here, because it is already
  * declared there as a {@code CachePurpose.SECURITY} setting with its own startup ceiling. This validator adds
@@ -33,9 +38,18 @@ public class RevocationWindowValidator {
 
     private final Duration authorityCacheTtl;
 
+    private final Duration introspectionCacheTtl;
+
     public RevocationWindowValidator(SecurityProperties.Pat pat, Duration authorityCacheTtl) {
+        this(pat, authorityCacheTtl, Duration.ZERO);
+    }
+
+    public RevocationWindowValidator(SecurityProperties.Pat pat, Duration authorityCacheTtl,
+                                      Duration introspectionCacheTtl) {
         this.pat = pat;
         this.authorityCacheTtl = authorityCacheTtl == null ? Duration.ZERO : authorityCacheTtl;
+        this.introspectionCacheTtl =
+                introspectionCacheTtl == null ? Duration.ZERO : introspectionCacheTtl;
     }
 
     /**
@@ -55,7 +69,23 @@ public class RevocationWindowValidator {
     }
 
     /**
-     * Computes both windows, logs them, and throws when either exceeds the ceiling.
+     * Resolves the introspection cache's configured TTL, or zero when the direct filter is not in use.
+     *
+     * <p>Read from the resolver for the same reason the authority cache's TTL is: the default is only what
+     * this module suggests, and a deployment that overrode it would otherwise have its window computed
+     * from a number it had deliberately changed.
+     */
+    public static Duration introspectionCacheTtl(
+            ru.ludwigandreas.cache.config.CacheSettingsResolver resolver) {
+        if (resolver == null) {
+            return Duration.ZERO;
+        }
+        return resolver.resolve(
+                ru.ludwigandreas.security.authn.pat.PatIntrospectionCaches.definition()).ttl();
+    }
+
+    /**
+     * Computes all three windows, logs them, and throws when any exceeds the ceiling.
      *
      * <p>Logged even when it passes, and that is deliberate: the number then exists in the record of every
      * deployment rather than only in the head of whoever last reasoned about it. An operator asked "how long
@@ -73,6 +103,9 @@ public class RevocationWindowValidator {
                 .plus(pat.getEdgeCacheLifetime())
                 .plus(authorityCacheTtl);
         Duration longLived = pat.getRevalidationInterval().plus(authorityCacheTtl);
+        // The third path. Computed whether or not the filter is enabled, so a deployment that turns it on
+        // later does not meet its window for the first time at that point.
+        Duration directFilter = introspectionCacheTtl.plus(authorityCacheTtl);
         Duration ceiling = pat.getMaxRevocationWindow();
 
         if (requestResponse.compareTo(ceiling) > 0) {
@@ -86,12 +119,20 @@ public class RevocationWindowValidator {
                     "revalidation-interval=" + pat.getRevalidationInterval(),
                     "authority cache ttl=" + authorityCacheTtl));
         }
+        if (directFilter.compareTo(ceiling) > 0) {
+            throw exceeded("direct filter", directFilter, ceiling, List.of(
+                    "introspection cache ttl=" + introspectionCacheTtl,
+                    "authority cache ttl=" + authorityCacheTtl));
+        }
 
         log.info("Personal access token revocation window: {} for request/response callers"
                         + " (assertion {} + edge cache {} + authority cache {}), {} for long-lived"
-                        + " connections (revalidation {} + authority cache {}). Ceiling {}.",
+                        + " connections (revalidation {} + authority cache {}), {} for callers"
+                        + " authenticated by the direct filter (introspection cache {} + authority"
+                        + " cache {}). Ceiling {}.",
                 requestResponse, pat.getAssertionLifetime(), pat.getEdgeCacheLifetime(), authorityCacheTtl,
-                longLived, pat.getRevalidationInterval(), authorityCacheTtl, ceiling);
+                longLived, pat.getRevalidationInterval(), authorityCacheTtl,
+                directFilter, introspectionCacheTtl, authorityCacheTtl, ceiling);
     }
 
     private SecurityConfigurationException exceeded(String path, Duration actual, Duration ceiling,
