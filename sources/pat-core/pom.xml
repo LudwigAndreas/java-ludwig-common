@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>pat-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Personal access token core</name>
+    <description>
+        The personal-access-token format and nothing stateful: the masked secret carrier, the
+        lpat_&lt;keyId&gt;_&lt;secret&gt;_&lt;checksum&gt; mint and parse, SHA-256 fingerprinting with
+        constant-time comparison, the attenuation scope set, the single definition of the ludwig_pat
+        JWT claim, and the problem-type constants the edge renders a rejected credential with. No
+        storage, no Spring, no HTTP.
+    </description>
+
+    <!--
+        ZERO in-repo dependencies, and - exactly as in cache-spring-boot-starter - that is a
+        load-bearing property rather than an accident.
+
+        This module is depended on from BOTH sides of the security seam. security-spring-boot-starter
+        reads the ludwig_pat claim and applies the attenuation, and it sits near the bottom of this
+        reactor: identity-projection, user-settings, web-core and every service depend on it. The
+        issuing side, pat-spring-boot-starter, depends on security-spring-boot-starter in turn. If
+        this module depended on audit-core, on web-core or on security itself, the security starter
+        could not depend on it and the claim name would have to be written as a literal on both sides
+        of the seam - which is the failure the single PatClaims definition exists to prevent, and whose
+        symptom is a token that authenticates as its owner with no attenuation applied at all.
+
+        Everything here is JDK-only: SecureRandom, MessageDigest, java.util.zip.CRC32C and
+        java.util.Base64. Nothing to pin in ludwig-bom, which is why this change touches no BOM.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            Lombok is provided-scope and compile-time only, as everywhere else in this reactor. It does
+            not appear on a consumer's classpath and so does not break the zero-dependency property
+            above.
+        -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

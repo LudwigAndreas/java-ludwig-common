@@ -48,6 +48,27 @@ public final class SecurityPrincipals {
         return current().map(LudwigPrincipal::subject);
     }
 
+    /**
+     * What the current caller presented, when it was a long-lived credential.
+     *
+     * <p>Empty for an ordinary request, which is most of them - so a caller can treat "present" as "this is
+     * a token-backed request" without comparing against {@link CredentialKind#DIRECT}.
+     *
+     * <p>Lives here rather than being read with an {@code instanceof} at each use, because there are two
+     * denial paths that need it - method security and the data-scope guard - and a second copy of the cast
+     * is a second place to forget it. Both paths record the credential so that an investigation into a
+     * denial ends at the owner's demotion rather than at the token: a personal access token confers the
+     * intersection of its owner's <em>live</em> authority and its own scopes, so it can stop working with
+     * nobody having revoked anything.
+     */
+    public static Optional<Credential> currentCredential() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication instanceof LudwigAuthentication ludwig && ludwig.credential().isLongLived()) {
+            return Optional.of(ludwig.credential());
+        }
+        return Optional.empty();
+    }
+
     public static boolean isType(PrincipalType type) {
         return current().map(principal -> principal.isType(type)).orElse(false);
     }

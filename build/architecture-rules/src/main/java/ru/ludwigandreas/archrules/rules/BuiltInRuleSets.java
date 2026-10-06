@@ -37,7 +37,8 @@ public final class BuiltInRuleSets {
             new OperationVocabularyRules(),
             new CachingRules(),
             new PresentationRules(),
-            new UploadRules());
+            new UploadRules(),
+            new CredentialRules());
 
     private BuiltInRuleSets() {
     }

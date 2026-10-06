@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!--
+      Schema for pat-spring-boot-starter. Changeset ids and author are namespaced ("pat-NNN",
+      "ludwig-pat") so they never collide with a consuming application's own changesets in the shared
+      DATABASECHANGELOG table - see PatLiquibaseAutoConfiguration, which registers this changelog as an
+      independent SpringLiquibase bean, exactly as the idempotency and identity-projection modules do.
+
+      One table. There is deliberately no shared "credential" table and no inheritance hierarchy waiting
+      for a second credential type: a deploy key or a signed webhook secret would have a different
+      lifecycle, a different issuance authority and a different revocation story, and a table built to
+      hold all three would hold none of them well.
+    -->
+
+    <changeSet id="pat-001-create-token" author="ludwig-pat">
+        <comment>
+            The personal access token table. Holds digests, never secrets: the raw secret is returned in the
+            issuance response exactly once and there is no code path that can read it back.
+        </comment>
+        <createTable tableName="ludwig_pat">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="pk_ludwig_pat"/>
+            </column>
+
+            <!--
+              The owner's stable subject - the OIDC sub, never a username or an email. Those get reassigned,
+              and a credential keyed on a reassigned identifier attributes one person's tokens to another.
+              The same rule LudwigPrincipal.subject already states, for the same reason.
+            -->
+            <column name="owner_subject" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Human-readable label, so an owner with six tokens can tell them apart. Never authoritative. -->
+            <column name="name" type="varchar(200)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!--
+              The primary key id and digest.
+
+              key_id is unique and indexed because that is what makes verification an indexed point read
+              rather than a scan with a hash per candidate row. It is secret-adjacent lookup material: not
+              secret itself, but it travels with the secret and changes on rotation, which is why the claim
+              and the audit trail name `id` instead.
+
+              secret_digest is nullable, and the null has meaning: a revoked or expired token keeps its row
+              for audit with the digest CLEARED, so the record still says what that credential could do while
+              no longer being able to authenticate anything.
+            -->
+            <column name="key_id" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="secret_digest" type="varchar(64)"/>
+
+            <!--
+              The rotation overlap: a SECOND key id and digest on the SAME row, not a second row.
+
+              A rotation that invalidates the old secret at once requires every consumer to be updated
+              atomically. Nothing real can do that, so the observed outcome is that nobody rotates. Keeping
+              both on one row is what makes the token's identity, scopes and audit history continuous
+              across a rotation - a second row would be a second token wearing the first one's name.
+            -->
+            <column name="previous_key_id" type="varchar(64)"/>
+            <column name="previous_secret_digest" type="varchar(64)"/>
+            <column name="previous_secret_expires_at" type="timestamp with time zone"/>
+
+            <!--
+              Scopes and audiences, as text. Two dimensions that answer different questions and must not be
+              collapsed: scope answers WHAT may be done, audience answers WHERE it may be presented. A CI
+              token for deployments has no business being presentable at the billing service, whoever owns
+              it - and for an owner holding broad roles, "bounded by the owner's authority" is not a
+              meaningful bound.
+
+              Both are NOT NULL with no default. There is deliberately no default audience: every available
+              default is either "every service this token permits" or "everything", and both are the
+              condition audience binding exists to prevent.
+            -->
+            <column name="scopes" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="audiences" type="text">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Optional CIDR allowlist. Empty means "from anywhere", which is the common case. -->
+            <column name="allowed_cidrs" type="text"/>
+
+            <!--
+              The four audit columns db-core's AuditedEntity populates. created_by is who ISSUED the token,
+              which is not always the owner: an administrator may mint one for a service account, and that
+              distinction is the whole reason issuing on behalf of another subject needs its own authority.
+            -->
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="updated_at" type="timestamp with time zone"/>
+            <column name="updated_by" type="varchar(255)"/>
+
+            <!--
+              Mandatory expiry. Nullable in the column so that a deployment which has explicitly turned on
+              non-expiring tokens can store one, but the service refuses a null unless
+              ludwig.pat.allow-non-expiring is set: a credential with no expiry outlives every process that
+              knows it exists.
+            -->
+            <column name="expires_at" type="timestamp with time zone"/>
+
+            <column name="revoked_at" type="timestamp with time zone"/>
+            <column name="revocation_reason" type="varchar(64)"/>
+
+            <!--
+              Debounced last-use tracking, written off the critical path and best-effort.
+
+              Per-request writes to one hot row are write amplification on the exchange path and a
+              contention point under load. Losing an update costs an operator some precision in a dormancy
+              report; failing an exchange because a telemetry write failed costs a production pipeline.
+            -->
+            <column name="last_used_at" type="timestamp with time zone"/>
+            <column name="last_used_ip" type="varchar(64)"/>
+            <column name="use_count" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <!--
+              Optimistic locking, as every db-core entity has. Load-bearing here rather than incidental:
+              rotation reads a row, mints a new secret and writes both key ids back, and two concurrent
+              rotations without this would leave one secret unreachable - minted, handed to a caller, and
+              not in the row.
+            -->
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="pat-002-unique-key-ids" author="ludwig-pat">
+        <comment>
+            Unique indexes on both key ids. Unique rather than merely indexed: a collision is then a refused
+            insert rather than two tokens that verify against each other's digest, and uniqueness is what
+            makes the lookup a point read.
+        </comment>
+        <createIndex tableName="ludwig_pat" indexName="ux_ludwig_pat_key_id" unique="true">
+            <column name="key_id"/>
+        </createIndex>
+        <!--
+          Partial, because previous_key_id is null for every token that has never been rotated - which is
+          most of them - and a non-partial unique index would permit exactly ONE such row in the entire
+          table. Liquibase has no portable partial-index element, so this is raw DDL, as the idempotency
+          changelog already does for its own Postgres-specific statements.
+
+          This is schema DDL, not data access, and it is NOT an exception to the module's QueryDSL-only
+          rule: SqlConfinementTest scans src/main/java, every query in this module is a QueryDSL predicate
+          against a generated Q-type, and there is no third SQL carve-out. Said here because a reader who
+          finds SQL in this module will reasonably wonder.
+        -->
+        <sql dbms="postgresql">
+            CREATE UNIQUE INDEX ux_ludwig_pat_previous_key_id
+                ON ludwig_pat (previous_key_id)
+                WHERE previous_key_id IS NOT NULL
+        </sql>
+        <rollback>
+            <sql dbms="postgresql">DROP INDEX IF EXISTS ux_ludwig_pat_previous_key_id</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="pat-003-owner-index" author="ludwig-pat">
+        <comment>
+            Listing an owner's tokens is the management API's most common read, and purging walks expiry.
+        </comment>
+        <createIndex tableName="ludwig_pat" indexName="ix_ludwig_pat_owner">
+            <column name="owner_subject"/>
+        </createIndex>
+        <createIndex tableName="ludwig_pat" indexName="ix_ludwig_pat_expires_at">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

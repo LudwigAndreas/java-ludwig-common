@@ -52,6 +52,16 @@ public class IdentityProjectionService {
     private final LudwigCache<PrincipalRef, Authorities> authorityCache;
 
     /**
+     * Announces a disabled principal to anything holding state keyed on a subject.
+     *
+     * <p>An {@link org.springframework.context.ApplicationEventPublisher} rather than a direct call to the
+     * interested modules, because this module should not know what they are. Today the only listener is the
+     * personal-access-token issuer, which revokes the subject's live tokens so that a token list matches
+     * reality; tomorrow it could be anything else keyed on a subject.
+     */
+    private final org.springframework.context.ApplicationEventPublisher events;
+
+    /**
      * Whether the projection keeps the user's contact data.
      *
      * <p>Cleared rather than never mapped, because the mapper is generated and mapping by name is what
@@ -89,6 +99,14 @@ public class IdentityProjectionService {
         repository.save(entity);
 
         evictAfterCommit(event.subject());
+
+        // Published after the save and only for a disabling event. Not for UPSERT, which is the vast
+        // majority of traffic - a listener firing on every ordinary user update would be a listener
+        // somebody switches off.
+        if (statusFor(event) == UserStatus.DISABLED) {
+            events.publishEvent(new ru.ludwigandreas.security.principal.PrincipalDisabledEvent(
+                    event.subject(), event.type().name()));
+        }
     }
 
     /**

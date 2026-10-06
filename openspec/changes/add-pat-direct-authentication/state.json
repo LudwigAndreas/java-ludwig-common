@@ -1,0 +1,66 @@
+{
+  "change": "add-pat-direct-authentication",
+  "contract": {
+    "goal": "Make personal access tokens usable on a platform whose edge cannot exchange them: a service authenticates an lpat_ credential itself by introspecting it against the one central token table, with no second issuer, no signing key, no new proxy and no client change.",
+    "output": "pat-core gains the introspection request/response shape. pat-spring-boot-starter gains an RFC 7662-shaped /introspect endpoint reusing PatVerifier unchanged. security-spring-boot-starter gains PatAuthenticationFilter (off by default), a cached introspection client, a third revocation-window composition, and the attenuation construction extracted into one dedicated type. architecture-rules' one-attenuation-path rule is NARROWED to that one type. No new module, no POM change anywhere.",
+    "constraints": [
+      "No POM change in any module - the introspection client uses Spring's RestClient, already present via spring-boot-starter-web. Deliberately NOT rest-client-spring-boot-starter: it would put a sizeable module on the classpath of the one nearest the bottom of the reactor for one POST, and every platform consumer pays that.",
+      "pat-core keeps ZERO in-repo dependencies",
+      "security-spring-boot-starter acquires NO persistence dependency and NO new in-repo dependency",
+      "credentials.one-attenuation-path must be NARROWED (one type) not WIDENED (a second package). Adding the filter's package to the rule is a finding, not a fix.",
+      "The extraction in task 1.1 is a pure refactor: PatAttenuatingConverterTest must pass UNMODIFIED. Editing that test to accommodate the extraction would destroy the only evidence that behaviour did not change.",
+      "Exactly one table and one revocation point - no service holds a token row, a digest or a key id",
+      "Every introspection failure answers {\"active\": false} identically; the reason goes to metrics and audit only",
+      "The filter is OFF unless ludwig.security.pat.filter.enabled - adding the starter must not silently open a second authentication path",
+      "All THREE revocation-window compositions computed and logged, largest checked against the ceiling",
+      "never lower the bar: no weakened Checkstyle or ArchUnit rule, no disabled or deleted test, no narrowing to the part that passes"
+    ],
+    "done_when": [
+      "git diff --exit-code -- '**/pom.xml'",
+      "scripts/manifest.sh stale",
+      "mvn -q validate",
+      "mvn -pl :pat-core -am verify",
+      "mvn -pl :pat-spring-boot-starter -am verify",
+      "mvn -pl :security-spring-boot-starter -am verify",
+      "mvn -pl :architecture-rules -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :file-action-spring-boot-starter -am verify",
+      "mvn -pl :file-ingest-spring-boot-starter -am verify",
+      "mvn -pl :identity-projection-spring-boot-starter -am verify",
+      "mvn -pl :messaging-spring-boot-starter -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :object-storage-spring-boot-starter -am verify",
+      "mvn -pl :test-support-security -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "scripts/check_image_pins.sh",
+      "openspec validate add-pat-direct-authentication"
+    ]
+  },
+  "current_task": "complete, except 0.1 which is pending_human",
+  "decisions": [
+    "Task 0.1 is a routing precondition outside this repository and outside this agent's reach - it is about whether machine traffic can reach services without traversing the company session gateway. It is recorded in pending_human rather than guessed at. Everything in sections 1-5 is code that is correct regardless of the answer and is testable in-process with MockMvc, so implementation proceeds; DEPLOYMENT is blocked on 0.1 even when the gate is green.",
+    "Verify the PAT in the service rather than minting a JWT of our own. Rejected the self-minted JWT for three reasons, the third decisive: a second issuer Boot's single issuer-uri cannot express; a signing key to own and rotate; and - the settling one - there would STILL be nothing to perform the exchange, since the company gateway will not, so either every client runs it or we deploy our own proxy. A second issuer, a key and a proxy, to avoid one in-cluster hop.",
+    "The single attenuation path is preserved by extracting construction into one type and re-pointing the ArchUnit rule at that type - which makes the rule stricter (one class rather than a package). Adding the filter's package would have widened it: two packages today, three next year, invariant gone by increments.",
+    "The filter sits between the mTLS filter and the bearer filter, with the justification the mTLS filter already makes verbatim: a PAT request carries no bearer JWT, so the resource server downstream would reject it before the token was looked at.",
+    "A third revocation-window composition (introspection cache TTL + authority cache TTL) is computed and logged whether or not the filter is enabled, so a deployment enabling it later does not meet its window for the first time at that point.",
+    "This capability is scaffolding with a stated removal path: one property. What survives is the table, the management API, rotation, revocation, retention, every audit event, the attenuation and the whole of pat-core; what is deleted is one filter, one client, one endpoint and one property.",
+    "The mTLS filter's argument for running before the bearer filter does not transfer to the PAT filter, and the difference is that an mTLS request carries no Authorization header at all - so the resource server's token resolver finds nothing and passes it through - whereas a PAT request carries one. The mechanism for a credential the resource server must not consume is therefore the bearer-token resolver, not a position in the chain. Declining to hand the credential to the JWT decoder is also right independently of ordering: a decode failure is logged, metered and sometimes stack-traced, and the live secret is its input.",
+    "The introspection path is public at the application, like the exchange path, and this is not a weakening: a caller who could learn something from introspection can learn strictly more from the exchange, which takes the same credential, runs the same verification and returns a usable assertion. Both require the full secret, so neither is an enumeration oracle; the rate limiter applies to both. Public means the application does not authenticate the caller - the endpoint is expected to be reachable only inside the mesh, which this module cannot assert - and PatCredentialGuard still refuses a caller that IS authenticated by a personal access token. The alternative, giving the client a service identity, would have meant a token-acquisition mechanism in the module nearest the bottom of the reactor, which the change's own constraints rule out."
+  ],
+  "failures": [
+    "Task 4.4 as written was wrong, and shipping it would have left the whole direct PAT path dead in production. It said the filter must sit 'before the bearer filter', copying the mTLS filter's justification. Asserting against SecurityFilterChain.getFilters() rather than against the configuration - which the task itself demanded - showed the registered order is BearerTokenAuthenticationFilter, then IdentityHeaderStrippingFilter, then PatAuthenticationFilter: Spring Security orders the bearer filter AHEAD of BasicAuthenticationFilter, which is the position this module adds every filter at. Moving the PAT filter earlier would not have fixed it either, because BearerTokenAuthenticationFilter does not check for an existing authentication - it resolves a token, authenticates unconditionally, and on failure commences the entry point WITHOUT continuing the chain. So an lpat_ credential was answered 401 by the resource server before the PAT filter ran. Fixed with PatAwareBearerTokenResolver (delegating to DefaultBearerTokenResolver, reporting no token for an lpat_ prefix), installed only when the filter is enabled. The spec requirement, the task, the filter javadoc and the chain comment were all corrected rather than the test being relaxed; the mistaken reasoning is recorded in each, because 'before the bearer filter' reads as obviously correct. A test asserting the configuration would have passed throughout.",
+    "The introspection endpoint was unreachable by the only caller it has. PatIntrospectionController sits behind the chain's anyRequest().authenticated(), while PatIntrospectionClient carries no credential of its own - the only credential in the exchange is the token being asked about, which is the subject of the question rather than the caller's identity. So every introspection received a 401 and failed closed, and the direct path refused every token. Neither half's own tests could see it: PatIntrospectionIT authenticates a SERVICE principal before calling the endpoint, and the filter's unit test mocks the client. Found by PatDirectAuthenticationIT driving the whole loop over real HTTP. Fixed by extending PatExchangeConfigurationValidator to warn when the mounted introspection path is absent from ludwig.security.public-paths - the same check, with the same warn-not-fail reasoning, that already covers /oauth2/token - plus the path in the module's test properties, a spec requirement, and both READMEs.",
+    "Operational, not a product defect, and recorded so it is not re-diagnosed: the first run of the dependents gate reported identity-projection-spring-boot-starter and messaging-spring-boot-starter FAILED, both with 'The forked VM terminated without properly saying goodbye' in idempotency-spring-boot-starter - a transitive dependency pulled in by -am, not a module under test. The cause was two Maven builds started concurrently against the same reactor and the same target directories. Both passed on a serial re-run. Never run two -am builds of this reactor at the same time; the failure looks like a product defect in an unrelated module."
+  ],
+  "open_questions": [
+    "Should the introspection cache use the shared Redis tier rather than per-replica? Per-replica is assumed because CachePurpose.SECURITY refuses the cluster-wide load lease and stale reads anyway, so a shared tier buys only hit ratio. It is a configuration change under ludwig.cache.caches.<name>.tiers, not a design change.",
+    "Does the future MCP starter want this path or the edge exchange? Probably both, since an MCP server reachable from outside the mesh and one reachable only from inside it are different deployments. Worth revisiting when that change is written rather than guessing now.",
+    "Should PatIntrospectionClient be able to present a credential of its own, for a deployment that wants application-level caller authentication on introspection rather than relying on the mesh? RFC 7662 asks for it. Not done here: it needs a service-identity mechanism this module does not have, and adding one would put token acquisition in the module every platform consumer depends on. Worth revisiting with the MCP starter, which will face the same question for its own outbound calls."
+  ],
+  "pending_human": [
+    "TASK 0.1, BLOCKING FOR DEPLOYMENT ONLY: confirm a route exists by which machine traffic reaches services without traversing the company session gateway. Proof: a curl carrying any Authorization header through that route returns the service's own 401, not a 302 to OIDC. Without it this change is inert in production however green the build is. Cannot be checked from this repository."
+  ],
+  "rollback_point": "0488c30efac6f6d28181fa90cb31f91ab08ae4fa",
+  "index_version": "014d3295e62ce2ecb393c8be41aee4fd3353247f729330d99018549df2b8c493"
+}

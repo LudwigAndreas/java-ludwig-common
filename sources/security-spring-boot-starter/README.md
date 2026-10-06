@@ -459,6 +459,180 @@ surface as 500s. Two ways to cover them:
 
 ---
 
+## Personal access tokens
+
+A personal access token is an **attenuation** of its owner's live authority. This module does not store,
+issue or verify one - that is `pat-spring-boot-starter`, running in the identity provider. What happens here
+is the part every service does: reading the `ludwig_pat` claim off an assertion the edge already exchanged,
+and narrowing the authorities it just resolved.
+
+```
+effective = authoritiesOf(owner, now)  ∩  token.scopes()
+```
+
+Never a union. Never a snapshot taken at issuance. The owner side goes through the same `AuthorityLookup`
+as every other caller, with the same cache and the same metrics - so this is the paragraph
+[Why roles are not in the token](#why-roles-are-not-in-the-token) already promised, extended to tokens
+rather than excepted for them. Three consequences:
+
+- A role revoked from the owner stops working for their tokens **within the authority cache's TTL, with no
+  token revocation and no call to the issuer**.
+- A token scoped to an authority its owner never held grants nothing. It is **inert rather than dangerous**.
+- A token **can stop working without being revoked.** That is the whole security argument, and it will read
+  as a bug to whoever is paged - which is why the denial record names both the token and the authority that
+  went away, so the first investigation ends at the demotion rather than at the token.
+
+### Nothing here is a new door
+
+`PrincipalType` still has exactly three values. A token-backed caller is the same person, through the same
+door, with less authority - so `isType(USER)` and every `USER`-keyed `DataScopeProvider` keep matching, which
+they would not if this had been a fourth principal type.
+
+What was presented is recorded on `LudwigAuthentication`, **not** on `LudwigPrincipal`:
+
+```java
+authentication.credential().isLongLived();                       // was a token presented?
+authentication.credential().credentialId();                      // which one
+SecurityPrincipals.currentCredential();                          // the same, ambiently
+```
+
+The principal is the identity model - who the caller is. A credential is a property of *how this request
+authenticated*, which is not part of who anybody is. An earlier design put it on the principal as a new
+record component and accepted breaking the canonical constructor for every consumer; that was the path of
+least resistance to the same category error as a fourth `PrincipalType`, one level further in. The
+constructor you already use is untouched.
+
+### A malformed claim is refused, not ignored
+
+An assertion that announces a token but whose scope list cannot be read is **rejected**. This is the one
+place where the usual lenient default would be catastrophic: falling through to "no attenuation" would hand
+that token its owner's entire authority, reachable by corrupting a list.
+
+A claim of the wrong *type* is different and is ignored - it cannot have come from the exchange, so treating
+it as a refusal would let anyone deny service to a user by adding a junk claim upstream.
+
+### The revocation window is computed for you
+
+TTLs compose into the one number that matters, and nobody multiplies them out in production. Startup
+computes **all three** paths, logs them, and refuses to start when any one exceeds the ceiling:
+
+```
+request/response:   assertion lifetime + edge cache lifetime + authority cache TTL
+long-lived:         revalidation interval + authority cache TTL
+direct filter:      introspection cache TTL + authority cache TTL
+```
+
+The third is computed and logged **whether or not the direct filter is enabled** (it is zero when it is
+not), so a deployment that turns it on later reads a number it has already seen rather than meeting it for
+the first time at the moment it matters.
+
+```yaml
+ludwig:
+  security:
+    pat:
+      assertion-lifetime: 5m      # match what the issuer actually mints
+      edge-cache-lifetime: 5m     # match what the edge actually caches
+      revalidation-interval: 1m
+      max-revocation-window: 15m
+```
+
+All three are computed on purpose. Computing only the first would log a correct-looking number while being
+false for exactly the callers whose window is largest. The mechanism is the same as the audience check, and so is
+the reasoning: a revoked credential that keeps working cannot be found by testing, because everything works.
+
+### Preconditions, including one this repository cannot check
+
+**The designed route requires an edge that performs the exchange.** A client presenting `Authorization:
+Bearer lpat_...` directly to a service is not authenticated unless the second path below is switched on -
+by default no service has a verifier for that format. That restriction is what buys the property that makes
+the topology worth having: a `curl` sends one static header and never calls a token endpoint, tracks an
+expiry or refreshes anything.
+
+The edge owes three things, none of which any build here can verify:
+
+1. Exchange per **destination audience**, and cache per `(secret digest, audience)` for the lifetime the
+   response declares. Without the caching, every service request becomes an issuer request by proxy.
+2. Mint `aud` naming one service. `AudienceValidator` then enforces it here with **no new code** - which is
+   checked by `PatAudienceScopingTest`, because "no code needed" is the kind of claim that is true when
+   written and false a release later.
+3. Render a failed exchange as `401` with `WWW-Authenticate: Bearer error="invalid_token"` and the
+   credential-rejected problem type from `pat-core`'s `PatProblemTypes` - disclosing no cause.
+
+### The second path: authenticating a PAT directly
+
+For a platform whose edge **cannot** exchange a token - a company-provided session gateway that does
+cookie-to-JWT only, cannot be extended, and redirects a request with no session to OIDC - a personal access
+token would otherwise be unusable. One property turns on a filter that authenticates it in-service:
+
+```yaml
+ludwig:
+  security:
+    pat:
+      filter:
+        enabled: true                               # off by default
+        issuer-base-url: https://idp.internal       # where the token table lives
+        introspection-path: /introspect
+        timeout: 2s
+```
+
+What it does: recognises the `lpat_` prefix, introspects the credential at the issuing service (RFC 7662),
+and builds the authentication through the same single construction site every other path uses - so the
+effective authority is still `authoritiesOf(owner, now) ∩ token.scopes()`, resolved live. It computes no
+authority of its own.
+
+**There is still exactly one token table and one revocation point.** No service holds a token row, a digest
+or a key id; a service asks. That is the property the direct path was designed around, and it is why this
+is not a second issuer: there is no second signing key, no second `issuer-uri`, and no new proxy.
+
+#### What it costs
+
+| | Edge exchange (designed) | Direct filter (this path) |
+|---|---|---|
+| Revocation window | assertion + edge cache + authority cache | introspection cache + authority cache (**shorter**) |
+| Issuer availability | needed at exchange, then cached for the assertion's life | needed on every introspection cache miss |
+| Edge requirement | must perform RFC 8693 exchange | none |
+
+The trade is availability for reach. When the issuer is unreachable, PATs stop authenticating within the
+introspection cache TTL - every failure fails closed, which is the only safe direction but is a real
+dependency the exchange route does not have. Everything else continues: ordinary JWT traffic is untouched.
+
+#### Why the resource server does not see the credential
+
+The bearer-token filter would otherwise try to decode `lpat_...` as a JWT, fail, and answer `401` before
+this filter ran - it authenticates unconditionally and does not continue the chain on failure. So when the
+filter is enabled, the resource server is given a bearer-token resolver that reports **no token** for an
+`lpat_` credential, which is true: it is not a JWT and is not addressed to it.
+
+This was originally written as "place the filter before the bearer filter", by analogy with the mTLS filter.
+That analogy is wrong, and the README says so because it reads as obviously right: an mTLS request carries
+no `Authorization` header at all, so the resolver finds nothing and the request passes through. A PAT
+request carries one. The test that found this asserts against `SecurityFilterChain.getFilters()`; one
+reading the configuration would have passed.
+
+#### It is scaffolding, and here is the removal
+
+Set `enabled: false`. The claim reader that handles the exchanged assertion is already shipped and tested,
+and `PatDirectAuthenticationIT` asserts both configurations in one suite - with the filter off, an `lpat_`
+credential is unauthenticated and an exchanged assertion authenticates with the same effective authority.
+What is deleted when the edge gains PAT support is one filter, one client, one endpoint and one property.
+What survives is the table, the management API, rotation, revocation, retention, every audit event, the
+attenuation and the whole of `pat-core`.
+
+**No check can assert that a deployment actually removed it.** That is recorded among the credential area's
+unmechanisable conventions in `build/architecture-rules/README.md`, and the property's own javadoc says it
+too; this paragraph is the whole mitigation.
+
+### What a future streaming transport owes
+
+Every guarantee above assumes authority is re-derived per request. A connection authenticated once at open -
+SSE, a streaming RPC, a websocket, an MCP transport - pins its attenuation for its lifetime, so a token
+revoked an hour into an eight-hour stream keeps working.
+
+`ludwig.security.pat.revalidation-interval` ships now so the knob exists before the first transport does, and
+the long-lived composition above is already in the startup computation. There is deliberately **no ArchUnit
+rule**: nothing in this repository holds a connection open, so a rule would have an empty matching set, pass
+vacuously, and read as coverage. Whoever adds the first transport owes this module the enforcing test.
+
 ## Configuration reference
 
 ```yaml

@@ -15,6 +15,17 @@ import org.springframework.security.access.PermissionEvaluator;
 import ru.ludwigandreas.audit.ActorResolver;
 import ru.ludwigandreas.cache.api.LudwigCacheRegistry;
 import ru.ludwigandreas.cache.config.LudwigCacheAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
+import org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguration;
+import org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.security.web.SecurityFilterChain;
+import jakarta.servlet.Filter;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import java.util.List;
 import ru.ludwigandreas.security.authn.mtls.MutualTlsAuthenticationFilter;
 import ru.ludwigandreas.security.authn.mtls.PartnerIdentityResolver;
 import ru.ludwigandreas.security.authz.Authorities;
@@ -25,7 +36,11 @@ import ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
 import ru.ludwigandreas.security.config.MutualTlsAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityAuditAutoConfiguration;
+import ru.ludwigandreas.security.authn.pat.PatAuthenticationFilter;
+import ru.ludwigandreas.security.authn.pat.PatIntrospectionClient;
+import ru.ludwigandreas.security.config.ResourceServerAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration;
+import ru.ludwigandreas.security.web.IdentityHeaderStrippingFilter;
 import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.data.DataScopeMapping;
 import ru.ludwigandreas.security.data.DataScopePolicyValidator;
@@ -282,4 +297,135 @@ class SecurityAutoConfigurationTest {
             return mapping();
         }
     }
+
+    /**
+     * The chain the PAT filter joins, asserted against the filters Spring Security actually registered.
+     *
+     * <p>A separate runner because this is the only group that needs the resource server built, and
+     * building it pulls in Boot's own security auto-configuration - which the rest of the class
+     * deliberately does without, so that each condition can be exercised on its own.
+     *
+     * <p>The ordering is asserted against {@code chain.getFilters()} rather than against the
+     * configuration, for a specific reason: every one of these filters is added with
+     * {@code addFilterBefore(..., BasicAuthenticationFilter.class)}, so the configuration says nothing
+     * about their order relative to each other - only insertion order does. A test that read the
+     * configuration would pass while the filters ran in any sequence at all.
+     */
+    private final WebApplicationContextRunner chainRunner = new WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(
+                    LudwigCacheAutoConfiguration.class,
+                    LudwigSecurityAutoConfiguration.class,
+                    SecurityMetricsAutoConfiguration.class,
+                    DataAuthorizationAutoConfiguration.class,
+                    MutualTlsAutoConfiguration.class,
+                    AuditCoreAutoConfiguration.class,
+                    SecurityAuditAutoConfiguration.class,
+                    ResourceServerAutoConfiguration.class,
+                    SecurityAutoConfiguration.class,
+                    OAuth2ResourceServerAutoConfiguration.class,
+                    // Spring MVC, because the chain's requestMatchers resolve through
+                    // HandlerMappingIntrospector - which only exists when Security and MVC share a
+                    // context. Its absence is the failure a service would see too, so it belongs here
+                    // rather than being worked around with an AntPathRequestMatcher in production code.
+                    HttpMessageConvertersAutoConfiguration.class,
+                    WebMvcAutoConfiguration.class))
+            .withPropertyValues(
+                    "ludwig.security.jwt.audiences=deploy-service",
+                    // A jwk-set-uri rather than an issuer-uri, so the decoder is built without the
+                    // provider-discovery call an issuer-uri makes at startup.
+                    "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://idp.invalid/jwks");
+
+    @Test
+    @DisplayName("no PAT filter by default - adding this starter does not open a second authentication path")
+    void patFilterIsOffByDefault() {
+        chainRunner.run(context -> {
+            assertThat(context)
+                    .doesNotHaveBean(PatAuthenticationFilter.class)
+                    .doesNotHaveBean(PatIntrospectionClient.class);
+            assertThat(filterNames(context.getBean(SecurityFilterChain.class)))
+                    .doesNotContain("PatAuthenticationFilter");
+        });
+    }
+
+    @Test
+    @DisplayName("enabled without an issuer URL fails startup rather than refusing every token at runtime")
+    void patFilterWithoutAnIssuerFailsFast() {
+        chainRunner.withPropertyValues("ludwig.security.pat.filter.enabled=true")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    @DisplayName("when enabled it sits after the stripping filter, and the bearer filter declines the token")
+    void patFilterSitsAfterStrippingAndTheResolverDeclinesTheCredential() {
+        chainRunner.withPropertyValues(
+                        "ludwig.security.pat.filter.enabled=true",
+                        "ludwig.security.pat.filter.issuer-base-url=https://idp.internal")
+                .run(context -> {
+                    List<String> names = filterNames(context.getBean(SecurityFilterChain.class));
+
+                    assertThat(names).contains("PatAuthenticationFilter");
+                    assertThat(names.indexOf("PatAuthenticationFilter"))
+                            .as("after the stripping filter, so nothing it reads can be a client-supplied"
+                                    + " identity header")
+                            .isGreaterThan(names.indexOf(IdentityHeaderStrippingFilter.class.getSimpleName()));
+                    assertThat(names.indexOf("PatAuthenticationFilter"))
+                            .as("before the filter that actually enforces the authorization rules, which is"
+                                    + " what 'authenticates the request' has to mean")
+                            .isLessThan(names.indexOf("AuthorizationFilter"));
+
+                    // The assertion this group exists for, and the one that found the defect. The PAT
+                    // filter is registered AFTER the bearer filter - Spring Security orders
+                    // BearerTokenAuthenticationFilter ahead of BasicAuthenticationFilter, which is the
+                    // position this module adds every filter at, stripping included. Since the bearer
+                    // filter authenticates unconditionally and does not continue the chain on failure,
+                    // reaching the PAT filter at all depends on the resolver reporting no token.
+                    assertThat(names.indexOf(BearerTokenAuthenticationFilter.class.getSimpleName()))
+                            .as("recorded, not desired: the real order is bearer filter first, which is why"
+                                    + " PatAwareBearerTokenResolver exists")
+                            .isLessThan(names.indexOf("PatAuthenticationFilter"));
+                    // And that the resolver is in effect in the chain that was actually built, asserted
+                    // by running the bearer filter rather than by inspecting a bean: it must pass an
+                    // lpat_ credential through instead of committing a 401 on it.
+                    assertThat(bearerFilterPassesThrough(context.getBean(SecurityFilterChain.class)))
+                            .as("the bearer filter must decline the credential and continue the chain;"
+                                    + " if it answers 401 here, the PAT filter is never reached and the"
+                                    + " whole direct path is dead in production")
+                            .isTrue();
+                });
+    }
+
+    @Test
+    @DisplayName("without the filter, the bearer filter treats an lpat_ credential as an invalid token")
+    void defaultResolverIsUntouchedWithoutTheFilter() {
+        // The other side of the same assertion, and the one that makes "only when enabled" true rather
+        // than claimed: a deployment on the designed edge-exchange route resolves bearer tokens exactly
+        // as Spring Security does, so an lpat_ credential is an undecodable JWT and is refused.
+        chainRunner.run(context -> assertThat(bearerFilterPassesThrough(
+                context.getBean(SecurityFilterChain.class))).isFalse());
+    }
+
+    /**
+     * Runs the chain's bearer-token filter against an {@code lpat_} credential and reports whether it
+     * continued the chain.
+     *
+     * <p>{@code false} means it committed a response - which for this input is the {@code 401} that
+     * would make the direct PAT path unreachable.
+     */
+    private static boolean bearerFilterPassesThrough(SecurityFilterChain chain) throws Exception {
+        Filter bearer = chain.getFilters().stream()
+                .filter(BearerTokenAuthenticationFilter.class::isInstance)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no bearer filter in the chain"));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/things");
+        request.addHeader("Authorization",
+                "Bearer lpat_abcdefghijk_0123456789012345678901234567890123456_x");
+        MockFilterChain downstream = new MockFilterChain();
+        bearer.doFilter(request, new MockHttpServletResponse(), downstream);
+        return downstream.getRequest() != null;
+    }
+
+    private static List<String> filterNames(SecurityFilterChain chain) {
+        return chain.getFilters().stream().map(Filter::getClass).map(Class::getSimpleName).toList();
+    }
+
 }

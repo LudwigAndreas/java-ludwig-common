@@ -17,6 +17,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -43,6 +44,11 @@ import ru.ludwigandreas.security.web.SecurityMdcFilter;
  *   <li><b>Header stripping</b> first, so nothing later can read a client-supplied identity header.</li>
  *   <li><b>mTLS</b> next, because a partner request carries no bearer token and would otherwise be
  *       rejected by the resource server before its certificate was ever looked at.</li>
+ *   <li><b>Personal access token</b> next, and only when a deployment has enabled it. Same reasoning as
+ *       mTLS, which is why it shares that position: a PAT request carries no bearer token and would be
+ *       rejected by the resource server before the credential was ever looked at. Absent by default - the
+ *       designed route is that the edge exchanges the token before it arrives, and this filter exists for
+ *       a deployment whose edge cannot.</li>
  *   <li><b>Bearer token</b> last, for browser users, and only if nothing has authenticated yet.</li>
  * </ol>
  *
@@ -113,6 +119,92 @@ public class ResourceServerAutoConfiguration {
                 environment.getProperty(ISSUER_URI_PROPERTY), audiences);
     }
 
+    /**
+     * Computes, logs and bounds how long a revoked personal access token keeps working.
+     *
+     * <p>A bean rather than a call inside another bean's factory method, so that it runs during context
+     * refresh and fails startup, in the same way and for the same reason as
+     * {@link #ludwigAudienceValidator}. A warning here would be read once and then scroll away; what this
+     * guards against is a window nobody computed, and nobody reads a log line about a number they never
+     * thought to ask for.
+     */
+    @Bean
+    public RevocationWindowValidator ludwigRevocationWindowValidator(
+            SecurityProperties properties,
+            ObjectProvider<ru.ludwigandreas.cache.config.CacheSettingsResolver> cacheSettings) {
+        RevocationWindowValidator validator = new RevocationWindowValidator(
+                properties.getPat(),
+                RevocationWindowValidator.authorityCacheTtl(cacheSettings.getIfAvailable()),
+                RevocationWindowValidator.introspectionCacheTtl(cacheSettings.getIfAvailable()));
+        validator.validate();
+        return validator;
+    }
+
+    /**
+     * The introspection client, for a deployment whose edge cannot exchange a token.
+     *
+     * <p>Fails startup when the filter is enabled with no issuer URL. A filter that cannot reach the
+     * issuer authenticates nothing, and discovering that at the first request looks like "personal access
+     * tokens do not work" rather than like a missing property - the same reasoning as the audience check.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "ludwig.security.pat.filter", name = "enabled")
+    public ru.ludwigandreas.security.authn.pat.PatIntrospectionClient ludwigPatIntrospectionClient(
+            SecurityProperties properties) {
+        SecurityProperties.Pat.Filter filter = properties.getPat().getFilter();
+        if (filter.getIssuerBaseUrl() == null || filter.getIssuerBaseUrl().isBlank()) {
+            throw new SecurityConfigurationException(
+                    "ludwig.security.pat.filter.enabled=true but"
+                            + " ludwig.security.pat.filter.issuer-base-url is not set. The filter"
+                            + " authenticates a personal access token by introspecting it at the issuing"
+                            + " service; with nowhere to ask, it authenticates nothing and every token"
+                            + " request is refused - which presents as 'personal access tokens do not"
+                            + " work' rather than as a missing property.");
+        }
+        String audience = properties.getJwt().getAudiences().stream().findFirst().orElse(null);
+        return new ru.ludwigandreas.security.authn.pat.PatIntrospectionClient(
+                filter.getIssuerBaseUrl(), filter.getIntrospectionPath(), audience, filter.getTimeout());
+    }
+
+    /**
+     * The introspection cache's declaration, published only when the filter is enabled.
+     *
+     * <p>Conditional rather than unconditional so that a deployment not using this path does not acquire a
+     * cache it never reads - and so that {@code ludwig.cache.caches.pat-introspection} appearing in a
+     * configuration dump means somebody turned the path on.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "ludwig.security.pat.filter", name = "enabled")
+    public ru.ludwigandreas.cache.api.CacheDefinition<String,
+            ru.ludwigandreas.pat.introspection.PatIntrospectionResponse> ludwigPatIntrospectionCache() {
+        return ru.ludwigandreas.security.authn.pat.PatIntrospectionCaches.definition();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "ludwig.security.pat.filter", name = "enabled")
+    public ru.ludwigandreas.security.authn.pat.PatAuthenticationFilter ludwigPatAuthenticationFilter(
+            ru.ludwigandreas.security.authn.pat.PatIntrospectionClient client,
+            ru.ludwigandreas.cache.api.LudwigCacheRegistry cacheRegistry,
+            AuthorityLookup authorityLookup,
+            SecurityMetrics metrics) {
+        return new ru.ludwigandreas.security.authn.pat.PatAuthenticationFilter(
+                client,
+                cacheRegistry.cache(
+                        ru.ludwigandreas.security.authn.pat.PatIntrospectionCaches.definition()),
+                authorityLookup,
+                metrics);
+    }
+
+    // SUPPRESS CHECKSTYLE ParameterNumber - nine collaborators, and each one is a separately
+    // conditional bean this method has to resolve lazily: the JWT decoder and its converter exist only
+    // when an issuer is configured, the mTLS filter only when mTLS is on, the PAT filter only when a
+    // deployment enabled it, and the trusted proxies only alongside mTLS. Grouping them into a holder
+    // would mean a type whose entire purpose is to carry nine beans into one method, plus a bean
+    // definition for the holder - and it would hide which of them a context test has to substitute,
+    // which is the thing this signature is good at making obvious.
+    @SuppressWarnings("checkstyle:ParameterNumber")
     @Bean
     @ConditionalOnMissingBean(SecurityFilterChain.class)
     public SecurityFilterChain ludwigSecurityFilterChain(
@@ -123,6 +215,7 @@ public class ResourceServerAutoConfiguration {
             ObjectProvider<JwtDecoder> jwtDecoder,
             ObjectProvider<JwtPrincipalConverter> jwtConverter,
             ObjectProvider<MutualTlsAuthenticationFilter> mtlsFilter,
+            ObjectProvider<ru.ludwigandreas.security.authn.pat.PatAuthenticationFilter> patFilter,
             ObjectProvider<TrustedProxies> trustedProxies) throws Exception {
 
         http.csrf(AbstractHttpConfigurer::disable)
@@ -161,12 +254,38 @@ public class ResourceServerAutoConfiguration {
             http.addFilterBefore(mutualTls, BasicAuthenticationFilter.class);
         }
 
+        // Added after the stripping filter and at the same position, so it runs after it: the request
+        // reaching here has had every identity header removed.
+        //
+        // NOT before the bearer-token filter, which is what this was first written to do and what the
+        // mTLS filter's argument would suggest. Spring Security orders BearerTokenAuthenticationFilter
+        // AHEAD of BasicAuthenticationFilter, so this position is after the bearer filter, and the
+        // stripping filter above is too - moving this one earlier would mean moving that one as well.
+        // And it would not have been enough: the bearer filter does not check for an existing
+        // authentication, so it would have fed the lpat_ credential to the JWT decoder, failed, and
+        // answered 401 regardless of what ran before it. PatAwareBearerTokenResolver below is what
+        // actually makes this path reachable; see its javadoc, and SecurityAutoConfigurationTest, which
+        // asserts the real order rather than this comment.
+        //
+        // Absent unless ludwig.security.pat.filter.enabled, so this is null for every deployment whose
+        // edge can perform the token exchange, which is the designed route.
+        ru.ludwigandreas.security.authn.pat.PatAuthenticationFilter pat = patFilter.getIfAvailable();
+        if (pat != null) {
+            http.addFilterBefore(pat, BasicAuthenticationFilter.class);
+        }
+
         JwtDecoder decoder = jwtDecoder.getIfAvailable();
         JwtPrincipalConverter converter = jwtConverter.getIfAvailable();
         if (decoder != null && converter != null) {
-            http.oauth2ResourceServer(oauth2 -> oauth2
-                    .authenticationEntryPoint(entryPoint)
-                    .jwt(jwt -> jwt.decoder(decoder).jwtAuthenticationConverter(converter)));
+            http.oauth2ResourceServer(oauth2 -> {
+                oauth2.authenticationEntryPoint(entryPoint)
+                        .jwt(jwt -> jwt.decoder(decoder).jwtAuthenticationConverter(converter));
+                if (pat != null) {
+                    oauth2.bearerTokenResolver(
+                            new ru.ludwigandreas.security.authn.pat.PatAwareBearerTokenResolver(
+                                    new DefaultBearerTokenResolver()));
+                }
+            });
         }
 
         // After authentication, so the MDC carries the resolved principal rather than nothing.

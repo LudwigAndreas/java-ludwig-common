@@ -1,0 +1,49 @@
+{
+  "change": "add-personal-access-tokens",
+  "model": "claude-opus-5",
+  "index_version": "014d3295e62ce2ecb393c8be41aee4fd3353247f729330d99018549df2b8c493",
+  "modules_touched": [
+    "pat-core",
+    "pat-spring-boot-starter",
+    "security-spring-boot-starter",
+    "identity-projection-spring-boot-starter",
+    "audit-core",
+    "architecture-rules",
+    "checkstyle-rules",
+    "ludwig-bom",
+    "jacoco-aggregate",
+    "common"
+  ],
+  "gate": {
+    "manifest_build": "pass",
+    "manifest_layout": "pass - 33 modules, each in the directory its role requires",
+    "manifest_stale": "pass - exits 0, POM-set SHA b053447f0c497de5",
+    "validate": "pass - mvn -q validate, 0 errors across every module",
+    "install": "pass - mvn clean install, BUILD SUCCESS",
+    "aggregate_report": "pass - 30 of 30 jar modules present; pat-core 88.8%, pat-spring-boot-starter 82.2%, platform 73.9% instruction / 63.0% branch",
+    "image_pins": "pass - 6 image references, all pinned by digest",
+    "api_baseline": "FAIL (environment, not the change) - exits 1 because https://nexus.example.internal is unreachable, so revapi could not fetch a baseline for any of the 25 published modules. API compatibility is UNVERIFIED and must be re-run where the releases repository is reachable.",
+    "openspec_validate": "pass"
+  },
+  "tests": {
+    "added": 147,
+    "unit_touched_modules": 357,
+    "integration_touched_modules": 41,
+    "failed": 0,
+    "architecture_rules": "56 of 56 pass in pat-spring-boot-starter"
+  },
+  "environment": {
+    "jdk_used": "temurin-17.0.19",
+    "note": "Maven defaults to JDK 26 on this machine, and JaCoCo 0.8.12 cannot instrument JDK-26 CLDR/locale classes. That does not merely warn - it fails Spring context loading in any integration test that touches locale data, so every gate command here was run with JAVA_HOME pointing at the Temurin 17 the project actually targets. Not an escape hatch: -Djacoco.skip was declined and would have been the wrong tool. The permanent fix is the deployment's call: pin CI to 17, or raise JaCoCo in ludwig-bom."
+  },
+  "retries": 23,
+  "human_corrections": 2,
+  "rollback_point": "b5e0c8cbaf5ff37d94556db0f5c011ca7c5c1efa",
+  "unresolved": [
+    "API compatibility is unverified. scripts/check_api_baseline.sh could not resolve a baseline for any published module because the releases repository is unreachable here. Its own message is the reason this matters: an unresolvable baseline is not an absent one - revapi compared each module against an empty archive and reported nothing, which looks exactly like a passing check and is not one.",
+    "AccessDecision, a public record in security.audit, gained two components (credentialKind, credentialId) and therefore a changed canonical constructor. In-repo there are zero canonical-constructor callers and three builder callers, so nothing here breaks - but an external consumer calling it directly would. This is the one genuinely breaking edge in the change. LudwigAuthentication deliberately took an overloaded constructor to avoid exactly this, and the same treatment is available for AccessDecision if the break is not wanted.",
+    "The long-lived-connection revalidation requirement has no mechanical check, by design: nothing in this repository holds a connection open, so a rule would pass vacuously and read as coverage. The configuration property and its startup ceiling ship, and the enforcing test is a recorded obligation on the change that introduces the first streaming transport.",
+    "Six conventions this change introduces cannot be checked by any build and are recorded in the design's enforcement table rather than dropped: the edge caching the exchange response, the plain-digest reasoning depending on the generator, the secret being displayed exactly once by the consuming UI, the checksum not being a security control, the edge's client-facing 401 contract, and the streaming revalidation above.",
+    "ExchangeFailure.BAD_CHECKSUM was removed as unreachable, which means the defender cannot currently distinguish a truncated token from random garbage in metrics. Distinguishing them would be a change to PatTokens.parse to report why it failed - worth doing for the signal ('many truncated tokens' is a client bug, 'random garbage' is a scanner), and deliberately not done here because it is a parser change rather than an enum constant."
+  ]
+}

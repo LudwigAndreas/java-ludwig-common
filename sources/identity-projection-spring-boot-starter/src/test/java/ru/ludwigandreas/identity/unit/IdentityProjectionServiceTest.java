@@ -41,10 +41,15 @@ class IdentityProjectionServiceTest {
 
     private IdentityProjectionService service;
 
+    /** Collects published events, so the disabling signal can be asserted rather than assumed. */
+    private final java.util.List<Object> published = new java.util.ArrayList<>();
+
+    private final org.springframework.context.ApplicationEventPublisher events = published::add;
+
     @BeforeEach
     void setUp() {
         service = new IdentityProjectionService(
-                repository, new OidcUserEventMapperImpl(), authorityCache, true);
+                repository, new OidcUserEventMapperImpl(), authorityCache, events, true);
     }
 
     private OidcUserEvent event(OidcUserEventType type, Instant occurredAt, Set<String> roles) {
@@ -138,7 +143,7 @@ class IdentityProjectionServiceTest {
         // Cleared on every apply, not only on insert: switching the flag off has to actually remove
         // what an earlier configuration stored, rather than freezing it in place forever.
         IdentityProjectionService withoutContact = new IdentityProjectionService(
-                repository, new OidcUserEventMapperImpl(), authorityCache, false);
+                repository, new OidcUserEventMapperImpl(), authorityCache, events, false);
         when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
 
         withoutContact.apply(event(OidcUserEventType.UPSERT, NOW, Set.of()));
@@ -148,5 +153,35 @@ class IdentityProjectionServiceTest {
         assertThat(saved.getValue().getEmail()).isNull();
         assertThat(saved.getValue().getEmailVerified()).isNull();
         assertThat(saved.getValue().getChatHandle()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("a disabling event is published, so anything keyed on the subject can react")
+    void disablingPublishesAnEvent() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
+
+        service.apply(event(OidcUserEventType.DISABLE, NOW, Set.of()));
+
+        // The cross-module half of the owner-disabled path. The listener lives in
+        // pat-spring-boot-starter and is tested there; what has to be asserted HERE is that this module
+        // actually publishes, because a listener for an event nobody publishes passes its own tests
+        // perfectly and does nothing.
+        assertThat(published)
+                .singleElement()
+                .isInstanceOf(ru.ludwigandreas.security.principal.PrincipalDisabledEvent.class);
+        assertThat(((ru.ludwigandreas.security.principal.PrincipalDisabledEvent) published.get(0)).subject())
+                .isEqualTo(SUBJECT);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("an ordinary upsert publishes nothing")
+    void upsertPublishesNothing() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
+
+        service.apply(event(OidcUserEventType.UPSERT, NOW, Set.of()));
+
+        // The vast majority of traffic. A listener firing on every ordinary user update is a listener
+        // somebody switches off, taking the disabling signal with it.
+        assertThat(published).isEmpty();
     }
 }

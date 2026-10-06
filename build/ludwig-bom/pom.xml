@@ -234,6 +234,26 @@
                 <artifactId>security-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!--
+                The two personal-access-token modules.
+
+                Here because this BOM manages what a CONSUMER resolves, and a published platform module
+                absent from it is one a consumer cannot name without hard-coding a version - which is the
+                problem the BOM exists to solve. The change that added these modules initially asserted it
+                needed no BOM edit; that assertion was about third-party versions and overlooked that the
+                BOM also manages the platform's own coordinates. jacoco-aggregate is what surfaced it, by
+                failing to resolve them.
+            -->
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>pat-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>pat-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
                 <artifactId>identity-projection-spring-boot-starter</artifactId>

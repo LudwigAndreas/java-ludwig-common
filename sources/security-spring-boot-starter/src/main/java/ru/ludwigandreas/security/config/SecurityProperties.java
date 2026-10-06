@@ -40,6 +40,11 @@ public class SecurityProperties {
     private final Audit audit = new Audit();
     private final Metrics metrics = new Metrics();
     private final SystemPrincipal systemPrincipal = new SystemPrincipal();
+    private final Pat pat = new Pat();
+
+    public Pat getPat() {
+        return pat;
+    }
 
     public enum DefaultAccess {
         /** Anything without a matching policy is denied. The only safe default. */
@@ -446,6 +451,181 @@ public class SecurityProperties {
 
         public void setLogGrants(boolean logGrants) {
             this.logGrants = logGrants;
+        }
+    }
+
+    /**
+     * How long a revoked personal access token can still work, declared so it can be refused.
+     *
+     * <p>Every value here is a term in one of two sums, and the sums are the point. Nobody multiplies out
+     * three independently configured TTLs in production, so the module does it at startup, logs both totals
+     * and refuses to start above the ceiling - the same mechanism and the same reasoning as the existing
+     * audience check, whose javadoc says a defect that cannot be discovered by testing is worth refusing to
+     * start over.
+     *
+     * <pre>
+     *   request/response callers:  assertion lifetime + edge cache lifetime + authority cache TTL
+     *   long-lived connections:    revalidation interval + authority cache TTL
+     * </pre>
+     *
+     * <p><b>Both are computed.</b> Computing only the first would be worse than computing neither: it would
+     * log a correct-looking number while being false for exactly the callers whose window is largest.
+     */
+    public static class Pat {
+
+        /**
+         * How long an exchanged assertion is valid. Set to match what the issuer actually mints - this
+         * module cannot read the issuer's configuration, so a wrong value here makes the computed window
+         * wrong in the dangerous direction.
+         */
+        private java.time.Duration assertionLifetime = java.time.Duration.ofMinutes(5);
+
+        /**
+         * How long the edge may reuse a cached assertion for one token and audience.
+         *
+         * <p>Declared here although the edge is not in this repository and no build can check it, because
+         * leaving it out of the sum would mean the computed window silently excludes the largest term for a
+         * correctly configured edge. See the module README for the edge's obligations.
+         */
+        private java.time.Duration edgeCacheLifetime = java.time.Duration.ofMinutes(5);
+
+        /**
+         * How often a service holding a long-lived connection open must re-derive the caller's authority.
+         *
+         * <p>Ships before any transport that needs it, so the knob exists before the first streaming
+         * transport does. There is deliberately no ArchUnit rule for the requirement: nothing in this
+         * repository holds a connection open, so a rule would pass vacuously and read as coverage. The
+         * enforcing test is a recorded obligation on the change that adds the first transport.
+         */
+        private java.time.Duration revalidationInterval = java.time.Duration.ofMinutes(1);
+
+        /** The ceiling. Startup fails when either composition exceeds it. */
+        private java.time.Duration maxRevocationWindow = java.time.Duration.ofMinutes(15);
+
+        /** Whether to compute, log and enforce the window at all. Off only for a test that wants it off. */
+        private boolean validateRevocationWindow = true;
+
+        private final Filter filter = new Filter();
+
+        public Filter getFilter() {
+            return filter;
+        }
+
+        /**
+         * Authenticating a personal access token directly, without an edge that can exchange it.
+         *
+         * <p><b>Scaffolding, and off by default.</b> The designed route is that the edge exchanges an
+         * {@code lpat_} credential for a short-lived assertion and this module reads the
+         * {@code ludwig_pat} claim off it. This path exists for a deployment whose edge cannot do that -
+         * a company-provided session gateway that does cookie-to-JWT only and cannot be extended - where
+         * otherwise a personal access token could not be used at all.
+         *
+         * <p>When the edge gains that ability, set {@link #enabled} to {@code false}. The claim reader is
+         * already shipped and tested, and the table, the management API, the attenuation and the audit
+         * trail are unchanged in both worlds. <b>No check can assert that a deployment did this</b>, which
+         * is recorded among the credential area's unmechanisable conventions; this paragraph is the whole
+         * mitigation.
+         *
+         * <p>Off by default because adding a starter must never silently open a second authentication
+         * path, and because a deployment whose edge can exchange should use the exchange - it has a longer
+         * revocation window and does not make the issuing service a per-request dependency.
+         */
+        public static class Filter {
+
+            private boolean enabled = false;
+
+            /**
+             * Where the issuing service lives, as a base URL.
+             *
+             * <p>Startup fails when the filter is enabled and this is blank: a filter that cannot reach
+             * the issuer authenticates nothing, and discovering that at the first request looks like
+             * "personal access tokens do not work" rather than like a missing property.
+             */
+            private String issuerBaseUrl;
+
+            /** The introspection path on that service. */
+            private String introspectionPath = "/introspect";
+
+            /**
+             * How long to wait for the issuer.
+             *
+             * <p>Two seconds. Short on purpose: this is on the request path, and a slow issuer has to
+             * degrade into a refused request rather than a hung one. A request that waits thirty seconds
+             * and then fails is worse for the caller than one that fails immediately.
+             */
+            private java.time.Duration timeout = java.time.Duration.ofSeconds(2);
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
+
+            public String getIssuerBaseUrl() {
+                return issuerBaseUrl;
+            }
+
+            public void setIssuerBaseUrl(String issuerBaseUrl) {
+                this.issuerBaseUrl = issuerBaseUrl;
+            }
+
+            public String getIntrospectionPath() {
+                return introspectionPath;
+            }
+
+            public void setIntrospectionPath(String introspectionPath) {
+                this.introspectionPath = introspectionPath;
+            }
+
+            public java.time.Duration getTimeout() {
+                return timeout;
+            }
+
+            public void setTimeout(java.time.Duration timeout) {
+                this.timeout = timeout;
+            }
+        }
+
+        public java.time.Duration getAssertionLifetime() {
+            return assertionLifetime;
+        }
+
+        public void setAssertionLifetime(java.time.Duration assertionLifetime) {
+            this.assertionLifetime = assertionLifetime;
+        }
+
+        public java.time.Duration getEdgeCacheLifetime() {
+            return edgeCacheLifetime;
+        }
+
+        public void setEdgeCacheLifetime(java.time.Duration edgeCacheLifetime) {
+            this.edgeCacheLifetime = edgeCacheLifetime;
+        }
+
+        public java.time.Duration getRevalidationInterval() {
+            return revalidationInterval;
+        }
+
+        public void setRevalidationInterval(java.time.Duration revalidationInterval) {
+            this.revalidationInterval = revalidationInterval;
+        }
+
+        public java.time.Duration getMaxRevocationWindow() {
+            return maxRevocationWindow;
+        }
+
+        public void setMaxRevocationWindow(java.time.Duration maxRevocationWindow) {
+            this.maxRevocationWindow = maxRevocationWindow;
+        }
+
+        public boolean isValidateRevocationWindow() {
+            return validateRevocationWindow;
+        }
+
+        public void setValidateRevocationWindow(boolean validateRevocationWindow) {
+            this.validateRevocationWindow = validateRevocationWindow;
         }
     }
 

@@ -1,0 +1,80 @@
+{
+  "change": "add-pat-direct-authentication",
+  "model": "claude-opus-5",
+  "index_version": "014d3295e62ce2ecb393c8be41aee4fd3353247f729330d99018549df2b8c493",
+  "modules_touched": [
+    "pat-core",
+    "pat-spring-boot-starter",
+    "security-spring-boot-starter",
+    "architecture-rules"
+  ],
+  "gate": {
+    "pom_diff_empty": "pass",
+    "manifest_stale": "pass",
+    "validate": "pass",
+    "verify_pat_core": "pass",
+    "verify_pat_spring_boot_starter": "pass",
+    "verify_security_spring_boot_starter": "pass",
+    "verify_architecture_rules": "pass",
+    "verify_dependents": "pass (10/10: crud-service-example, export, file-action, file-ingest, identity-projection, messaging, notification-service, object-storage, test-support-security, user-settings)",
+    "check_image_pins": "pass (6 references, all digest-pinned)",
+    "check_api_baseline": "FAILED - not a product failure and not a pass. The releases repository (nexus.example.internal) is unreachable from this environment, so revapi compared 25 modules against an empty archive, which reports nothing and looks exactly like a clean compatibility check. API compatibility for this change is UNVERIFIED. Nothing in it is expected to be breaking - AttenuatedAuthentications, PatAwareBearerTokenResolver, PatIntrospectionClient, PatIntrospectionCaches, PatAuthenticationFilter and the introspection records are all new types, and the only changed signatures are additive: a second constructor on RevocationWindowValidator (the two-argument one is kept and asserted still to mean 'no direct path'), a third parameter on PatExchangeConfigurationValidator (the two-argument constructor is kept), and a ninth parameter on the ludwigSecurityFilterChain bean method, which is a Spring factory method rather than published API. But expected is not checked.",
+    "openspec_validate": "pass",
+    "gate_sh": "FAILED at scripts/check_api_baseline.sh and stopped there, exit 1, so it did not reach the validate or verify steps. That is the gate script working: it refuses to report a pass on an unresolvable baseline, and its own message says 'Do not narrow the change to something that passes. Fix it, or report the failure.' This is the report. Every other command in the gate was run by hand and is recorded above; gate.sh --list for security-spring-boot-starter is a subset of what was run, so the two agree on what the gate is. The gate as a whole is therefore NOT green, for an environment reason that is outside this change and identical to the one the preceding change hit."
+  },
+  "tests": {
+    "added": 26,
+    "added_detail": {
+      "PatIntrospectionClientTest": 3,
+      "PatIntrospectionCacheTest": 4,
+      "PatAuthenticationFilterTest": 5,
+      "PatAwareBearerTokenResolverTest": 4,
+      "SecurityAutoConfigurationTest": 4,
+      "RevocationWindowValidationTest": 4,
+      "PatDirectAuthenticationIT": 6,
+      "note": "PatIntrospectionTest (3), PatIntrospectionIT (6), UniformIntrospectionFailureIT (2) and CredentialRulesTest's fence assertion (1) were written earlier in the same change and are counted in the module totals rather than here; the 26 is what sections 4 and 5 added."
+    },
+    "passed": 425,
+    "failed": 0,
+    "by_module": {
+      "pat-core": "50 unit",
+      "pat-spring-boot-starter": "106 unit + 55 integration",
+      "security-spring-boot-starter": "137 unit",
+      "architecture-rules": "77 unit"
+    }
+  },
+  "coverage": {
+    "pat-core": "90.2% instruction / 84.3% branch",
+    "pat-spring-boot-starter": "82.2% instruction / 67.6% branch",
+    "security-spring-boot-starter": "75.1% instruction / 59.9% branch",
+    "note": "The security starter's 59.9% branch coverage sits just below the 60% branch gate ludwig-service-parent enforces on services. Library modules are parented by the reactor root and are not held to that gate, so verify passed legitimately - but the module that now carries a second authentication path is the one closest to the line, and recording it is better than letting a green build imply otherwise."
+  },
+  "retries": 4,
+  "retries_detail": [
+    "SecurityAutoConfigurationTest's chain assertion failed three times before it was right: no HandlerMappingIntrospector (needed WebMvcAutoConfiguration on the runner), then the ordering assertion failed and revealed the defect it was written to look for, then the assertion that the resolver is in effect had to be rewritten from inspecting a bean - the resolver is not one - to running the chain's bearer filter against an lpat_ credential.",
+    "RevocationWindowValidationTest's two-term-constructor fixture was wrong on the first attempt: 1m+1m+4m breached a 5m ceiling on the request/response path, so it failed for a reason unrelated to what it was asserting. Re-cut with a three-second margin so any non-zero default for the new term would breach it.",
+    "PatDirectAuthenticationIT failed to load its context twice: a type mismatch (PatService.IssuedToken, not PatTokens.MintedToken, and PatSnapshot carries no key id so the lookup goes through IssuedToken.token().id()), then an ambiguous mapping because the protected endpoint was both component-scanned and declared as a @Bean."
+  ],
+  "human_corrections": 0,
+  "rollback_point": "0488c30efac6f6d28181fa90cb31f91ab08ae4fa",
+  "jdk": "temurin-17.0.19, passed explicitly as JAVA_HOME. Maven defaults to JDK 26 on this machine and JaCoCo 0.8.12 cannot instrument JDK-26 locale classes - which does not merely warn, it fails Spring context loading in any integration test that touches locale data. -Djacoco.skip is denied by this session's permissions, so the JDK is the only route.",
+  "defects_found_by_this_change": [
+    "The PAT filter was unreachable. Task 4.4 specified 'register it before the bearer filter', copying the mTLS filter's justification. Spring Security orders BearerTokenAuthenticationFilter ahead of BasicAuthenticationFilter - the position this module adds every filter at, stripping included - so the filter was registered after it; and BearerTokenAuthenticationFilter authenticates unconditionally and on failure commences the entry point without continuing the chain, so it answered 401 on the lpat_ credential whatever ran before it. Moving the filter would not have fixed it. Fixed with PatAwareBearerTokenResolver, installed only when the filter is enabled. Found because the task demanded the assertion be made against SecurityFilterChain.getFilters() rather than against the configuration; a configuration-reading test would have passed throughout. SecurityAutoConfigurationTest.defaultResolverIsUntouchedWithoutTheFilter now asserts the 401 still happens without the resolver, so the defect is pinned rather than only repaired.",
+    "The introspection endpoint was unreachable by its only caller. It sits behind the chain's anyRequest().authenticated() while PatIntrospectionClient carries no credential of its own - the only credential in the exchange is the token being asked about, which is the subject of the question rather than the caller's identity. Every introspection received a 401 and failed closed, refusing every token. Invisible from either half: PatIntrospectionIT authenticates a SERVICE principal before calling the endpoint, and the filter's unit test mocks the client. Found by PatDirectAuthenticationIT driving the whole loop over real HTTP. Fixed by extending PatExchangeConfigurationValidator's existing public-path warning to cover the mounted introspection path, on the same warn-not-fail reasoning it already applies to /oauth2/token."
+  ],
+  "scope_changes": [
+    "Task 4.4 was rewritten and task 4.4a added, because the task as written was wrong rather than merely incomplete. The spec requirement, the filter javadoc and the chain comment all record the mistaken reasoning rather than quietly replacing it: 'before the bearer filter, because a PAT request carries no bearer JWT' reads as obviously correct, which is exactly why it needs a note.",
+    "Task 5.3 added for the introspection reachability fix, which no task anticipated."
+  ],
+  "unresolved": [
+    "TASK 0.1, BLOCKING FOR DEPLOYMENT: no route has been confirmed by which machine traffic reaches services without traversing the company session gateway. A request with no session is redirected to OIDC, which is fatal for curl, for CI and for an MCP client. This change is inert in production until that exists, however green the build is. It is infrastructure work outside this repository and cannot be checked from here.",
+    "API compatibility is unverified - see check_api_baseline above.",
+    "Whether PatIntrospectionClient should be able to present a credential of its own, for a deployment wanting application-level caller authentication on introspection rather than relying on the mesh. RFC 7662 asks for it. Not done here: it needs a service-identity mechanism the module nearest the bottom of the reactor does not have, and adding token acquisition there would be paid for by every platform consumer. Recorded as an open question; worth revisiting with the MCP starter, which faces the same question for its own outbound calls.",
+    "Outstanding from the preceding change add-personal-access-tokens: its task 6.7 (the same api-baseline check, same environment block) and the AccessDecision canonical-constructor decision - that record gained two components, which is a breaking edge for any external caller using the canonical constructor. Zero in-repo canonical-constructor callers, three builder callers.",
+    "The security starter's 59.9% branch coverage - see coverage above."
+  ],
+  "unmechanisable_conventions": {
+    "count_in_credential_area": 8,
+    "note": "Taken from six to eight by this change and recorded in both locales of build/architecture-rules/README.md, deliberately not trimmed to make the group look complete. The newest additions are that no check can assert a deployment actually removed the scaffolding when its edge gains PAT support, and that no check can verify the introspection endpoint is in fact reachable only inside the mesh. The public-path requirement itself IS mechanised, as a startup warning in PatExchangeConfigurationValidator, matching the precedent the exchange path already set - a warning rather than a build failure because the module cannot see whether an application published the path through its own SecurityFilterChain."
+  }
+}

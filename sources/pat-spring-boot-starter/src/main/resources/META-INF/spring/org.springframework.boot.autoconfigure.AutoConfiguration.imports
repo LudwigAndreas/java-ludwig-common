@@ -1,0 +1,4 @@
+ru.ludwigandreas.pat.autoconfigure.PatAutoConfiguration
+ru.ludwigandreas.pat.autoconfigure.PatLiquibaseAutoConfiguration
+ru.ludwigandreas.pat.autoconfigure.PatWebAutoConfiguration
+ru.ludwigandreas.pat.autoconfigure.PatExchangeAutoConfiguration

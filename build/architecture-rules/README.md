@@ -382,6 +382,121 @@ validator, which refuses a `purpose: security` TTL above the configured ceiling,
 author writing it down. Also not checked: whether a module that should cache does. That is a performance
 judgment, not a structural property.
 
+### `credentials` - there is one way a credential becomes authority, and nobody writes a second one
+
+| Rule id | What it enforces |
+|---|---|
+| `credentials.no-second-credential-store` | No class outside `ru.ludwigandreas.pat..` is named like a credential store |
+| `credentials.no-second-credential-spi` | No interface outside it is named like a credential seam |
+| `credentials.secret-reveal-is-fenced` | No class outside it calls the raw-secret accessor on `PatSecret` |
+| `credentials.one-attenuation-path` | Only `ru.ludwigandreas.security.authn.jwt..` constructs a credential-backed `LudwigPrincipal` |
+| `credentials.secret-carrier-stays-inside` | No method outside it has `PatSecret` in its signature |
+
+Unlike `audit`, `operations` and `caching`, this group is **not** the durable half of a consolidation -
+there was nothing to consolidate. It was written *before* the code it governs, deliberately, because the
+invariant it protects cannot be restored after it has been broken.
+
+**The invariant.** A personal access token is an *attenuation* of its owner's live authority: the effective
+authority of a request it backs is the intersection of what the owner holds **now** and what the token's
+scopes name. Never a union, never a snapshot taken at issuance. `LudwigPrincipal` already states the
+platform's position - the identity provider issues identity, not entitlement, so a revoked role stops
+working within a cache TTL rather than a token lifetime, and a stolen token cannot carry roles that were
+never granted. A token freezing its owner's roles at issuance is exactly the token-carried role that
+reasoning refuses, with a ninety-day lifetime attached.
+
+Prose cannot hold that. The intersection is one line, the union is also one line, and the difference is
+invisible in review and invisible in every test that happens to use a principal whose authority exceeds the
+token's scopes. `credentials.one-attenuation-path` is what holds it: if exactly one place can construct a
+credential-backed principal, and that place intersects, no second place can get it wrong.
+
+**The group is named for the concern, not the feature.** A second credential *format* is legitimate and
+expected - a deploy key, a signed webhook secret and a personal access token have different lifetimes,
+issuance authorities and revocation stories, and collapsing them would be the mistake. What must not exist
+twice is the *mechanism*: the store, the seam, and above all the code path that turns a credential into
+authority. A future deploy-key module declares its own format in its own package and reuses this mechanism.
+
+**`secret-carrier-stays-inside` is deliberately not the rule the design first reached for.** "The carrier is
+never passed to a logger" is the obvious phrasing and it is not checkable: SLF4J takes `Object...`, so the
+carrier is already widened to `Object` by the time it reaches a logging call and there is no typed parameter
+to match. Keying on the logging call would catch the shape nobody writes and miss every shape somebody does.
+Containment is checkable and strictly stronger - code that never holds the carrier cannot log it, cannot put
+it in an audit attribute and cannot serialize it, which disposes of all three without enumerating any.
+
+**Not checked here: that the one construction path actually intersects rather than unions.** That is a
+statement about what a method body computes and no structural rule reaches it. It is covered by unit tests
+over the converter; `one-attenuation-path` is what makes those tests *sufficient* rather than merely
+indicative, because it guarantees there is nothing else to test.
+
+**Not checked here: that a plain digest is the right choice.** The algorithm is a string literal argument and
+ArchUnit reads bytecode, where that is a constant-pool entry its model does not expose. That half is
+Checkstyle's `WeakDigestAlgorithm`, by the same division as `SecondRedactionMask`.
+
+#### The six rules in this area that no build can check
+
+Recorded rather than omitted, because the list is the backlog for the next improvement and is more useful
+than the part that already works. Each carries a comment at the point of the rule.
+
+1. **The edge must cache the exchange response for the lifetime it declares.** The edge configuration is not
+   in this repository and no build here can see it. Mitigated by the response declaring its own lifetime, and
+   by an issuer metric on exchanges per distinct token that makes a non-caching edge visible as a step change
+   in traffic rather than as nothing.
+2. **A plain digest is correct only because the secret is full-entropy and machine-generated.** No check can
+   assert the reasoning still holds if the generator changes. A comment at the hashing site states it.
+3. **The secret is displayed exactly once.** The issuer returns it once and has no path to re-read it, but
+   what the consuming UI does with it is outside any build here.
+4. **The checksum is not a security control.** There is nothing to detect, only a misreading to pre-empt.
+5. **The edge's client-facing `401` contract.** Same reason as 1. Mitigated by publishing the problem type
+   and the management location as constants in `pat-core`, so the edge configures against a definition rather
+   than inventing one.
+6. **A long-lived connection re-derives authority on an interval.** *This one is deferred, not absent.*
+
+#### Why there is no rule for the streaming requirement
+
+Nothing in this repository holds a connection open - no SSE, no streaming RPC, no websocket - so a rule for
+it would have an **empty matching set**. It would pass on the day it was written and keep passing after the
+requirement had been broken in a module that does not exist yet.
+
+A rule that passes because there is nothing to check is worse than an absent one: it appears in the
+enforcement table, it stays green forever, and it gives the next reader a reason not to look. So the check is
+recorded as an **obligation on the change that introduces the first streaming transport** - the MCP starter -
+which is the first change that will have a transport to enforce it against. The configuration property
+(`revalidation-interval`) and its startup ceiling check ship ahead of it, so the knob exists before the
+transport does.
+
+Whoever adds that transport owes this repository the test. That sentence is the enforcement.
+
+#### The attenuation fence names a type, not a package - and that was a near miss
+
+When a second authentication path was added (a filter that authenticates an `lpat_` credential directly,
+for a platform whose edge cannot perform the token exchange), `credentials.one-attenuation-path` came
+under pressure to **widen**: append the filter's package to the fence and move on. Two packages today,
+three next year, and the invariant is gone by increments with the rule green the whole way.
+
+Instead the attenuation and the principal construction were extracted into one type -
+`security.authn.attenuation.AttenuatedAuthentications` - and the rule was re-pointed at that type alone.
+The rule is now **stricter** than it was: it cannot be satisfied by adding a caller, only by routing
+through the type.
+
+So a change that adds a third authentication path has exactly one correct move, and a change that
+instead appends to `ATTENUATION_TYPE` is a finding rather than a fix. That sentence is in the constant's
+javadoc, where somebody would make the edit.
+
+#### The list is now eight, not six
+
+Two more conventions in the credential area cannot be checked by any build:
+
+7. **Machine traffic must bypass the company session gateway.** The edge in front of this platform is a
+   company-provided proxy that does session-cookie-to-JWT and nothing else; a request with no session is
+   redirected to OIDC, which is fatal for a `curl` or an MCP client. Whether a deployment routes machine
+   traffic around it is not in this repository, and not even a startup warning is available - a service
+   cannot tell how it was reached. The mitigation is the module README and the fact that the failure is
+   unmistakable: an OIDC redirect in answer to a `curl`.
+8. **The direct-authentication path is meant to be deleted.** It is scaffolding until the company gateway
+   gains PAT support, at which point the exchange endpoint and the `ludwig_pat` claim reader - both
+   already shipped - carry the traffic. No check can assert that a deployment removed the filter once its
+   edge could do the exchange. A deprecation note on the property is the whole mitigation, and it will be
+   read by whoever is already looking at the property rather than by whoever should be.
+
 ## Configuring the conventions
 
 Nothing in the rules hardcodes a package name. A service maps its own layout onto the library's

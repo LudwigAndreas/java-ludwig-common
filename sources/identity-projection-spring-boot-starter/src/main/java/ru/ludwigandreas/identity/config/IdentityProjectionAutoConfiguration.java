@@ -58,8 +58,10 @@ public class IdentityProjectionAutoConfiguration {
     public IdentityProjectionService identityProjectionService(SecurityUserRepository users,
                                                                 OidcUserEventMapper mapper,
                                                                 LudwigCache<PrincipalRef, Authorities> authorityCache,
-                                                                IdentityProjectionProperties properties) {
-        return new IdentityProjectionService(users, mapper, authorityCache,
+                                                                IdentityProjectionProperties properties,
+                                                                org.springframework.context
+                                                                        .ApplicationEventPublisher events) {
+        return new IdentityProjectionService(users, mapper, authorityCache, events,
                 properties.getContact().isEnabled());
     }
 
