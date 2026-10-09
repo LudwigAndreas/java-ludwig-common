@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.ludwigandreas.notification.service.model.CategoryClass;
+import ru.ludwigandreas.notification.service.model.ChannelClass;
 import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
 
@@ -36,6 +37,23 @@ import ru.ludwigandreas.notification.settings.NotificationProperties;
  * one preference-shaped thing this service still owns: a bounce is delivery state derived from
  * provider feedback only this service receives, and the user never chose it.
  *
+ * <h2>Quiet hours apply to a channel that interrupts, and opt-out applies to all of them</h2>
+ *
+ * <p>These two rules look alike and are not. A recipient's opt-out is a statement about whether they
+ * want a category at all, and it is honoured on every channel. A quiet window is narrower than that:
+ * it exists so that nobody is woken, which is a statement about <em>delivery arriving
+ * unrequested</em>. A notification that waits in an inbox until its owner chooses to look wakes
+ * nobody, so deferring it to the next opening would delay it for no benefit and suppressing it
+ * outright would discard it for no benefit at all.
+ *
+ * <p>So the quiet-hours branch is skipped for a {@link ChannelClass#PASSIVE} channel, and the
+ * question is asked of {@link ChannelType#isPassive()} rather than of a named constant. That is not
+ * stylistic. The same premise justifies three separate rules - this one, digest collapsing, and the
+ * address suppression list - and writing each of them against a constant is how one declaration
+ * decays into the six special cases the classification exists to replace. An ArchUnit rule in this
+ * service's own test sources fails the build if any class in this package reads the {@code IN_APP}
+ * constant.
+ *
  * <h2>Precedence</h2>
  *
  * <p>Two settings can bear on one opt-out decision: the exact {@code (category, channel)} pair and
@@ -66,6 +84,12 @@ public class PreferenceEvaluator {
         // out" for every question - so there is no separate guard for the literal-address case.
         if (preferences.optedOut(category, channel)) {
             return DispatchDecision.suppressed(DispatchDecision.Reasons.OPT_OUT);
+        }
+        // Opt-out above applies to every channel; quiet hours below apply only to a channel that
+        // interrupts. Asked of the channel's class rather than of the channel, because the rule is
+        // about interruption and not about any particular transport - see the class javadoc.
+        if (channel.isPassive()) {
+            return DispatchDecision.allowed();
         }
         return quietHoursDecision(preferences.quietHours(), now);
     }

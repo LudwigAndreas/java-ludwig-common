@@ -33,6 +33,9 @@ import ru.ludwigandreas.notification.service.preference.PreferenceEvaluator;
 import ru.ludwigandreas.notification.service.preference.RecipientPreferences;
 import ru.ludwigandreas.notification.service.preference.SuppressionService;
 import ru.ludwigandreas.notification.service.recipient.RecipientResolver;
+import ru.ludwigandreas.notification.repository.entity.InboxItemEntity;
+import ru.ludwigandreas.notification.service.exception.TemplateRenderException;
+import ru.ludwigandreas.notification.service.inbox.InAppSettlement;
 import ru.ludwigandreas.notification.service.recipient.ResolvedRecipient;
 import ru.ludwigandreas.notification.service.template.TemplateModel;
 
@@ -51,6 +54,13 @@ import ru.ludwigandreas.notification.service.template.TemplateModel;
  * <p>The one thing deliberately <em>not</em> done here is rendering. Rendering is CPU work whose
  * result is only needed at send time, it would double the ingress latency, and a template that is
  * about to be corrected would bake the old wording into every queued delivery.
+ *
+ * <p><b>A passive channel is the exception, and not an inconsistency.</b> Every clause of the
+ * paragraph above is about work that can wait until send time, and a passive delivery has no send
+ * time - it is settled here, in this transaction. Deferring its render to read time is not merely
+ * awkward but impossible: {@code retention.recipient-data-ttl} scrubs the variable map after seven
+ * days while an unread item is kept until its owner reads it, so an item still unread in week three
+ * could no longer be rendered at all. See {@link #settlePassive} and {@code InAppSettlement}.
  *
  * <h2>Why {@code ACCEPTED} is a real state</h2>
  *
@@ -74,6 +84,7 @@ public class DeliveryFanOutService {
     private final NotificationProperties properties;
     private final NotificationMetrics metrics;
     private final ObjectMapper objectMapper;
+    private final InAppSettlement inAppSettlement;
 
     /**
      * Creates the delivery rows for one request.
@@ -97,19 +108,105 @@ public class DeliveryFanOutService {
             // is that every delivery for this person must be settled against the SAME preferences -
             // one lookup, one answer, snapshotted onto every row it produced.
             RecipientPreferences preferences = recipientResolver.preferences(recipient);
+            List<NotificationDeliveryEntity> forThisRecipient = new ArrayList<>();
 
             for (ChannelType channel : command.channels()) {
-                if (channelRegistry.find(channel).isEmpty()) {
+                // A passive channel is expected to have no implementation: its delivery is settled
+                // here, in this transaction, rather than handed to a transport - so the missing-bean
+                // guard below must not fire for it. Without this exemption every in-app request
+                // would be silently dropped by the very check that exists to catch a deployment gap.
+                if (!channel.isPassive() && channelRegistry.find(channel).isEmpty()) {
                     // No bean claims this transport in this deployment. Creating a row that can never
                     // be sent would be a dead letter blaming the recipient for a deployment gap.
                     log.warn("Request {} asked for channel {}, which has no implementation here",
                             request.getId(), channel);
                     continue;
                 }
-                created.add(create(request, command, recipient, channel, preferences, now));
+                forThisRecipient.add(
+                        create(request, command, recipient, channel, preferences, now));
             }
+
+            // Evaluated per recipient, after that recipient's channels have settled and before the
+            // transaction commits. Per recipient and not per request, because in a request naming
+            // five people one person's total suppression must not create fallbacks for the other
+            // four; and inside the transaction, so the fallback cannot half-apply.
+            fallbackFor(request, command, recipient, preferences, forThisRecipient, now)
+                    .ifPresent(forThisRecipient::add);
+
+            created.addAll(forThisRecipient);
         }
         return created;
+    }
+
+    /**
+     * One more delivery, on the configured fallback channel, when nothing else got through.
+     *
+     * <p>Four conditions, and each excludes a case that would otherwise be wrong:
+     *
+     * <ul>
+     *   <li><b>Every interrupting delivery suppressed.</b> If any channel still has a destination,
+     *       the notification already has one and a fallback would be a duplicate.</li>
+     *   <li><b>The category class declares a fallback.</b> Absent, behaviour is exactly as before.</li>
+     *   <li><b>The caller did not already ask for that channel.</b> Otherwise a request naming
+     *       {@code EMAIL} and {@code IN_APP} whose email was suppressed would get two inbox
+     *       items.</li>
+     *   <li><b>The recipient has not declined the fallback channel.</b> The fallback restores a
+     *       destination they have not refused; it is not a way to override a stated preference. This
+     *       is the condition that keeps the feature honest, and it is the easiest one to omit.</li>
+     * </ul>
+     *
+     * <p>Takes the deliveries created for <em>this</em> recipient, collected by the loop that made
+     * them, rather than filtering the whole request's accumulating list. The entity carries no single
+     * recipient-reference column - a recipient is a user id or an address, never both - so a filter
+     * would have had to reconstruct the identity it was grouping by, which is a second place for the
+     * two notions of "same recipient" to disagree.
+     */
+    private Optional<NotificationDeliveryEntity> fallbackFor(NotificationRequestEntity request,
+                                                             NotificationCommand command,
+                                                             RecipientRef recipient,
+                                                             RecipientPreferences preferences,
+                                                             List<NotificationDeliveryEntity> mine,
+                                                             Instant now) {
+        ChannelType fallback = configuredFallback(command.categoryClass());
+        if (fallback == null || command.channels().contains(fallback)) {
+            return Optional.empty();
+        }
+
+        if (mine.isEmpty() || !mine.stream()
+                .allMatch(delivery -> delivery.getStatus() == DeliveryStatus.SUPPRESSED)) {
+            return Optional.empty();
+        }
+
+        // The recipient's own preference still wins. A fallback that overrode an opt-out would turn
+        // "I do not want this category" into "you will get it somewhere else", which is worse than
+        // not delivering it at all.
+        DispatchDecision decision = preferenceEvaluator.evaluate(preferences, fallback,
+                command.category(), command.categoryClass(), now);
+        if (decision instanceof DispatchDecision.Suppressed) {
+            log.debug("Not falling back to {} for {}: the recipient has declined it", fallback,
+                    recipient.reference());
+            return Optional.empty();
+        }
+
+        log.debug("Every requested channel was suppressed for {}; falling back to {}",
+                recipient.reference(), fallback);
+        NotificationDeliveryEntity delivery =
+                create(request, command, recipient, fallback, preferences, now);
+        metrics.recordDeliveryFallback(fallback, command.category());
+        return Optional.of(delivery);
+    }
+
+    /**
+     * The fallback channel for a category class, resolved from its configured name.
+     *
+     * <p>The properties are strings because the settings package is deliberately free of
+     * service-layer types. This is the one boundary that resolves them, and an unrecognised name
+     * throws rather than being ignored: a typo in {@code preferences.fallback} that silently meant
+     * "no fallback" would be discovered as a missing notification months later.
+     */
+    private ChannelType configuredFallback(CategoryClass categoryClass) {
+        String configured = properties.getPreferences().getFallback().get(categoryClass.name());
+        return configured == null ? null : ChannelType.valueOf(configured);
     }
 
     private NotificationDeliveryEntity create(NotificationRequestEntity request,
@@ -132,8 +229,14 @@ public class DeliveryFanOutService {
         statusRecorder.recordCreation(delivery);
 
         if (resolved.isEmpty()) {
-            statusRecorder.transition(delivery, DeliveryStatus.DEAD,
-                    "no usable " + channel + " address for " + recipient.reference());
+            // A passive channel is addressed by subject, so "no address" would be the wrong reason
+            // to report: what it lacks is an identified recipient, and saying so is the difference
+            // between an operator looking for a missing mailbox and one looking at a request that
+            // named a literal address for a channel that cannot use one.
+            statusRecorder.transition(delivery, DeliveryStatus.DEAD, channel.isPassive()
+                    ? channel + " needs an identified recipient, and " + recipient.reference()
+                            + " is not one"
+                    : "no usable " + channel + " address for " + recipient.reference());
             metrics.recordDeliverySuppressed(channel, DispatchDecision.Reasons.UNRESOLVABLE);
             return delivery;
         }
@@ -151,7 +254,18 @@ public class DeliveryFanOutService {
      */
     private void settle(NotificationDeliveryEntity delivery, ResolvedRecipient recipient,
                         NotificationCommand command, Instant now) {
-        if (suppressionService.isSuppressed(recipient.channel(), recipient.address(), now)) {
+        // The suppression list is a set of delivery addresses that hard-bounced or complained. A
+        // passive channel has no address - its destination is the recipient's own inbox, addressed by
+        // subject - so there is nothing for an entry to be about, and asking would mean asking about
+        // a null. Skipped by classification rather than by constant, for the reason given in
+        // PreferenceEvaluator's javadoc: the same premise justifies three rules, and writing each of
+        // them against a named transport is how the one declaration decays into six special cases.
+        //
+        // This is not a bypass of the no-bypass rule. The entry's subject is the address, and the
+        // claim it makes - "mail to this mailbox bounces" - says nothing about whether the person
+        // behind it can read their inbox.
+        if (!recipient.channel().isPassive()
+                && suppressionService.isSuppressed(recipient.channel(), recipient.address(), now)) {
             delivery.setSuppressionReason(DispatchDecision.Reasons.SUPPRESSION_LIST);
             statusRecorder.transition(delivery, DeliveryStatus.SUPPRESSED,
                     "destination is on the suppression list");
@@ -183,14 +297,95 @@ public class DeliveryFanOutService {
             return;
         }
 
-        Optional<Duration> digestWindow = digestWindowFor(command);
+        // A digest exists to reduce a count of interruptions: ten emails in an hour become one. An
+        // inbox already has that property - its items sit in a list the recipient reads once - so
+        // batching here would delay every item to the end of a window and buy nothing. Folding an
+        // inbox is a presentation decision belonging to whatever renders it, and it has the items.
+        Optional<Duration> digestWindow =
+                recipient.channel().isPassive() ? Optional.empty() : digestWindowFor(command);
         if (digestWindow.isPresent() && recipient.userId() != null) {
             batch(delivery, recipient, command, digestWindow.get(), now);
             return;
         }
 
+        if (recipient.channel().isPassive()) {
+            settlePassive(delivery, recipient, now);
+            return;
+        }
+
         statusRecorder.transition(delivery, DeliveryStatus.PENDING, "ready to send");
         metrics.recordDeliveryEnqueued(recipient.channel(), command.priority());
+    }
+
+    /**
+     * Settles a passive delivery here rather than enqueueing it.
+     *
+     * <p>This is the one carve-out from "every delivery goes through the queue", and it is a carve-out
+     * with a reason rather than a shortcut. The queue exists so that a slow third-party network never
+     * holds a pooled database connection - which is also why a transport may not open a transaction.
+     * A passive channel's destination is the same PostgreSQL this transaction is already writing to,
+     * so there is no network to keep out, nothing for a lease to protect and no failure a retry could
+     * fix. Deferring the write would turn an exact one into an eventual one and leave a window in
+     * which a notification reported as delivered is not yet readable.
+     *
+     * <p>The row therefore never exists in a state the claim query selects, which
+     * {@code InAppSettlementIT#claimIgnoresInAppDeliveries} asserts, and no transport is registered
+     * for the channel, which {@code InAppSettlementIT#noTransportSupportsInApp} asserts. Those two
+     * tests are the boundary of the carve-out; this comment is only its explanation.
+     *
+     * <p>A render failure produces one {@code DEAD} delivery rather than a failed request, matching
+     * what the dispatcher does with the same failure on any other channel: a request naming five
+     * people must not be rejected because one template variant is missing.
+     */
+    private void settlePassive(NotificationDeliveryEntity delivery, ResolvedRecipient recipient,
+                               Instant now) {
+        Optional<InboxItemEntity> item =
+                inAppSettlement.settle(delivery, recipient.userId(), storedVariables(delivery), now);
+
+        if (item.isEmpty()) {
+            statusRecorder.transition(delivery, DeliveryStatus.DEAD,
+                    "no renderable " + recipient.channel() + " template for "
+                            + delivery.getTemplateKey());
+            metrics.recordDeliverySuppressed(recipient.channel(),
+                    DispatchDecision.Reasons.UNRESOLVABLE);
+            return;
+        }
+
+        // DELIVERED and not SENT. SENT means "handed to a provider that has not confirmed"; there is
+        // no provider here and nothing left to confirm, so the intermediate state would be one nobody
+        // could ever observe and that no receipt would ever resolve.
+        statusRecorder.transition(delivery, DeliveryStatus.DELIVERED,
+                "stored in the recipient's inbox");
+        // recordSendSucceeded rather than recordDeliveryEnqueued: nothing was enqueued, and the
+        // delivery is complete. Counting it as enqueued would make the queue's own gauges claim work
+        // that does not exist, which is the number an operator uses to decide whether it is moving.
+        metrics.recordSendSucceeded(recipient.channel());
+    }
+
+    /**
+     * The variables this delivery was written with, read back from its own row.
+     *
+     * <p>Read from the delivery rather than recomputed from the command, so that a passive delivery
+     * renders with exactly the bytes a dispatched one would have rendered with - per-recipient
+     * variables included, and the request-wide fallback included where serializing a caller's
+     * hand-built value failed. Recomputing would be a second implementation of
+     * {@link #variables(NotificationCommand, RecipientRef, ResolvedRecipient)} that could disagree
+     * with it.
+     */
+    private Map<String, Object> storedVariables(NotificationDeliveryEntity delivery) {
+        try {
+            return objectMapper.readValue(delivery.getVariables(),
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                    });
+        } catch (java.io.IOException e) {
+            // This service wrote these bytes moments ago in this same transaction, so a failure here
+            // is a bug rather than bad input. Rendering with no variables would silently produce a
+            // notification with blanks where the content should be, so the delivery is dead-lettered
+            // by the empty return instead.
+            log.warn("Stored variables for delivery {} could not be read", delivery.getId(), e);
+            throw new TemplateRenderException(delivery.getTemplateKey(),
+                    "stored variables could not be read: " + e.getMessage(), e);
+        }
     }
 
     /**

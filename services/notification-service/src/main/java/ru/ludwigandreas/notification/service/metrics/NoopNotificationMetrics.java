@@ -35,6 +35,10 @@ public class NoopNotificationMetrics implements NotificationMetrics {
     }
 
     @Override
+    public void recordDeliveryFallback(ChannelType channel, String category) {
+    }
+
+    @Override
     public void recordClaim(ChannelType channel, int claimed) {
     }
 

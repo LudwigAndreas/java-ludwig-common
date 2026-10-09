@@ -50,6 +50,24 @@ final class TestPrincipals {
                 .postProcessor();
     }
 
+    /**
+     * An ordinary person, holding no notification role at all, reading their own inbox.
+     *
+     * <p>Deliberately role-free. Reading one's own notifications is not a privilege anybody grants -
+     * every authenticated person has an inbox - so the inbox endpoints gate on
+     * {@code isAuthenticated()} and the row-level rule is the owner predicate. A test that used
+     * {@link #admin()} here would pass just as well against an endpoint that had been gated on a role
+     * by mistake, and would prove nothing about the one caller the API is actually for.
+     *
+     * @param subject the person's subject, which is also the inbox owner they will see
+     */
+    static RequestPostProcessor recipient(String subject) {
+        return TestPrincipalBuilder.user(subject)
+                .displayName("A Recipient")
+                .tenant(TENANT)
+                .postProcessor();
+    }
+
     /** Authenticated, but holding no notification role at all. */
     static RequestPostProcessor outsider() {
         return TestPrincipalBuilder.user("outsider")

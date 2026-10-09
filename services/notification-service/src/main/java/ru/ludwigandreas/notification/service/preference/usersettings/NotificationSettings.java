@@ -65,7 +65,30 @@ public final class NotificationSettings {
 
     /** The opt-out for one category on one channel. */
     public static SettingDefinition<Boolean> optOut(String category, ChannelType channel) {
-        return WellKnownSettings.channelOptOut(category, channel.name().toLowerCase(Locale.ROOT));
+        return WellKnownSettings.channelOptOut(category, keySegment(channel));
+    }
+
+    /**
+     * One channel's name as a setting-key segment.
+     *
+     * <p>A setting key is {@code ^[a-z][a-z0-9]*([.\-][a-z0-9]+)*$} - lowercase segments separated by
+     * a dot or a hyphen, and <b>an underscore is not a separator</b>. Lowercasing the enum name was
+     * enough while every constant was a single word, and {@code IN_APP} is the first that is not:
+     * {@code in_app} is rejected, so the key had to be built rather than assumed.
+     *
+     * <p>Replacing the underscore rather than renaming the constant is the right direction. The enum
+     * name is a published value - it appears on the wire, in a column and in a log line - and
+     * {@code INAPP} would be a worse name everywhere in order to suit one key format. The transform
+     * lives here, in the adapter that is already this service's boundary to the settings module, and
+     * it is used by both the declaration and the lookup, so the two cannot drift.
+     *
+     * <p>{@code ChannelSettingKeyTest} asserts that every constant maps to a key the settings module
+     * accepts. Without it this is caught at context load, which is where it was in fact caught: a
+     * setting definition is validated when the registry is built, so the whole application fails to
+     * start rather than one channel's opt-out failing to resolve.
+     */
+    private static String keySegment(ChannelType channel) {
+        return channel.name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     /** The blanket opt-out for one channel. */

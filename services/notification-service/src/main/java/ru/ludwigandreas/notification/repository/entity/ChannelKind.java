@@ -17,5 +17,15 @@ public enum ChannelKind {
     CHAT,
 
     /** An HMAC-signed HTTP callback to a URL the recipient registered. */
-    WEBHOOK
+    WEBHOOK,
+
+    /**
+     * The recipient's in-product inbox.
+     *
+     * <p>The one constant here with no {@code NotificationChannel} bean behind it, because its
+     * destination is this database rather than a provider: an in-app delivery is settled in the
+     * fan-out transaction and is never written in a state the claim query selects. See
+     * {@code ChannelType.IN_APP}.
+     */
+    IN_APP
 }

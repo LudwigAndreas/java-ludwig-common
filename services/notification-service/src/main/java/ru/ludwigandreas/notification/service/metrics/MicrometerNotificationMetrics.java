@@ -77,6 +77,16 @@ public class MicrometerNotificationMetrics implements NotificationMetrics {
     }
 
     @Override
+    public void recordDeliveryFallback(ChannelType channel, String category) {
+        // The category is a caller-supplied string and is therefore the one tag here that is not a
+        // closed set. It is already a tag on this counter's siblings, so it carries no new
+        // cardinality risk: the notification catalogue is a bounded, reviewed list, and a service
+        // inventing categories at runtime is a problem this tag makes visible rather than causes.
+        count(DELIVERIES, Tags.of("channel", name(channel), "category", category,
+                "outcome", "fallback"));
+    }
+
+    @Override
     public void recordClaim(ChannelType channel, int claimed) {
         registry.counter(CLAIMS, Tags.of("channel", name(channel))).increment(claimed);
     }

@@ -90,11 +90,24 @@ public class RetentionScheduler implements SmartLifecycle {
         // schedules its own run under the same lock mechanism. Two purges of one table on two schedules is
         // exactly the duplication the promotion removed.
         long windows = step(lock, () -> retentionService.purgeRateLimitWindows(now));
+        long inbox = step(lock, () -> retentionService.purgeInbox(now));
+        long unread = step(lock, () -> retentionService.purgeUnreadInbox(now));
 
-        if (content + scrubbed + deliveries + history + suppressions + windows > 0) {
+        if (content + scrubbed + deliveries + history + suppressions + windows + inbox > 0) {
             log.info("Retention purge: {} bodies dropped, {} deliveries scrubbed, {} deliveries "
-                            + "deleted, {} history rows, {} suppressions, {} rate-limit windows",
-                    content, scrubbed, deliveries, history, suppressions, windows);
+                            + "deleted, {} history rows, {} suppressions, {} rate-limit windows, "
+                            + "{} read inbox items",
+                    content, scrubbed, deliveries, history, suppressions, windows, inbox);
+        }
+
+        // Logged on its own line, at WARN, and only when it actually did something. Every other
+        // number above is routine housekeeping; this one is "we destroyed notifications their
+        // recipients were meant to read and never saw", which is the only retention outcome an
+        // operator needs to see without going looking for it. Folding it into the line above would
+        // make the one consequential number the least visible.
+        if (unread > 0) {
+            log.warn("Retention purge discarded {} UNREAD inbox item(s) past "
+                    + "retention.inbox-unread-max-age: their recipients never saw them", unread);
         }
     }
 

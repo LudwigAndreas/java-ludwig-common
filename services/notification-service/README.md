@@ -17,6 +17,12 @@ poller claims due deliveries with `FOR UPDATE SKIP LOCKED`, renders a FreeMarker
 recipient's language, and hands the result to a channel — SMTP, the internal chat API, or a signed
 webhook.
 
+One channel does not work that way. `IN_APP` stores the notification in the recipient's own inbox and
+is settled in the transaction that accepted the request, never queued, because its destination is
+this service's database rather than somebody else's network. It is the destination that still works
+when a recipient has declined every push channel or has no verified address — see
+[the inbox](#the-inbox-the-one-passive-channel).
+
 It is built entirely from this repository's own modules. It used to add the two things none of them
 provided - consumer-side idempotency and a leased distributed lock - and both have since been promoted
 into the platform: the store into `idempotency-spring-boot-starter`, the lock into `job-core`. See
@@ -55,6 +61,7 @@ Location: /api/v1/notifications/0f8a…
 - [The Kafka topic](#the-kafka-topic)
 - [How to author a template](#how-to-author-a-template)
 - [How to add a channel](#how-to-add-a-channel)
+- [The inbox: the one passive channel](#the-inbox-the-one-passive-channel)
 - [Preferences, quiet hours and suppression](#preferences-quiet-hours-and-suppression)
 - [Where preferences come from](#where-preferences-come-from)
 - [Priority lanes and rate limits](#priority-lanes-and-rate-limits)
@@ -104,8 +111,9 @@ delivery:  ACCEPTED ─┬──────────────────
                      │                                      ▲           │                (on receipt)
                      ├──→ SUPPRESSED  (opt-out, list, quiet)│           ├──→ FAILED ──┐
                      ├──→ BATCHED ──→ COLLAPSED  (digest)   │           │             │ backoff
-                     └──→ DEAD       (unresolvable)         │           └──→ DEAD     │ + jitter
-                                                            └─────────────────────────┘
+                     ├──→ DEAD       (unresolvable)         │           └──→ DEAD     │ + jitter
+                     │                                      └─────────────────────────┘
+                     └──→ DELIVERED  (IN_APP: settled here, never queued)
            PENDING ──→ CANCELLED   (operator)
            DEAD    ──→ PENDING     (operator retry; attempts reset)
 ```
@@ -641,7 +649,12 @@ public interface NotificationChannel {
 
 Then add the constant to `ChannelType`, its persistence twin `ChannelKind` and its wire twin
 `ChannelTypeDto` — MapStruct fails the build if the three drift apart — and a `channels.sms` block to
-`NotificationProperties`.
+`NotificationProperties`. `ChannelType`'s constructor also requires a `ChannelClass`, so a transport
+added without one does not compile; read [the inbox section](#the-inbox-the-one-passive-channel) for
+what that declaration means before choosing.
+
+**This is the whole story for an interrupting channel, and deliberately not for a passive one.**
+`IN_APP` has no `NotificationChannel` bean at all — see below.
 
 The contract the implementation must honour:
 
@@ -674,6 +687,182 @@ rotation is far worse than a few wasted retries. Conversely HTTP 401/403 are **t
 dead-lettering makes a broken credential visible in minutes whereas retrying hides it behind a queue
 that slowly stops moving; those dead letters are replayable once it is fixed.
 
+## The inbox: the one passive channel
+
+`IN_APP` notifies somebody *inside the product*: the notification is stored, and its recipient reads
+it back when they choose. It exists because every other transport here pushes a message at a person
+and is done, which leaves nobody to notify when a recipient has declined every push channel, has no
+verified contact address, or is simply at their desk.
+
+```console
+$ curl -s https://notifications.internal/api/v1/inbox/unread-count -H "$AUTH"
+{"unread":3}
+
+$ curl -s "https://notifications.internal/api/v1/inbox?\$top=1" -H "$AUTH"
+{"content":[{"id":"7c3f…","category":"account","createdAt":"2026-10-09T09:12:04Z","read":false}],
+ "offset":0,"size":1,"totalElements":3}
+
+$ curl -s -X POST https://notifications.internal/api/v1/inbox/7c3f…/read -H "$AUTH"
+{"id":"7c3f…","read":true,"readAt":"2026-10-09T09:40:11Z","seenAt":"2026-10-09T09:40:11Z"}
+```
+
+### It is not a channel bean, and that is the carve-out
+
+There is **no `NotificationChannel` implementation for `IN_APP`**, and adding one fails the build
+(`InAppSettlementIT#noTransportSupportsInApp`). The reason is the transport contract itself: an
+implementation may not open a transaction and may not touch the database, because a provider call
+inside a transaction holds a pooled connection for the duration of somebody else's network — which
+is how one slow relay drains the pool. The work queue in front of it exists for the same reason.
+
+Neither hazard exists here. The "provider" is the same PostgreSQL the fan-out transaction is already
+writing to: there is no third-party network, no timeout to bound, and no failure a retry could fix.
+So an in-app delivery is **settled in the transaction that accepted the request** — created
+`ACCEPTED` and moved straight to `DELIVERED`, alongside the `SUPPRESSED`, `BATCHED` and `DEAD`
+settlements the fan-out already performs — and is never written in a state the claim query selects
+(`InAppSettlementIT#claimIgnoresInAppDeliveries`). The caller's `202` therefore reports a delivery
+that is already terminal, and the item is readable the instant it returns.
+
+`DELIVERED` and not `SENT`: `SENT` means "handed to a provider that has not confirmed", and there is
+no provider to confirm.
+
+### `INTERRUPTING` vs `PASSIVE`, and why the dimension exists
+
+Every transport declares a `ChannelClass`, as a mandatory constructor argument of `ChannelType`.
+The test to apply: **does delivery reach somebody who is not asking for it right now?**
+
+| | opt-out | quiet hours | digest | suppression list |
+|---|---|---|---|---|
+| `EMAIL` / `CHAT` / `WEBHOOK` — `INTERRUPTING` | yes | yes | yes | yes |
+| `IN_APP` — `PASSIVE` | **yes** | no | no | no |
+
+Three of those four rules are justified by the same premise — that delivery interrupts somebody —
+and that premise is false for the inbox. Each is switched off for its own reason: a quiet window
+exists so that nobody is woken, and an item that waits wakes nobody; a digest exists to reduce a
+count of interruptions, and folding an inbox is the inbox's own presentation decision; and a
+suppression entry is a fact about a delivery *address*, of which a passive channel has none.
+Per-category opt-out still applies in full — a recipient may decline a declinable category here
+exactly as anywhere else.
+
+The dimension exists so that is **one declaration** rather than an `IN_APP` branch in six
+evaluators. An ArchUnit rule fails the build if anything in the preference path reads the `IN_APP`
+constant instead of asking the classification. What no build can check is whether a transport's
+declared class is *true* — that is a statement about the world, exactly as a cache's `CachePurpose`
+is, and it is the one mistake the module cannot detect for you.
+
+### The inbox item is a second aggregate
+
+| | `notification_delivery` | `notification_inbox_item` |
+|---|---|---|
+| means | what we tried to do | what the recipient has |
+| written by | this service | its recipient |
+| shape | a work-queue row, claimed continuously, kept narrow | a document, mutated by its owner |
+| retention | 90d **from creation** | 90d **from being read** |
+
+This is the same argument the service already makes one level up for why retry state lives on the
+delivery and not the request. One table holding both roles would force the retention purge to give a
+single answer to two different questions, and the delivery deliberately is not an `AuditedEntity`,
+so a recipient's own write to it would not be audited the way a user-owned mutation should be. An
+ArchUnit rule fails the build if a read-state field ever appears on a delivery entity.
+
+Content is a separate table for the same two reasons the delivery's is — the item row is what every
+inbox query scans, and content is the purge's one cheap target — but it is **not** the delivery's
+content table, and that is the point. `notification_delivery_content` is purged at `content-ttl`,
+seven days, with a startup check that a body never outlives its delivery; an unread inbox item has
+to survive somebody's holiday. A rule fails the build if the settlement path reaches that table.
+
+Rendering also happens at fan-out rather than at send time, which is the opposite of what this
+service does everywhere else. A passive channel has no later send step for that reasoning to attach
+to, and deferring the render to read time is not merely awkward but impossible: the variable map is
+scrubbed at `recipient-data-ttl`, so an item still unread in week three could no longer be rendered
+at all. The consequence is accepted rather than hidden — an in-app notification carries the wording
+that was current when it was produced, which is the same promise already made about a sent email.
+
+### The read API, and the three defences on it
+
+```
+GET  /api/v1/inbox                     the caller's own items, newest first, dismissed excluded
+GET  /api/v1/inbox/unread-count        for a badge: a number, no content
+GET  /api/v1/inbox/{id}                one item, with its rendered body
+POST /api/v1/inbox/{id}/seen           shown in a list — not the same as opened
+POST /api/v1/inbox/{id}/read           also marks seen; idempotent
+POST /api/v1/inbox/read                mark all read; reports how many moved
+POST /api/v1/inbox/{id}/dismiss        leaves the list, stays retrievable by id
+GET  /api/v1/filter-metadata/notification-inbox    what $filter may name
+```
+
+`isAuthenticated()` and no role: reading one's own notifications is not a privilege anybody grants,
+and a role here would either be granted to everybody — and so mean nothing — or be forgotten for
+somebody who then silently stops seeing their notifications. The row-level rule is the owner
+predicate, and it lives where the rows are.
+
+A caller can only ever reach their own inbox, and three independent mechanisms say so:
+
+1. **No parameter to supply.** No owner path variable, no owner query parameter, and no owner field
+   on any response that a client could send back.
+2. **No filter to spell.** `ownerUserId` carries no `@Filterable`, so `$filter=ownerUserId eq …` is
+   rejected as naming an unfilterable field — the same way a filter on a recipient address already
+   is. An ArchUnit rule fails the build if the annotation is added.
+3. **No status code to read.** A foreign item and an item that never existed return the **identical**
+   404 — same type, same title, same wording. A 403 would be an oracle: repeated against guessed ids
+   it enumerates what the platform has told other people, and "has this person been told about X" is
+   exactly the fact its subject would consider private. `InboxScopingIT` compares the two responses
+   field by field rather than merely checking both are 404, because a well-meaning improvement to an
+   error message is how that distinction gets reintroduced.
+
+Any one of the three would be enough on a good day. Together they mean that removing one — which
+somebody will eventually do, not knowing it was load-bearing — does not open the hole.
+
+The transitions are `POST` rather than `PATCH` because they are named idempotent commands over a
+derived state machine rather than partial edits of a document, and none of them is a long-running
+operation: each completes inside its request, so there is no envelope, no status resource and no
+`Retry-After`.
+
+The three instants are **monotonic** — set once, never reset. A client that double-taps "read" must
+not rewrite `read_at`, because that instant is what the retention window is measured from: a
+notification read in January could otherwise still be sitting in an inbox in March because a retry
+kept pushing its anchor forward.
+
+### The fallback
+
+```yaml
+ludwig:
+  notification:
+    preferences:
+      fallback:
+        TRANSACTIONAL: IN_APP
+```
+
+Empty by default. When set, and when **every** channel a caller requested settled `SUPPRESSED` for
+one recipient, one more delivery is created on the fallback channel — so a notification the platform
+owner has declared undeclinable lands somewhere. Four conditions, each excluding a case that would
+otherwise be wrong: every requested channel suppressed; a fallback declared for that category class;
+the caller did not already ask for that channel; and **the recipient has not declined it either**.
+The last one is what keeps the feature honest — a fallback that overrode an opt-out would turn *"I do
+not want this category"* into *"you will get it somewhere else"*, which is worse than not delivering
+it.
+
+Keyed by category class in configuration, never a field on the request, for the same reason the
+transactional bypass is a category property: as a request flag every calling service would set it.
+Think hard before adding `MARKETING` — forcing campaigns into an inbox somebody has deliberately
+emptied is the one configuration of this feature that is worse than not having it.
+
+A delivery that settled `DEAD` — no destination at all — does **not** trigger the fallback. A refusal
+is a preference the inbox respects; an unreachable address is an operational problem that falling
+back would hide. Whether it should is an open question rather than an oversight, and a test pins the
+current answer either way.
+
+### Retention
+
+| What | Property | Default | Anchor |
+|---|---|---|---|
+| Inbox items and their bodies | `retention.inbox-ttl`, `retention.inbox-content-ttl` | 90d | `read_at` / `dismissed_at` |
+| Unread items | `retention.inbox-unread-max-age` | **unset** | `created_at` |
+
+An item that has been neither read nor dismissed is **never** purged by age. The ceiling that does
+discard one is a separate property, unset by default, and its purge is logged at `WARN` on its own
+line and counted apart from the routine total — "we discarded N unread notifications" is the one
+retention number an operator must not have to go looking for.
+
 ## Preferences, quiet hours and suppression
 
 Three mechanisms, checked in this order, and the order matters.
@@ -698,6 +887,10 @@ Three mechanisms, checked in this order, and the order matters.
    that wraps midnight (22:00→07:00), which is what people actually configure. A marketing
    notification arriving inside the window is **deferred** to the end of it, not dropped: the caller
    was told the request was accepted, so something has to arrive.
+
+All three apply to an **interrupting** channel. On the one passive channel only the second does —
+see [the inbox](#the-inbox-the-one-passive-channel) for which of them is switched off and why each
+has its own reason.
 
 The transactional/marketing split is a property of the **category**, not a flag on the request. As a
 request flag every calling service would set it, and every one would set it to true — from inside any
@@ -941,8 +1134,11 @@ The two sensitive things here are **recipient addresses** and **rendered bodies*
 
 ### Retention
 
-Four windows, widening outwards. The relationship is checked at startup, because keeping a body longer
-than the delivery that owns it means the purge orphans it.
+Six windows. The four delivery ones widen outwards; the two inbox ones are anchored on the item
+having been **read or dismissed** rather than on its age, which is why they are months where
+`content-ttl` is days. The relationships are checked at startup: a body kept longer than the thing
+that owns it means the purge orphans it, and an inbox window shorter than `content-ttl` would make
+the inbox expire before the push attempt it exists to outlive.
 
 | What | Property | Default | Why this length |
 |---|---|---|---|
@@ -950,6 +1146,8 @@ than the delivery that owns it means the purge orphans it.
 | Addresses and variable maps | `retention.recipient-data-ttl` | 7d | scrubbed in place, leaving the delivery row intact |
 | Delivery rows | `retention.delivery-ttl` | 90d | by then carrying no personal data; capacity planning and bounce rates |
 | Status history | `retention.history-ttl` | 180d | the audit trail, personal-data-free by construction |
+| Inbox items + bodies | `retention.inbox-ttl`, `inbox-content-ttl` | 90d | **anchored on being read**, not on age — see [the inbox](#the-inbox-the-one-passive-channel) |
+| Unread inbox items | `retention.inbox-unread-max-age` | **unset** | discarding one loses something its recipient never saw, so it is opt-in and logged at `WARN` |
 
 Also purged: expired suppressions (**never** permanent ones — a spam complaint does not stop being true)
 and closed rate-limit windows. **Expired dedup claims are not in this list any more**: that table belongs
@@ -1163,7 +1361,22 @@ Stated plainly rather than buried.
      caught the `…​.active` long-task timer and forced an invalid distribution range onto it —
      throwing on the first HTTP request the service ever served. Changed to an exact match.
 
-7. **Not implemented:** provider-specific receipt adapters (the endpoint takes this service's own
+7. **The in-app channel is a carve-out from "a transport is a bean", with a boundary and two tests.**
+   Stated here as well as in [its own section](#the-inbox-the-one-passive-channel), because the
+   add-a-channel instructions are what a reader finds first and they are no longer the whole story.
+   The honest cost: the dispatch path is no longer identical for every transport. The reason it is
+   worth paying is that the queue protects against a hazard this destination does not have, and
+   deferring a row insert out of the transaction already writing it is strictly less reliable.
+
+8. **Real-time push is deliberately absent.** No SSE, no websocket. An unread count polled every
+   thirty seconds is honest and free; push is decoration over a durable inbox and must never become
+   the delivery mechanism. No rule forbids it today, on purpose - a rule with no code to fire on
+   passes forever and reads as coverage.
+
+9. **The fallback does not fire on an unreachable channel**, only on a refused one. See
+   [the fallback](#the-fallback).
+
+10. **Not implemented:** provider-specific receipt adapters (the endpoint takes this service's own
    normalised shape, so each provider needs a small translation in front of it), and per-tenant
    template overrides. Digest is implemented but ships **disabled**, because a digest window is a
    product decision per category rather than something to default.
@@ -1178,11 +1391,16 @@ mvn -pl notification-service test -Dtest='*Test'   # unit + integration + archit
 docker build -f services/notification-service/Dockerfile -t notification-service:1.0.0 .   # context = repo root
 ```
 
-208 tests: unit coverage of rendering strictness, backoff and jitter, opt-out precedence in all
-three states, both preference sources and the degradation between them, batch isolation, quiet hours
-across midnight and timezones, failure classification per channel and PII masking; Testcontainers
+340 tests (242 unit, 98 integration): unit coverage of rendering strictness, backoff and jitter,
+opt-out precedence in all three states, both preference sources and the degradation between them,
+batch isolation, quiet hours across midnight and timezones, failure classification per channel, PII
+masking, the channel classification and its setting-key mapping, the inbox's monotonic transitions
+and message-bundle parity; Testcontainers
 integration coverage of the full path ingress → queue → dispatch against real PostgreSQL and a real
-SMTP server (GreenMail), the REST batch and read-back endpoints and their scoping, concurrent claim
+SMTP server (GreenMail), the in-app settlement and that the claim query never sees it, the inbox
+schema's foreign-key delete actions and partial retention index, the recipient-facing inbox API and
+its three scoping defences, read-anchored retention, the suppression fallback's four conditions, the
+REST batch and read-back endpoints and their scoping, concurrent claim
 disjointness at three simulated replicas, stale reclaim, idempotent redelivery over a real Kafka
 broker, retry to `DEAD`, suppression before and after enqueueing, receipts, data scoping, and the 47
 architecture rules.

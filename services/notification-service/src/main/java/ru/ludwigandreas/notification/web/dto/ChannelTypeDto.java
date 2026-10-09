@@ -9,5 +9,14 @@ package ru.ludwigandreas.notification.web.dto;
 public enum ChannelTypeDto {
     EMAIL,
     CHAT,
-    WEBHOOK
+    WEBHOOK,
+
+    /**
+     * The recipient's in-product inbox.
+     *
+     * <p>Requestable like any other channel. A caller naming it gets a delivery that is already
+     * terminal in the 202 response, because an in-app notification is settled in the transaction
+     * that accepts the request rather than queued for dispatch.
+     */
+    IN_APP
 }

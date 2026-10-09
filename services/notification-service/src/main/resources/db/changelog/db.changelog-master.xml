@@ -67,6 +67,19 @@
     <include file="classpath:db/changelog/changes/0017-drop-idempotency.sql" relativeToChangelogFile="false"/>
 
     <!--
+        The recipient-owned inbox, in two tables for the same reason the delivery and its content are
+        two: the item row is what every inbox query scans and wants to stay narrow, and content in its
+        own table gives the purge one cheap target. The difference from notification_delivery_content
+        is the retention window - the inbox's is anchored on being read, not on age - which is exactly
+        why it cannot be the same table.
+
+        Order matters only in that 0019 references 0018's primary key.
+    -->
+    <include file="classpath:db/changelog/changes/0018-inbox-item.sql" relativeToChangelogFile="false"/>
+
+    <include file="classpath:db/changelog/changes/0019-inbox-item-content.sql" relativeToChangelogFile="false"/>
+
+    <!--
         Same arrangement for the identity projection's tables (security_user, security_partner,
         security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false. This
         service sets ludwig.identity.contact.enabled, so its security_user rows carry the verified

@@ -584,6 +584,35 @@ public class NotificationProperties {
         private boolean quietHoursDefer = true;
 
         /**
+         * Where a notification goes when every channel the caller asked for was suppressed.
+         *
+         * <p>Keyed by category-class name: {@code TRANSACTIONAL: IN_APP} means "a notification the
+         * platform owner has declared undeclinable must land somewhere, and the inbox is somewhere".
+         * Empty by default, so a deployment that has not thought about it behaves exactly as before.
+         *
+         * <p><b>Why configuration keyed by category class, and never a field on the request.</b> This
+         * is the same argument {@code PreferenceEvaluator} makes about the transactional bypass: a
+         * per-request flag would be set by every calling service, because from inside any one service
+         * its own notification always looks important. Keying it by category class puts the decision
+         * with whoever owns the notification catalogue, and keeps it coarse enough that
+         * {@code MARKETING: IN_APP} - forcing campaigns into an inbox somebody has deliberately
+         * emptied - is hard to arrive at by accident.
+         *
+         * <p>The fallback restores a destination the recipient has not declined. It is <b>not</b> an
+         * override: if they have also opted out of the fallback channel for that category, nothing is
+         * created. No build can check that a configured answer is the right product decision, which is
+         * recorded as one of this change's unmechanisable rules.
+         *
+         * <p>Strings rather than the {@code CategoryClass} and {@code ChannelType} enums, and not for
+         * convenience: this package is deliberately free of service-layer types, because every layer
+         * reads it and so it must depend on nothing. {@code NotificationRuntimeProperties#channels}
+         * is keyed by name for the same reason. The names are resolved to enums at the one boundary
+         * that consumes them, where an unknown name is a startup failure rather than a silent
+         * mismatch.
+         */
+        private Map<String, String> fallback = new LinkedHashMap<>();
+
+        /**
          * The three ways a deployment can answer "where do preferences come from".
          *
          * <p>Named rather than a boolean because there are genuinely three answers and the third one
@@ -660,6 +689,50 @@ public class NotificationProperties {
         /** The audit trail outlives the deliveries it describes, carrying no personal data. */
         @NotNull
         private Duration historyTtl = Duration.ofDays(180);
+
+        /**
+         * How long an inbox item is kept <b>after its owner read or dismissed it</b>.
+         *
+         * <p>The anchor is what makes this different from every window above, and it is the single
+         * most important property of the inbox's retention. The delivery windows run from creation,
+         * because a delivery is a record of something this service did. An inbox item is a document
+         * its owner has not necessarily seen yet, so measuring from creation would delete
+         * notifications out from under people who had simply not looked - which is the one outcome
+         * the inbox exists to prevent.
+         *
+         * <p>An item that has been neither read nor dismissed is therefore <em>never</em> purged by
+         * this window, whatever its age. If a deployment needs a ceiling on that, it sets
+         * {@link #getInboxUnreadMaxAge()} and says so out loud.
+         */
+        @NotNull
+        private Duration inboxTtl = Duration.ofDays(90);
+
+        /**
+         * How long an inbox item's rendered body is kept, on the same read-anchored basis.
+         *
+         * <p>Separate from {@link #getContentTtl()} and necessarily so: that one is seven days,
+         * because a delivery body is the most sensitive thing this service holds and exists only so
+         * an operator can answer "what did we send?". An inbox body is what the recipient is
+         * <em>meant</em> to read, and has to survive somebody's holiday.
+         *
+         * <p>Must not exceed {@link #getInboxTtl()}; {@code NotificationConfigurationValidator}
+         * refuses to start otherwise, because a body outliving its item means the purge orphans it.
+         */
+        @NotNull
+        private Duration inboxContentTtl = Duration.ofDays(90);
+
+        /**
+         * A ceiling on how long an item nobody has read is kept. <b>Unset by default.</b>
+         *
+         * <p>Deliberately a separate property rather than a default on {@link #getInboxTtl()}, and
+         * deliberately empty. Purging an unread item discards a notification its recipient was meant
+         * to receive and never saw, which is a product decision somebody has to take rather than a
+         * value inherited from the setting next to it. No build can check that a configured ceiling
+         * was considered rather than copied, so the mitigations are that it cannot be set by accident
+         * and that its purge is counted separately - "we discarded N unread notifications" is the one
+         * retention number an operator must be able to see.
+         */
+        private Duration inboxUnreadMaxAge;
 
         /** Rows deleted per purge statement, so one run cannot hold a long transaction open. */
         @Positive

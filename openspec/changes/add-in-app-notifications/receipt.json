@@ -1,0 +1,37 @@
+{
+  "change": "add-in-app-notifications",
+  "model": "claude-opus-5",
+  "index_version": "efa98140f3c017f708f52c40af6d8540c5b580d2a64ffa12d0a126b155b69e63",
+  "modules_touched": [
+    "notification-service"
+  ],
+  "gate": {
+    "manifest_stale": "pass - project-index.json current, no POM changed",
+    "check_image_pins": "pass - 6 image references, all pinned by digest",
+    "check_api_baseline": "FAIL - not caused by this change; unresolvable published baseline for 25 modules this change does not touch, and notification-service has no published baseline at all. The user directed that it be ignored. It is NOT a pass.",
+    "check_migrations": "pass - 16 root changelogs, 86 changesets, all conforming",
+    "validate": "pass - mvn -q validate clean across every module",
+    "verify": "pass - mvn -pl :notification-service -am verify, BUILD SUCCESS, 242 unit + 102 integration, 0 failures, 0 errors, all coverage checks met (70% instruction / 60% branch)",
+    "dependents": "none - scripts/manifest.sh reports 0 in-repo dependents, so there is no dependent build step",
+    "openspec_validate": "pass - valid under --strict"
+  },
+  "tests": {
+    "added": 104,
+    "added_detail": "101 declared test methods across 16 new classes, plus 3 cases on NotificationConfigurationValidatorTest. Parameterized methods expand at runtime, so the executed count is higher than the declared one.",
+    "passed": 344,
+    "failed": 0,
+    "breakdown": "242 surefire (unit + architecture), 102 failsafe (integration)"
+  },
+  "retries": 16,
+  "retries_detail": "Counted as attempts beyond the first on a task, each with an identifiable change: 4 on the enum triad (three pre-existing exhaustive switches plus the wire DTO), 1 on check_migrations (needs git-tracked files), 2 on the settlement (Lombok builder cannot set an inherited id; wrong entity field names), 1 on the ArchUnit rules (invented API - noFields, not noClasses), 1 on mark-all-read (JPA bulk update needs an ambient transaction), 2 on the byte-identical refusal assertion (instance and timestamp, then traceId), 3 on the fallback IT (chat ships disabled; DEAD is not SUPPRESSED; javadoc placement), 1 on the fallback metric (wrong counter name), 1 on the fallback itself (no recipient-reference column to group by).",
+  "human_corrections": 1,
+  "human_corrections_detail": "The user directed that check_api_baseline.sh be ignored and that work continue. No correction of incorrect work was needed.",
+  "rollback_point": "66b05195d02cb71b377f6e4fedacc222df724973",
+  "unresolved": [
+    "scripts/check_api_baseline.sh cannot pass in this environment - it needs access to the releases repository or a populated ~/.m2. Unrelated to this change and explicitly set aside by the user, but the gate is therefore not green in full.",
+    "Open product question: should the fallback also fire when every requested channel settled DEAD (unreachable) rather than SUPPRESSED (refused)? That is arguably the more valuable trigger - it is the 'no verified address' case from the proposal's Why - but the specs say SUPPRESSED, so the narrower behaviour ships and is pinned by a test either way.",
+    "Real-time push is absent by design (a stated non-goal) and carries no rule, deliberately, because a rule with no code to fire on passes forever and reads as coverage. The obligation belongs to the change that introduces push.",
+    "README.ru.md has no 'Build and test' section, so the updated test counts appear only in the English README. Pre-existing drift, not introduced here.",
+    "The inbox unread count is uncached and read straight from Postgres on every poll. Correct before fast, and deliberate - a cache would need a CachePurpose nobody can yet justify - but it is the first thing to measure if a client polls it aggressively."
+  ]
+}

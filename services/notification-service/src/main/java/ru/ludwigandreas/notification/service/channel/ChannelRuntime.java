@@ -67,6 +67,17 @@ public class ChannelRuntime {
             case EMAIL -> channels.getEmail();
             case CHAT -> channels.getChat();
             case WEBHOOK -> channels.getWebhook();
+            // Every caller of this class is in the dispatch path - the rate limiter and the
+            // dispatcher - and a passive channel never enters it: an in-app delivery is settled in
+            // the fan-out transaction and is never written in a state the claim query selects. So
+            // there are no per-attempt settings to answer with, and being asked for them means the
+            // settlement has leaked into the queue. Throwing makes that a loud bug at the point of
+            // the mistake; returning a zeroed settings object would instead rate-limit the inbox to
+            // nothing and silently stop delivering it.
+            case IN_APP -> throw new IllegalStateException(
+                    "no dispatch settings for passive channel " + channel
+                            + ": an in-app delivery is settled in the fan-out transaction and must "
+                            + "never reach the dispatch path");
         };
     }
 }

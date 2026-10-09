@@ -47,6 +47,20 @@ public class RecipientFixtures {
         users.deleteAll();
     }
 
+    /**
+     * A user reachable on chat as well as email.
+     *
+     * <p>Needed wherever a test asserts that a chat delivery was <em>suppressed</em>. Without a chat
+     * handle the resolver finds no destination and the delivery settles {@code DEAD} instead, which
+     * is a different outcome and silently breaks any assertion that was really about preferences.
+     */
+    public void givenUserWithChat(String userId, String email, String chatHandle) {
+        givenUser(userId, email);
+        SecurityUserEntity user = users.findById(userId).orElseThrow();
+        user.setChatHandle(chatHandle);
+        users.saveAndFlush(user);
+    }
+
     /** A user the OIDC provider has told us about, with a verified address. */
     public void givenUser(String userId, String email) {
         SecurityUserEntity user = new SecurityUserEntity();

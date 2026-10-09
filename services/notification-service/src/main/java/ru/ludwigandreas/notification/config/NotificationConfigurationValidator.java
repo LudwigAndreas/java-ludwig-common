@@ -267,6 +267,24 @@ public class NotificationConfigurationValidator {
                             + "would never run.",
                     retention.getRecipientDataTtl(), retention.getDeliveryTtl()));
         }
+        if (retention.getInboxContentTtl().compareTo(retention.getInboxTtl()) > 0) {
+            problems.add(String.format(
+                    "retention.inbox-content-ttl (%s) exceeds retention.inbox-ttl (%s): an inbox "
+                            + "body would outlive the item that owns it, so the purge would orphan "
+                            + "it.",
+                    retention.getInboxContentTtl(), retention.getInboxTtl()));
+        }
+        // Checked rather than assumed, because the two windows are deliberately far apart - the
+        // delivery body is purged in days and the inbox body in months - and the first instinct on
+        // reading that is that one of them is a typo. An inbox window SHORTER than the delivery's
+        // would mean the inbox, whose whole purpose is to outlive the push attempt, expiring first.
+        if (retention.getInboxTtl().compareTo(retention.getContentTtl()) < 0) {
+            problems.add(String.format(
+                    "retention.inbox-ttl (%s) is shorter than retention.content-ttl (%s): an inbox "
+                            + "item would expire before the rendered delivery body it was created "
+                            + "alongside, which inverts the reason the inbox has its own window.",
+                    retention.getInboxTtl(), retention.getContentTtl()));
+        }
         if (retention.getHistoryTtl().compareTo(retention.getDeliveryTtl()) < 0) {
             problems.add(String.format(
                     "retention.history-ttl (%s) is shorter than retention.delivery-ttl (%s): a "
@@ -289,6 +307,13 @@ public class NotificationConfigurationValidator {
                 // Read from the environment rather than guessed, because a default that happened to be
                 // lower than reality would make this whole check permissive in the wrong direction.
                 case EMAIL -> channels.getEmail().isEnabled() ? smtpTimeout() : Duration.ZERO;
+                // A passive channel makes no provider call at all: an in-app delivery is settled in
+                // the fan-out transaction and never reaches a dispatcher, so there is nothing here
+                // for a lease to outlast. Spelled as its own arm rather than folded into a `default`
+                // deliberately - the switch being exhaustive is what forced this decision to be made
+                // when the transport was added, and a default arm would have silently answered zero
+                // for the next transport that does have a timeout.
+                case IN_APP -> Duration.ZERO;
             };
             if (timeout.compareTo(slowest) > 0) {
                 slowest = timeout;

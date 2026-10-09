@@ -130,7 +130,15 @@ public class DefaultRecipientResolver implements RecipientResolver {
         }
 
         String address = identity.map(user -> addressOf(user, channel)).orElse(null);
-        if (address == null || address.isBlank()) {
+        // A passive channel is addressed by subject, so having no address is its normal state rather
+        // than a reason not to deliver - and the whole point of the inbox is that it works for the
+        // recipient whose contact details are missing or unverified. Asked by classification and not
+        // by constant, so a second passive transport needs no edit here.
+        //
+        // An unresolved identity is deliberately not a barrier either: the projection is fed
+        // asynchronously, so a new user can be notifiable before their record lands, and this service
+        // already chooses not to treat that as a failure on any channel.
+        if (!channel.isPassive() && (address == null || address.isBlank())) {
             log.debug("Recipient {} has no usable {} address", ref.userId(), channel);
             return Optional.empty();
         }
@@ -157,6 +165,16 @@ public class DefaultRecipientResolver implements RecipientResolver {
      */
     private Optional<ResolvedRecipient> resolveAddress(RecipientRef ref, ChannelType channel,
                                                        RecipientPreferences preferences) {
+        // A passive channel is addressed by subject, and a literal address has no subject behind it,
+        // so there is no inbox to attribute the notification to. Unresolvable rather than merely
+        // awkward: the alternative is an inbox item with no owner, which nobody could ever read and
+        // which the owner column forbids anyway. The fan-out turns this into one terminal delivery,
+        // so a request naming several recipients still delivers to the others.
+        if (channel.isPassive()) {
+            log.debug("Channel {} is passive and needs an identified recipient; a literal address "
+                    + "has none", channel);
+            return Optional.empty();
+        }
         return Optional.of(new ResolvedRecipient(
                 null,
                 channel,
@@ -184,6 +202,11 @@ public class DefaultRecipientResolver implements RecipientResolver {
                     : verified(user.getAlternateEmail(), user.getEmailVerified());
             case CHAT -> user.getChatHandle();
             case WEBHOOK -> null;
+            // A passive channel has no address by construction - the destination is the recipient's
+            // own inbox, addressed by subject. Null here is not "we could not find one": it is the
+            // correct and permanent answer, which is also why an in-app delivery stores no
+            // recipient_address and why the address suppression list does not apply to it.
+            case IN_APP -> null;
         };
     }
 

@@ -227,6 +227,21 @@ ludwig:
         - product-updates
         - digest-summary
 
+      # Where a notification goes when EVERY channel the caller asked for was suppressed. Keyed by
+      # category class, so the decision belongs to whoever owns the notification catalogue rather
+      # than to each calling service - the same reason the transactional bypass is a category
+      # property and not a request flag.
+      #
+      # EMPTY BY DEFAULT. Uncommenting the line below means "a notification the platform has declared
+      # undeclinable must land somewhere, and the inbox is somewhere". It never overrides a stated
+      # preference: a recipient who has also declined IN_APP for that category still gets nothing.
+      #
+      # Think twice before adding MARKETING here. It would force campaigns into an inbox somebody has
+      # deliberately emptied, which is the one configuration of this feature that is worse than not
+      # having it.
+      fallback: {}
+      #  TRANSACTIONAL: IN_APP
+
     recipients:
       # Refuse to write to an address the OIDC provider has not marked verified. A provider that says
       # nothing at all is not treated as a refusal - see the property's Javadoc.
@@ -245,12 +260,23 @@ ludwig:
     retention:
       enabled: true
       run-interval: 1h
-      # The four windows widen outwards, and the order is checked at startup. See the retention
+      # The delivery windows widen outwards, and the order is checked at startup. See the retention
       # policy in the README for what each one covers and why they differ.
       content-ttl: 7d
       recipient-data-ttl: 7d
       delivery-ttl: 90d
       history-ttl: 180d
+      # The inbox's two windows are anchored on the item having been READ or dismissed, not on its
+      # age - an item nobody has opened is never purged by them. That is why they are months where
+      # content-ttl is days: a delivery body is kept only as long as somebody might ask what we sent,
+      # while an inbox body is the thing the recipient is meant to read and has to survive a holiday.
+      inbox-ttl: 90d
+      inbox-content-ttl: 90d
+      # DELIBERATELY UNSET. Setting this discards notifications their recipients were meant to
+      # receive and never saw, so it is a product decision somebody takes out loud rather than a
+      # default inherited from the line above. When it is set, its purge is logged at WARN on its own
+      # line and counted separately from the read-anchored one.
+      # inbox-unread-max-age: 365d
       batch-size: 1000
 
     receipts:
@@ -522,6 +548,14 @@ odata:
     # A $top above the maximum is capped rather than rejected - a client asking for too much still
     # gets a useful answer.
     page-size-exceeded-strategy: CLAMP
+    metadata:
+      # Mounts the shared FilterMetadataController. Set because the inbox is read by a recipient's own
+      # client, which is the one caller that genuinely needs to know what it may filter on - and the
+      # document is already filtered per caller, so it exposes nothing a caller could not determine by
+      # trying. Only entities whose @FilterPolicy declares a metadataName appear, which today is the
+      # inbox alone: the delivery's surface stays unpublished on purpose, because its audience is
+      # support rather than a browser.
+      base-path: /api/v1/filter-metadata
 
 management:
   endpoints:

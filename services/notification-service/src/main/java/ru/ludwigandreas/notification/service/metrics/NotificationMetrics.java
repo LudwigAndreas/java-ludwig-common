@@ -44,6 +44,21 @@ public interface NotificationMetrics {
     /** A delivery settled before it ever reached the queue, with the reason it was suppressed. */
     void recordDeliverySuppressed(ChannelType channel, String reason);
 
+    /**
+     * One notification that reached its recipient only because a fallback channel was configured.
+     *
+     * <p>Its own counter rather than an {@code outcome} on the enqueue counter, because it answers a
+     * question nothing else does: how often does the platform's configured opinion about
+     * undeclinable categories actually override what every requested channel produced? A deployment
+     * enabling this for a broad category class will see it the first day it fires, which is the
+     * cheapest possible way to find out that the configuration was wider than intended.
+     *
+     * <p>Tagged by channel and category only. No recipient, no item, no delivery id - each is
+     * unbounded, and one tag valued by recipient turns a campaign to a million people into a million
+     * time series.
+     */
+    void recordDeliveryFallback(ChannelType channel, String category);
+
     /** A batch leased from the queue; {@code claimed} may be fewer than asked for. */
     void recordClaim(ChannelType channel, int claimed);
 

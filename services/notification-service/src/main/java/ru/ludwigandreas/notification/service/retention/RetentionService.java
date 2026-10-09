@@ -1,11 +1,13 @@
 package ru.ludwigandreas.notification.service.retention;
 
+import java.time.Duration;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
+import ru.ludwigandreas.notification.repository.InboxItemRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.RateLimitWindowRepository;
 import ru.ludwigandreas.notification.repository.SuppressionRepository;
@@ -39,6 +41,7 @@ import ru.ludwigandreas.notification.repository.SuppressionRepository;
 public class RetentionService {
 
     private final NotificationDeliveryRepository deliveryRepository;
+    private final InboxItemRepository inboxRepository;
     private final SuppressionRepository suppressionRepository;
     private final RateLimitWindowRepository rateLimitRepository;
     private final NotificationProperties properties;
@@ -89,6 +92,48 @@ public class RetentionService {
      * owns a TTL has to own the thing that makes the TTL true, and leaving that to every consumer is how one
      * of them forgets and the table grows without limit.
      */
+
+    /**
+     * Deletes inbox items their owners have already read or dismissed.
+     *
+     * <p><b>Anchored on being read, not on age</b>, and that is the whole difference between this
+     * step and every one above it. A delivery is a record of something this service did, so its
+     * window runs from creation. An inbox item is a document its owner may not have opened yet, so a
+     * creation-anchored window would delete notifications out from under people who had simply not
+     * looked - which is precisely what the inbox exists to prevent.
+     *
+     * <p>An item that is neither read nor dismissed is therefore never touched here, whatever its
+     * age. {@link #purgeUnreadInbox} is the separate, opt-in step for that, and it is separate so
+     * that discarding something nobody has read can never happen as a side effect of this one.
+     *
+     * <p>Content goes with the item, explicitly rather than by cascade, so the two counts stay
+     * separable and the statement does not depend on a foreign key to be correct.
+     */
+    @Transactional
+    public long purgeInbox(Instant now) {
+        return inboxRepository.purgeSettledBefore(
+                now.minus(properties.getRetention().getInboxTtl()),
+                properties.getRetention().getBatchSize());
+    }
+
+    /**
+     * Deletes inbox items nobody ever read, past a configured ceiling.
+     *
+     * <p>Off unless {@code retention.inbox-unread-max-age} is set, and a no-op when it is not. This
+     * is the one step in this class that destroys information a user was meant to receive and never
+     * saw, so it does nothing by default and its count is reported separately from
+     * {@link #purgeInbox}'s - an operator has to be able to see "we discarded N unread
+     * notifications" as its own number rather than folded into a total.
+     */
+    @Transactional
+    public long purgeUnreadInbox(Instant now) {
+        Duration ceiling = properties.getRetention().getInboxUnreadMaxAge();
+        if (ceiling == null) {
+            return 0L;
+        }
+        return inboxRepository.purgeUnreadBefore(
+                now.minus(ceiling), properties.getRetention().getBatchSize());
+    }
 
     /** Deletes rate-limit counters for windows that have closed. */
     @Transactional

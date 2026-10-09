@@ -187,6 +187,48 @@ class NotificationConfigurationValidatorTest {
                 .hasMessageContaining("history-ttl");
     }
 
+    @Test
+    @DisplayName("an inbox body that would outlive its own item is refused")
+    void refusesInboxContentOutlivingTheItem() {
+        NotificationProperties properties = defaults();
+        properties.getRetention().setInboxContentTtl(Duration.ofDays(365));
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("inbox-content-ttl");
+    }
+
+    /**
+     * The inverse mistake, and the likelier one. The inbox's windows are months where the delivery
+     * body's is days, and the first instinct on reading that is that one of them is a typo -
+     * "correcting" the inbox down to 7d would make the inbox expire before the push attempt it
+     * exists to outlive.
+     */
+    @Test
+    @DisplayName("an inbox window shorter than the delivery body's is refused")
+    void refusesInboxShorterThanDeliveryContent() {
+        NotificationProperties properties = defaults();
+        properties.getRetention().setInboxTtl(Duration.ofDays(1));
+        properties.getRetention().setInboxContentTtl(Duration.ofDays(1));
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("inbox-ttl");
+    }
+
+    /**
+     * The ceiling must ship unset. A default here would discard unread notifications on the upgrade
+     * that introduced it, which is the kind of data loss nobody attributes to a retention default.
+     */
+    @Test
+    @DisplayName("the unread ceiling is unset by default and a valid configuration starts")
+    void unreadCeilingIsUnsetByDefault() {
+        NotificationProperties properties = defaults();
+
+        assertThat(properties.getRetention().getInboxUnreadMaxAge()).isNull();
+        validator(properties).validate();
+    }
+
     /**
      * Reporting one problem at a time turns a bad rollout into several rounds of deploy-and-read;
      * reporting all of them turns it into one edit.
