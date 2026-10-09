@@ -62,6 +62,7 @@ Location: /api/v1/notifications/0f8a…
 - [How to author a template](#how-to-author-a-template)
 - [How to add a channel](#how-to-add-a-channel)
 - [The inbox: the one passive channel](#the-inbox-the-one-passive-channel)
+- [Platform announcements](#platform-announcements)
 - [Preferences, quiet hours and suppression](#preferences-quiet-hours-and-suppression)
 - [Where preferences come from](#where-preferences-come-from)
 - [Priority lanes and rate limits](#priority-lanes-and-rate-limits)
@@ -863,6 +864,186 @@ discard one is a separate property, unset by default, and its purge is logged at
 line and counted apart from the routine total — "we discarded N unread notifications" is the one
 retention number an operator must not have to go looking for.
 
+## Platform announcements
+
+An announcement is one message for an audience defined by a *rule* — everybody, or everybody holding
+a role — stored **once** and read by all of them. Release notes, an incident notice, a deprecation
+warning.
+
+```console
+$ curl -X POST https://notifications.internal/api/v1/announcements -H "$AUTH" -d '{
+        "category": "platform-incident",
+        "audienceType": "ROLE", "audienceValue": "ADMIN",
+        "templateKey": "platform-release",
+        "variables": {"productName": "Ludwig", "version": "1.4.0"},
+        "visibleUntil": "2026-11-10T08:00:00Z"
+      }'
+
+HTTP/1.1 202 Accepted
+Operation-Location: /api/v1/announcements/7c3f…/email-run
+{"id":"7c3f…","category":"platform-incident","audienceType":"ROLE","emailRunId":"a91e…"}
+```
+
+### Why this is not a notification to everybody
+
+The obvious implementation is to enumerate the users and submit batches. It works, and the numbers
+say why it is the wrong shape. One 4 KB release note to 50 000 people becomes 50 000 delivery rows,
+50 000 inbox items and **50 000 copies of the same body** — about 200 MB. Worse than the size: a user
+who joins tomorrow never sees it, a typo cannot be corrected, and the inbox's read-anchored retention
+(right for "your invoice is ready") keeps the 40 000 copies nobody opened forever.
+
+| | notification | announcement |
+|---|---|---|
+| shape | **N** documents, one reader each | **one** document, N readers |
+| fan-out | on write | on read |
+| rows for 50 000 people | 150 000 | **3** (one row, two locales) |
+| a user created tomorrow | never sees it | sees it |
+| correcting a typo | impossible | one `UPDATE` |
+| retention | sweep N rows | delete 1, cascade |
+
+### The audience is a predicate, resolved live
+
+Two columns — `audience_kind` and `audience_value` — and no membership is ever stored. Visibility is
+resolved **on every read** from the caller's own principal:
+
+```
+visible to me =  visible_from <= now < visible_until
+             AND ( kind = EVERYONE  OR  (kind = ROLE AND value IN :myRoles) )
+             AND NOT EXISTS (my dismissal marker)
+```
+
+`:myRoles` is already on the principal, so this is an `IN` over a short in-memory list — plain
+QueryDSL, one index, **no join and no `UNION`**. A revoked role stops granting visibility on the next
+request, with no job and nothing to go stale; somebody granted it sees the backlog. That is the same
+argument `security-spring-boot-starter` uses for reading authorities from the projection rather than
+from a token claim, and it is why a materialized audience is forbidden by an ArchUnit rule rather
+than merely discouraged.
+
+### Two feeds, not one, and the second reason is the important one
+
+```
+GET  /api/v1/announcements                  the caller's own, newest first, dismissed excluded
+GET  /api/v1/announcements/outstanding-count  for a banner or a badge
+GET  /api/v1/announcements/{id}             in the caller's language
+POST /api/v1/announcements/{id}/dismiss     for this caller alone; idempotent
+```
+
+JPQL has no `UNION`, so a merged inbox-plus-announcement feed could not page, sort and count across
+two sources without a third native-SQL carve-out. **And** the inbox's correctness rests on one
+obviously-right predicate, `owner = me`; an announcement's visibility is *derived* from role
+membership, so threading it in would put a reviewed security term on the endpoint every client polls.
+An ArchUnit rule forbids the inbox path from depending on an announcement, so that stays true.
+
+The cost is that a client shows two feeds and sums two numbers. That is probably also the right
+product shape: an announcement is a banner or a "what's new" panel, not a line in the bell dropdown.
+
+Reading needs only `isAuthenticated()` — **the audience predicate is the authorization**. A caller
+without the role gets an empty page, not a 403, which is also why a foreign announcement and one that
+never existed return the identical 404.
+
+### Publishing: data on the request, policy in the configuration
+
+```yaml
+ludwig:
+  notification:
+    announcements:
+      enabled: true
+      allowed-audiences: [EVERYONE, ROLE]
+      targetable-roles: [ADMIN, SUPPORT]     # roles that may be TARGETED, not who may publish
+      max-visibility-window: 90d
+      categories:
+        platform-release:  { category-class: PLATFORM, channels: [IN_APP] }
+        platform-incident: { category-class: PLATFORM, channels: [IN_APP, EMAIL] }
+```
+
+A publish names a **category** and carries no `channels` and no `alsoEmail`. That is the argument
+`PreferenceEvaluator` already makes about the transactional bypass: anything an announcer can set,
+every announcer sets to the most permissive value, because from inside any one team its own
+announcement always looks important. Sending a hundred thousand emails should take a reviewed
+configuration change, not a boolean.
+
+`targetable-roles` is an allowlist and not "any role", for two reasons. A free-form role target is an
+**enumeration primitive** — an announcer can discover which roles exist by publishing to guesses — and
+some roles' membership is itself the sensitive fact. A refused kind and a refused role return the
+*same* error carrying neither detail, so neither can be used to probe the configuration. Resolution
+happens in exactly one method and an ArchUnit rule forbids a second construction path.
+
+Publishing needs `ROLE_NOTIFICATION_ANNOUNCER`, deliberately **not** `NOTIFICATION_ADMIN`: an admin
+inspects delivery history and retries dead letters, while an announcer originates a message to the
+whole organisation. Support staff need the first and must not silently acquire the second.
+
+### `PLATFORM`: undeclinable, but not urgent
+
+| class | per-category opt-out | quiet hours |
+|---|---|---|
+| `TRANSACTIONAL` | bypassed | bypassed |
+| **`PLATFORM`** | **bypassed** | **honoured** |
+| `MARKETING` | honoured | honoured |
+
+The empty cell in the old two-class model is the whole argument. Forced into `TRANSACTIONAL`, a
+release note emails somebody at three in the morning; forced into `MARKETING`, half the estate has
+opted out of the incident notice. Both answers are mandatory constructor arguments of
+`CategoryClass`, so a fourth class cannot be added without somebody deciding both.
+
+### One row per supported locale
+
+The template is rendered once per `supported-locales` at publish — two rows today — so the count
+follows the number of **languages**, never the audience. Every locale is rendered **before** anything
+is stored, so a template that compiles in English and fails in Russian rejects the whole publish
+rather than producing an announcement half the estate cannot read. A reader whose language has no row
+gets the default in full, the same fallback rule the template resolver already applies.
+
+Rendering at read time is not an option, for the same reason the inbox renders at fan-out:
+`recipient-data-ttl` scrubs the variable map, so an announcement in its third week could no longer be
+produced at all.
+
+### Email fires from the announcement, and it *is* an operation
+
+Where the category's channels include `EMAIL`, publishing starts a resumable fan-out that pages the
+audience and creates **ordinary deliveries** — so the existing dispatcher, retry, backoff,
+cluster-wide rate limit, suppression list and quiet-hours deferral all apply per recipient. A
+broadcast is not a way to bypass any of them, and the cheapest guarantee of that is not having a
+second send path at all. Deliveries go out at `BULK` priority, so one announcement cannot starve the
+password resets people are actually waiting for.
+
+Unlike anything in the inbox, this genuinely is a long-running operation — minutes, with progress,
+cancellable — so it maps onto `web-core`'s `OperationResponse` through **this service's own** run
+table, built with `OperationResponses`. The contrast with the inbox, which deliberately uses no
+envelope, is the point.
+
+```
+GET  /api/v1/announcements/{id}/email-run               progress while running; terminal when done
+POST /api/v1/announcements/{id}/email-run/cancellation   202 - the stop is REQUESTED
+```
+
+**Exactly-once comes from atomicity, not from the dedup key.** One batch creates its deliveries *and*
+advances its keyset cursor in one transaction, so an interruption anywhere leaves the cursor where
+the last complete batch left it and a resume has no overlap to reconcile — which is why there is no
+per-recipient progress table. The existing unique `dedupKey` is the second line if two replicas ever
+raced, and the batch's idempotency key is derived from the announcement and the cursor rather than
+being random, which is what makes that backstop meaningful.
+
+Cancellation is cooperative, answers **202 not 204**, and does **not** recall deliveries already
+created — they are committed work, and dropping them would make the count the envelope already
+reported untrue.
+
+**The emailed audience is a snapshot; visibility stays live**, and the two are allowed to diverge:
+an email is sent at an instant and cannot be unsent. Somebody who gains the role afterwards sees the
+announcement and is not emailed; somebody who loses it mid-run may or may not be, depending where the
+walk had reached. Re-checking membership per row would make a long run send to a different audience
+than the one that was approved.
+
+### Retention
+
+| What | Property | Default | Anchor |
+|---|---|---|---|
+| Announcements, content, markers, run | `retention.announcement-ttl` | 90d | **`visible_until`** |
+
+Anchored on the end of visibility, not on age: one published for next quarter has not started, and
+one still showing must never vanish out from under its readers. The startup check refuses a window
+shorter than `max-visibility-window`. Everything cascades from the one row, so the purge is a
+constant number of statements whether the audience was ten people or the whole organisation.
+
 ## Preferences, quiet hours and suppression
 
 Three mechanisms, checked in this order, and the order matters.
@@ -891,6 +1072,15 @@ Three mechanisms, checked in this order, and the order matters.
 All three apply to an **interrupting** channel. On the one passive channel only the second does —
 see [the inbox](#the-inbox-the-one-passive-channel) for which of them is switched off and why each
 has its own reason.
+
+There are now **three** category classes, and the third exists because the first two cannot express
+"undeclinable but not urgent" — see [platform announcements](#platform-announcements):
+
+| class | per-category opt-out | quiet hours |
+|---|---|---|
+| `TRANSACTIONAL` | bypassed | bypassed |
+| `PLATFORM` | bypassed | **honoured** |
+| `MARKETING` | honoured | honoured |
 
 The transactional/marketing split is a property of the **category**, not a flag on the request. As a
 request flag every calling service would set it, and every one would set it to true — from inside any
@@ -1134,7 +1324,7 @@ The two sensitive things here are **recipient addresses** and **rendered bodies*
 
 ### Retention
 
-Six windows. The four delivery ones widen outwards; the two inbox ones are anchored on the item
+Seven windows. The four delivery ones widen outwards; the two inbox ones are anchored on the item
 having been **read or dismissed** rather than on its age, which is why they are months where
 `content-ttl` is days. The relationships are checked at startup: a body kept longer than the thing
 that owns it means the purge orphans it, and an inbox window shorter than `content-ttl` would make
@@ -1148,6 +1338,7 @@ the inbox expire before the push attempt it exists to outlive.
 | Status history | `retention.history-ttl` | 180d | the audit trail, personal-data-free by construction |
 | Inbox items + bodies | `retention.inbox-ttl`, `inbox-content-ttl` | 90d | **anchored on being read**, not on age — see [the inbox](#the-inbox-the-one-passive-channel) |
 | Unread inbox items | `retention.inbox-unread-max-age` | **unset** | discarding one loses something its recipient never saw, so it is opt-in and logged at `WARN` |
+| Announcements + content, markers, email run | `retention.announcement-ttl` | 90d | anchored on **`visible_until`** — everything cascades from one row, so the purge is a constant number of statements whatever the audience was |
 
 Also purged: expired suppressions (**never** permanent ones — a spam complaint does not stop being true)
 and closed rate-limit windows. **Expired dedup claims are not in this list any more**: that table belongs
@@ -1376,7 +1567,29 @@ Stated plainly rather than buried.
 9. **The fallback does not fire on an unreachable channel**, only on a refused one. See
    [the fallback](#the-fallback).
 
-10. **Not implemented:** provider-specific receipt adapters (the endpoint takes this service's own
+10. **Announcement audiences are `EVERYONE` and `ROLE` only.** Organisation units are deliberately
+    absent: the identity provider owns the org structure (`ou_id`, `organization`) and
+    `identity-projection` does not carry it yet. Adding it is a separate change that touches a shared
+    starter; the audience model has the hole shaped for it — one more kind, one more `OR` branch.
+
+11. **There are no notification-local user groups, and there will not be.** A durable, meaningful
+    grouping of people is directory data and belongs to the provider; a one-off "tell these forty
+    people" is already `recipients: [...]` on an ordinary request. The case in between — a reusable
+    list that exists only here — is the one that rots, because no leaver process touches it and it
+    quietly announces things to people who left eighteen months ago.
+
+12. **An announcement cannot be acknowledged**, only dismissed. "This must stay until acknowledged,
+    and report who has not" is a different feature with its own reporting surface.
+
+13. **A published announcement's audience is immutable.** Its content can be corrected; moving it
+    between audiences cannot, because part of the audience may already have been emailed and the
+    change would make the record of who was told untrue.
+
+14. **The emailed audience and live visibility can diverge.** Somebody who loses the targeted role
+    while a fan-out is still walking may or may not be emailed. Specified and tested rather than
+    hidden - a run lasting minutes cannot also be instantaneous.
+
+15. **Not implemented:** provider-specific receipt adapters (the endpoint takes this service's own
    normalised shape, so each provider needs a small translation in front of it), and per-tenant
    template overrides. Digest is implemented but ships **disabled**, because a digest window is a
    product decision per category rather than something to default.
@@ -1391,16 +1604,22 @@ mvn -pl notification-service test -Dtest='*Test'   # unit + integration + archit
 docker build -f services/notification-service/Dockerfile -t notification-service:1.0.0 .   # context = repo root
 ```
 
-340 tests (242 unit, 98 integration): unit coverage of rendering strictness, backoff and jitter,
-opt-out precedence in all three states, both preference sources and the degradation between them,
-batch isolation, quiet hours across midnight and timezones, failure classification per channel, PII
-masking, the channel classification and its setting-key mapping, the inbox's monotonic transitions
-and message-bundle parity; Testcontainers
+458 tests (286 unit, 172 integration): unit coverage of rendering strictness, backoff and jitter,
+opt-out precedence in all three states, the three-by-two category-class bypass matrix, both preference
+sources and the degradation between them, batch isolation, quiet hours across midnight and timezones,
+failure classification per channel, PII masking, the channel classification and its setting-key
+mapping, the inbox's monotonic transitions, the announcement audience allowlist and its
+indistinguishable refusals, what an announcement's audit record must not contain, and message-bundle
+parity; Testcontainers
 integration coverage of the full path ingress → queue → dispatch against real PostgreSQL and a real
 SMTP server (GreenMail), the in-app settlement and that the claim query never sees it, the inbox
 schema's foreign-key delete actions and partial retention index, the recipient-facing inbox API and
 its three scoping defences, read-anchored retention, the suppression fallback's four conditions, the
-REST batch and read-back endpoints and their scoping, concurrent claim
+announcement publishing with per-locale rendering and its atomicity, the audience check constraints
+and cascade directions, role-based visibility with grant and revocation taking effect on the next
+read, the two feeds not leaking into each other, the resumable email fan-out with its
+exactly-once-on-resume and cooperative cancellation, announcement retention cascading from one row,
+the REST batch and read-back endpoints and their scoping, concurrent claim
 disjointness at three simulated replicas, stale reclaim, idempotent redelivery over a real Kafka
 broker, retry to `DEAD`, suppression before and after enqueueing, receipts, data scoping, and the 47
 architecture rules.

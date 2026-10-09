@@ -42,6 +42,9 @@ class PreferenceEvaluatorTest {
     /** 02:00 Moscow - inside the 22:00-08:00 window below. */
     private static final Instant NIGHT = Instant.parse("2026-10-09T23:00:00Z");
 
+    /** 15:00 Moscow - outside the window, so a deferral there would be the test's own fault. */
+    private static final Instant NOON = Instant.parse("2026-10-09T12:00:00Z");
+
     private final PreferenceEvaluator evaluator = new PreferenceEvaluator(quietHoursEnabled());
 
     @Nested
@@ -135,6 +138,118 @@ class PreferenceEvaluatorTest {
 
             assertThat(decision).isInstanceOf(DispatchDecision.Allowed.class);
         }
+    }
+
+    /**
+     * The whole three-by-two matrix in one place, including the two rows that must not have changed.
+     *
+     * <p>Splitting one bypass into two is the kind of edit that is behaviour-preserving right up
+     * until it is not, and the failure is silent in both directions: a lost opt-out bypass sends
+     * nothing at all for transactional mail, and a gained quiet-hours bypass starts emailing people
+     * at three in the morning. The `TRANSACTIONAL` and `MARKETING` rows below are controls - if the
+     * split had collapsed back into a single question, the `PLATFORM` row would still pass and these
+     * would not.
+     */
+    @Nested
+    @DisplayName("the category-class bypass matrix")
+    class BypassMatrix {
+
+        @Test
+        @DisplayName("TRANSACTIONAL bypasses both, unchanged")
+        void transactionalBypassesBoth() {
+            assertThat(CategoryClass.TRANSACTIONAL.bypassesOptOut()).isTrue();
+            assertThat(CategoryClass.TRANSACTIONAL.bypassesQuietHours()).isTrue();
+
+            // Opted out of the category AND inside the quiet window: still allowed.
+            assertThat(evaluator.evaluate(optedOutAndQuiet(), ChannelType.EMAIL, CATEGORY,
+                    CategoryClass.TRANSACTIONAL, NIGHT))
+                    .isInstanceOf(DispatchDecision.Allowed.class);
+        }
+
+        @Test
+        @DisplayName("MARKETING bypasses neither, unchanged")
+        void marketingBypassesNeither() {
+            assertThat(CategoryClass.MARKETING.bypassesOptOut()).isFalse();
+            assertThat(CategoryClass.MARKETING.bypassesQuietHours()).isFalse();
+
+            assertThat(evaluator.evaluate(optedOutOf(CATEGORY, ChannelType.EMAIL),
+                    ChannelType.EMAIL, CATEGORY, CategoryClass.MARKETING, NIGHT))
+                    .isInstanceOf(DispatchDecision.Suppressed.class);
+            assertThat(evaluator.evaluate(withQuietHours(), ChannelType.EMAIL, CATEGORY,
+                    CategoryClass.MARKETING, NIGHT))
+                    .isInstanceOf(DispatchDecision.Deferred.class);
+        }
+
+        @Test
+        @DisplayName("PLATFORM bypasses opt-out")
+        void platformBypassesOptOut() {
+            assertThat(CategoryClass.PLATFORM.bypassesOptOut()).isTrue();
+
+            assertThat(evaluator.evaluate(optedOutOf(CATEGORY, ChannelType.EMAIL),
+                    ChannelType.EMAIL, CATEGORY, CategoryClass.PLATFORM, NOON))
+                    .as("the organisation has decided they should know")
+                    .isInstanceOf(DispatchDecision.Allowed.class);
+        }
+
+        /** The cell the old two-class model had no way to express. */
+        @Test
+        @DisplayName("PLATFORM honours quiet hours")
+        void platformHonoursQuietHours() {
+            assertThat(CategoryClass.PLATFORM.bypassesQuietHours()).isFalse();
+
+            assertThat(evaluator.evaluate(withQuietHours(), ChannelType.EMAIL, CATEGORY,
+                    CategoryClass.PLATFORM, NIGHT))
+                    .as("undeclinable is not the same as urgent")
+                    .isInstanceOf(DispatchDecision.Deferred.class);
+        }
+
+        /**
+         * Both at once, which is the case that distinguishes a real split from two flags that happen
+         * to agree: the opt-out is bypassed and the quiet window is still honoured, in one decision.
+         */
+        @Test
+        @DisplayName("PLATFORM for an opted-out recipient inside quiet hours is deferred, not suppressed")
+        void platformDefersRatherThanSuppresses() {
+            DispatchDecision decision = evaluator.evaluate(optedOutAndQuiet(), ChannelType.EMAIL,
+                    CATEGORY, CategoryClass.PLATFORM, NIGHT);
+
+            assertThat(decision).isInstanceOf(DispatchDecision.Deferred.class);
+            assertThat(((DispatchDecision.Deferred) decision).reason())
+                    .isEqualTo(DispatchDecision.Reasons.QUIET_HOURS);
+        }
+
+        /**
+         * Quiet hours never applied to a passive channel, so this answer changes nothing for the
+         * inbox half of an announcement - only for its email half.
+         */
+        @Test
+        @DisplayName("PLATFORM on a passive channel is allowed even inside quiet hours")
+        void platformOnPassiveChannelIsAllowed() {
+            assertThat(evaluator.evaluate(optedOutAndQuiet(), ChannelType.IN_APP, CATEGORY,
+                    CategoryClass.PLATFORM, NIGHT))
+                    .isInstanceOf(DispatchDecision.Allowed.class);
+        }
+
+        @Test
+        @DisplayName("every class declares both answers")
+        void everyClassDeclaresBothAnswers() {
+            for (CategoryClass categoryClass : CategoryClass.values()) {
+                // Reading them is the assertion: they are primitives set from mandatory constructor
+                // arguments, so a class added without them does not compile. This asserts the set is
+                // exhaustively covered by the rows above rather than that the getters work.
+                categoryClass.bypassesOptOut();
+                categoryClass.bypassesQuietHours();
+            }
+            assertThat(CategoryClass.values()).hasSize(3);
+        }
+    }
+
+    /** Opted out of the category on email, and inside the quiet window. */
+    private static RecipientPreferences optedOutAndQuiet() {
+        return preferences(
+                (askedCategory, askedChannel) -> CATEGORY.equals(askedCategory)
+                        ? OptOutState.OPTED_OUT : OptOutState.UNSET,
+                new QuietHours(LocalTime.of(22, 0), LocalTime.of(8, 0), ZONE));
     }
 
     private static RecipientPreferences withQuietHours() {

@@ -68,6 +68,33 @@ final class TestPrincipals {
                 .postProcessor();
     }
 
+    /**
+     * A person holding exactly these roles, for testing audience visibility.
+     *
+     * <p>Takes the roles explicitly rather than offering a fixed "admin recipient", because the
+     * interesting assertions are about what changes when a role is granted or revoked - and that
+     * needs two principals for the same subject differing only in their roles.
+     *
+     * <p>The role codes are passed as the directory names them, without the {@code ROLE_} prefix, so
+     * that a test reads the way the configuration does.
+     */
+    static RequestPostProcessor recipientWithRoles(String subject, String... roles) {
+        return TestPrincipalBuilder.user(subject)
+                .displayName("A Recipient")
+                .tenant(TENANT)
+                .roles(roles)
+                .postProcessor();
+    }
+
+    /** Somebody allowed to publish announcements, which is not the notification admin. */
+    static RequestPostProcessor announcer() {
+        return TestPrincipalBuilder.user("announcer-subject")
+                .displayName("An Announcer")
+                .tenant(TENANT)
+                .roles("ROLE_NOTIFICATION_ANNOUNCER")
+                .postProcessor();
+    }
+
     /** Authenticated, but holding no notification role at all. */
     static RequestPostProcessor outsider() {
         return TestPrincipalBuilder.user("outsider")

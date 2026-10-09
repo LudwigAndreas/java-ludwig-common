@@ -21,6 +21,15 @@ public final class LockNames {
     /** Deleting settled deliveries, expired claims and closed rate-limit windows. */
     public static final String RETENTION = "notification-retention";
 
+    /**
+     * Walking an announcement's audience and creating its email deliveries.
+     *
+     * <p>Its own lock rather than sharing the retention one: the two have different schedules and
+     * very different durations, and a broadcast holding the retention lock for several minutes would
+     * stall the purge behind work that has nothing to do with it.
+     */
+    public static final String ANNOUNCEMENT_BROADCAST = "notification-announcement-broadcast";
+
     private LockNames() {
     }
 }

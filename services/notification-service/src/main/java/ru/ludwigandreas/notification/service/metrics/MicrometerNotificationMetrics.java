@@ -30,6 +30,7 @@ public class MicrometerNotificationMetrics implements NotificationMetrics {
     private static final String OLDEST_PENDING = "notification.queue.oldest.pending.age";
     private static final String REQUESTS = "notification.requests";
     private static final String DELIVERIES = "notification.deliveries";
+    private static final String ANNOUNCEMENT_BROADCASTS = "notification.announcement.broadcasts";
     private static final String SENDS = "notification.sends";
     private static final String RECEIPTS = "notification.receipts";
     private static final String CLAIMS = "notification.queue.claims";
@@ -84,6 +85,13 @@ public class MicrometerNotificationMetrics implements NotificationMetrics {
         // inventing categories at runtime is a problem this tag makes visible rather than causes.
         count(DELIVERIES, Tags.of("channel", name(channel), "category", category,
                 "outcome", "fallback"));
+    }
+
+    @Override
+    public void recordAnnouncementBroadcast(String category, String outcome,
+                                            long deliveriesCreated) {
+        registry.summary(ANNOUNCEMENT_BROADCASTS, Tags.of("category", category, "outcome", outcome))
+                .record(deliveriesCreated);
     }
 
     @Override

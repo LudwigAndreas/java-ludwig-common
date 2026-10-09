@@ -10,5 +10,16 @@ package ru.ludwigandreas.notification.web.dto;
  */
 public enum CategoryClassDto {
     TRANSACTIONAL,
+
+    /**
+     * Undeclinable but not urgent: a release note, a deprecation warning, an incident notice.
+     *
+     * <p>Accepted on the wire for completeness and symmetry with the other two, but note that the
+     * feature it exists for - a platform announcement - does not let a caller choose it: an
+     * announcement names a <em>category</em>, and the deployment's catalogue decides that category's
+     * class. See {@code CategoryClass} for why the class is not a request-level decision.
+     */
+    PLATFORM,
+
     MARKETING
 }

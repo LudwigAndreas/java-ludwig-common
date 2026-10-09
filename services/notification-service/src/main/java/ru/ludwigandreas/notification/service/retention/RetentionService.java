@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
+import ru.ludwigandreas.notification.repository.AnnouncementRepository;
 import ru.ludwigandreas.notification.repository.InboxItemRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.RateLimitWindowRepository;
@@ -42,6 +43,7 @@ public class RetentionService {
 
     private final NotificationDeliveryRepository deliveryRepository;
     private final InboxItemRepository inboxRepository;
+    private final AnnouncementRepository announcementRepository;
     private final SuppressionRepository suppressionRepository;
     private final RateLimitWindowRepository rateLimitRepository;
     private final NotificationProperties properties;
@@ -133,6 +135,27 @@ public class RetentionService {
         }
         return inboxRepository.purgeUnreadBefore(
                 now.minus(ceiling), properties.getRetention().getBatchSize());
+    }
+
+    /**
+     * Deletes announcements whose visibility window closed long enough ago.
+     *
+     * <p><b>Anchored on the end of visibility</b>, not on creation and not on being read. An
+     * announcement published for next quarter has not started yet, and one still showing must never
+     * vanish out from under the people reading it - which is why the startup check refuses a window
+     * shorter than {@code announcements.max-visibility-window}.
+     *
+     * <p>Its content rows and every dismissal marker go with it in one cascade, which is what makes
+     * this step a <b>constant number of statements regardless of how large the audience was</b>. That
+     * is the property the whole aggregate exists for: the per-recipient alternative would have left
+     * one row per person to sweep, and for an unread broadcast to fifty thousand people that sweep is
+     * the expensive part rather than the send.
+     */
+    @Transactional
+    public long purgeAnnouncements(Instant now) {
+        return announcementRepository.purgeExpiredBefore(
+                now.minus(properties.getRetention().getAnnouncementTtl()),
+                properties.getRetention().getBatchSize());
     }
 
     /** Deletes rate-limit counters for windows that have closed. */

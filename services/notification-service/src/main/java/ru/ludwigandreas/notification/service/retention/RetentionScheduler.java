@@ -92,12 +92,15 @@ public class RetentionScheduler implements SmartLifecycle {
         long windows = step(lock, () -> retentionService.purgeRateLimitWindows(now));
         long inbox = step(lock, () -> retentionService.purgeInbox(now));
         long unread = step(lock, () -> retentionService.purgeUnreadInbox(now));
+        long announcements = step(lock, () -> retentionService.purgeAnnouncements(now));
 
-        if (content + scrubbed + deliveries + history + suppressions + windows + inbox > 0) {
+        if (content + scrubbed + deliveries + history + suppressions + windows + inbox
+                + announcements > 0) {
             log.info("Retention purge: {} bodies dropped, {} deliveries scrubbed, {} deliveries "
                             + "deleted, {} history rows, {} suppressions, {} rate-limit windows, "
-                            + "{} read inbox items",
-                    content, scrubbed, deliveries, history, suppressions, windows, inbox);
+                            + "{} read inbox items, {} expired announcements",
+                    content, scrubbed, deliveries, history, suppressions, windows, inbox,
+                    announcements);
         }
 
         // Logged on its own line, at WARN, and only when it actually did something. Every other

@@ -9,6 +9,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.ludwigandreas.notification.service.model.Audience;
 import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.odatafilter.annotation.Filterable;
 
@@ -108,6 +109,92 @@ class InAppCarveOutRulesTest {
                 .because("notification_delivery_content is purged at content-ttl (7d) with a startup "
                         + "check that a body never outlives its delivery, so an unread inbox body "
                         + "stored there would be deleted before its owner had read it")
+                .check(productionClasses);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Announcements. Same placement argument as everything above: an announcement aggregate and an
+    // audience predicate exist in exactly one module.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * The property the whole announcement aggregate rests on: one row, whatever the audience size.
+     *
+     * <p>A materialized audience is the obvious optimisation and it is wrong four ways at once - it
+     * reintroduces the N rows the aggregate exists to avoid, it is stale the moment a role is
+     * revoked, it makes a user created tomorrow invisible to an {@code EVERYONE} announcement, and it
+     * turns retention from a constant-cost deletion back into a sweep. None of those is obvious from
+     * reading the field that would cause them.
+     */
+    @Test
+    @DisplayName("the announcement carries no materialized audience")
+    void announcementHasNoMaterializedAudience() {
+        noFields()
+                .that().areDeclaredInClassesThat().haveSimpleNameEndingWith("AnnouncementEntity")
+                .should().haveRawType(java.util.Collection.class)
+                .orShould().haveRawType(java.util.Set.class)
+                .orShould().haveRawType(java.util.List.class)
+                .because("an announcement is ONE row whatever its audience: a collection of subjects "
+                        + "here reintroduces the per-recipient cost, goes stale on revocation, hides "
+                        + "the announcement from users created later, and turns retention back into "
+                        + "a sweep")
+                .check(productionClasses);
+    }
+
+    /**
+     * The allowlist is only a control if there is one way past it.
+     *
+     * <p>A second construction path would behave perfectly for every role on the list - every test
+     * green, every valid publish fine - and would also accept every role that is not on it. Nothing
+     * would look wrong until somebody announced to a role nobody meant to be addressable, which is
+     * the definition of a check that needs to be structural rather than remembered.
+     */
+    @Test
+    @DisplayName("only the audience resolver constructs a role-targeted audience")
+    void onlyTheResolverBuildsARoleAudience() {
+        noClasses()
+                .that().resideOutsideOfPackage("..service.announcement..")
+                .and().resideInAPackage("ru.ludwigandreas.notification..")
+                .should().callMethod(Audience.class, "ofRole", String.class)
+                .because("targetable-roles is consulted in exactly one place; a second construction "
+                        + "path would accept every role that is not on the allowlist while looking "
+                        + "entirely correct for every role that is")
+                .check(productionClasses);
+    }
+
+    /**
+     * Filtering by audience would let a caller enumerate which roles the platform addresses, and
+     * therefore which roles exist - the same enumeration concern the resolver's indistinguishable
+     * refusals exist to prevent, arriving by a different door.
+     */
+    @Test
+    @DisplayName("the announcement audience is not filterable")
+    void announcementAudienceIsNotFilterable() {
+        noFields()
+                .that().areDeclaredInClassesThat().haveSimpleNameEndingWith("AnnouncementEntity")
+                .and().haveNameMatching("audience.*")
+                .should().beAnnotatedWith(Filterable.class)
+                .because("filtering by audience enumerates which roles the platform addresses")
+                .check(productionClasses);
+    }
+
+    /**
+     * The inbox keeps its boring, obviously-correct predicate.
+     *
+     * <p>The inbox read path is safe because of {@code owner = me}. Announcement visibility is
+     * derived from role membership, and merging the two would put a derived security term on the
+     * endpoint every client polls. The feeds are separate precisely so that cannot happen by
+     * accident, and this is the rule that keeps them separate.
+     */
+    @Test
+    @DisplayName("the inbox read path never depends on an announcement")
+    void inboxDoesNotDependOnAnnouncements() {
+        noClasses()
+                .that().resideInAPackage("..service.inbox..")
+                .should().dependOnClassesThat().haveSimpleNameStartingWith("Announcement")
+                .because("the inbox's correctness rests on a single owner predicate; an announcement's "
+                        + "visibility is derived, and the two must not be mixed on the service's "
+                        + "most-polled endpoint")
                 .check(productionClasses);
     }
 

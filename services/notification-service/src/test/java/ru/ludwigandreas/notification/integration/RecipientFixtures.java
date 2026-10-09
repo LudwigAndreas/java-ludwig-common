@@ -61,6 +61,33 @@ public class RecipientFixtures {
         users.saveAndFlush(user);
     }
 
+    /**
+     * A user holding these role codes, as the directory names them - bare, not {@code ROLE_}-prefixed.
+     *
+     * <p>{@code security_user_role.role_code} stores them that way, which is what the audience walk
+     * queries against. The prefixed form belongs to a principal, not to the projection.
+     */
+    public void givenUserWithRoles(String userId, String email, String... roles) {
+        givenUser(userId, email);
+        SecurityUserEntity user = users.findById(userId).orElseThrow();
+        user.getRoles().addAll(java.util.Set.of(roles));
+        users.saveAndFlush(user);
+    }
+
+    /**
+     * A user the provider has told us about and then deactivated.
+     *
+     * <p>Needed to assert that a leaver is not in a broadcast audience at all. Continuing to write to
+     * a leaver's address is both a privacy problem and, for a shared mailbox that has been
+     * reassigned, a disclosure to whoever now reads it.
+     */
+    public void givenDeactivatedUser(String userId, String email) {
+        givenUser(userId, email);
+        SecurityUserEntity user = users.findById(userId).orElseThrow();
+        user.setStatus(UserStatus.DISABLED);
+        users.saveAndFlush(user);
+    }
+
     /** A user the OIDC provider has told us about, with a verified address. */
     public void givenUser(String userId, String email) {
         SecurityUserEntity user = new SecurityUserEntity();

@@ -1,0 +1,1 @@
+Доступна версия ${productName} ${version}

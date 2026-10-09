@@ -5,71 +5,81 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/InboxItemContentRepository.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/InboxItemRepository.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/InboxQueryRepository.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/InboxQueryRepositoryImpl.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/InboxItemContentEntity.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/InboxItemEntity.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/exception/InboxItemNotFoundException.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/inbox/InAppSettlement.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/inbox/InboxService.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/mapper/InboxItemMapper.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/ChannelClass.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/InboxItemView.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/InboxSummary.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/InboxController.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/InboxItemResponse.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/InboxSummaryResponse.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/mapper/InboxDtoMapper.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/changes/0018-inbox-item.sql" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/changes/0019-inbox-item-content.sql" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/templates/welcome/in_app/en/body.html.ftl" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/templates/welcome/in_app/en/body.txt.ftl" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/templates/welcome/in_app/en/subject.ftl" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/templates/welcome/in_app/ru/body.html.ftl" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/templates/welcome/in_app/ru/body.txt.ftl" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/templates/welcome/in_app/ru/subject.ftl" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture/InAppCarveOutRulesTest.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InAppSettlementIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InboxApiIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InboxOpenApiIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InboxRetentionIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InboxSchemaIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InboxScopingIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/MarkAllReadIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/SuppressionFallbackIT.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/ChannelClassificationTest.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/ChannelSettingKeyTest.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/InboxServiceTest.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/MessageBundleParityTest.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/PassiveChannelSettlementTest.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/PreferenceEvaluatorTest.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementContentRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementEmailRunQueryRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementEmailRunQueryRepositoryImpl.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementEmailRunRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementMarkerRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepositoryImpl.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementContentEntity.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementContentId.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementEmailRunEntity.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementEntity.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementMarkerEntity.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementMarkerId.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AudienceKind.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/exception/AnnouncementNotFoundException.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/exception/AudienceNotPermittedException.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/exception/UnknownAnnouncementCategoryException.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/exception/VisibilityWindowTooLongException.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/AnnouncementAdminView.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/AnnouncementView.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/Audience.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/AudienceType.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/BroadcastRunView.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/AnnouncementAdminController.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/AnnouncementController.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AnnouncementAdminResponse.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AnnouncementResponse.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AnnouncementSummaryResponse.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AudienceTypeDto.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/PublishAnnouncementRequest.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/mapper/AnnouncementDtoMapper.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/changes/0020-announcement.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/changes/0021-announcement-content.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/changes/0022-announcement-marker.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/changes/0023-announcement-email-run.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementApiIT.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementEmailFanOutIT.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementPublishIT.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementRetentionIT.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementSchemaIT.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementVisibilityIT.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/AnnouncementAuditTest.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/AnnouncementServiceTest.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/AudienceResolverTest.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/RecordingAuditSink.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/openspec/changes/add-platform-announcements/tasks.md" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/changes/add-platform-announcements/tasks.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.ru.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationConfigurationValidator.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationConfigurationValidator.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/ChannelKind.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/ChannelKind.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/channel/ChannelRuntime.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/channel/ChannelRuntime.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationQueueConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/config/NotificationQueueConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/CategoryKind.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/CategoryKind.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/lock/LockNames.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/lock/LockNames.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/metrics/MicrometerNotificationMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/metrics/MicrometerNotificationMetrics.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/metrics/NoopNotificationMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/metrics/NoopNotificationMetrics.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/metrics/NotificationMetrics.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/metrics/NotificationMetrics.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/ChannelType.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/ChannelType.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/CategoryClass.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/CategoryClass.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/preference/PreferenceEvaluator.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/preference/PreferenceEvaluator.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/preference/usersettings/NotificationSettings.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/preference/usersettings/NotificationSettings.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/queue/DeliveryFanOutService.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/queue/DeliveryFanOutService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/DefaultRecipientResolver.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/recipient/DefaultRecipientResolver.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/retention/RetentionScheduler.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/retention/RetentionScheduler.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/retention/RetentionService.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/retention/RetentionService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/settings/NotificationProperties.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/settings/NotificationProperties.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/ChannelTypeDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/ChannelTypeDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/CategoryClassDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/CategoryClassDto.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/application.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages.properties" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages_ru.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages_ru.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture/InAppCarveOutRulesTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture/InAppCarveOutRulesTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InboxOpenApiIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/InboxOpenApiIT.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/NotificationTestBase.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/NotificationTestBase.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/RecipientFixtures.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/RecipientFixtures.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/TestPrincipals.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/TestPrincipals.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/NotificationConfigurationValidatorTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/NotificationConfigurationValidatorTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/PreferenceEvaluatorTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/PreferenceEvaluatorTest.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -160,7 +170,10 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "JUnit.CatalogIntegrationTest.executor": "Debug",
     "Maven.common [clean,install].executor": "Run",
+    "Maven.common [clean,verify,-pl...].executor": "Run",
+    "Maven.common [clean,verify].executor": "Run",
     "Maven.common [verify,-DskipITs].executor": "Run",
     "Maven.common [verify].executor": "Run",
     "RequestMappingsPanelOrder0": "0",
@@ -180,17 +193,39 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "settings.editor.selected.configurable": "reference.settings.project.maven.ignored.files",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
   <component name="RunAnythingCache">
     <option name="myCommands">
-      <command value="mvn clean install" />
       <command value="mvn verify " />
       <command value="mvn verify -DskipITs" />
+      <command value="mvn clean install" />
+      <command value="mvn clean verify " />
+      <command value="mvn clean verify -pl services/crus-service-example -am" />
+      <command value="mvn clean verify -pl services/crud-service-example -am" />
     </option>
   </component>
-  <component name="RunManager" selected="Spring Boot.CatalogApplication">
+  <component name="RunManager" selected="JUnit.CatalogIntegrationTest">
+    <configuration name="CatalogIntegrationTest" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="crud-service-example" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="ru.ludwigandreas.example.catalog.integration.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="ru.ludwigandreas.example.catalog.integration" />
+      <option name="MAIN_CLASS_NAME" value="ru.ludwigandreas.example.catalog.integration.CatalogIntegrationTest" />
+      <option name="TEST_OBJECT" value="class" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
     <configuration default="true" type="JetRunConfigurationType">
       <module name="ludwig-common" />
       <method v="2">
@@ -218,6 +253,11 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="JUnit.CatalogIntegrationTest" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
@@ -240,5 +280,33 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="UnknownFeatures">
+    <option featureType="dependencySupport" implementationName="java:org.springframework.security:spring-security-core" />
+    <option featureType="dependencySupport" implementationName="java:org.springframework:spring-core" />
+    <option featureType="dependencySupport" implementationName="java:org.apache.kafka:kafka_2.13" />
+    <option featureType="dependencySupport" implementationName="java:jakarta.validation:jakarta.validation-api" />
+    <option featureType="dependencySupport" implementationName="java:io.projectreactor:reactor-core" />
+    <option featureType="dependencySupport" implementationName="java:org.springframework.data:spring-data-commons" />
+    <option featureType="dependencySupport" implementationName="executable:kubectl" />
+    <option featureType="dependencySupport" implementationName="java:org.hibernate.validator:hibernate-validator" />
+    <option featureType="dependencySupport" implementationName="java:org.springframework:spring-webmvc" />
+    <option featureType="dependencySupport" implementationName="java:org.projectlombok:lombok" />
+    <option featureType="dependencySupport" implementationName="java:junit:junit" />
+    <option featureType="dependencySupport" implementationName="executable:docker" />
+    <option featureType="dependencySupport" implementationName="java:jakarta.persistence:jakarta.persistence-api" />
+    <option featureType="dependencySupport" implementationName="java:org.springframework:spring-messaging" />
+    <option featureType="dependencySupport" implementationName="java:org.springframework.boot:spring-boot" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/integration/CatalogIntegrationTest.java</url>
+          <line>93</line>
+          <option name="timeStamp" value="2" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

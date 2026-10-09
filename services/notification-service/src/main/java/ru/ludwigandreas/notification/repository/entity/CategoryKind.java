@@ -17,6 +17,15 @@ public enum CategoryKind {
      */
     TRANSACTIONAL,
 
+    /**
+     * The platform is telling the recipient something they cannot decline but which is not urgent:
+     * a release note, a deprecation warning, an incident notice.
+     *
+     * <p>Undeclinable like {@link #TRANSACTIONAL} and <em>not</em> urgent like it, which is the
+     * combination neither of the other two can express. See {@code CategoryClass} for the table.
+     */
+    PLATFORM,
+
     /** Anything the recipient can decline: campaigns, newsletters, product announcements. */
     MARKETING
 }

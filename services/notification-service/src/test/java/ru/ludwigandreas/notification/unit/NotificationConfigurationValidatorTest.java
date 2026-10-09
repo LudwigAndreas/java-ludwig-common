@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
@@ -227,6 +228,131 @@ class NotificationConfigurationValidatorTest {
 
         assertThat(properties.getRetention().getInboxUnreadMaxAge()).isNull();
         validator(properties).validate();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The announcement catalogue, checked at startup rather than at publish
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * The control for the whole group below: a deployment that has not switched announcements on
+     * must not be failed over a catalogue it does not use.
+     */
+    @Test
+    @DisplayName("an empty announcement catalogue is fine while announcements are off")
+    void disabledAnnouncementsAreNotValidated() {
+        NotificationProperties properties = defaults();
+
+        assertThat(properties.getAnnouncements().isEnabled()).isFalse();
+        validator(properties).validate();
+    }
+
+    @Test
+    @DisplayName("announcements enabled with no permitted audience is refused")
+    void refusesEnabledWithNoAudience() {
+        NotificationProperties properties = announcementsEnabled();
+        properties.getAnnouncements().getAllowedAudiences().clear();
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("allowed-audiences");
+    }
+
+    @Test
+    @DisplayName("announcements enabled with an empty catalogue is refused")
+    void refusesEnabledWithNoCategories() {
+        NotificationProperties properties = announcementsEnabled();
+        properties.getAnnouncements().getCategories().clear();
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("categories");
+    }
+
+    @Test
+    @DisplayName("an unknown audience kind is refused, naming the known ones")
+    void refusesUnknownAudienceKind() {
+        NotificationProperties properties = announcementsEnabled();
+        properties.getAnnouncements().setAllowedAudiences(List.of("ORG_UNIT"));
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ORG_UNIT")
+                .hasMessageContaining("EVERYONE");
+    }
+
+    /**
+     * The mistake with the quietest consequence. A category class that does not exist fails here; a
+     * category class that exists but is the wrong one cannot be detected by any build, which is why
+     * that is recorded as an unmechanisable rule rather than pretended about.
+     */
+    @Test
+    @DisplayName("an unknown category class is refused, naming the category")
+    void refusesUnknownCategoryClass() {
+        NotificationProperties properties = announcementsEnabled();
+        properties.getAnnouncements().getCategories().get("platform-release")
+                .setCategoryClass("URGENT");
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("platform-release")
+                .hasMessageContaining("URGENT");
+    }
+
+    @Test
+    @DisplayName("an unknown channel is refused, naming the category")
+    void refusesUnknownChannel() {
+        NotificationProperties properties = announcementsEnabled();
+        properties.getAnnouncements().getCategories().get("platform-release")
+                .setChannels(List.of("IN_APP", "SMS"));
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("platform-release")
+                .hasMessageContaining("SMS");
+    }
+
+    /**
+     * An announcement purged while it is still visible presents as a banner vanishing mid-incident,
+     * which is attributable to nothing. Hence a startup check rather than a comment.
+     */
+    @Test
+    @DisplayName("a retention window shorter than the longest visibility window is refused")
+    void refusesRetentionShorterThanVisibility() {
+        NotificationProperties properties = announcementsEnabled();
+        properties.getAnnouncements().setMaxVisibilityWindow(Duration.ofDays(180));
+
+        assertThatThrownBy(() -> validator(properties).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("announcement-ttl");
+    }
+
+    @Test
+    @DisplayName("a valid catalogue starts")
+    void validCatalogueStarts() {
+        validator(announcementsEnabled()).validate();
+    }
+
+    /** Enabled, with one inbox-only and one emailing category - the shape a real deployment has. */
+    private static NotificationProperties announcementsEnabled() {
+        NotificationProperties properties = defaults();
+        NotificationProperties.Announcements announcements = properties.getAnnouncements();
+        announcements.setEnabled(true);
+        announcements.setAllowedAudiences(new java.util.ArrayList<>(List.of("EVERYONE", "ROLE")));
+        announcements.setTargetableRoles(new java.util.ArrayList<>(List.of("ADMIN")));
+
+        NotificationProperties.Announcements.AnnouncementCategory release =
+                new NotificationProperties.Announcements.AnnouncementCategory();
+        release.setCategoryClass("PLATFORM");
+        release.setChannels(new java.util.ArrayList<>(List.of("IN_APP")));
+        announcements.getCategories().put("platform-release", release);
+
+        NotificationProperties.Announcements.AnnouncementCategory incident =
+                new NotificationProperties.Announcements.AnnouncementCategory();
+        incident.setCategoryClass("PLATFORM");
+        incident.setChannels(new java.util.ArrayList<>(List.of("IN_APP", "EMAIL")));
+        announcements.getCategories().put("platform-incident", incident);
+        return properties;
     }
 
     /**

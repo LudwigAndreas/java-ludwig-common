@@ -272,12 +272,62 @@ ludwig:
       # while an inbox body is the thing the recipient is meant to read and has to survive a holiday.
       inbox-ttl: 90d
       inbox-content-ttl: 90d
+      # Measured from the END of an announcement's visibility, not from its creation. Must not be
+      # shorter than announcements.max-visibility-window, or an announcement would be purged while
+      # people could still see it - the startup check refuses that.
+      announcement-ttl: 90d
       # DELIBERATELY UNSET. Setting this discards notifications their recipients were meant to
       # receive and never saw, so it is a product decision somebody takes out loud rather than a
       # default inherited from the line above. When it is set, its purge is logged at WARN on its own
       # line and counted separately from the read-anchored one.
       # inbox-unread-max-age: 365d
       batch-size: 1000
+
+    # --- platform announcements -------------------------------------------------------------------
+    # One message for an audience defined by a rule, stored once and read by everybody in it.
+    #
+    # EVERYTHING HERE IS POLICY. An announcement's audience, template, variables and window arrive on
+    # the request, because they change every time. What may be targeted at all, which categories
+    # exist, and which of them may send email are decided here, by whoever owns the notification
+    # catalogue - because anything an announcer can set, every announcer will set to the most
+    # permissive value. That is the same reason the transactional bypass is a category property and
+    # not a request flag, and it is why a publish request has no `channels` field.
+    announcements:
+      enabled: ${NOTIFICATION_ANNOUNCEMENTS_ENABLED:false}
+
+      # Which audience kinds this deployment permits. ORG_UNIT is deliberately absent: the org
+      # structure belongs to the identity provider and will arrive through identity-projection, which
+      # is a separate change.
+      allowed-audiences:
+        - EVERYONE
+        - ROLE
+
+      # Role codes that may be TARGETED - not roles that may publish, which is endpoint security.
+      #
+      # An allowlist rather than "any role", and not for tidiness: a free-form role target lets an
+      # announcer discover which roles exist by publishing to each in turn, and lets somebody address
+      # a role whose membership is itself sensitive. Empty by default, so a deployment must name them.
+      targetable-roles: []
+
+      # A banner with a very long window is a banner nobody removes.
+      max-visibility-window: 90d
+
+      fan-out:
+        # Recipients per batch. One long transaction would pin the oldest transaction id and stop
+        # autovacuum on the busiest tables here, which is why this is batched like the retention purge.
+        batch-size: 500
+        run-interval: 30s
+
+      # The catalogue. An announcer names a category; the category decides its class and its channels.
+      # Empty by default - a deployment declares what it actually announces.
+      #
+      # Think hard before giving MARKETING a category here, and harder before giving one EMAIL:
+      # forcing a campaign into an inbox somebody deliberately emptied is the one configuration of
+      # this feature that is worse than not having it, and EVERYONE + EMAIL is the most expensive
+      # thing this service can be asked to do.
+      categories: {}
+      #  platform-release:  { category-class: PLATFORM, channels: [IN_APP] }
+      #  platform-incident: { category-class: PLATFORM, channels: [IN_APP, EMAIL] }
 
     receipts:
       enabled: ${NOTIFICATION_RECEIPTS_ENABLED:true}

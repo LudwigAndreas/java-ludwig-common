@@ -39,6 +39,11 @@ public class NoopNotificationMetrics implements NotificationMetrics {
     }
 
     @Override
+    public void recordAnnouncementBroadcast(String category, String outcome,
+                                            long deliveriesCreated) {
+    }
+
+    @Override
     public void recordClaim(ChannelType channel, int claimed) {
     }
 

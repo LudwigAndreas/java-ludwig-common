@@ -59,6 +59,18 @@ public interface NotificationMetrics {
      */
     void recordDeliveryFallback(ChannelType channel, String category);
 
+    /**
+     * One announcement's email broadcast finishing, and how many deliveries it created.
+     *
+     * <p>Tagged by category and outcome only. Deliberately <b>not</b> by announcement id: announcements
+     * accumulate for the lifetime of the deployment, so a tag valued by one grows the series count
+     * without bound - the same reason no metric here takes a recipient or a delivery id.
+     *
+     * <p>The count is recorded as an observation rather than only incremented, because the question an
+     * operator asks is "how big was that broadcast", and a monotonic counter cannot answer it per run.
+     */
+    void recordAnnouncementBroadcast(String category, String outcome, long deliveriesCreated);
+
     /** A batch leased from the queue; {@code claimed} may be fewer than asked for. */
     void recordClaim(ChannelType channel, int claimed);
 

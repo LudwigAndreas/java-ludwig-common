@@ -1,0 +1,1 @@
+${productName} ${version} is available

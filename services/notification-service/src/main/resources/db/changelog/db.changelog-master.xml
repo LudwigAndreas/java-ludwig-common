@@ -80,6 +80,30 @@
     <include file="classpath:db/changelog/changes/0019-inbox-item-content.sql" relativeToChangelogFile="false"/>
 
     <!--
+        Platform announcements: one row for one message, whatever the size of its audience. The
+        audience is a predicate (kind + value) rather than a materialized list, which is what makes
+        the row count independent of how many people it reaches - and what lets somebody who joins
+        tomorrow be inside an EVERYONE audience with nothing rewritten.
+
+        Content is keyed by locale, so its row count follows the number of languages the deployment
+        ships and never the audience. Markers are written only when somebody actually dismisses.
+
+        Order matters: 0021 and 0022 both reference 0020's primary key.
+    -->
+    <include file="classpath:db/changelog/changes/0020-announcement.sql" relativeToChangelogFile="false"/>
+
+    <include file="classpath:db/changelog/changes/0021-announcement-content.sql" relativeToChangelogFile="false"/>
+
+    <include file="classpath:db/changelog/changes/0022-announcement-marker.sql" relativeToChangelogFile="false"/>
+
+    <!--
+        The email fan-out's run table. This service's own, because the long-running-operation
+        contract is explicit that there is no shared operation table - each module keeps its own and
+        maps onto the envelope at its edge.
+    -->
+    <include file="classpath:db/changelog/changes/0023-announcement-email-run.sql" relativeToChangelogFile="false"/>
+
+    <!--
         Same arrangement for the identity projection's tables (security_user, security_partner,
         security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false. This
         service sets ludwig.identity.contact.enabled, so its security_user rows carry the verified

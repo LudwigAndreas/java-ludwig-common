@@ -24,12 +24,20 @@ import ru.ludwigandreas.notification.settings.NotificationProperties;
  *
  * <h2>The bypass, and why it is a category property rather than a flag on the request</h2>
  *
- * <p>A {@link CategoryClass#TRANSACTIONAL} notification ignores preferences and quiet hours. If that
- * decision were a boolean on the request, every calling service would set it, and every calling
- * service would set it to true - because from inside any one service its own notification always
- * looks important. Making it a property of the <em>category</em> means the decision is made once, in
- * configuration, by whoever owns the notification catalogue, and a service that wants its campaign
- * exempted has to argue for it rather than pass a flag.
+ * <p>A {@link CategoryClass} answers two independent questions - whether opt-out is bypassed and
+ * whether quiet hours are - and this method asks both of the class rather than comparing against a
+ * named constant. If either decision were a boolean on the request, every calling service would set
+ * it, and every calling service would set it to true, because from inside any one service its own
+ * notification always looks important. Making it a property of the <em>category</em> means the
+ * decision is made once, in configuration, by whoever owns the notification catalogue, and a service
+ * that wants its campaign exempted has to argue for it rather than pass a flag.
+ *
+ * <p>The two questions were one until {@link CategoryClass#PLATFORM} existed. A release note is
+ * undeclinable and not urgent, so it bypasses opt-out and honours quiet hours - a combination the
+ * single question could not express. Asking the class rather than branching on constants is also
+ * what keeps this method from growing an arm per class: there is deliberately no {@code switch} and
+ * no {@code default} here, because a {@code default} would silently answer for the next class
+ * somebody adds.
  *
  * <p>The suppression list is checked separately and has no bypass at all - see
  * {@link SuppressionService}. That is the one rule a transactional notification cannot override,
@@ -77,13 +85,18 @@ public class PreferenceEvaluator {
      */
     public DispatchDecision evaluate(RecipientPreferences preferences, ChannelType channel,
                                      String category, CategoryClass categoryClass, Instant now) {
-        if (categoryClass == CategoryClass.TRANSACTIONAL) {
-            return DispatchDecision.allowed();
-        }
+        // Two questions asked of the class, not one asked of a constant. They were one answer while
+        // TRANSACTIONAL was the only bypass; PLATFORM is undeclinable AND not urgent, which the
+        // single question could not express. Asked of CategoryClass's own flags so that a fourth
+        // class does not compile until both answers exist - see CategoryClass for the table.
+        //
         // A recipient with no account has no preferences to consult, and none() answers "not opted
         // out" for every question - so there is no separate guard for the literal-address case.
-        if (preferences.optedOut(category, channel)) {
+        if (!categoryClass.bypassesOptOut() && preferences.optedOut(category, channel)) {
             return DispatchDecision.suppressed(DispatchDecision.Reasons.OPT_OUT);
+        }
+        if (categoryClass.bypassesQuietHours()) {
+            return DispatchDecision.allowed();
         }
         // Opt-out above applies to every channel; quiet hours below apply only to a channel that
         // interrupts. Asked of the channel's class rather than of the channel, because the rule is

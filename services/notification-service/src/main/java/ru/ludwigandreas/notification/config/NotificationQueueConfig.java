@@ -20,6 +20,8 @@ import ru.ludwigandreas.hotreload.binding.HotReloadTypedConfigFactory;
 import ru.ludwigandreas.hotreload.binding.RefreshableConfig;
 import ru.ludwigandreas.notification.service.metrics.NotificationMetrics;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
+import ru.ludwigandreas.notification.service.announcement.AnnouncementBroadcastScheduler;
+import ru.ludwigandreas.notification.service.announcement.AnnouncementEmailBroadcastService;
 import ru.ludwigandreas.notification.service.channel.ChannelRegistry;
 import ru.ludwigandreas.notification.service.channel.ChannelRuntime;
 import ru.ludwigandreas.notification.service.channel.NotificationChannel;
@@ -254,6 +256,25 @@ public class NotificationQueueConfig {
                                                   NotificationProperties properties) {
         return new RetentionScheduler(runLock, retentionService, notificationTaskScheduler,
                 properties);
+    }
+
+    /**
+     * Drives announcement email fan-outs.
+     *
+     * <p>Conditional on announcements being enabled, like the digest and retention schedulers are on
+     * theirs: a deployment that does not announce should not run a job looking for work that cannot
+     * exist. The scheduler is harmless either way - it would find no claimable runs - but a scheduled
+     * job with nothing to do is one more thing in a thread dump to explain.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "ludwig.notification.announcements", name = "enabled")
+    public AnnouncementBroadcastScheduler announcementBroadcastScheduler(
+            RunLock runLock,
+            AnnouncementEmailBroadcastService broadcastService,
+            TaskScheduler notificationTaskScheduler,
+            NotificationProperties properties) {
+        return new AnnouncementBroadcastScheduler(runLock, broadcastService,
+                notificationTaskScheduler, properties);
     }
 
     /**

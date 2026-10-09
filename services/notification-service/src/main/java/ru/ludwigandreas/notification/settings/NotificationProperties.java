@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.time.Duration;
@@ -81,6 +82,9 @@ public class NotificationProperties {
 
     @Valid
     private final Events events = new Events();
+
+    @Valid
+    private final Announcements announcements = new Announcements();
 
     /** The Kafka consumer that carries the primary, fire-and-forget ingress. */
     @Getter
@@ -658,6 +662,127 @@ public class NotificationProperties {
         private String templateKeySuffix = "-digest";
     }
 
+    /**
+     * Platform announcements: one message for an audience defined by a rule.
+     *
+     * <h2>Everything here is policy, and none of it is data</h2>
+     *
+     * <p>The split this block exists to enforce. An announcement's audience, template, variables and
+     * window change every time and arrive on the request. What may be targeted <em>at all</em>, which
+     * categories exist, and which of them may send email do not change per announcement and must not
+     * be expressible on one - because anything an announcer can set, every announcer will set to the
+     * most permissive value. That is the same argument {@code PreferenceEvaluator} makes about the
+     * transactional bypass, and it is why there is no {@code channels} field and no {@code alsoEmail}
+     * flag on a publish request.
+     *
+     * <p>Every value here is a {@code String}, including the ones that name an enum. This package is
+     * deliberately free of service-layer types, because every layer reads it and so it must depend on
+     * nothing - the same reason {@code NotificationRuntimeProperties#channels} is keyed by name. They
+     * are resolved to enums at the one boundary that consumes them, where an unknown name is a
+     * startup failure rather than a silent mismatch.
+     */
+    @Getter
+    @Setter
+    public static class Announcements {
+
+        /** Off by default, so a deployment that has not thought about this behaves as before. */
+        private boolean enabled;
+
+        /**
+         * Which audience kinds this deployment permits at all, by name.
+         *
+         * <p>Empty means none, which is why {@link #enabled} with nothing here refuses startup
+         * rather than silently accepting no announcement.
+         */
+        private List<String> allowedAudiences = new ArrayList<>();
+
+        /**
+         * Role codes that may be <b>targeted</b> by an announcement.
+         *
+         * <p>An allowlist rather than "any role", and the reason is not tidiness. A free-form role
+         * target is an enumeration primitive for the role space: an announcer could discover which
+         * roles exist by publishing to each in turn. It also lets somebody address a role whose
+         * membership is itself sensitive - "everyone under investigation" is a role somebody will
+         * eventually create.
+         *
+         * <p>Distinct from <em>who may publish</em>, which is resource-level authorization on the
+         * endpoint. A caller can hold the publishing role and still be refused a role target.
+         *
+         * <p>No build can check that a role on this list should be addressable. What is checked is
+         * that the list is consulted, in exactly one place, by an ArchUnit rule.
+         */
+        private List<String> targetableRoles = new ArrayList<>();
+
+        /**
+         * The longest window an announcement may be published for.
+         *
+         * <p>Capped because an announcement with a very long window is a banner nobody removes, and
+         * because the retention window is measured from the end of visibility - so an unbounded
+         * window would mean a row that is never purged. {@code NotificationConfigurationValidator}
+         * also refuses a retention window shorter than this, which would purge an announcement while
+         * it was still visible.
+         */
+        @NotNull
+        private Duration maxVisibilityWindow = Duration.ofDays(90);
+
+        @Valid
+        private final FanOut fanOut = new FanOut();
+
+        /**
+         * The catalogue, keyed by category name.
+         *
+         * <p>An announcer names a category and gets that category's class and channels. A category
+         * absent from here is rejected at publish rather than defaulted, because a default would
+         * silently pick both a declinability and whether email is sent.
+         */
+        private Map<String, AnnouncementCategory> categories = new LinkedHashMap<>();
+
+        /** One category's policy: what it is, and where it goes. */
+        @Getter
+        @Setter
+        public static class AnnouncementCategory {
+
+            /**
+             * The category class by name - {@code TRANSACTIONAL}, {@code PLATFORM} or
+             * {@code MARKETING}.
+             *
+             * <p>Validated at startup. No build can check that the chosen class is the right product
+             * answer: it is a statement about what the organisation may impose on people, exactly the
+             * shape of a cache's {@code CachePurpose}.
+             */
+            @NotBlank
+            private String categoryClass;
+
+            /**
+             * The channels this category is delivered over, by name.
+             *
+             * <p>{@code IN_APP} alone means the announcement is only shown. Including {@code EMAIL}
+             * starts a fan-out at publish, which is the expensive and irreversible half - hence a
+             * catalogue entry somebody reviewed rather than a request field.
+             */
+            @NotEmpty
+            private List<String> channels = new ArrayList<>();
+        }
+
+        /** How the email fan-out paces itself. */
+        @Getter
+        @Setter
+        public static class FanOut {
+
+            /**
+             * Recipients per batch, so one run never holds a long transaction open.
+             *
+             * <p>A long transaction would pin the oldest transaction id and stop autovacuum on the
+             * busiest tables in the service, which is the same reason the retention purge is batched.
+             */
+            @Positive
+            private int batchSize = 500;
+
+            @NotNull
+            private Duration runInterval = Duration.ofSeconds(30);
+        }
+    }
+
     /** What is kept, and for how long. The documented retention policy is this block. */
     @Getter
     @Setter
@@ -733,6 +858,22 @@ public class NotificationProperties {
          * retention number an operator must be able to see.
          */
         private Duration inboxUnreadMaxAge;
+
+        /**
+         * How long an announcement is kept <b>after its visibility window has closed</b>.
+         *
+         * <p>Anchored on the end of visibility rather than on creation, because an announcement's
+         * useful life is its window and an announcement published for next quarter has not started
+         * yet. Its content rows and every dismissal marker for it go with it in one cascade, which is
+         * why the whole purge is a constant number of rows regardless of how large the audience was -
+         * the property the per-recipient fan-out could not have.
+         *
+         * <p>Must not be shorter than {@code announcements.max-visibility-window};
+         * {@code NotificationConfigurationValidator} refuses to start otherwise, because an
+         * announcement purged while still visible presents as a banner vanishing mid-incident.
+         */
+        @NotNull
+        private Duration announcementTtl = Duration.ofDays(90);
 
         /** Rows deleted per purge statement, so one run cannot hold a long transaction open. */
         @Positive

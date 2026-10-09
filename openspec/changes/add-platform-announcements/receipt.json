@@ -1,0 +1,38 @@
+{
+  "change": "add-platform-announcements",
+  "model": "claude-opus-5",
+  "index_version": "efa98140f3c017f708f52c40af6d8540c5b580d2a64ffa12d0a126b155b69e63",
+  "modules_touched": [
+    "notification-service"
+  ],
+  "gate": {
+    "manifest_stale": "pass - project-index.json current, no POM changed",
+    "check_image_pins": "pass - 6 image references, all pinned by digest",
+    "check_api_baseline": "FAIL - environmental and not caused by this change; unresolvable published baseline for 25 modules this change does not touch. The user directed it be ignored. NOT a pass.",
+    "check_migrations": "pass - 16 root changelogs, 90 changesets, all conforming",
+    "validate": "pass - mvn -q validate clean across every module",
+    "verify": "pass - mvn -pl :notification-service -am verify, BUILD SUCCESS across the reactor, 286 unit + 174 integration in notification-service, 0 failures, 0 errors, all coverage checks met",
+    "dependents": "none - 0 in-repo dependents, so no dependent build step",
+    "openspec_validate": "pass - valid under --strict"
+  },
+  "tests": {
+    "added": 90,
+    "added_detail": "AnnouncementSchemaIT 11, AnnouncementVisibilityIT 15, AnnouncementPublishIT 14, AnnouncementApiIT 12, AnnouncementEmailFanOutIT 11, AnnouncementRetentionIT 6, AudienceResolverTest 9, AnnouncementServiceTest 9, AnnouncementAuditTest 7, plus 4 ArchUnit rules, 8 catalogue-validation cases, 7 bypass-matrix cases and 2 OpenAPI cases folded into existing classes.",
+    "passed": 460,
+    "failed": 0,
+    "breakdown": "286 surefire (unit + architecture), 174 failsafe (integration)"
+  },
+  "retries": 19,
+  "retries_detail": "Attempts beyond the first, each with an identifiable change: 4 on the enum triad and three exhaustive switches; 1 on check_migrations (a prose line beginning with the word 'changeset'); 1 on the @EmbeddedId entities vs the shared entity-base rule; 2 on the generated id (assigned UUID discarded, then saveAndFlush ordering); 3 on the audit sink in the Spring context (TestConfiguration implementing the sink, split config, then abandoned for a unit-test double); 1 on the shared Testcontainers context evicted by a second property source; 1 on the ROLE_ prefix mismatch; 3 on the layering rules letting entities reach the controller (views, mapper, then test call sites); 2 on the audit numeric attribute vs SnapshotEntity immutability; 1 on window fixtures computed from two separate clock reads.",
+  "human_corrections": 2,
+  "human_corrections_detail": "The user directed that check_api_baseline.sh be ignored, and committed add-in-app-notifications so this change had its own rollback point. Neither was a correction of incorrect work.",
+  "rollback_point": "8164ef6e309b21a1fc0386508a3ff3c9af0de56e",
+  "unresolved": [
+    "scripts/check_api_baseline.sh cannot pass in this environment and was explicitly set aside, so the gate is not green in full.",
+    "ORG_UNIT audiences are a declared non-goal pending identity-projection carrying ou_id; that change touches a shared starter and pulls crud-service-example into the gate.",
+    "The emailed audience and live visibility can diverge for somebody who loses the targeted role mid-run. Specified, tested and documented rather than resolved - resolving it would mean a long run sending to a different audience than the one approved.",
+    "audienceTotal is never populated, so the operation envelope's progress always reports a null total. Honest (the field is nullable for exactly this) but a caller cannot show a percentage; counting the audience up front would delay the first send.",
+    "No cache on the announcement feed. Correct before fast, and the design records that if one is ever needed its CachePurpose is security, not performance - the TTL would be how long a revoked role keeps seeing an admin announcement.",
+    "README.ru.md still has no 'Build and test' section, so the updated test counts appear only in the English README. Pre-existing drift."
+  ]
+}

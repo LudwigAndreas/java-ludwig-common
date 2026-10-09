@@ -7,6 +7,8 @@ import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.ConfigurableEnvironment;
 import ru.ludwigandreas.job.core.config.JobCoreProperties;
+import ru.ludwigandreas.notification.service.model.AudienceType;
+import ru.ludwigandreas.notification.service.model.CategoryClass;
 import ru.ludwigandreas.notification.service.model.ChannelType;
 import ru.ludwigandreas.notification.service.preference.ConfiguredPreferenceSource;
 import ru.ludwigandreas.notification.service.preference.RecipientPreferenceSource;
@@ -66,6 +68,7 @@ public class NotificationConfigurationValidator {
         checkDigestCategories(problems);
         checkRetentionOrdering(problems);
         checkPreferenceSource(problems);
+        checkAnnouncements(problems);
 
         if (!problems.isEmpty()) {
             throw new IllegalStateException("ludwig.notification configuration is unsafe:\n  - "
@@ -291,6 +294,93 @@ public class NotificationConfigurationValidator {
                             + "delivery would outlive its own audit trail.",
                     retention.getHistoryTtl(), retention.getDeliveryTtl()));
         }
+    }
+
+    /**
+     * The announcement catalogue, checked at startup rather than at publish.
+     *
+     * <p>A typo here is otherwise discovered by an announcer at the moment they are trying to
+     * announce something, which is the worst possible time to learn about it - and for a category
+     * naming the wrong class it would not be discovered at all, it would just quietly send to people
+     * who had opted out or wake them at three in the morning.
+     *
+     * <p>Only checked when announcements are enabled. Failing a deployment over a catalogue it has
+     * switched off would be a startup error about nothing, which is the same reason
+     * {@link #checkLockLease} only considers enabled jobs.
+     */
+    private void checkAnnouncements(List<String> problems) {
+        NotificationProperties.Announcements announcements = properties.getAnnouncements();
+        if (!announcements.isEnabled()) {
+            return;
+        }
+
+        if (announcements.getAllowedAudiences().isEmpty()) {
+            problems.add("announcements.enabled is true but announcements.allowed-audiences is "
+                    + "empty, so every publish would be rejected. Either list the audience kinds "
+                    + "this deployment permits or switch announcements off.");
+        }
+        for (String audience : announcements.getAllowedAudiences()) {
+            if (!isEnumConstant(AudienceType.class, audience)) {
+                problems.add(String.format(
+                        "announcements.allowed-audiences contains '%s', which is not an audience "
+                                + "kind. Known kinds: %s.",
+                        audience, namesOf(AudienceType.values())));
+            }
+        }
+
+        if (announcements.getCategories().isEmpty()) {
+            problems.add("announcements.enabled is true but announcements.categories is empty, so "
+                    + "there is no category an announcer could name.");
+        }
+        announcements.getCategories().forEach((name, category) -> {
+            if (!isEnumConstant(CategoryClass.class, category.getCategoryClass())) {
+                problems.add(String.format(
+                        "announcements.categories.%s.category-class is '%s', which is not a category "
+                                + "class. Known classes: %s.",
+                        name, category.getCategoryClass(), namesOf(CategoryClass.values())));
+            }
+            for (String channel : category.getChannels()) {
+                if (!isEnumConstant(ChannelType.class, channel)) {
+                    problems.add(String.format(
+                            "announcements.categories.%s.channels contains '%s', which is not a "
+                                    + "channel. Known channels: %s.",
+                            name, channel, namesOf(ChannelType.values())));
+                }
+            }
+        });
+
+        // An announcement is purged on a window measured from the END of its visibility, so a
+        // retention window shorter than the longest permitted visibility would delete an
+        // announcement while people could still see it - which presents as a banner vanishing
+        // mid-incident and is attributable to nothing.
+        Duration announcementTtl = properties.getRetention().getAnnouncementTtl();
+        if (announcementTtl.compareTo(announcements.getMaxVisibilityWindow()) < 0) {
+            problems.add(String.format(
+                    "retention.announcement-ttl (%s) is shorter than "
+                            + "announcements.max-visibility-window (%s): an announcement would be "
+                            + "purged while it was still visible.",
+                    announcementTtl, announcements.getMaxVisibilityWindow()));
+        }
+    }
+
+    private static boolean isEnumConstant(Class<? extends Enum<?>> type, String name) {
+        if (name == null) {
+            return false;
+        }
+        for (Enum<?> constant : type.getEnumConstants()) {
+            if (constant.name().equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String namesOf(Enum<?>[] constants) {
+        List<String> names = new ArrayList<>(constants.length);
+        for (Enum<?> constant : constants) {
+            names.add(constant.name());
+        }
+        return String.join(", ", names);
     }
 
     /** The longest a single provider call may block, across every enabled channel. */

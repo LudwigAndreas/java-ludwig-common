@@ -29,6 +29,9 @@ import org.springframework.test.web.servlet.MockMvc;
  *       there.</li>
  * </ul>
  *
+ * <p>It also covers the announcement endpoints, whose cancellation contract (202, and committed
+ * deliveries not recalled) is the part a client would otherwise have to discover by trying.
+ *
  * <p>Deliberately not a whole-document snapshot. A snapshot of every path in this service would fail
  * on every unrelated endpoint change, and the usual response to that is to regenerate it without
  * reading the diff - which is worse than no test.
@@ -90,6 +93,51 @@ class InboxOpenApiIT extends NotificationTestBase {
                 .as("a client needs to be told it will never see a 403 here")
                 .contains("404")
                 .containsIgnoringCase("belongs to somebody else");
+    }
+
+    /**
+     * The announcement endpoints, and the two contract facts a client cannot guess.
+     *
+     * <p>That cancellation answers 202 rather than 204 is the platform's rule, and a client treating
+     * 204 as "stopped" would report a stop that has only been requested. That already-created
+     * deliveries are not recalled is the other half: a caller who cancelled needs to know that some
+     * mail is still going out.
+     */
+    @Test
+    @DisplayName("the announcement endpoints are published with their cancellation contract")
+    void announcementEndpointsArePublished() throws Exception {
+        JsonNode paths = document().path("paths");
+
+        assertThat(paths.has("/api/v1/announcements")).isTrue();
+        assertThat(paths.has("/api/v1/announcements/outstanding-count")).isTrue();
+        assertThat(paths.has("/api/v1/announcements/{id}")).isTrue();
+        assertThat(paths.has("/api/v1/announcements/{id}/dismiss")).isTrue();
+        assertThat(paths.has("/api/v1/announcements/{id}/email-run")).isTrue();
+        assertThat(paths.has("/api/v1/announcements/{id}/email-run/cancellation")).isTrue();
+
+        String cancel = paths.path("/api/v1/announcements/{id}/email-run/cancellation")
+                .path("post").path("description").asText();
+        assertThat(cancel)
+                .as("202 rather than 204 is the contract, not an implementation detail")
+                .contains("202");
+        assertThat(cancel)
+                .as("a caller who cancelled must know that committed deliveries still go out")
+                .containsIgnoringCase("not recalled");
+    }
+
+    /**
+     * The audience is absent from what a recipient can filter on. Asserted against the published
+     * document because that is what a client generator reads.
+     */
+    @Test
+    @DisplayName("the announcement feed documents that a foreign announcement is a 404")
+    void announcementRefusalContractIsDocumented() throws Exception {
+        String description = document()
+                .path("paths").path("/api/v1/announcements/{id}").path("get")
+                .path("description").asText();
+
+        assertThat(description).contains("404");
+        assertThat(description).containsIgnoringCase("indistinguishable");
     }
 
     @Test
