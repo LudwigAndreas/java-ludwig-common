@@ -1,0 +1,40 @@
+{
+  "change": "add-published-api-documents",
+  "model": "claude-opus-5",
+  "index_version": "8251d1fa05bf0f1fb329f328b747909ef5344c884eba0ac4bee8aa5c5b74ffe8",
+  "modules_touched": [
+    "crud-service-example",
+    "notification-service"
+  ],
+  "gate": {
+    "manifest_build": "pass",
+    "manifest_stale": "pass",
+    "manifest_layout": "pass",
+    "validate": "pass",
+    "verify_crud_service_example": "pass",
+    "verify_notification_service": "pass",
+    "dependents": "none - inRepoDependents is [] for both services",
+    "check_migrations": "pass",
+    "check_image_pins": "pass",
+    "check_api_baseline": "not run - known environmentally broken in this checkout (unresolvable published baselines for untouched modules); no library module is touched by this change",
+    "openspec_validate": "pass",
+    "git_status_clean": "pass - only intended files, and no tracked file was rewritten by an ordinary verify"
+  },
+  "tests": {
+    "added": 5,
+    "passed": 510,
+    "failed": 0
+  },
+  "retries": 1,
+  "human_corrections": 1,
+  "rollback_point": "2a725e366c2194aab1e2ef70ba84d448313c4227",
+  "unresolved": [
+    "No check fails when a NEW service is added with controllers and no published document. The check lives in each service's own tests, and an absent test cannot fail. None of the three enforcement tools can see a missing file under docs/api/; scripts/manifest.sh layout is the natural home, but that is a repository-layout capability change this change deliberately does not make.",
+    "The two ApiDocumentIT classes are near-identical by deliberate decision, recorded as a non-goal in design.md. If a third service wants one, that is the point to extract it.",
+    "FINDING, pre-existing, NOT fixed: crud-service-example's application.yml nests the 'catalog:' block under 'logging:' (indent 2, line 475), so it binds logging.catalog.notifications.* while CatalogNotificationProperties binds ludwig.catalog.notifications. Every one of template-key, category, category-class, priority, channels and steward-user-ids is inert. Left alone because moving it changes what the service sends once the feature is enabled, which a documentation change must not do.",
+    "FINDING, pre-existing, NOT fixed: the published document for GET /api/v1/products advertises a query parameter named 'options' - springdoc's own misreading of the ODataQueryOptions argument. ODataQueryOptionsOpenApiCustomizer only adds parameters and never removes that one, so a generated client gets a useless parameter. Belongs to odata-filter-spring-boot-starter.",
+    "ODataQueryOptionsOpenApiCustomizer's javadoc claims a parameter bound by a custom resolver is 'invisible to springdoc'. It is not invisible - it is rendered as 'options'. The comment overstates, and a committed document now contradicts it.",
+    "Task 2.6 was verified structurally rather than by mutation: the five published parameters carry description strings that exist verbatim only in the customizer, so the assertion cannot pass without it. A mutation test was judged not worth a build cycle, which is a weaker proof than this repository usually accepts.",
+    "notification-service/README.ru.md still has no 'Build and test' section (23 English sections against 22 Russian). Pre-existing drift, neither introduced nor closed here."
+  ]
+}

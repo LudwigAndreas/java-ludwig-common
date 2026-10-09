@@ -201,6 +201,19 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- The published API description. The -webmvc-ui artifact, not -common: a service wants the
+             UI and the /v3/api-docs endpoint, whereas odata-filter-spring-boot-starter deliberately
+             takes -common as `optional` because a starter contributing a customizer has no business
+             pushing swagger-ui onto its consumers. That `optional` is also why this is needed at all:
+             optional dependencies are not transitive, so depending on odata-filter did NOT put
+             springdoc on this service's classpath, and the customizer that describes the OData query
+             options had nothing to contribute to. No <version>: springdoc.version is managed in
+             ludwig-bom. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
         <!-- Metrics exposed by db-core/odata-filter/outbox are all Micrometer-based. -->
         <dependency>
             <groupId>io.micrometer</groupId>

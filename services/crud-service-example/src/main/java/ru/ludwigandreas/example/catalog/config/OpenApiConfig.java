@@ -1,4 +1,4 @@
-package ru.ludwigandreas.notification.config;
+package ru.ludwigandreas.example.catalog.config;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -27,6 +27,16 @@ import org.springframework.context.annotation.Configuration;
  * <p>The {@code code} member is the part a client should branch on: it is stable, whereas
  * {@code detail} is localized and will read differently depending on the caller's
  * {@code Accept-Language}.
+ *
+ * <p>Deliberately the same shape as {@code notification-service}'s. This service is the reference a
+ * new one is copied from, so the thing being demonstrated is that a service declares its own
+ * {@code info} block and reuses the platform's one error contract - not that the description is
+ * inherited from somewhere, which would hide the decision.
+ *
+ * <p>The five OData query options on the product search endpoint are <em>not</em> declared here.
+ * They are contributed by {@code odata-filter-spring-boot-starter}'s
+ * {@code ODataQueryOptionsOpenApiCustomizer}, which this service activates simply by having springdoc
+ * on the classpath. Writing them again here is how the document and the parser start to disagree.
  */
 @Configuration(proxyBeanMethods = false)
 public class OpenApiConfig {
@@ -34,14 +44,16 @@ public class OpenApiConfig {
     private static final String PROBLEM_SCHEMA = "ProblemDetail";
 
     @Bean
-    public OpenAPI notificationOpenApi() {
+    public OpenAPI catalogOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Notification service")
+                        .title("Product catalog")
                         .version("v1")
                         .description("""
-                                Submit notification requests, inspect delivery history, and manage
-                                recipient contact records, preferences and the suppression list.
+                                Create, read, update and delete products, and search them with the
+                                OData query options. Which rows a caller sees is decided by the
+                                scoped query rather than by the endpoint, so two callers may get
+                                different results from the same request.
 
                                 Errors are RFC 9457 problem documents. Branch on `code`, which is
                                 stable; `detail` is localized from the caller's Accept-Language and

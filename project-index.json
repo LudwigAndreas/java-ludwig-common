@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-08T19:15:53.410542Z",
+    "generatedAt": "2026-10-09T22:11:20.953739Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 33,
-    "commit": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
-    "commitShort": "d4bb513",
+    "commit": "2a725e366c2194aab1e2ef70ba84d448313c4227",
+    "commitShort": "2a725e3",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "efa98140f3c017f708f52c40af6d8540c5b580d2a64ffa12d0a126b155b69e63",
-      "newestPom": "sources/odata-filter-spring-boot-starter/pom.xml",
-      "newestPomModified": "2026-10-08T14:19:26.923388Z"
+      "pomSetSha": "8251d1fa05bf0f1fb329f328b747909ef5344c884eba0ac4bee8aa5c5b74ffe8",
+      "newestPom": "services/crud-service-example/pom.xml",
+      "newestPomModified": "2026-10-09T22:02:58.287978Z"
     }
   },
   "modules": [
@@ -2205,7 +2205,7 @@
       },
       "testClasses": {
         "surefire": 4,
-        "failsafe": 3
+        "failsafe": 4
       },
       "pom": "services/crud-service-example/pom.xml",
       "readme": "services/crud-service-example/README.md",
@@ -2313,6 +2313,12 @@
         "services/notification-service/src/main/resources/db/changelog/changes/0015-drop-recipient-profile.sql",
         "services/notification-service/src/main/resources/db/changelog/changes/0016-drop-lock-table.sql",
         "services/notification-service/src/main/resources/db/changelog/changes/0017-drop-idempotency.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0018-inbox-item.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0019-inbox-item-content.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0020-announcement.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0021-announcement-content.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0022-announcement-marker.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0023-announcement-email-run.sql",
         "services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml"
       ],
       "i18nBundles": [
@@ -2329,8 +2335,8 @@
         "architecture": "services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture"
       },
       "testClasses": {
-        "surefire": 16,
-        "failsafe": 4
+        "surefire": 27,
+        "failsafe": 19
       },
       "pom": "services/notification-service/pom.xml",
       "readme": "services/notification-service/README.md",

@@ -262,6 +262,28 @@ On `develop`, not at release time. The develop SNAPSHOT is a minor bump, so a bi
 fails the develop build. If your change really is breaking, say so with `+semver: major` and the
 build goes green — because you have now declared it, which is the whole point.
 
+### 5.2a The HTTP surface is a different thing, guarded differently
+
+Everything above is about **Java** API compatibility, and it applies to the jars - the libraries and
+starters. A service's **HTTP** surface is not covered by it at all: revapi compares bytecode, and
+nothing in a service's bytecode says that a JSON field disappeared from a response.
+
+What guards that instead is a committed document per service, under `docs/api/`, generated from the
+service's own Spring context by its `ApiDocumentIT` and compared at `verify`. The build fails when
+the committed copy and the running service disagree, which means:
+
+- **A pull request that changes a service's HTTP surface contains a diff of that surface.** This is
+  the thing to actually read when reviewing one. A widened response, a dropped field, a changed
+  status code and a new endpoint all appear there and nowhere else.
+- **A refresh is deliberate.** `mvn -pl :<artifactId> verify -Dit.test=ApiDocumentIT
+  -DfailIfNoTests=false -Dludwig.apidocs.write=true`, and then read what it produced. An ordinary
+  build never rewrites the file, so `git status` staying clean is meaningful.
+
+Note what this does **not** do: it does not refuse a backwards-incompatible change the way the
+version increment above refuses one. There is no versioning policy for HTTP surfaces in this
+repository, so the document makes the change visible and leaves the judgement to a person.
+`docs/api/README.md` says the same thing at more length.
+
 ### 5.3 Deprecating something
 
 ```java

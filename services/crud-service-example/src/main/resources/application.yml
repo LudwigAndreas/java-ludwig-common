@@ -483,3 +483,13 @@ logging:
       # Platform user ids, not addresses: the notification service owns the address, the locale and
       # the recipient's preferences, and a copy held here is one that goes stale silently.
       steward-user-ids: ${CATALOG_STEWARD_USER_IDS:}
+
+# --- published API description -------------------------------------------------------------------
+# Paths match notification-service's, so the two services are reachable the same way. The document
+# itself is generated from the running context and committed under docs/api/; ApiDocumentIT fails
+# the build when the committed copy drifts from what this service serves.
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

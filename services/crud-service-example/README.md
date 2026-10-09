@@ -126,6 +126,26 @@ curl -sS localhost:8080/api/v1/products/$ID "${EDITOR[@]}"                     #
 curl -sS -X DELETE localhost:8080/api/v1/products/$ID "${EDITOR[@]}"           # 403: delete is admin-only
 ```
 
+## The published API document
+
+This service serves its OpenAPI document at `/v3/api-docs` and a Swagger UI at `/swagger-ui.html`.
+Whether either is reachable from outside is the deployment's authorization decision, exactly as it is
+for `notification-service`.
+
+The document is also committed, at `docs/api/crud-service-example.openapi.yaml`, so that a change to
+this service's HTTP surface shows up as a diff rather than only inside a running process.
+`ApiDocumentIT` regenerates it at `verify` and fails the build when the committed copy no longer
+matches what the service serves; `docs/api/README.md` has the refresh command and explains why the
+document is canonicalized before it is compared.
+
+Two things in that document are worth knowing. The `ProblemDetail` schema is declared by hand in
+`OpenApiConfig` and attached to every operation as its `default` response, because every error here
+is produced by `web-core`'s advice rather than returned from a controller - a document inferred from
+return types alone would describe only the happy paths. And the five OData query options on the
+search endpoint are contributed by `odata-filter-spring-boot-starter`'s customizer, which loads
+because springdoc is on this service's classpath; that starter declares springdoc as `optional`, and
+an optional dependency is not transitive, which is why this service has to declare it itself.
+
 ## Three models, and why
 
 ```

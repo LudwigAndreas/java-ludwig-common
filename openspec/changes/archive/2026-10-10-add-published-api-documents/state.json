@@ -1,0 +1,46 @@
+{
+  "change": "add-published-api-documents",
+  "contract": {
+    "goal": "each of the two services publishes its OpenAPI document as a committed artifact that the build keeps in step with the code",
+    "output": "docs/api/{crud-service-example,notification-service}.openapi.yaml + docs/api/README.md + an ApiDocumentIT per service + springdoc on crud-service-example",
+    "constraints": [
+      "no new in-repo dependency for either service",
+      "no version written into a service POM - springdoc.version is managed in ludwig-bom",
+      "the committed document is generated, never hand-edited",
+      "an ordinary verify must not rewrite a tracked file; refresh is opt-in via -Dludwig.apidocs.write=true",
+      "the generated document must be byte-stable across JVMs; normalize a specific unstable field rather than weakening the comparison",
+      "no endpoint, response body, status code or error shape changes",
+      "no new gate script - the producer and the verifier are the same thing"
+    ],
+    "done_when": [
+      "scripts/manifest.sh build",
+      "mvn -q validate",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :notification-service -am verify",
+      "scripts/check_migrations.sh",
+      "scripts/check_image_pins.sh",
+      "openspec validate add-published-api-documents --strict",
+      "git status clean apart from the intended files"
+    ]
+  },
+  "current_task": "complete - 23/23, gate green",
+  "decisions": [
+    "YAML not JSON for the committed artifact: its whole value is reviewability in a diff, and OpenAPI JSON produces punctuation-heavy diffs",
+    "canonical serialization sorts every map by key and strips servers; arrays are left alone because array order is semantic in OpenAPI while map order is not",
+    "the check is an integration test rather than a gate script, because only something that can start a Spring context with a database can produce the document to compare against",
+    "crud-service-example takes springdoc-openapi-starter-webmvc-ui, matching notification-service; -common optional is correct for a starter contributing a customizer and wrong for a service",
+    "no shared test-support module for the ~60 duplicated lines: a reactor edge and a POM would cost more than the duplication until a third service wants it",
+    "odata-query-contract is relied upon but not modified - this change makes its existing claim about the generated document checkable without altering the requirement",
+    "document proven byte-identical across two separate JVMs for notification-service; no residual instability needed normalizing beyond sorting and stripping servers",
+    "a hand-added OpenAPI component is pruned by springdoc unless something references it: notification-service's ProblemDetail survived only because BatchItemResult happens to have a ProblemDetail field. Fixed properly by attaching the problem document to every operation as its `default` response via an OperationCustomizer in each service's OpenApiConfig - `default` is accurate because web-core's single advice can answer on any operation, whereas listing 400/404/409 per operation would drift from the mappers",
+    "task 2.6 verified structurally rather than by mutation: the five published parameters carry description strings that exist verbatim only in ODataQueryOptionsOpenApiCustomizer, so the assertion cannot pass without it"
+  ],
+  "failures": [
+    "FINDING, pre-existing, out of scope: services/crud-service-example/src/main/resources/application.yml puts the `catalog:` block at indent 2 under `logging:` (line 475), so it binds as logging.catalog.notifications.* while CatalogNotificationProperties binds ludwig.catalog.notifications. None of template-key, category, category-class, priority, channels or steward-user-ids takes effect. Not fixed here: moving the block changes what the service sends once the feature is enabled, which a documentation change must not do",
+    "FINDING, pre-existing, out of scope: the published document for GET /api/v1/products advertises a query parameter named `options` - springdoc's own misreading of the ODataQueryOptions argument, which ODataQueryOptionsOpenApiCustomizer does not remove because it only adds. A client generator will emit a useless `options` parameter. Belongs to odata-filter-spring-boot-starter"
+  ],
+  "open_questions": [
+    "should scripts/manifest.sh layout require docs/api/<artifactId>.openapi.yaml for every module declaring spring-boot-starter-web? deferred - it changes the repository-layout capability, which this change does not touch"
+  ],
+  "pending_human": []
+}

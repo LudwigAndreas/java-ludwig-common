@@ -1,0 +1,1100 @@
+components:
+  schemas:
+    CategoryResponse:
+      properties:
+        code:
+          type: string
+        id:
+          format: uuid
+          type: string
+        name:
+          type: string
+      type: object
+    ColumnResponse:
+      description: A column of a report
+      properties:
+        header:
+          type: string
+        id:
+          type: string
+        pii:
+          type: boolean
+        type:
+          type: string
+      type: object
+    CreateProductRequest:
+      properties:
+        categoryId:
+          format: uuid
+          type: string
+        description:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        price:
+          exclusiveMinimum: false
+          minimum: 0.0
+          type: number
+        sku:
+          maxLength: 64
+          minLength: 0
+          pattern: '[A-Z0-9][A-Z0-9-]*'
+          type: string
+        status:
+          enum:
+          - DRAFT
+          - ACTIVE
+          - DISCONTINUED
+          type: string
+        stockQuantity:
+          format: int32
+          type: integer
+        supplierCost:
+          exclusiveMinimum: false
+          minimum: 0.0
+          type: number
+      required:
+      - categoryId
+      - name
+      - price
+      - sku
+      - status
+      type: object
+    FilterMetadata:
+      properties:
+        defaultOrderBy:
+          type: string
+        defaultPageSize:
+          format: int32
+          type: integer
+        entity:
+          type: string
+        maxDepth:
+          format: int32
+          type: integer
+        maxNestedPropertyDepth:
+          format: int32
+          type: integer
+        maxPageSize:
+          format: int32
+          type: integer
+        properties:
+          items:
+            $ref: '#/components/schemas/FilterPropertyMetadata'
+          type: array
+      type: object
+    FilterPropertyMetadata:
+      properties:
+        operators:
+          items:
+            type: string
+          type: array
+        path:
+          type: string
+        sortable:
+          type: boolean
+        type:
+          type: string
+      type: object
+    ODataQueryOptions:
+      properties:
+        count:
+          type: boolean
+        filter:
+          type: string
+        orderBy:
+          type: string
+        skip:
+          format: int32
+          type: integer
+        top:
+          format: int32
+          type: integer
+      type: object
+    OperationFailure:
+      properties:
+        args:
+          items:
+            type: string
+          type: array
+        code:
+          type: string
+        detail:
+          type: string
+      type: object
+    OperationProgress:
+      properties:
+        completed:
+          format: int64
+          type: integer
+        phase:
+          type: string
+        total:
+          format: int64
+          type: integer
+        unit:
+          type: string
+      type: object
+    OperationResponse:
+      properties:
+        correlationId:
+          type: string
+        detail:
+          type: string
+        failure:
+          $ref: '#/components/schemas/OperationFailure'
+        finishedAt:
+          format: date-time
+          type: string
+        id:
+          type: string
+        progress:
+          $ref: '#/components/schemas/OperationProgress'
+        result:
+          $ref: '#/components/schemas/OperationResult'
+        startedAt:
+          format: date-time
+          type: string
+        status:
+          enum:
+          - PENDING
+          - RUNNING
+          - SUCCEEDED
+          - FAILED
+          - CANCELLED
+          - EXPIRED
+          type: string
+        submittedAt:
+          format: date-time
+          type: string
+        terminal:
+          type: boolean
+      type: object
+    OperationResult:
+      properties:
+        alternatives:
+          items:
+            $ref: '#/components/schemas/OperationResult'
+          type: array
+        href:
+          type: string
+        mediaType:
+          type: string
+        sizeBytes:
+          format: int64
+          type: integer
+      type: object
+    PageResponseProductResponse:
+      properties:
+        content:
+          items:
+            $ref: '#/components/schemas/ProductResponse'
+          type: array
+        offset:
+          format: int64
+          type: integer
+        page:
+          format: int32
+          type: integer
+        size:
+          format: int32
+          type: integer
+        totalElements:
+          format: int64
+          type: integer
+        totalPages:
+          format: int32
+          type: integer
+      type: object
+    PageResponseRowRejectResponse:
+      properties:
+        content:
+          items:
+            $ref: '#/components/schemas/RowRejectResponse'
+          type: array
+        offset:
+          format: int64
+          type: integer
+        page:
+          format: int32
+          type: integer
+        size:
+          format: int32
+          type: integer
+        totalElements:
+          format: int64
+          type: integer
+        totalPages:
+          format: int32
+          type: integer
+      type: object
+    Pageable:
+      properties:
+        page:
+          format: int32
+          minimum: 0
+          type: integer
+        size:
+          format: int32
+          minimum: 1
+          type: integer
+        sort:
+          items:
+            type: string
+          type: array
+      type: object
+    ProblemDetail:
+      description: RFC 9457 problem document, as produced by web-core-spring-boot-starter.
+      properties:
+        code:
+          description: Stable machine-readable code. Branch on this, never on detail.
+          type: string
+        detail:
+          description: Localized explanation, for a human.
+          type: string
+        instance:
+          description: URI of the request that failed.
+          type: string
+        status:
+          description: HTTP status code.
+          type: integer
+        title:
+          description: Short, localized summary.
+          type: string
+        traceId:
+          description: Trace id, for correlating with the logs.
+          type: string
+        type:
+          description: URI identifying the problem type.
+          type: string
+      type: object
+    ProductResponse:
+      properties:
+        category:
+          $ref: '#/components/schemas/CategoryResponse'
+        createdAt:
+          format: date-time
+          type: string
+        description:
+          type: string
+        id:
+          format: uuid
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        sku:
+          type: string
+        status:
+          enum:
+          - DRAFT
+          - ACTIVE
+          - DISCONTINUED
+          type: string
+        stockQuantity:
+          format: int32
+          type: integer
+        updatedAt:
+          format: date-time
+          type: string
+        version:
+          format: int64
+          type: integer
+      type: object
+    ReportDefinitionResponse:
+      description: A report this service can produce
+      properties:
+        columns:
+          items:
+            $ref: '#/components/schemas/ColumnResponse'
+          type: array
+        defaultFormat:
+          type: string
+        filterable:
+          type: boolean
+        formats:
+          items:
+            type: string
+          type: array
+        key:
+          type: string
+        sortableColumns:
+          items:
+            type: string
+          type: array
+        title:
+          type: string
+      type: object
+    ReportRunResponse:
+      description: The state of a report run
+      properties:
+        attempts:
+          format: int32
+          type: integer
+        definitionKey:
+          type: string
+        degraded:
+          type: boolean
+        degradedStages:
+          items:
+            type: string
+          type: array
+        failureCode:
+          type: string
+        finishedAt:
+          format: date-time
+          type: string
+        formats:
+          items:
+            type: string
+          type: array
+        id:
+          format: uuid
+          type: string
+        omittedSheets:
+          items:
+            type: string
+          type: array
+        operation:
+          $ref: '#/components/schemas/OperationResponse'
+        percent:
+          format: int32
+          type: integer
+        rowsWritten:
+          format: int64
+          type: integer
+        startedAt:
+          format: date-time
+          type: string
+        status:
+          enum:
+          - PENDING
+          - RUNNING
+          - SUCCEEDED
+          - FAILED
+          - CANCELLED
+          - EXPIRED
+          type: string
+      type: object
+    RowRejectResponse:
+      properties:
+        args:
+          items:
+            type: string
+          type: array
+        code:
+          type: string
+        column:
+          type: string
+        message:
+          type: string
+        row:
+          format: int32
+          type: integer
+        sheet:
+          type: string
+      type: object
+    RunReportRequest:
+      description: A request to produce a report
+      properties:
+        columnIds:
+          items:
+            type: string
+          maxItems: 200
+          minItems: 0
+          type: array
+        filter:
+          maxLength: 4000
+          minLength: 0
+          type: string
+        formats:
+          items:
+            type: string
+          maxItems: 5
+          minItems: 0
+          type: array
+        locale:
+          type: string
+        options:
+          additionalProperties:
+            additionalProperties:
+              type: string
+            type: object
+          type: object
+        parameters:
+          additionalProperties:
+            type: string
+          type: object
+        savedReportId:
+          format: uuid
+          type: string
+        sort:
+          items:
+            $ref: '#/components/schemas/SortRequest'
+          maxItems: 10
+          minItems: 0
+          type: array
+        timeZone:
+          type: string
+      type: object
+    SortRequest:
+      description: One term of the requested order
+      properties:
+        columnId:
+          type: string
+        direction:
+          type: string
+      type: object
+    SubmissionResponse:
+      properties:
+        action:
+          type: string
+        awaitingConfirmation:
+          type: boolean
+        confirmBy:
+          format: date-time
+          type: string
+        errorReport:
+          type: boolean
+        filename:
+          type: string
+        finishedAt:
+          format: date-time
+          type: string
+        format:
+          enum:
+          - XLSX
+          - CSV
+          type: string
+        id:
+          format: uuid
+          type: string
+        operation:
+          $ref: '#/components/schemas/OperationResponse'
+        rejectsStored:
+          format: int64
+          type: integer
+        rowsApplied:
+          format: int64
+          type: integer
+        rowsRead:
+          format: int64
+          type: integer
+        rowsRejected:
+          format: int64
+          type: integer
+        rowsSkipped:
+          format: int64
+          type: integer
+        sheet:
+          type: string
+        state:
+          enum:
+          - UPLOADED
+          - VALIDATED
+          - APPLYING
+          - APPLIED
+          - REJECTED
+          - EXPIRED
+          type: string
+        submittedAt:
+          format: date-time
+          type: string
+      type: object
+    UpdateProductRequest:
+      properties:
+        categoryId:
+          format: uuid
+          type: string
+        description:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        price:
+          exclusiveMinimum: false
+          minimum: 0.0
+          type: number
+        status:
+          enum:
+          - DRAFT
+          - ACTIVE
+          - DISCONTINUED
+          type: string
+        stockQuantity:
+          format: int32
+          type: integer
+        supplierCost:
+          exclusiveMinimum: false
+          minimum: 0.0
+          type: number
+        version:
+          format: int64
+          type: integer
+      required:
+      - categoryId
+      - name
+      - price
+      - status
+      type: object
+info:
+  description: |
+    Create, read, update and delete products, and search them with the
+    OData query options. Which rows a caller sees is decided by the
+    scoped query rather than by the endpoint, so two callers may get
+    different results from the same request.
+
+    Errors are RFC 9457 problem documents. Branch on `code`, which is
+    stable; `detail` is localized from the caller's Accept-Language and
+    is written for a human.
+  title: Product catalog
+  version: v1
+openapi: 3.0.1
+paths:
+  /api/v1/file-actions/{action}:
+    post:
+      operationId: submit
+      parameters:
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              properties:
+                file:
+                  format: binary
+                  type: string
+              required:
+              - file
+              type: object
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - file-action-controller
+  /api/v1/file-actions/{action}/template:
+    get:
+      operationId: template
+      parameters:
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                format: byte
+                type: string
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - file-action-controller
+  /api/v1/file-actions/{action}/{id}:
+    get:
+      operationId: poll
+      parameters:
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - file-action-controller
+  /api/v1/file-actions/{action}/{id}/cancel:
+    post:
+      operationId: cancel
+      parameters:
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - file-action-controller
+  /api/v1/file-actions/{action}/{id}/confirm:
+    post:
+      operationId: confirm
+      parameters:
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - file-action-controller
+  /api/v1/file-actions/{action}/{id}/error-report:
+    get:
+      operationId: errorReport
+      parameters:
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                format: binary
+                type: string
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - file-action-controller
+  /api/v1/file-actions/{action}/{id}/rejects:
+    get:
+      operationId: rejects
+      parameters:
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      - in: query
+        name: pageable
+        required: true
+        schema:
+          $ref: '#/components/schemas/Pageable'
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseRowRejectResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - file-action-controller
+  /api/v1/filter-metadata/{entity}:
+    get:
+      operationId: metadata
+      parameters:
+      - in: path
+        name: entity
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FilterMetadata'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - filter-metadata-controller
+  /api/v1/products:
+    get:
+      operationId: search
+      parameters:
+      - in: query
+        name: options
+        required: true
+        schema:
+          $ref: '#/components/schemas/ODataQueryOptions'
+      - description: OData filter expression, e.g. price lt 100 and category/code eq 'TOOLS'. Which properties may appear is decided by the entity's policy.
+        in: query
+        name: $filter
+        required: false
+        schema:
+          type: string
+      - description: Ordering clause, e.g. name desc, createdAt asc. The server appends its own tie-breaker so that paging stays deterministic.
+        in: query
+        name: $orderby
+        required: false
+        schema:
+          type: string
+      - description: Page size. Capped by the endpoint's maximum.
+        in: query
+        name: $top
+        required: false
+        schema:
+          format: int32
+          type: integer
+      - description: Absolute row offset. Need not be a multiple of $top; the response reports the offset that was applied.
+        in: query
+        name: $skip
+        required: false
+        schema:
+          format: int32
+          type: integer
+      - description: Whether to compute the total. Defaults to true; pass false to skip the count query, and the response then carries no total.
+        in: query
+        name: $count
+        required: false
+        schema:
+          type: boolean
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseProductResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - product-controller
+    post:
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - product-controller
+  /api/v1/products/{id}:
+    delete:
+      operationId: delete
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - product-controller
+    get:
+      operationId: get
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - product-controller
+    put:
+      operationId: update
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - product-controller
+  /api/v1/reports/definitions:
+    get:
+      operationId: definitions
+      parameters:
+      - in: query
+        name: locale
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/ReportDefinitionResponse'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      summary: List the reports this caller may run
+      tags:
+      - Reports
+  /api/v1/reports/runs/{runId}:
+    delete:
+      operationId: cancel_1
+      parameters:
+      - in: path
+        name: runId
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReportRunResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      summary: Cancel a report run
+      tags:
+      - Reports
+    get:
+      operationId: status
+      parameters:
+      - in: path
+        name: runId
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReportRunResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      summary: Poll a report run
+      tags:
+      - Reports
+  /api/v1/reports/runs/{runId}/outputs/{format}:
+    get:
+      operationId: download
+      parameters:
+      - in: path
+        name: runId
+        required: true
+        schema:
+          format: uuid
+          type: string
+      - in: path
+        name: format
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                format: binary
+                type: string
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      summary: Download a produced file
+      tags:
+      - Reports
+  /api/v1/reports/{definitionKey}/runs:
+    post:
+      description: Runs it now if it is small, queues it otherwise
+      operationId: run
+      parameters:
+      - in: path
+        name: definitionKey
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunReportRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReportRunResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      summary: Request a report
+      tags:
+      - Reports
+tags:
+- description: Produce, poll and download tabular reports
+  name: Reports

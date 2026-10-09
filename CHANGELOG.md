@@ -109,6 +109,46 @@ either.
   `TimeZone.getDefault()`, `ZoneId.systemDefault()` or `Clock.systemDefaultZone()`, and nothing may
   declare a second type holding the caller's locale-and-zone pair.
 
+- **`notification-service`: in-app notifications, the one passive channel.** A recipient who wants no
+  email, chat or webhook can still be told something. `IN_APP` is a delivery channel like the others -
+  same request contract, same template layout, same preference and suppression handling - but it is
+  classified `PASSIVE`, and that classification is a mandatory constructor argument on `ChannelType`, so
+  a new channel cannot be added without deciding it. Being passive means it does not interrupt: quiet
+  hours do not defer it, because there is nothing to wake anybody up. Delivery settles the moment the
+  item is written, since there is no provider to accept it. The inbox is the reader: list, unread count,
+  mark one or all read, mark seen, and dismiss, each scoped to the caller and never taking an owner
+  parameter - so one caller cannot read another's inbox by changing a path. A foreign item and a missing
+  one are both 404, deliberately indistinguishable. Every transition is idempotent.
+- **`notification-service`: platform announcements.** One announcement addressed to everybody, or to
+  everybody holding a role, rather than a notification per person. The distinction is the design: a
+  notification fans out on write (N rows, one reader each), an announcement fans out on read (one row, N
+  readers), so publishing to the whole organisation is a constant number of statements and so is purging
+  it. A recipient sees the announcements their roles allow, dismisses them individually, and a dismissal
+  is a row that exists only for the people who actually dismissed. Content is stored per supported
+  locale. The audience is resolved once at publish against a configured allowlist, so a role nobody
+  authorized cannot be targeted, and the role codes are normalized at that point - a role-targeted
+  announcement that matched nobody was the defect that found. A category may also fan out by email,
+  which is a long-running operation reported through the platform's one `OperationResponse` envelope,
+  cancellable cooperatively, answering 202 because the stop is only requested and committed deliveries
+  are not recalled. Visibility is a window, and retention is anchored to the end of it rather than to
+  creation, so an announcement published for next quarter is not purged before it appears and one still
+  showing never vanishes from under the people reading it.
+- **Both services publish their OpenAPI document into the tree**, at
+  `docs/api/<artifactId>.openapi.yaml`, generated from the service's real application context rather
+  than written by hand. The point is reviewability: a service's HTTP surface otherwise exists only
+  inside a running process, so a change that widens a response, drops a field or alters a status code
+  shows a reviewer nothing. An `ApiDocumentIT` per service regenerates the document at `verify` and
+  fails the build when the committed copy disagrees with what the service serves; an ordinary build
+  never rewrites it, so refreshing is deliberate and the diff is always asked for. Each document is
+  canonicalized first - every object's members sorted, `servers` stripped - because springdoc's
+  handler-walk order is not promised to be stable and unsorted output would produce diffs that are pure
+  reordering. These documents describe what the services currently serve; they are explicitly not a
+  compatibility baseline, which remains `scripts/check_api_baseline.sh`'s job for the jars.
+  `crud-service-example` gained springdoc to make this possible, which also activated
+  `odata-filter-spring-boot-starter`'s customizer there for the first time - so the reference service's
+  search endpoint now documents its five OData query options, as the `odata-query-contract` capability
+  already required but nothing could check.
+
 ### Changed
 
 - **BREAKING for a database that already applied these changesets - every Liquibase changeset in the

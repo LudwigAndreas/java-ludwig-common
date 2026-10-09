@@ -70,6 +70,7 @@ Location: /api/v1/notifications/0f8a…
 - [PII discipline and the retention policy](#pii-discipline-and-the-retention-policy)
 - [Metrics, and the two that matter](#metrics-and-the-two-that-matter)
 - [Operational runbook](#operational-runbook)
+- [The published API document](#the-published-api-document)
 - [Configuration](#configuration)
 - [Deviations and known gaps](#deviations-and-known-gaps)
 
@@ -1443,6 +1444,29 @@ the same resolver: if the preview shows the new wording, the sends will too.
 the cause and making it fight for its last attempt would let one further blip dead-letter it again.
 Fix the cause first: `lastError` on the delivery says what happened, and
 `GET /deliveries/{id}/content` shows exactly what was rendered.
+
+## The published API document
+
+This service already served its OpenAPI document at `/v3/api-docs` and a Swagger UI at
+`/swagger-ui.html`. What is new is that the document is **committed**, at
+`docs/api/notification-service.openapi.yaml`, so a change to this service's HTTP surface shows up as
+a diff rather than only inside a running process.
+
+`ApiDocumentIT` regenerates it at `verify` and fails the build when the committed copy no longer
+matches what the service serves. An ordinary build never rewrites it; refreshing is an explicit
+`-Dludwig.apidocs.write=true`, so the diff is always something the author asked for.
+`docs/api/README.md` has the command and explains why the document is canonicalized - every object's
+members sorted, `servers` stripped - before it is compared.
+
+One detail in that document is worth knowing, because it was nearly wrong. The `ProblemDetail`
+schema is declared by hand in `OpenApiConfig`, since every error here is produced by `web-core`'s
+advice rather than returned from a controller, and a document inferred from return types alone would
+describe only the happy paths. But springdoc prunes a component nothing refers to, and for a while
+this schema survived only because `BatchItemResult` happens to carry a `ProblemDetail` field -
+meaning the whole error contract would have vanished from the document the day that unrelated field
+was removed. It is now attached to every operation as its `default` response, which is also the
+accurate status to use: `web-core`'s single advice can answer on any operation, so listing 400, 404
+and 409 per endpoint would be a list that drifts from the mappers.
 
 ## Configuration
 
