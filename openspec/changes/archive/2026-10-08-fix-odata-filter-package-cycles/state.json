@@ -1,0 +1,49 @@
+{
+  "change": "fix-odata-filter-package-cycles",
+  "contract": {
+    "goal": "both ArchUnit rules that route-odata-filter-audit-through-audit-core had to disable in odata-filter-spring-boot-starter are switched back on, with nothing disabled in their place",
+    "output": "an acyclic package graph in odata-filter-spring-boot-starter; cycles.modules-are-free-of-cycles and configuration-properties.configuration-properties-are-validated enabled in its ArchitectureTest; no public behaviour changed",
+    "constraints": [
+      "RE-ENABLING THE TWO RULES IS THE DELIVERABLE. If either is still disabled at the end, this change did not do its job and the receipt says so.",
+      "no public behaviour may change - a caller's filter, the predicate it produces, the page it returns and every error it can raise stay exactly as they are; a test that needs more than an import changed is a finding",
+      "no package named common, shared, internal or util - a package with no real role is how a cycle becomes a knot",
+      "the trace comes first and may overrule design D1-D3; where it does, the decision is amended with the trace quoted",
+      "the ODataFilterService constructor and every bean type stay as they are, so the services' wiring is untouched",
+      "@Validated must not reactivate web-core's validator wiring in a consumer with no validation implementation - that failure cost 15 integration tests in add-odata-query-execution",
+      "no new in-repo dependency; a third-party one only under D3, optional, version in ludwig-bom only"
+    ],
+    "done_when": [
+      "grep -c 'cycles.modules-are-free-of-cycles' in the module's ArchitectureTest returns 0",
+      "grep -c 'configuration-properties.configuration-properties-are-validated' in the module's ArchitectureTest returns 0",
+      "scripts/manifest.sh stale",
+      "scripts/check_image_pins.sh",
+      "mvn -q validate",
+      "mvn -pl :odata-filter-spring-boot-starter -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "mvn clean install",
+      "openspec validate fix-odata-filter-package-cycles"
+    ]
+  },
+  "current_task": "complete",
+  "decisions": [
+    "Carried forward, same environment: builds run with JAVA_HOME=/Users/ludwig/Library/Java/JavaVirtualMachines/temurin-17.0.19/Contents/Home, because Maven defaults to Homebrew JDK 26 here and JaCoCo 0.8.12 cannot instrument class file major version 70.",
+    "Carried forward: scripts/check_api_baseline.sh exits 1 and revapi compares against an empty archive (v1.1.0 tagged, artifacts unreachable). Pre-existing, out of scope by the user's earlier explicit decision, excluded from done_when and recorded in the receipt.",
+    "One cycle is already fixed and is the template: route-odata-filter-audit-through-audit-core removed core <-> querydsl by moving ODataQueryExecutor, ODataSearch and ODataPage into a new execution package. The edge was removed by moving the type that pointed the wrong way, not by weakening anything.",
+    "1.1/1.2 TRACE: 20 violations (not 16 - execution and metadata, added since, widened the same family). ALL TWENTY start and end at `config`, and there is no cycle anywhere else. The inbound edges to config are exactly three - core, web and policy - and every one is an ODataFilterProperties import. Saved as cycles-before.txt.",
+    "D1 CONFIRMED by the trace and its rationale strengthened: the original 'renaming config gains nothing' was too weak. The real reason is that an auto-configuration class's FQN is configuration API - a deployment excludes one by name in YAML, which no compiler checks - so renaming the wiring package breaks an exclusion silently at runtime, while moving the properties class breaks a compile.",
+    "D2 WITHDRAWN: there is no core <-> validation <-> policy cycle. validation appears in four cycles and is a pass-through in every one; policy does not depend on core at all. Merging validation into policy would have been a restructuring performed for no reason, which is what taking the trace first was for.",
+    "2.1: moved ODataFilterProperties to ru.ludwigandreas.odatafilter.properties. One class, one boundary - all 20 cycles gone.",
+    "2.3 SECOND-ORDER FINDING, fixed properly: the move made spring.configuration-classes-reside-in-config-packages fail, because that rule's CONFIGURATION annotation role includes @ConfigurationProperties and accepts only ..config../..configuration... Fixed with the rule library's own mechanism - architecture.rules.conventions.packages.configuration.add = ..properties.. - which is exactly what file-ingest did for its ..autoconfigure.. wiring. Not a rename to fit the rule and not a suppression: a @Configuration class dropped anywhere else in this module is still a violation.",
+    "4.1: took D3's preferred option - hibernate-validator as an OPTIONAL dependency (version managed by spring-boot-dependencies, so ludwig-bom needed no entry), @Validated on ODataFilterProperties, @Min(1) on the five bound limits and @Valid on the three nested blocks. The springdoc jakarta.validation-api exclusion was REMOVED, because excluding the API while depending on an implementation that brings it would be self-contradictory.",
+    "4.2 the regression did not reopen: crud-service-example verifies green with 23/23 integration tests and no NoClassDefFoundError on ResourceBundleLocator.",
+    "CONTRACT NOTE, not a scope change: done_when's first two entries (grep returns 0) are too literal - both rule ids still appear in the ArchitectureTest's javadoc explaining that they are enabled. The intent is met and proven by the architecture report showing both with status=passed. Satisfying the grep literally would have meant deleting the explanation. Recorded in the receipt rather than reinterpreted silently."
+  ],
+  "failures": [],
+  "open_questions": [],
+  "pending_human": [],
+  "rollback_point": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+  "index_version": "a3e73a09bbcb681b5c5bb8ee608105d5b0e57ea063a45720977d7df7c072f05c"
+}

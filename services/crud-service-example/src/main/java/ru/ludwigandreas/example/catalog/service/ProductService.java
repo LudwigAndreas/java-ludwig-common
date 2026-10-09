@@ -1,10 +1,10 @@
 package ru.ludwigandreas.example.catalog.service;
 
 import java.util.UUID;
-import org.springframework.data.domain.Page;
 import ru.ludwigandreas.example.catalog.service.model.NewProduct;
 import ru.ludwigandreas.example.catalog.service.model.Product;
-import ru.ludwigandreas.example.catalog.service.model.ProductQuery;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.example.catalog.service.model.ProductUpdate;
 
 /**
@@ -17,7 +17,7 @@ public interface ProductService {
 
     Product get(UUID id);
 
-    Page<Product> search(ProductQuery query);
+    ODataPage<Product> search(ODataQueryOptions options);
 
     Product update(UUID id, ProductUpdate command);
 

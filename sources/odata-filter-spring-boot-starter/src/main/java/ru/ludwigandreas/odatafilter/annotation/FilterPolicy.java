@@ -47,4 +47,35 @@ public @interface FilterPolicy {
      * the first request with a clear message rather than a JPQL error.
      */
     String defaultOrderBy() default "";
+
+    /**
+     * The name this entity's filter policy is published under, or empty to publish nothing.
+     *
+     * <h2>One member carrying two things, on purpose</h2>
+     *
+     * <p>Setting it is both the decision to publish and the identifier published under, because the two
+     * are the same decision: there is no reason to name an entity that is not exposed, and no way to
+     * expose one without naming it. Empty - the default - means this entity has no metadata document and
+     * the endpoint answers 404 for it, exactly as it does for a name nobody has used.
+     *
+     * <h2>Why it is not derived from the class name</h2>
+     *
+     * <p>Deriving it (strip a conventional {@code Entity} suffix, uncapitalize) would publish
+     * {@code ProductEntity} as {@code product} and {@code NotificationDeliveryEntity} as
+     * {@code notificationDelivery}, and would make renaming a Java class a breaking change to a URL. The
+     * published identifier is an API decision somebody should review; a class name is not reviewed as
+     * one. {@link Filterable#name()} already works this way for the same reason.
+     *
+     * <h2>What publishing commits you to</h2>
+     *
+     * <p>The document lists the property paths a caller may name, their types, the operators permitted on
+     * each and the limits enforced - all projected from this policy and the entity's {@link Filterable}
+     * annotations, never from a second list. So the annotations become a published contract: renaming a
+     * {@code @Filterable(name = ...)} changes the document. That was already true the moment a client sent
+     * a filter naming it; publishing only makes it visible to whoever edits the annotation.
+     *
+     * <p>It is still filtered per caller - a path the requester may not use is absent from its document -
+     * so publishing a name does not publish the whole policy to everyone.
+     */
+    String metadataName() default "";
 }

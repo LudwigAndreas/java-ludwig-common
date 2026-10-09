@@ -8,7 +8,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import ru.ludwigandreas.odatafilter.annotation.FilterOperator;
 import ru.ludwigandreas.odatafilter.annotation.FilterPolicy;
-import ru.ludwigandreas.odatafilter.config.ODataFilterProperties;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.testmodel.Employee;
 
 class FilterPolicyRegistryTest {

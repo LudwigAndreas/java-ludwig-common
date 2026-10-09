@@ -6,6 +6,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -222,6 +227,48 @@ class CatalogIntegrationTest {
     }
 
     @Test
+    void reportsTheAbsoluteOffsetForAnUnalignedSkip() throws Exception {
+        create(request("SAW-1", "Saw", "30.00", TOOLS));
+        create(request("DRILL-1", "Drill", "120.00", TOOLS));
+        create(request("PHONE-1", "Phone", "500.00", ELECTRONICS));
+
+        // $skip=1 with $top=2 has no integer page, so "page" alone could not tell this request apart
+        // from $skip=2. The envelope reports the offset that was actually applied.
+        mockMvc.perform(get("/api/v1/products")
+                        .param("$orderby", "price asc")
+                        .param("$top", "2")
+                        .param("$skip", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.offset").value(1))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content[0].sku").value("DRILL-1"))
+                .andExpect(jsonPath("$.content[1].sku").value("PHONE-1"));
+    }
+
+    @Test
+    void omitsTheTotalWhenTheCallerDeclinesTheCount() throws Exception {
+        create(request("SAW-1", "Saw", "30.00", TOOLS));
+        create(request("DRILL-1", "Drill", "120.00", TOOLS));
+
+        mockMvc.perform(get("/api/v1/products").param("$count", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.offset").value(0))
+                // Absent, not null and not zero: no count query was issued, and zero is a real total.
+                .andExpect(jsonPath("$.totalElements").doesNotExist())
+                .andExpect(jsonPath("$.totalPages").doesNotExist());
+    }
+
+    @Test
+    void rejectsAMalformedScalarOptionNamingTheOption() throws Exception {
+        mockMvc.perform(get("/api/v1/products").param("$count", "yes"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ludwig.odata.error.invalid-option"))
+                .andExpect(jsonPath("$.property").value("$count"));
+    }
+
+    @Test
     void refusesToFilterOnFieldsThePolicyDoesNotExpose() throws Exception {
         // Not annotated @Filterable at all: unreachable, however the query is phrased.
         mockMvc.perform(get("/api/v1/products").param("$filter", "contains(description, 'secret')"))
@@ -235,6 +282,73 @@ class CatalogIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ludwig.odata.error.field-forbidden"))
                 .andExpect(jsonPath("$.property").value("supplierCost"));
+    }
+
+    @Test
+    void publishesTheFilterPolicyToTheCallerAsking() throws Exception {
+        // The alternative to this endpoint is a client discovering the filterable surface by sending
+        // filters and reading the 400s - the behaviour odata.filter.rejected is documented as an alerting
+        // signal for.
+        mockMvc.perform(get("/api/v1/filter-metadata/product").with(TestPrincipals.admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entity").value("product"))
+                .andExpect(jsonPath("$.maxPageSize").value(100))
+                .andExpect(jsonPath("$.defaultPageSize").value(20))
+                .andExpect(jsonPath("$.maxDepth").value(4))
+                .andExpect(jsonPath("$.defaultOrderBy").value("createdAt desc, id asc"))
+                .andExpect(jsonPath("$.properties[*].path", hasItem("sku")))
+                .andExpect(jsonPath("$.properties[*].path", hasItem("category/code")))
+                // Not annotated @Filterable: the document is a projection of the allow-list, not the schema.
+                .andExpect(jsonPath("$.properties[*].path", not(hasItem("description"))));
+    }
+
+    @Test
+    void filtersTheFilterPolicyByTheCallersRoles() throws Exception {
+        // supplierCost is annotated but restricted to ROLE_CATALOG_ADMIN. An editor does not hold it, so the
+        // path is ABSENT rather than listed as forbidden - otherwise the document would hand an editor a
+        // column name and a privilege name it cannot use.
+        mockMvc.perform(get("/api/v1/filter-metadata/product").with(TestPrincipals.editor()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.properties[*].path", not(hasItem("supplierCost"))));
+
+        mockMvc.perform(get("/api/v1/filter-metadata/product").with(TestPrincipals.admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.properties[*].path", hasItem("supplierCost")))
+                // No role name anywhere, for either caller.
+                .andExpect(content().string(not(containsString("ROLE_CATALOG_ADMIN"))));
+    }
+
+    @Test
+    void everyOperatorTheDocumentAdvertisesIsAcceptedByTheSearchEndpoint() throws Exception {
+        create(request("SAW-1", "Saw", "30.00", TOOLS));
+
+        // The agreement that matters end to end: if the document says a path takes an operator, the search
+        // endpoint must not reject it. A unit test asserts this over the module's own fixtures; this asserts
+        // it over the real policy, the real security context and the real controller.
+        mockMvc.perform(get("/api/v1/products").param("$filter", "sku eq 'SAW-1'")
+                        .with(TestPrincipals.admin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/products").param("$filter", "contains(name, 'aw')")
+                        .with(TestPrincipals.admin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/products").param("$filter", "category/code eq 'TOOLS'")
+                        .with(TestPrincipals.admin()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void refusesMetadataForAnEntityThatPublishesNothing() throws Exception {
+        // CategoryEntity has @Filterable fields and no metadataName: it is reachable only as category/code
+        // from a product and has no search endpoint of its own. A 404 rather than an empty document, which
+        // would confirm the entity exists.
+        mockMvc.perform(get("/api/v1/filter-metadata/category").with(TestPrincipals.admin()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ludwig.odata.error.metadata-not-published"))
+                .andExpect(jsonPath("$.entity").value("category"));
+
+        mockMvc.perform(get("/api/v1/filter-metadata/nothing-like-this").with(TestPrincipals.admin()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ludwig.odata.error.metadata-not-published"));
     }
 
     @Test

@@ -1,0 +1,52 @@
+--liquibase formatted sql
+
+-- The second half of 0009 leaves this service.
+--
+-- notification_idempotency, IdempotencyStore, PostgresIdempotencyStore, IdempotencyRecordEntity and
+-- its three repositories are gone; the claim lives in idempotency-spring-boot-starter's
+-- idempotency_claim, and this service calls that module's store directly in TRANSACTIONAL mode - see
+-- the README, "Promoted: the work-dedup store now lives in idempotency-spring-boot-starter".
+--
+-- This file drops the old table, and it does so AFTER the module's own changelog has been included
+-- (which creates idempotency_claim and moves every row into it) in db.changelog-master.xml. The order
+-- is not cosmetic: an <include> contributes its changesets at the position it appears, so dropping the
+-- legacy table before the migration had run would discard every in-flight key - and every one of those
+-- is a claim on work that has been done, which means every one of them is a notification this service
+-- would otherwise send to a real person a second time, during the very deploy that introduces the
+-- module whose purpose is to stop that.
+--
+-- Same shape as 0016, which dropped notification_lock after job-core's changelog was included.
+--
+-- The guards, in order:
+--   - the legacy table still exists, so a deployment that never had it records this as run;
+--   - idempotency_claim exists, so the target of the migration is actually there;
+--   - and only once the rows are somewhere. A deployment whose migration failed part way must not also
+--     lose the source: with the row-count guard the drop is skipped, the changeset is marked ran
+--     against a database where it did not apply, and the legacy table survives for an operator to
+--     reconcile by hand. Without it, a failed migration and a successful drop would be silent data
+--     loss with no way back. The count is the reconciliation the runbook would otherwise ask an
+--     operator to perform by eye: zero rows in the old table that are not in the new one.
+--
+-- The rollback recreates the table empty rather than repopulating it. Repopulating would mean copying
+-- claims back out of a shared table this service no longer owns, and a rolled-back deployment is a
+-- deployment running the previous release - which had these rows in its own table and will simply
+-- re-claim on the next redelivery. An empty table is one duplicate per in-flight key in the worst
+-- case; a half-copied one is a dedup table nobody can reason about.
+
+--changeset ludwig-notification:notification-0017-drop-idempotency dbms:postgresql
+--comment Drops notification_idempotency, every row of which is now in idempotency_claim.
+--preconditions onFail:MARK_RAN
+--precondition-table-exists table:notification_idempotency
+--precondition-table-exists table:idempotency_claim
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM notification_idempotency n WHERE NOT EXISTS (SELECT 1 FROM idempotency_claim c WHERE c.scope = n.scope AND c.idempotency_key = n.idempotency_key)
+DROP TABLE notification_idempotency;
+--rollback CREATE TABLE notification_idempotency (
+--rollback     id              UUID                     NOT NULL,
+--rollback     scope           VARCHAR(64)              NOT NULL,
+--rollback     idempotency_key VARCHAR(255)             NOT NULL,
+--rollback     request_id      UUID                     NOT NULL,
+--rollback     created_at      TIMESTAMP WITH TIME ZONE NOT NULL,
+--rollback     expires_at      TIMESTAMP WITH TIME ZONE NOT NULL,
+--rollback     CONSTRAINT pk_notification_idempotency PRIMARY KEY (id),
+--rollback     CONSTRAINT uk_notification_idempotency_key UNIQUE (scope, idempotency_key)
+--rollback );

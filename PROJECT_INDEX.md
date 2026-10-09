@@ -6,9 +6,9 @@
 |---|---|
 | revision | `1.1.0-SNAPSHOT` |
 | modules | 33 |
-| commit | `b5e0c8c` (`feature/file-input`) |
-| generated | 2026-10-04T14:17:53.602225Z |
-| **freshness** | POM-set SHA `014d3295e62ce2ec` · newest POM `build/ludwig-bom/pom.xml` @ 2026-10-04T14:17:53.420865Z |
+| commit | `d4bb513` (`master`) |
+| generated | 2026-10-08T19:15:53.410542Z |
+| **freshness** | POM-set SHA `efa98140f3c017f7` · newest POM `sources/odata-filter-spring-boot-starter/pom.xml` @ 2026-10-08T14:19:26.923388Z |
 
 The freshness row is how you tell this index is stale: `scripts/manifest.sh stale` recomputes the POM-set SHA and exits non-zero if it differs. It is content-based, not timestamp-based, so a checkout or a branch switch does not report a false stale.
 
@@ -65,7 +65,7 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
-| **audit-core** | `common` | `ru.ludwigandreas.audit` | none | — | `audit-spring-boot-starter`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `hot-reload-spring-boot-starter`, `idempotency-spring-boot-starter`, `messaging-spring-boot-starter`, `observability-spring-boot-starter`, `outbox-spring-boot-starter`, `pat-spring-boot-starter`, `reconciliation-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter` |
+| **audit-core** | `common` | `ru.ludwigandreas.audit` | none | — | `audit-spring-boot-starter`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `hot-reload-spring-boot-starter`, `idempotency-spring-boot-starter`, `messaging-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `pat-spring-boot-starter`, `reconciliation-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter` |
 | **db-core** | `common` | `ru.ludwigandreas.db.core` | none | `test-support` (test), `web-core-spring-boot-starter` | `audit-spring-boot-starter`, `crud-service-example`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `identity-projection-spring-boot-starter`, `notification-service`, `outbox-spring-boot-starter`, `pat-spring-boot-starter`, `reconciliation-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **job-core** | `common` | `ru.ludwigandreas.job.core` | none | `test-support` (test) | `audit-spring-boot-starter`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `notification-service`, `outbox-spring-boot-starter`, `reconciliation-spring-boot-starter` |
 | **pat-core** | `common` | `ru.ludwigandreas.pat` | none | — | `pat-spring-boot-starter`, `security-spring-boot-starter` |
@@ -75,7 +75,7 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
-| **odata-filter-spring-boot-starter** | `common` | `ru.ludwigandreas.odatafilter` | rest | `test-support` (test), `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `notification-service`, `user-settings-spring-boot-starter` |
+| **odata-filter-spring-boot-starter** | `common` | `ru.ludwigandreas.odatafilter` | rest | `architecture-rules` (test), `audit-core`, `test-support` (test), `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `notification-service`, `user-settings-spring-boot-starter` |
 | **audit-spring-boot-starter** | `common` | `ru.ludwigandreas.audit.store` | rest | `audit-core`, `db-core`, `job-core`, `outbox-spring-boot-starter`, `test-support` (test), `web-core-spring-boot-starter` | `user-settings-spring-boot-starter` |
 | **idempotency-spring-boot-starter** | `common` | `ru.ludwigandreas.idempotency` | rest | `audit-core`, `db-core`, `job-core`, `test-support` (test), `web-core-spring-boot-starter` | `file-action-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service` |
 | **cache-spring-boot-starter** | `common` | `ru.ludwigandreas.cache` | none | `test-support` (test) | `pat-spring-boot-starter`, `security-spring-boot-starter`, `user-settings-spring-boot-starter` |
@@ -113,7 +113,7 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
-| **architecture-rules** | `common` | `ru.ludwigandreas.archrules` | rest | — | `crud-service-example`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `pat-spring-boot-starter`, `user-settings-spring-boot-starter` |
+| **architecture-rules** | `common` | `ru.ludwigandreas.archrules` | rest | — | `crud-service-example`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `odata-filter-spring-boot-starter`, `pat-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **checkstyle-rules** | `common` | `ru.ludwigandreas.checkstyle.unit` |  | — | — |
 
 ## Dependency graph
@@ -121,6 +121,8 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 Every in-repo edge, at every scope, `A -> B` meaning *A declares a dependency on B*. This is the graph Maven orders the reactor by. Before adding an edge A -> B, check that B has no path back to A here.
 
 ```
+odata-filter-spring-boot-starter           -> architecture-rules  [test]
+odata-filter-spring-boot-starter           -> audit-core
 odata-filter-spring-boot-starter           -> test-support  [test]
 odata-filter-spring-boot-starter           -> web-core-spring-boot-starter
 db-core                                    -> test-support  [test]
@@ -294,7 +296,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`build/architecture-rules/README.md`](build/architecture-rules/README.md) · [`build/architecture-rules/README.ru.md`](build/architecture-rules/README.ru.md)
 - surfaces: rest
 - test classes: 10 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :architecture-rules -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- **gate**: `mvn -q validate`, then `mvn -pl :architecture-rules -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `audit-core`
 
@@ -306,7 +308,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - auto-configuration: `sources/audit-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - test dirs: unit (`sources/audit-core/src/test/java/ru/ludwigandreas/audit/unit`)
 - test classes: 5 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :audit-core -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :hot-reload-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`
+- **gate**: `mvn -q validate`, then `mvn -pl :audit-core -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :hot-reload-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`
 
 ### `audit-spring-boot-starter`
 
@@ -316,7 +318,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/audit-spring-boot-starter/README.md`](sources/audit-spring-boot-starter/README.md) · [`sources/audit-spring-boot-starter/README.ru.md`](sources/audit-spring-boot-starter/README.ru.md)
 - surfaces: rest
 - auto-configuration: `sources/audit-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/audit-changelog.xml`
+- Liquibase: `sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0001-create-audit-event.sql`, `sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0002-migrate-user-setting-audit.sql`, `sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0003-migrate-sync-audit-record.sql`, `sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0004-normalise-redaction-marker.sql`, `sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/audit-changelog.xml`
 - i18n: `sources/audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages.properties`, `sources/audit-spring-boot-starter/src/main/resources/i18n/ludwig-audit-messages_ru.properties`
 - test dirs: integration (`sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration`)
 - test classes: 0 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
@@ -352,7 +354,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - package root `ru.ludwigandreas.example.catalog`
 - README [`services/crud-service-example/README.md`](services/crud-service-example/README.md) · [`services/crud-service-example/README.ru.md`](services/crud-service-example/README.ru.md)
 - surfaces: rest
-- Liquibase: `services/crud-service-example/src/main/resources/db/changelog/changes/0001-catalog-schema.xml`, `services/crud-service-example/src/main/resources/db/changelog/changes/0002-catalog-reference-data.xml`, `services/crud-service-example/src/main/resources/db/changelog/changes/0003-catalog-security.xml`, `services/crud-service-example/src/main/resources/db/changelog/changes/0004-catalog-watchers.xml`, `services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml`
+- Liquibase: `services/crud-service-example/src/main/resources/db/changelog/changes/0001-product-category.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0002-product.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0003-product-indexes.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0004-reference-categories.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0005-product-supplier-partner.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0006-product-scope-indexes.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0007-product-watcher.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0008-product-watcher-index.sql`, `services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml`
 - i18n: `services/crud-service-example/src/main/resources/i18n/messages.properties`, `services/crud-service-example/src/main/resources/i18n/messages_ru.properties`
 - test dirs: architecture (`services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/architecture`), integration (`services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/integration`), unit (`services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/unit`)
 - test classes: 4 surefire, 3 failsafe (`*IT` / `*IntegrationTest`)
@@ -379,10 +381,10 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/export-spring-boot-starter/README.md`](sources/export-spring-boot-starter/README.md) · [`sources/export-spring-boot-starter/README.ru.md`](sources/export-spring-boot-starter/README.ru.md)
 - surfaces: rest
 - auto-configuration: `sources/export-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/export-changelog.xml`
+- Liquibase: `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0001-create-export-report-run.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0002-unique-idempotency-key.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0003-index-claim.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0004-index-reclaim.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0005-index-requester.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0006-create-export-report-output.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0007-fk-output-run.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0008-index-output-run.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0009-index-output-purge.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0010-create-export-saved-report.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0011-index-saved-report-definition.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0012-create-export-report-subscription.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0013-fk-subscription-saved-report.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0014-index-subscription-enabled.sql`, `sources/export-spring-boot-starter/src/main/resources/db/changelog/export/export-changelog.xml`
 - i18n: `sources/export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages.properties`, `sources/export-spring-boot-starter/src/main/resources/i18n/ludwig-export-messages_ru.properties`
 - test dirs: architecture (`sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/architecture`), integration (`sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/integration`), unit (`sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/unit`)
-- test classes: 16 surefire, 2 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 17 surefire, 2 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`
 
 ### `file-action-spring-boot-starter`
@@ -393,7 +395,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/file-action-spring-boot-starter/README.md`](sources/file-action-spring-boot-starter/README.md) · [`sources/file-action-spring-boot-starter/README.ru.md`](sources/file-action-spring-boot-starter/README.ru.md)
 - surfaces: rest
 - auto-configuration: `sources/file-action-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/file-action-changelog.xml`
+- Liquibase: `sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/0001-create-submission.sql`, `sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/0002-create-row-reject.sql`, `sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/file-action-changelog.xml`
 - i18n: `sources/file-action-spring-boot-starter/src/main/resources/i18n/ludwig-file-action-messages.properties`, `sources/file-action-spring-boot-starter/src/main/resources/i18n/ludwig-file-action-messages_ru.properties`
 - test dirs: architecture (`sources/file-action-spring-boot-starter/src/test/java/ru/ludwigandreas/fileaction/architecture`), integration (`sources/file-action-spring-boot-starter/src/test/java/ru/ludwigandreas/fileaction/integration`), unit (`sources/file-action-spring-boot-starter/src/test/java/ru/ludwigandreas/fileaction/unit`)
 - test classes: 26 surefire, 6 failsafe (`*IT` / `*IntegrationTest`)
@@ -407,7 +409,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/file-ingest-spring-boot-starter/README.md`](sources/file-ingest-spring-boot-starter/README.md) · [`sources/file-ingest-spring-boot-starter/README.ru.md`](sources/file-ingest-spring-boot-starter/README.ru.md)
 - surfaces: actuator
 - auto-configuration: `sources/file-ingest-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/file-ingest-changelog.xml`
+- Liquibase: `sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0001-create-run.sql`, `sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0002-index-run-task-status.sql`, `sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0003-create-quarantine.sql`, `sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0004-rename-completed-to-succeeded.sql`, `sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/file-ingest-changelog.xml`
 - i18n: `sources/file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages.properties`, `sources/file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages_ru.properties`
 - test dirs: architecture (`sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/architecture`), integration (`sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/integration`), unit (`sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/unit`)
 - test classes: 8 surefire, 9 failsafe (`*IT` / `*IntegrationTest`)
@@ -432,7 +434,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/idempotency-spring-boot-starter/README.md`](sources/idempotency-spring-boot-starter/README.md) · [`sources/idempotency-spring-boot-starter/README.ru.md`](sources/idempotency-spring-boot-starter/README.ru.md)
 - surfaces: rest
 - auto-configuration: `sources/idempotency-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/idempotency-changelog.xml`
+- Liquibase: `sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/0001-create-claim.sql`, `sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/0002-migrate-notification-idempotency.sql`, `sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/idempotency-changelog.xml`
 - i18n: `sources/idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages.properties`, `sources/idempotency-spring-boot-starter/src/main/resources/i18n/ludwig-idempotency-messages_ru.properties`
 - test dirs: architecture (`sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/architecture`), integration (`sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/integration`), unit (`sources/idempotency-spring-boot-starter/src/test/java/ru/ludwigandreas/idempotency/unit`)
 - test classes: 4 surefire, 5 failsafe (`*IT` / `*IntegrationTest`)
@@ -446,7 +448,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/identity-projection-spring-boot-starter/README.md`](sources/identity-projection-spring-boot-starter/README.md) · [`sources/identity-projection-spring-boot-starter/README.ru.md`](sources/identity-projection-spring-boot-starter/README.ru.md)
 - surfaces: none
 - auto-configuration: `sources/identity-projection-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml`
+- Liquibase: `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0001-create-security-user.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0002-create-security-user-role.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0003-create-security-partner.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0004-create-security-partner-role.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0005-create-security-grant.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0006-security-grant-dimension-check.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0007-security-user-contact.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml`
 - test dirs: unit (`sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit`)
 - test classes: 1 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :notification-service -am verify`
@@ -480,7 +482,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/job-core/README.md`](sources/job-core/README.md) · [`sources/job-core/README.ru.md`](sources/job-core/README.ru.md)
 - surfaces: none
 - auto-configuration: `sources/job-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml`
+- Liquibase: `sources/job-core/src/main/resources/db/changelog/job-core/0001-create-run-lock.sql`, `sources/job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml`
 - test dirs: integration (`sources/job-core/src/test/java/ru/ludwigandreas/job/core/integration`), unit (`sources/job-core/src/test/java/ru/ludwigandreas/job/core/unit`)
 - test classes: 3 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :job-core -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`
@@ -525,7 +527,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - package root `ru.ludwigandreas.notification`
 - README [`services/notification-service/README.md`](services/notification-service/README.md) · [`services/notification-service/README.ru.md`](services/notification-service/README.ru.md)
 - surfaces: actuator, rest
-- Liquibase: `services/notification-service/src/main/resources/db/changelog/changes/0001-notification-schema.xml`, `services/notification-service/src/main/resources/db/changelog/changes/0002-notification-recipients.xml`, `services/notification-service/src/main/resources/db/changelog/changes/0003-notification-platform-gaps.xml`, `services/notification-service/src/main/resources/db/changelog/changes/0004-preferences-move-out.xml`, `services/notification-service/src/main/resources/db/changelog/changes/0005-fold-lock-into-job-core.xml`, `services/notification-service/src/main/resources/db/changelog/changes/0006-fold-idempotency-into-starter.xml`, `services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml`
+- Liquibase: `services/notification-service/src/main/resources/db/changelog/changes/0001-request.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0002-delivery.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0003-delivery-indexes.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0004-delivery-status-history.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0005-delivery-content.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0006-recipient-profile.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0007-recipient-preference.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0008-suppression.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0009-idempotency.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0010-lock.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0011-rate-limit-window.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0012-template-revision.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0013-record-quiet-hours-deferral.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0014-drop-recipient-preference.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0015-drop-recipient-profile.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0016-drop-lock-table.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0017-drop-idempotency.sql`, `services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml`
 - i18n: `services/notification-service/src/main/resources/i18n/notification-messages.properties`, `services/notification-service/src/main/resources/i18n/notification-messages_ru.properties`
 - test dirs: architecture (`services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture`), integration (`services/notification-service/src/test/java/ru/ludwigandreas/notification/integration`), unit (`services/notification-service/src/test/java/ru/ludwigandreas/notification/unit`)
 - test classes: 16 surefire, 4 failsafe (`*IT` / `*IntegrationTest`)
@@ -565,8 +567,8 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - surfaces: rest
 - auto-configuration: `sources/odata-filter-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - i18n: `sources/odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages.properties`, `sources/odata-filter-spring-boot-starter/src/main/resources/i18n/ludwig-odata-filter-messages_ru.properties`
-- test dirs: integration (`sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration`)
-- test classes: 8 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
+- test dirs: architecture (`sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/architecture`), integration (`sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration`)
+- test classes: 23 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `outbox-spring-boot-starter`
@@ -577,7 +579,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/outbox-spring-boot-starter/README.md`](sources/outbox-spring-boot-starter/README.md) · [`sources/outbox-spring-boot-starter/README.ru.md`](sources/outbox-spring-boot-starter/README.ru.md)
 - surfaces: none
 - auto-configuration: `sources/outbox-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/outbox-changelog.xml`
+- Liquibase: `sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0001-create-outbox-message.sql`, `sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0002-index-poll.sql`, `sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0003-index-ordering-key.sql`, `sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0004-unique-idempotency-key.sql`, `sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0005-create-status-history.sql`, `sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/outbox-changelog.xml`
 - test dirs: integration (`sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration`), unit (`sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit`)
 - test classes: 5 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
@@ -590,7 +592,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/pat-core/README.md`](sources/pat-core/README.md) · [`sources/pat-core/README.ru.md`](sources/pat-core/README.ru.md)
 - surfaces: none
 - test dirs: unit (`sources/pat-core/src/test/java/ru/ludwigandreas/pat/unit`)
-- test classes: 7 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 8 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :pat-core -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :security-spring-boot-starter -am verify`
 
 ### `pat-spring-boot-starter`
@@ -601,10 +603,10 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/pat-spring-boot-starter/README.md`](sources/pat-spring-boot-starter/README.md) · [`sources/pat-spring-boot-starter/README.ru.md`](sources/pat-spring-boot-starter/README.ru.md)
 - surfaces: rest
 - auto-configuration: `sources/pat-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/pat-changelog.xml`
+- Liquibase: `sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/0001-create-token.sql`, `sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/0002-unique-key-ids.sql`, `sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/0003-owner-index.sql`, `sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/pat-changelog.xml`
 - i18n: `sources/pat-spring-boot-starter/src/main/resources/i18n/ludwig-pat-messages.properties`, `sources/pat-spring-boot-starter/src/main/resources/i18n/ludwig-pat-messages_ru.properties`
 - test dirs: architecture (`sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/architecture`), integration (`sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/integration`), unit (`sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/unit`)
-- test classes: 7 surefire, 7 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 7 surefire, 10 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :pat-spring-boot-starter -am verify`
 
 ### `reconciliation-spring-boot-starter`
@@ -615,7 +617,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/reconciliation-spring-boot-starter/README.md`](sources/reconciliation-spring-boot-starter/README.md) · [`sources/reconciliation-spring-boot-starter/README.ru.md`](sources/reconciliation-spring-boot-starter/README.ru.md)
 - surfaces: actuator
 - auto-configuration: `sources/reconciliation-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml`
+- Liquibase: `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0001-create-inbox-record.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0002-index-inbox-claim.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0003-index-inbox-key-history.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0004-index-inbox-stale-and-ops.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0005-index-inbox-fetch-suppression.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0006-create-task-state.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0007-create-remote-job.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0008-index-remote-job.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0009-create-quota-lease.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0010-create-quota-waiter.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0011-create-audit-record.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml`
 - test dirs: integration (`sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration`), unit (`sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/unit`)
 - test classes: 7 surefire, 3 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :reconciliation-spring-boot-starter -am verify`
@@ -642,7 +644,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - auto-configuration: `sources/security-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - i18n: `sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages.properties`, `sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages_ru.properties`
 - test dirs: unit (`sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit`)
-- test classes: 20 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 24 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :test-support-security -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `test-support`
@@ -674,7 +676,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/user-settings-spring-boot-starter/README.md`](sources/user-settings-spring-boot-starter/README.md) · [`sources/user-settings-spring-boot-starter/README.ru.md`](sources/user-settings-spring-boot-starter/README.ru.md)
 - surfaces: rest
 - auto-configuration: `sources/user-settings-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/user-settings-changelog.xml`
+- Liquibase: `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0001-create-user-setting-value.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0002-user-setting-value-scope-check.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0003-create-user-setting-audit.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0004-create-user-consent.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0005-user-consent-update-guard.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/user-settings-changelog.xml`
 - i18n: `sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages.properties`, `sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages_ru.properties`
 - test dirs: architecture (`sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture`), integration (`sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/integration`), unit (`sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/unit`)
 - test classes: 14 surefire, 3 failsafe (`*IT` / `*IntegrationTest`)

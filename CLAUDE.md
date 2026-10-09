@@ -227,7 +227,24 @@ Consequences when editing POMs:
   `web.dto` → `service.model` → `repository.entity`, wired by MapStruct; Lombok instead of
   boilerplate; **QueryDSL-JPA against generated Q-types only** — no JPQL/SQL strings, no derived
   query methods; transactions in the service layer; Liquibase changelogs under
-  `src/main/resources/db/changelog`.
+  `src/main/resources/db/changelog`, in the one shape the next bullet describes.
+- **Every Liquibase changeset is formatted SQL, and the layout is uniform.** A changeset lives in
+  its own `NNNN-<slug>.sql` file opening with `--liquibase formatted sql`; its id is
+  `<prefix>-NNNN-<slug>` and its author `ludwig-<prefix>`, with `NNNN` and `<slug>` identical to the
+  filename's, so the tree and `DATABASECHANGELOG` cannot disagree. Numbers are unique per module and
+  ascend in include order. Every changeset declares `dbms:postgresql` and a `--rollback` — real SQL,
+  or `--rollback NOT REQUIRED`, which parses to the same empty rollback as XML's `<rollback/>`; the
+  point is that the author decided. Each module keeps exactly one **XML root changelog containing
+  `<include>` elements and comments only**, pinned to `dbchangelog-4.27.xsd`, which stays XML only
+  because Liquibase's formatted-SQL parser has no include directive. Preconditions are limited to
+  `--precondition-table-exists table:<name>`, `--precondition-view-exists` and
+  `--precondition-sql-check` — the only three that parser implements. Prose comments must never begin
+  a line with a directive name (`changeset`, `rollback`, `preconditions`, …): before the first
+  changeset Liquibase rejects the whole file over it, and after it the line is silently read as
+  prose. `scripts/check_migrations.sh` enforces all of it and the gate runs it; it is a gate script
+  rather than an ArchUnit or Checkstyle rule because a changelog is a resource. The QueryDSL-only
+  rule above governs repository queries in Java and does **not** apply here. The spec is the
+  `database-migration` capability in `openspec/specs/`.
 - Every container image reference is pinned by name, version **and** `sha256` digest. A bare tag is
   not acceptable anywhere, including in READMEs and docker run examples.
 - **Two carve-outs from the QueryDSL-only rule exist, and each has a boundary.**

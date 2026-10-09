@@ -5,49 +5,66 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
 
+    <!--
+        Includes only. Every changeset is formatted SQL in its own NNNN-<slug>.sql file under
+        changes/ - see the database-migration capability. This file stays XML because Liquibase's
+        formatted-SQL parser has no include directive; it is wiring, not a migration.
+    -->
+
     <!-- This service's own schema. -->
-    <include file="classpath:db/changelog/changes/0001-notification-schema.xml" relativeToChangelogFile="false"/>
-    <include file="classpath:db/changelog/changes/0002-notification-recipients.xml" relativeToChangelogFile="false"/>
-    <include file="classpath:db/changelog/changes/0003-notification-platform-gaps.xml" relativeToChangelogFile="false"/>
-    <include file="classpath:db/changelog/changes/0004-preferences-move-out.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0001-request.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0002-delivery.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0003-delivery-indexes.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0004-delivery-status-history.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0005-delivery-content.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0006-recipient-profile.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0007-recipient-preference.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0008-suppression.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0009-idempotency.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0010-lock.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0011-rate-limit-window.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0012-template-revision.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0013-record-quiet-hours-deferral.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0014-drop-recipient-preference.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0015-drop-recipient-profile.sql" relativeToChangelogFile="false"/>
 
     <!--
         The outbox module ships its own changelog inside its jar. Including it here - rather than
         letting the module apply it standalone, see ludwig.outbox.liquibase.enabled=false - keeps
         every table this service owns under one migration history. Its changeset ids are namespaced
-        (outbox-NNN/ludwig-outbox), so they cannot collide with the ones above.
+        (outbox-NNNN/ludwig-outbox), so they cannot collide with the ones above.
     -->
     <include file="classpath:db/changelog/outbox/outbox-changelog.xml" relativeToChangelogFile="false"/>
 
     <!--
         Same arrangement for job-core's job_run_lock, which replaced this service's own
         notification_lock - see ludwig.job-core.liquibase.enabled=false. Its changeset ids are
-        namespaced (job-core-NNN/ludwig-job-core).
+        namespaced (job-core-NNNN/ludwig-job-core).
 
-        This include sits ABOVE 0005, which drops notification_lock, and the order is not cosmetic:
-        an <include> contributes its changesets at the position it appears, so putting it after the
-        drop would leave a fresh database with neither lock table between the two changesets - and a
-        deployment that failed part way through the migration would come up with no lock at all.
+        This include sits ABOVE 0016-drop-lock-table.sql, and the order is not cosmetic: an <include>
+        contributes its changesets at the position it appears, so putting it after the drop would
+        leave a fresh database with neither lock table between the two changesets - and a deployment
+        that failed part way through the migration would come up with no lock at all.
     -->
     <include file="classpath:db/changelog/job-core/job-core-changelog.xml" relativeToChangelogFile="false"/>
 
-    <include file="classpath:db/changelog/changes/0005-fold-lock-into-job-core.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0016-drop-lock-table.sql" relativeToChangelogFile="false"/>
 
     <!--
         Same arrangement for idempotency-spring-boot-starter's idempotency_claim, which replaced this
-        service's own notification_idempotency - see ludwig.idempotency.liquibase.enabled=false. Its changeset
-        ids are namespaced (idempotency-NNN/ludwig-idempotency).
+        service's own notification_idempotency - see ludwig.idempotency.liquibase.enabled=false. Its
+        changeset ids are namespaced (idempotency-NNNN/ludwig-idempotency).
 
-        This include sits ABOVE 0006, which drops notification_idempotency, and the order is load-bearing for
-        a stronger reason than it was for the lock: the module's changelog carries the changeset that MOVES
-        every row out of the old table, and an <include> contributes its changesets at the position it
-        appears. Putting it after the drop would discard every in-flight key - and every in-flight key is a
-        claim on work that has been done, so every one of them is a notification this service would send to a
-        real person a second time.
+        This include sits ABOVE 0017-drop-idempotency.sql, and the order is load-bearing for a
+        stronger reason than it was for the lock: the module's changelog carries the changeset that
+        MOVES every row out of the old table, and an <include> contributes its changesets at the
+        position it appears. Putting it after the drop would discard every in-flight key - and every
+        in-flight key is a claim on work that has been done, so every one of them is a notification
+        this service would send to a real person a second time.
     -->
     <include file="classpath:db/changelog/idempotency/idempotency-changelog.xml" relativeToChangelogFile="false"/>
 
-    <include file="classpath:db/changelog/changes/0006-fold-idempotency-into-starter.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0017-drop-idempotency.sql" relativeToChangelogFile="false"/>
 
     <!--
         Same arrangement for the identity projection's tables (security_user, security_partner,

@@ -8,7 +8,7 @@ package ru.ludwigandreas.usersettings.audit;
  *
  * <p>In the {@code audit} package rather than {@code entity} since the consolidation: the entity it used to
  * be a column of is gone into {@code audit_event}, and this enum is now the authoring vocabulary the writer
- * uses. The {@code audit-002} changeset maps its three values onto the action names below so a migrated row
+ * uses. The {@code audit-0002} changeset maps its three values onto the action names below so a migrated row
  * and a new one carry the same string.
  */
 public enum SettingAuditAction {

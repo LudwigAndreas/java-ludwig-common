@@ -38,7 +38,7 @@ import ru.ludwigandreas.odatafilter.annotation.Filterable;
 @Entity
 @Table(name = "product")
 @FilterPolicy(maxDepth = 4, maxPageSize = 100, defaultPageSize = 20, maxNestedPropertyDepth = 2,
-        defaultOrderBy = "createdAt desc, id asc")
+        defaultOrderBy = "createdAt desc, id asc", metadataName = "product")
 @Getter
 @Setter
 @Builder

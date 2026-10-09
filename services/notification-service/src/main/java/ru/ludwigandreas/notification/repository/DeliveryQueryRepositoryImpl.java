@@ -1,12 +1,7 @@
 package ru.ludwigandreas.notification.repository;
 
 import com.querydsl.core.Tuple;
-import com.querydsl.core.types.Order;
-import com.querydsl.core.types.OrderSpecifier;
-import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
-import com.querydsl.core.types.dsl.ComparableExpressionBase;
-import com.querydsl.core.types.dsl.PathBuilder;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.Instant;
 import java.util.Collection;
@@ -14,10 +9,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.support.PageableExecutionUtils;
 import ru.ludwigandreas.notification.repository.entity.ChannelKind;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatus;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatusHistoryEntity;
@@ -25,10 +16,11 @@ import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntit
 import ru.ludwigandreas.notification.repository.entity.QDeliveryContentEntity;
 import ru.ludwigandreas.notification.repository.entity.QDeliveryStatusHistoryEntity;
 import ru.ludwigandreas.notification.repository.entity.QNotificationDeliveryEntity;
-import ru.ludwigandreas.notification.repository.query.DeliverySearchCriteria;
 import ru.ludwigandreas.notification.repository.query.QueueDepth;
-import ru.ludwigandreas.odatafilter.core.ODataFilterService;
-import ru.ludwigandreas.odatafilter.core.ODataQuery;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
+import ru.ludwigandreas.odatafilter.execution.ODataQueryExecutor;
+import ru.ludwigandreas.odatafilter.execution.ODataSearch;
 import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.data.DataAction;
 
@@ -38,7 +30,7 @@ import ru.ludwigandreas.security.data.DataAction;
  *
  * <p>Every statement here goes through {@link JPAQueryFactory} and the generated Q-types: no JDBC,
  * no JPQL string, no method-name-derived query. The one dynamic piece is the client's OData
- * {@code $filter}, and that is not free-form either - {@link ODataFilterService} only produces paths
+ * {@code $filter}, and that is not free-form either - {@link ODataQueryExecutor} only produces paths
  * the entity's own {@code @Filterable} annotations allow, which is what keeps the recipient address
  * and the rendered body unreachable from a query string.
  */
@@ -55,14 +47,6 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
     private static final QDeliveryContentEntity CONTENT =
             QDeliveryContentEntity.deliveryContentEntity;
 
-    /**
-     * Same root and alias as {@link #DELIVERY}, reached dynamically. Needed only to turn the
-     * {@code $orderby} clause - property paths resolved at runtime by definition - into
-     * {@code OrderSpecifier}s over the very same query root.
-     */
-    private static final PathBuilder<NotificationDeliveryEntity> ROOT =
-            new PathBuilder<>(NotificationDeliveryEntity.class, DELIVERY.getMetadata().getName());
-
     /** The two states the claim query considers, and therefore what "waiting" means for the gauges. */
     private static final List<DeliveryStatus> CLAIMABLE =
             List.of(DeliveryStatus.PENDING, DeliveryStatus.FAILED);
@@ -76,7 +60,7 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
             DeliveryStatus.SUPPRESSED, DeliveryStatus.CANCELLED, DeliveryStatus.COLLAPSED);
 
     private final JPAQueryFactory queryFactory;
-    private final ODataFilterService filterService;
+    private final ODataQueryExecutor odataExecutor;
     private final DataAccessGuard dataAccessGuard;
 
     /**
@@ -90,21 +74,9 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
      * nothing gets an empty page rather than a 403 that would confirm matching deliveries exist.
      */
     @Override
-    public Page<NotificationDeliveryEntity> search(DeliverySearchCriteria criteria) {
-        ODataQuery<NotificationDeliveryEntity> query = filterService.parse(
-                NotificationDeliveryEntity.class, criteria.filter(), criteria.top(), criteria.skip(),
-                criteria.orderBy());
-        Pageable pageable = query.pageable();
-        Predicate scoped = dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ).and(query.predicate());
-
-        List<NotificationDeliveryEntity> content = queryFactory.selectFrom(DELIVERY)
-                .where(scoped)
-                .orderBy(orderSpecifiers(pageable.getSort()))
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
-
-        return PageableExecutionUtils.getPage(content, pageable, () -> count(scoped));
+    public ODataPage<NotificationDeliveryEntity> search(ODataQueryOptions options) {
+        return odataExecutor.search(NotificationDeliveryEntity.class, options,
+                ODataSearch.of(DELIVERY).and(dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ)));
     }
 
     @Override
@@ -255,30 +227,4 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
                 .and(DELIVERY.nextAttemptAt.loe(now));
     }
 
-    private long count(Predicate predicate) {
-        Long total = queryFactory.select(DELIVERY.count()).from(DELIVERY).where(predicate).fetchOne();
-        return total == null ? 0L : total;
-    }
-
-    /**
-     * The sort always carries the entity's {@code @FilterPolicy(defaultOrderBy = ...)} tie-breaker,
-     * appended by the filter service after whatever the caller asked for, so there is no unordered
-     * case to fall back on here.
-     */
-    private OrderSpecifier<?>[] orderSpecifiers(Sort sort) {
-        return sort.stream()
-                .map(order -> orderSpecifier(order.getProperty(), order.isAscending()))
-                .toArray(OrderSpecifier<?>[]::new);
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private OrderSpecifier<?> orderSpecifier(String property, boolean ascending) {
-        String[] segments = property.split("\\.");
-        PathBuilder<?> parent = ROOT;
-        for (int i = 0; i < segments.length - 1; i++) {
-            parent = parent.get(segments[i]);
-        }
-        ComparableExpressionBase path = parent.getComparable(segments[segments.length - 1], Comparable.class);
-        return new OrderSpecifier(ascending ? Order.ASC : Order.DESC, path);
-    }
 }

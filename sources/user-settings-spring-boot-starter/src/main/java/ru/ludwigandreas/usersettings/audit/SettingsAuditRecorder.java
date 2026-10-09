@@ -19,8 +19,8 @@ import ru.ludwigandreas.usersettings.api.SettingsSubject;
  *
  * <p>A caller of the platform's {@link AuditSink} rather than an SPI of its own, which it never was - it was
  * a concrete class writing {@code user_setting_audit} directly, the only one of the nine audit mechanisms
- * with no logging path at all. Those rows migrated into {@code audit_event} by the {@code audit-002}
- * changeset, and their marker was rewritten by {@code audit-004}.
+ * with no logging path at all. Those rows migrated into {@code audit_event} by the {@code audit-0002}
+ * changeset, and their marker was rewritten by {@code audit-0004}.
  *
  * <p>Runs inside the caller's transaction on the write path, so an audit row and the change it describes
  * commit together. That is the property worth having, and it is now also the reason {@code settings} is the

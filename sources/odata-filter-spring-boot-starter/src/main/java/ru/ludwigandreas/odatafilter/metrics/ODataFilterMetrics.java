@@ -21,4 +21,16 @@ public interface ODataFilterMetrics {
 
     /** Time spent in {@code parse} regardless of outcome. */
     void recordParseDuration(String entityType, Duration duration);
+
+    /**
+     * A caller asked what it may filter on, and was told.
+     *
+     * <p>Counted separately from an applied filter and from a rejection so that the two signals can be told
+     * apart. A rise in rejections is documented as "either a client bug or someone probing for what's
+     * filterable"; this is what distinguishes the clients that asked properly from the ones probing, which
+     * the rejection counter alone cannot do.
+     *
+     * @param entityType the published name the document was served for
+     */
+    void recordMetadataServed(String entityType);
 }

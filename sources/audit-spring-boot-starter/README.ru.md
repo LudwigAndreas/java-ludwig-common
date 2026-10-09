@@ -147,8 +147,8 @@ outbox и reconciliation: FK заставляет брать key-share блок�
 
 | Было | Судьба |
 |---|---|
-| `user_setting_audit` | **Миграция** changeset'ом `audit-002`; маркер `[redacted]` переписан там же и в `audit-004` |
-| `sync_audit_record` | **Миграция** changeset'ом `audit-003` |
+| `user_setting_audit` | **Миграция** changeset'ом `audit-0002`; маркер `[redacted]` переписан там же и в `audit-0004` |
+| `sync_audit_record` | **Миграция** changeset'ом `audit-0003` |
 | `outbox_status_history` | **Остаётся.** См. ниже |
 
 Обе миграции переносят **строки**, а не только схему. Консолидация, которая начинает новый журнал пустым

@@ -1,0 +1,67 @@
+{
+  "change": "add-odata-query-execution",
+  "contract": {
+    "goal": "close the gap between 'the filter is parsed' and 'the page is on the wire', so a service author writes none of the predicate/ordering/paging/counting mechanics by hand",
+    "output": "ODataQueryExecutor + public ordering conversion + ODataQueryOptions in odata-filter-spring-boot-starter; offset on PageResponse with nullable totals in web-core-spring-boot-starter; $count honoured; ODataQuery.predicate() -> Optional; the deprecated argument resolver deleted; both services and export migrated; one ArchUnit rule",
+    "constraints": [
+      "major release: binary-incompatible changes are permitted (revapi versionIncreaseAllows major -> breaking); do NOT apply the design's deprecation fallback",
+      "never edit .mvn/maven.config - it stays -Drevision=1.1.0-SNAPSHOT; a major build passes -Drevision on the command line",
+      "ODataFilterService must keep working with no EntityManager and no Spring MVC (export replays saved filters on a worker thread)",
+      "no new in-repo dependency; one new optional third-party dependency (springdoc-openapi-starter-common) with its version in ludwig-bom only",
+      "the executor asserts the consumer's root alias matches the derived alias - a silent cross join becomes a loud failure",
+      "no caller literal values in any new log, event or error message",
+      "both locale bundles move together; key sets must match"
+    ],
+    "done_when": [
+      "scripts/manifest.sh build && scripts/manifest.sh stale",
+      "scripts/check_image_pins.sh",
+      "mvn -q validate",
+      "mvn -pl :web-core-spring-boot-starter -am verify",
+      "mvn -pl :odata-filter-spring-boot-starter -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :architecture-rules -am verify",
+      "mvn -pl :audit-spring-boot-starter -am verify",
+      "mvn -pl :db-core -am verify",
+      "mvn -pl :file-action-spring-boot-starter -am verify",
+      "mvn -pl :file-ingest-spring-boot-starter -am verify",
+      "mvn -pl :idempotency-spring-boot-starter -am verify",
+      "mvn -pl :messaging-spring-boot-starter -am verify",
+      "mvn -pl :object-storage-spring-boot-starter -am verify",
+      "mvn -pl :observability-spring-boot-starter -am verify",
+      "mvn -pl :pat-spring-boot-starter -am verify",
+      "mvn -pl :rest-client-spring-boot-starter -am verify",
+      "mvn -pl :security-spring-boot-starter -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "mvn clean install",
+      "openspec validate add-odata-query-execution"
+    ]
+  },
+  "current_task": "complete",
+  "decisions": [
+    "1.1: v1.1.0 IS tagged, so the precondition task 1.1 was written against is false - the add-api-compatibility-and-release-governance receipt's 'no v* tag' statement is stale by 9 commits. The design's revapi fallback (keep ODataQueryArgumentResolver and the old parse overload for one release as forRemoval=true) is deliberately NOT applied: the user instructed that this is a new major release and backward compatibility is not a constraint, and revapi's own versionIncreaseAllows maps major -> breaking, so the removals are permitted at -Drevision=2.x.",
+    "1.1: scripts/check_api_baseline.sh exits 1 for 25 modules because v1.1.0 is tagged but only 1.1.0-SNAPSHOT is in ~/.m2 and nexus.example.internal is unreachable from this environment. This is PRE-EXISTING and independent of this change - the gate is red for any change in this repo right now. Per an explicit user decision it is treated as out of scope: it is excluded from done_when above, recorded in the receipt's unresolved field, and every other gate command is run in full. Consequence to state plainly in the receipt: the compatibility half of the gate did not actually verify the four breaking changes.",
+    "1.1: .mvn/maven.config is not edited (CLAUDE.md forbids it outright). Local verification of the major-release behaviour passes -Drevision on the command line when needed.",
+    "2.x: PageResponse keeps `page` and gains `offset`; totals widened to Long/Integer with @JsonInclude(NON_NULL) so a declined count is omitted rather than null. jackson-annotations was already an optional dependency of web-core, so no POM change was needed. The canonical constructor turned out to be called only inside PageResponse and its own test - all four external users go through the factories - so the source-breaking blast radius was one test file, not sixteen modules.",
+    "2.x ENVIRONMENT: Maven defaults to Homebrew JDK 26 here, and JaCoCo 0.8.12 cannot instrument class file major version 70, so every surefire fork dies before running a test. Every build in this change is run with JAVA_HOME=/Users/ludwig/Library/Java/JavaVirtualMachines/temurin-17.0.19/Contents/Home (the project targets Java 17). This is environmental, not a code defect, and no file was changed for it.",
+    "3.1 DEVIATION: ODataQueryOptions went in ru.ludwigandreas.odatafilter.core, not .web as tasks.md said. core.ODataFilterService.parse takes it, so placing it in web would have made core depend on web - the inverse of the real direction. The spec constrains only that it name no entity and hold no QueryDSL type, which is satisfied.",
+    "3.4 DEVIATION/IMPROVEMENT: rather than a bare $count key, added InvalidQueryOptionException + the ludwig.odata.error.invalid-option code, used for malformed $top, $skip and $count alike. Reusing FilterSyntaxException would have told a caller with a typo in $count that its filter expression could not be parsed. The offending value is deliberately kept out of the message because the message reaches the logs.",
+    "4.x: ODataSearch.of takes EntityPathBase<T>, not EntityPath<T> - EntityPath has no count(). PathBuilder extends EntityPathBase, so the executor accepts both a generated Q-type and a dynamic PathBuilder root, which is what let this module's own annotation-processor-free tests use it.",
+    "4.x: the executor combines the caller's filter and the repository's predicates with a BooleanBuilder, so an absent filter contributes nothing to the WHERE clause rather than a literal true.",
+    "4.x: ODataPage (entities, offset, size, nullable total) is an internal result type, not a second wire envelope - PageResponse remains the one paged envelope. A Spring Data Page cannot represent a declined count because it always carries a total.",
+    "4.x: narrow `mvn -pl :odata-filter-spring-boot-starter` builds compile against the stale 1.1.0-SNAPSHOT web-core in ~/.m2; -am is required for anything touching PageResponse.",
+    "5.x: springdoc-openapi-starter-common (not -webmvc-ui) added to ludwig-bom under the existing ${springdoc.version}=2.6.0 and declared optional in the module POM. The customizer is needed because a resolver-bound parameter is invisible to springdoc, which is objection 3 of 4 against the deleted resolver - shipping the one-parameter signature without it would have reproduced that defect rather than fixed it.",
+    "6.x: the ArchUnit rule went into RuleGroup.PERSISTENCE as persistence.dynamic-paths-are-not-hand-built. Proof it fires, not just compiles: before task 8.1 it failed notification-service's ArchitectureTest with 4 named violations (the ROOT field, the PathBuilder constructor in <clinit>, and the two get/getComparable calls in orderSpecifier); after, both services pass and crud-service-example's architecture-report.json carries it as status=passed.",
+    "5.x FAILURE AND FIX (1st attempt): adding springdoc-openapi-starter-common broke all 15 odata integration tests - swagger-core-jakarta drags jakarta.validation-api in, and that API jar alone activates web-core's LocalValidatorFactoryBean wiring in a module with no validation implementation, giving NoClassDefFoundError on hibernate-validator's ResourceBundleLocator. Fixed by excluding jakarta.validation-api from that dependency, with the reason written at the exclusion. Latent web-core observation, not fixed here: its ValidationMessageConfiguration is conditional on the validation API rather than on an implementation, so any module that acquires the API jar transitively hits this.",
+    "5.x FAILURE AND FIX (2nd attempt): the customizer bean then failed every crud-service-example context with NoClassDefFoundError: org/springdoc/core/customizers/OperationCustomizer. @ConditionalOnClass on a @Bean METHOD cannot protect a method whose return type implements the missing interface - Spring resolves the signature while parsing the configuration, before the condition runs. Moved into a nested @Configuration(proxyBeanMethods = false) class with @ConditionalOnClass(name = ...), which ASM skips without loading any type. Note for later: the pre-existing odataFilterProblemMapper and odataFilterProblemMessageBundle beans have the same shape against web-core's optional ExceptionProblemMapper and are a latent instance of this; their own test passes, so not touched here.",
+    "11.x: full gate green. mvn clean install with no flags and no exclusions: BUILD SUCCESS, 64 reactor entries, 2937 tests, 0 failures/errors/skips. JaCoCo's enforced gate met everywhere; aggregate report covers every jar module. The one gate step not run is check_api_baseline/revapi, out of scope per the user's decision at task 1.1 and recorded in the receipt's unresolved list as an un-verified compatibility half."
+  ],
+  "failures": [],
+  "open_questions": [
+    "Both services declare an identical QuerydslConfig providing the JPAQueryFactory bean. Deferred in the proposal's Open Questions - it belongs to db-core, which is outside this change's module set."
+  ],
+  "pending_human": [],
+  "rollback_point": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+  "index_version": "014d3295e62ce2ecb393c8be41aee4fd3353247f729330d99018549df2b8c493"
+}

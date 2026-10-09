@@ -21,6 +21,55 @@ either.
 
 ### Added
 
+- **`odata-filter-spring-boot-starter`: filter-policy discovery.** A client can ask what it may filter on
+  instead of finding out by sending filters and reading the rejections - which was the only alternative, and
+  is the behaviour `odata.filter.rejected` is documented as an alerting signal for. `GET <base-path>/<entity>`
+  returns the property paths the caller may name, each one's type, the operators permitted on it, whether it
+  is sortable, and the limits the server enforces. Off until `odata.filter.metadata.base-path` is set, and
+  per-entity opt-in on top of that via `@FilterPolicy(metadataName = ...)`; an entity nobody published answers
+  404, not an empty document. The document is filtered per caller - a path its roles do not allow is absent
+  rather than listed as forbidden, and no role name appears in it - and it is a projection of the resolved
+  policy, so it cannot drift from what the query path accepts. It is deliberately not called `$metadata` and
+  does not claim to be CSDL.
+- **`odata-filter-spring-boot-starter`: `odata.filter.metadata.served`**, a counter tagged by entity, so the
+  clients that asked properly can be told apart from the ones probing.
+- **`audit-core`: the `query` audit category.** A caller's read of a filterable collection, kept distinct
+  from `access`, which records authorization decisions. "Was alice permitted to search" and "what did alice
+  search for" are different questions, and an investigation normally needs to join them rather than find
+  them merged.
+- **`odata-filter-spring-boot-starter` now has an architecture test.** It had none, so the shared ArchUnit
+  rule library - including the whole `audit` group, whose subject is this module - had never been applied to
+  it. Two of its rules are switched off there as named debt, with the reason at the point of the disable:
+  `cycles.modules-are-free-of-cycles` and
+  `configuration-properties.configuration-properties-are-validated`.
+- **`architecture-rules`: `audit.audit-types-produce-audit-events`.** Fails the build when a type in a
+  module's `audit` package produces no `AuditEvent`. The two existing audit rules only caught a module that
+  declared something *extra* - a second SPI, a second logger - and not one that declared nothing and also
+  called no sink, which is how this module's trail reached nothing while the build stayed green.
+- **`odata-filter-spring-boot-starter`: one call runs a filtered, ordered, counted page.**
+  `ODataQueryExecutor` applies the predicate, the ordering, the offset, the limit and - unless the caller
+  sent `$count=false` - the count, and `ODataSearch` lets a repository contribute its own predicates
+  (where a data scope goes) and shape the content query (where a fetch join goes) without writing any of
+  those four steps. Both example services lost a `PathBuilder` field, an `orderSpecifiers(Sort)`, a
+  reflective `orderSpecifier(String, boolean)` with an unchecked-cast suppression, a
+  `PageableExecutionUtils` call and a private `count` - which they had been carrying identically. The
+  executor also refuses a query root whose alias differs from the one the predicate is built against:
+  that mismatch never failed in JPQL, it cross-joined the table to itself and returned rows that were
+  quietly wrong.
+- **`odata-filter-spring-boot-starter`: `ODataPaths` exposes the dynamic path walk** for a repository
+  that must drive its own query and still needs the `$orderby` ordering expressions.
+- **`odata-filter-spring-boot-starter`: `$count` is implemented.** `$count=false` skips the count query
+  and the response then carries no total. The module previously documented this option as deliberately
+  ignored, on the grounds that a flag nothing could act on bought the caller nothing - which was true
+  until something here executed the query.
+- **`odata-filter-spring-boot-starter`: `ODataQueryOptions`** carries the five query options as one
+  springdoc-describable controller parameter, replacing five `@RequestParam` declarations per endpoint and
+  the per-service `XSearchCriteria` records that were structurally identical across services.
+- **`web-core-spring-boot-starter`: `PageResponse.offset`.** The absolute row offset applied, so a caller
+  paging by an unaligned `$skip` can read its own position back out of the response.
+- **`architecture-rules`: `persistence.dynamic-paths-are-not-hand-built`.** Fails the build when a
+  service builds a QueryDSL `PathBuilder` for a caller-supplied property name instead of taking the
+  resolution from the module that validated it.
 - **`file-action-spring-boot-starter`: the platform's one path for a user-submitted file that performs a
   business action.** A person drags a spreadsheet in and orders are created. A service writes a typed
   `RowBinding`, one of two sealed handler shapes and a block of YAML; the module owns the upload edge, the
@@ -62,6 +111,84 @@ either.
 
 ### Changed
 
+- **BREAKING for a database that already applied these changesets - every Liquibase changeset in the
+  platform is now formatted SQL.** All 84 changesets across 13 modules moved out of Liquibase's XML
+  change vocabulary into `--liquibase formatted sql` files, one changeset per file, named
+  `NNNN-<slug>.sql` with the changeset id `<prefix>-NNNN-<slug>` and the author `ludwig-<prefix>`, so
+  the filename and the `DATABASECHANGELOG` row cannot disagree. Each module keeps one XML root
+  changelog holding `<include>` elements and comments only - it stays XML because Liquibase 4.27's
+  formatted-SQL parser has no include directive. **Every root changelog keeps its existing path**, so
+  no consumer's `<include>` line, `spring.liquibase.change-log` setting or module property changes.
+  What a consumer sees instead is the DDL itself, in the file, rather than a vocabulary that generates
+  it - and 46 of those changesets already wrapped a raw `<sql>` block, so the repository was half SQL
+  already with no rule saying which to use.
+
+  **Four changeset-id namespaces were corrected** in the same pass, because the author is now derived
+  from the prefix: `ingest-` became `file-ingest-`, `usrset-` became `user-settings-`,
+  `notification-service`'s `0004-N-` scheme became `notification-00NN`/`ludwig-notification` like its
+  five siblings, and the reconciliation test changelog became `reconciliation-test-`. Sequence numbers
+  were renumbered to be unique and ascending within each module, which closed
+  `crud-service-example`'s two changesets numbered `003` and two numbered `004` and
+  `reconciliation`'s `004b`.
+
+  **If a database has already applied the XML changesets**, its next startup fails on a checksum
+  mismatch rather than a corrupt schema. Recovery is `liquibase clearChecksums` followed by a normal
+  `update`; for the four renamed namespaces above, the `DATABASECHANGELOG` rows also need their `ID`,
+  `AUTHOR` and `FILENAME` updated to the new values, or those changesets re-run. This change was made
+  on the recorded basis that no such deployment exists.
+
+- **Every changeset now declares `dbms:postgresql` and an explicit rollback.** The rollback is either
+  real SQL or `--rollback NOT REQUIRED`, which Liquibase parses to the same empty rollback as XML's
+  `<rollback/>`; 37 of the 84 previously declared none at all, so nothing distinguished "irreversible
+  by nature" from "nobody thought about it". The dialect declaration makes a non-PostgreSQL target
+  skip a changeset rather than fail halfway through the schema. `pat-0002`'s rollback now also drops
+  `ux_ludwig_pat_key_id`, which the XML version left behind.
+
+- **BREAKING - `odata-filter-spring-boot-starter`: `ODataFilterProperties` moves from `..config..` to
+  `..properties..`.** Only the import changes. It was the single class holding the module's entire
+  package-cycle problem: `core`, `web` and `policy` each read the bound properties while the wiring in
+  `config` references every package in the module, and those three inbound edges closed **twenty** distinct
+  cycles through `config` - every cycle the module had. One move removed all twenty. The auto-configuration
+  classes deliberately stay in `config`, because an auto-configuration class's fully-qualified name is
+  configuration API: a deployment switches one off with `spring.autoconfigure.exclude=...` in YAML, which no
+  compiler checks, so renaming that package would break an exclusion silently at runtime.
+- **`odata-filter-spring-boot-starter`: bound properties are validated at startup.** `maxDepth`,
+  `maxPageSize`, `defaultPageSize`, `maxNestedPropertyDepth` and `maxExpressionLength` must each be at least
+  1, and none of them was checked before. A `max-page-size` of 0 was accepted and then failed *every* query
+  at the first request, with a message naming `$top` - pointing an operator at the caller rather than at the
+  line of configuration that caused it. `hibernate-validator` is taken as an **optional** dependency, so it
+  does not reach a consumer; every in-repo consumer already ships one.
+- **`odata-filter-spring-boot-starter`: its `ArchitectureTest` now disables nothing as debt.**
+  `cycles.modules-are-free-of-cycles` and
+  `configuration-properties.configuration-properties-are-validated` were both switched off when the module
+  first got an architecture test; both are enabled.
+- **`odata-filter-spring-boot-starter`: a filter application is recorded to `audit-core`'s single
+  `AuditSink`**, under the `query` category, instead of being published only as a Spring application event
+  that each consumer had to forward itself. The event is still published as an in-process hook. Whether a
+  sink outage fails the query is `AuditFailurePolicy`'s decision, resolved from the deployment's
+  configuration - this module wraps the sink call in no `try`/`catch`.
+- **BREAKING - `odata-filter-spring-boot-starter`: `ODataQueryExecutor`, `ODataSearch` and `ODataPage` move
+  from `..querydsl..` to `..execution..`.** `core` already depended on `querydsl`, so the executor
+  depending on `core` from inside `querydsl` was a package cycle - introduced by the previous change and
+  caught by this one's new architecture test. Only the import changes.
+- **`odata-filter-spring-boot-starter`: `FilterSummary` lives in `..ast..`**, not `..audit..`. It describes
+  a filter rather than an audit concept, and the new audit rule is right to insist that a type in a
+  module's audit package produces the platform envelope.
+- **BREAKING - `odata-filter-spring-boot-starter`: `ODataFilterService.parse` takes an
+  `ODataQueryOptions`** instead of four positional parameters, two `String` and two `Integer`. The old
+  signature let a call site transpose `filter` and `orderBy`, or `top` and `skip`, and still compile.
+- **BREAKING - `odata-filter-spring-boot-starter`: `ODataQuery.predicate()` returns
+  `Optional<Predicate>`** and is empty when the caller supplied no `$filter`, where it used to return
+  `Expressions.TRUE`. An always-true predicate is indistinguishable from a caller's real one, which is
+  why `export-spring-boot-starter` was appending an unconditional `AND true` to every unfiltered report.
+- **BREAKING - `odata-filter-spring-boot-starter`: `ODataQueryArgumentResolver` and
+  `odata.filter.web.argument-resolver-enabled` are removed.** The resolver was deprecated and off by
+  default with no replacement; `ODataQueryOptions` is the replacement. Its request-reading half is kept
+  verbatim, including the non-`$`-prefixed parameter aliases.
+- **BREAKING - `web-core-spring-boot-starter`: `PageResponse`'s totals are nullable** (`Long`,
+  `Integer`) and omitted from the JSON when the caller declined the count. Its canonical constructor
+  gained `offset` and changed the totals' types; the factory methods are the supported way in and are
+  source-compatible apart from the new `of(List, long, int, Long)`.
 - **`LocaleContextHolder.getTimeZone()` now answers the caller's zone on a request thread.** It
   previously answered `TimeZone.getDefault()` - the container's zone - because
   `AcceptHeaderLocaleResolver` is a plain `LocaleResolver` and never publishes a
@@ -80,6 +207,16 @@ either.
   row for a user in Yekaterinburg. `ReportCaller` gains `preferences()`, and `locale()` and `zone()`
   become `default` methods over it - a source-compatible addition for a caller, and a method an
   implementor of that interface must now supply. An explicit `timeZone` in a report request still wins.
+
+
+### Removed
+
+- **BREAKING - `odata-filter-spring-boot-starter`: `FilterAppliedEvent`'s `rawFilter` and
+  `resolvedPredicate` components.** Both were the caller's literal values verbatim - `rawFilter` is the
+  `$filter` string as sent, and `resolvedPredicate` was `predicate.toString()` - so a filter on an e-mail,
+  phone or document-number field put that value into whatever listened. They are replaced by a
+  `FilterSummary` carrying the property paths and the operators and no value in any form: not hashed, not
+  truncated, not collected.
 
 ### Fixed
 

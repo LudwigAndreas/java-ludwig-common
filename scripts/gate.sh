@@ -67,7 +67,7 @@ fi
   die "repository layout check failed" 1
 }
 
-# Two file-only checks, before Maven, because they cost milliseconds and catch a class of defect
+# Three file-only checks, before Maven, because they cost milliseconds and catch a class of defect
 # the build cannot see:
 #
 #   check_image_pins     a container image referenced by tag alone. Not a Java fact and not a POM
@@ -75,7 +75,11 @@ fi
 #   check_api_baseline   an API baseline that is UNRESOLVABLE rather than absent. revapi treats
 #                        both as the same warning; the distinction is the difference between "no
 #                        comparison was possible" and "the comparison silently did nothing".
-COMMANDS=("scripts/check_image_pins.sh" "scripts/check_api_baseline.sh" "mvn -q validate")
+#   check_migrations     a Liquibase changeset authored in XML, a changeset id that disagrees with
+#                        its filename, a missing rollback, an un-namespaced id, an include that
+#                        resolves to nothing, or a migration file nothing includes. A changelog is a
+#                        resource, so ArchUnit cannot see it and Checkstyle is not pointed at it.
+COMMANDS=("scripts/check_image_pins.sh" "scripts/check_api_baseline.sh" "scripts/check_migrations.sh" "mvn -q validate")
 
 if [ "$FULL" = 1 ]; then
   COMMANDS+=("mvn clean install")

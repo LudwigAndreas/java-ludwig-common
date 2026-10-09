@@ -5,23 +5,22 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.notification.repository.DeliveryContentRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatus;
 import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntity;
-import ru.ludwigandreas.notification.repository.query.DeliverySearchCriteria;
 import ru.ludwigandreas.notification.service.exception.DeliveryContentUnavailableException;
 import ru.ludwigandreas.notification.service.exception.DeliveryNotFoundException;
 import ru.ludwigandreas.notification.service.exception.IllegalDeliveryTransitionException;
 import ru.ludwigandreas.notification.service.mapper.NotificationEntityMapper;
 import ru.ludwigandreas.notification.service.model.DeliveryContentView;
-import ru.ludwigandreas.notification.service.model.DeliveryQuery;
 import ru.ludwigandreas.notification.service.model.DeliveryTransition;
 import ru.ludwigandreas.notification.service.model.DeliveryView;
 import ru.ludwigandreas.notification.service.queue.DeliveryStatusRecorder;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.data.DataAction;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
@@ -59,17 +58,17 @@ public class DeliveryAdminService {
     private final DataAccessGuard dataAccessGuard;
 
     /**
-     * Translates the business layer's query into the repository's criteria.
+     * Passes the caller's options down unparsed.
      *
-     * <p>The translation happens here rather than in the controller so that the persistence layer's
-     * own types never appear in a web signature - which is what the layering rules check, and what
-     * stops the next change from passing an entity out through the same door.
+     * <p>There is nothing to translate any more: the options are one value from the controller to the
+     * repository, and only the repository - the layer that owns the entity - resolves them. This method
+     * used to build a second, structurally identical criteria record purely to avoid naming a
+     * persistence type in a web signature; a request object that names neither layer's types removes
+     * the need for the copy.
      */
     @Transactional(readOnly = true)
-    public Page<DeliveryView> search(DeliveryQuery query) {
-        DeliverySearchCriteria criteria =
-                new DeliverySearchCriteria(query.filter(), query.orderBy(), query.top(), query.skip());
-        return deliveryRepository.search(criteria).map(mapper::toView);
+    public ODataPage<DeliveryView> search(ODataQueryOptions options) {
+        return deliveryRepository.search(options).map(mapper::toView);
     }
 
     @Transactional(readOnly = true)

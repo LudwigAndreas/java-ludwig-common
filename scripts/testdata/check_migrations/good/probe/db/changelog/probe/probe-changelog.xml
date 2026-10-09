@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fixture: a conforming module. scripts/check_migrations.sh --self-test asserts this tree produces
+  zero findings, which is the half of the self-test that catches a rule firing when it should not.
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <include file="classpath:db/changelog/probe/0001-create-thing.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/probe/0002-guard-thing.sql" relativeToChangelogFile="false"/>
+
+</databaseChangeLog>

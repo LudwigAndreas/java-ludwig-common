@@ -4,7 +4,6 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,13 +13,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 import ru.ludwigandreas.example.catalog.service.ProductService;
 import ru.ludwigandreas.example.catalog.service.model.Product;
-import ru.ludwigandreas.example.catalog.service.model.ProductQuery;
 import ru.ludwigandreas.example.catalog.web.dto.CreateProductRequest;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.webcore.web.PageResponse;
 import ru.ludwigandreas.example.catalog.web.dto.ProductResponse;
 import ru.ludwigandreas.example.catalog.web.dto.UpdateProductRequest;
@@ -71,17 +70,17 @@ public class ProductController {
      * {@code GET /api/v1/products?$filter=price lt 100 and category/code eq 'TOOLS'&$orderby=price desc&$top=20}.
      * Which fields may appear in {@code $filter}/{@code $orderby} is decided by the entity's
      * {@code @Filterable} annotations, not by this signature.
+     *
+     * <p>The five options arrive as one {@link ODataQueryOptions}, bound by the starter's own argument
+     * resolver and described in the OpenAPI document by its customizer. They travel down unparsed, so
+     * neither this signature nor the service's names a JPA entity or a QueryDSL type.
      */
     @GetMapping
     @PreAuthorize("hasAnyRole('CATALOG_READER', 'CATALOG_EDITOR', 'CATALOG_ADMIN', "
             + "'CATALOG_PARTNER', 'CATALOG_WATCHER')")
-    public PageResponse<ProductResponse> search(
-            @RequestParam(name = "$filter", required = false) String filter,
-            @RequestParam(name = "$orderby", required = false) String orderBy,
-            @RequestParam(name = "$top", required = false) Integer top,
-            @RequestParam(name = "$skip", required = false) Integer skip) {
-        Page<Product> page = productService.search(new ProductQuery(filter, orderBy, top, skip));
-        return PageResponse.of(page.map(mapper::toResponse));
+    public PageResponse<ProductResponse> search(ODataQueryOptions options) {
+        ODataPage<ProductResponse> page = productService.search(options).map(mapper::toResponse);
+        return PageResponse.of(page.content(), page.offset(), page.size(), page.totalElements());
     }
 
     @PutMapping("/{id}")

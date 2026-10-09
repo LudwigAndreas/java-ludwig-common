@@ -486,6 +486,14 @@
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
             </dependency>
+            <!-- The annotations and the OperationCustomizer SPI without the UI, for a starter that
+                 contributes to an application's OpenAPI document but must not force the swagger-ui
+                 webjar on a service that has no use for it. odata-filter uses exactly this. -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-common</artifactId>
+                <version>${springdoc.version}</version>
+            </dependency>
             <!-- Spring Boot manages spring-kafka too; pinned here so the platform's Kafka line is
                  visible in one place and can be moved without moving the whole Boot line. -->
             <dependency>

@@ -155,7 +155,7 @@ ludwig.outbox.default-route.destination=default-topic
   против вашего основного `DataSource`, отдельно от вашего `spring.liquibase.change-log`. Выключается
   через `ludwig.outbox.liquibase.enabled=false`.
 
-Идентификаторы и автор набора изменений (`outbox-NNN`/`ludwig-outbox`) вынесены в собственное
+Идентификаторы и автор набора изменений (`outbox-NNNN`/`ludwig-outbox`) вынесены в собственное
 пространство имён, поэтому они никогда не столкнутся с вашими в общей таблице `DATABASECHANGELOG`.
 
 ## Репозитории

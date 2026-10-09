@@ -409,7 +409,7 @@ REST API, тогда как здешнее - в пайлоаде actuator; по�
 Об этом лучше сказать громко, чем дать кому-то обнаружить самому:
 
 - **Колонка `status` в `file_ingest_run` мигрируется** changesetом
-  `ingest-004-rename-completed-to-succeeded`, который защищён preCondition и потому ничего не
+  `file-ingest-0004-rename-completed-to-succeeded`, который защищён preCondition и потому ничего не
   делает на чистой установке и идемпотентен при повторном запуске. У него есть rollback.
 - **Пайлоад actuator `fileingest` изменил форму.** Отдельные поля `status`, `startedAt`,
   `finishedAt` и `failure` каждого прогона заменены одним полем `operation` с платформенным
@@ -433,7 +433,7 @@ REST-поверхности здесь по-прежнему нет, и это �
 ## Схема
 
 `db/changelog/file-ingest/file-ingest-changelog.xml`, идентификаторы и автор changeset'ов в своём
-пространстве имён (`ingest-NNN` / `ludwig-file-ingest`), применяется собственной
+пространстве имён (`file-ingest-NNNN` / `ludwig-file-ingest`), применяется собственной
 `FileIngestLiquibaseAutoConfiguration` - точной копией `JobCoreLiquibaseAutoConfiguration`, включая
 `@AutoConfigureAfter(LiquibaseAutoConfiguration.class)` и защиту **по имени** (защита по типу заставила бы
 бин подавлять сам себя). Переключается через `ludwig.ingest.liquibase.enabled`.

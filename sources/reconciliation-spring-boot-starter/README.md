@@ -687,7 +687,7 @@ This module no longer has an audit mechanism of its own. `ReconciliationAuditLog
 with its repository is gone too - nothing in this repository ever wrote it (the
 `PersistingReconciliationAuditLogger` its javadoc referred to did not exist), and any rows a
 deployment wrote through a logger of its own are migrated into `audit_event` by the audit module's
-`audit-003` changeset. Its trail now goes through the
+`audit-0003` changeset. Its trail now goes through the
 platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
 SIEM through the transactional outbox, or several at once - see
 [`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
@@ -700,7 +700,7 @@ caller that wants its named components.
 
 `Category` becomes an **attribute** rather than `audit_event.category`. That column names the
 subsystem and these five name a kind of event within it; collapsing them would make one column mean
-two different things depending on the row. The `audit-003` migration maps it the same way, so a
+two different things depending on the row. The `audit-0003` migration maps it the same way, so a
 migrated row and a new one are the same shape.
 
 The outcome is inferred from the event name - `.failed`, `.timed-out` and `.reclaimed` are failures,

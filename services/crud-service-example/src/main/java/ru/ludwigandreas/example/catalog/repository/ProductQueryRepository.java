@@ -2,9 +2,9 @@ package ru.ludwigandreas.example.catalog.repository;
 
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductEntity;
-import ru.ludwigandreas.example.catalog.repository.query.ProductSearchCriteria;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 
 /**
  * Custom repository fragment holding every product query this service runs.
@@ -27,6 +27,9 @@ public interface ProductQueryRepository {
      */
     boolean skuTaken(String sku, UUID excludedId);
 
-    /** Runs an OData search, returning one page plus its total count. */
-    Page<ProductEntity> search(ProductSearchCriteria criteria);
+    /**
+     * Runs an OData search, returning one page plus its total - unless the caller sent
+     * {@code $count=false}, in which case there is no total and no count query was issued.
+     */
+    ODataPage<ProductEntity> search(ODataQueryOptions options);
 }

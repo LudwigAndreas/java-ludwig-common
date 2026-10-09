@@ -36,6 +36,20 @@ public final class AuditCategories {
     public static final String SETTINGS = "settings";
 
     /**
+     * A caller's read of a filterable collection: which properties were queried, by whom, and how.
+     *
+     * <p>Distinct from {@link #ACCESS}, which records authorization <em>decisions</em>. This records a
+     * read that was allowed. "Was alice permitted to search deliveries" and "what did alice search
+     * deliveries for" are different questions, and an investigation normally needs to join them rather
+     * than find them merged - the same reasoning that keeps {@link #CREDENTIAL} out of {@code ACCESS}.
+     *
+     * <p>An event in this category carries the property paths and operators a filter named and
+     * deliberately not the values compared against: a trail retained for years is read by people who
+     * are not entitled to the data it guards.
+     */
+    public static final String QUERY = "query";
+
+    /**
      * Work-dedup claims: a key replayed instead of re-executed, and a key presented with a different
      * request from the one it was claimed for.
      *

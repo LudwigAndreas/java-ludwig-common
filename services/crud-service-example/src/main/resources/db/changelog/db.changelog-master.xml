@@ -5,17 +5,27 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
 
+    <!--
+        Includes only. Every changeset is formatted SQL in its own NNNN-<slug>.sql file under
+        changes/ - see the database-migration capability. This file stays XML because Liquibase's
+        formatted-SQL parser has no include directive; it is wiring, not a migration.
+    -->
+
     <!-- This service's own schema. -->
-    <include file="classpath:db/changelog/changes/0001-catalog-schema.xml" relativeToChangelogFile="false"/>
-    <include file="classpath:db/changelog/changes/0002-catalog-reference-data.xml" relativeToChangelogFile="false"/>
-    <include file="classpath:db/changelog/changes/0003-catalog-security.xml" relativeToChangelogFile="false"/>
-    <include file="classpath:db/changelog/changes/0004-catalog-watchers.xml" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0001-product-category.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0002-product.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0003-product-indexes.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0004-reference-categories.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0005-product-supplier-partner.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0006-product-scope-indexes.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0007-product-watcher.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/changes/0008-product-watcher-index.sql" relativeToChangelogFile="false"/>
 
     <!--
         The outbox module ships its own changelog inside its jar. Including it here (rather than
         letting the module apply it standalone - see ludwig.outbox.liquibase.enabled=false) keeps
         every table this service owns under one migration history. Its changeset ids are namespaced
-        (outbox-NNN/ludwig-outbox), so they cannot collide with the ones above.
+        (outbox-NNNN/ludwig-outbox), so they cannot collide with the ones above.
     -->
     <include file="classpath:db/changelog/outbox/outbox-changelog.xml" relativeToChangelogFile="false"/>
 
@@ -28,14 +38,14 @@
     <!--
         And for the export module's four tables (export_report_run, export_report_output,
         export_saved_report, export_report_subscription) - see ludwig.export.liquibase.enabled=false.
-        Its changeset ids are namespaced (export-NNN/ludwig-export) for the same reason.
+        Its changeset ids are namespaced (export-NNNN/ludwig-export) for the same reason.
     -->
     <include file="classpath:db/changelog/export/export-changelog.xml" relativeToChangelogFile="false"/>
 
     <!--
         And for the file-action module's two tables (file_action_submission, file_action_row_reject) - see
         ludwig.file-action.liquibase.enabled=false. Its changeset ids are namespaced
-        (file-action-NNN/ludwig-file-action) for the same reason.
+        (file-action-NNNN/ludwig-file-action) for the same reason.
 
         The product-import action itself adds no changeset: it writes through ProductService into
         catalog_product, which already exists. An import is a different way in to an action the service

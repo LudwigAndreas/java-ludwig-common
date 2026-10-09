@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-04T14:17:53.602225Z",
+    "generatedAt": "2026-10-08T19:15:53.410542Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 33,
-    "commit": "b5e0c8cbaf5ff37d94556db0f5c011ca7c5c1efa",
-    "commitShort": "b5e0c8c",
-    "branch": "feature/file-input",
+    "commit": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+    "commitShort": "d4bb513",
+    "branch": "master",
     "freshness": {
-      "pomSetSha": "014d3295e62ce2ecb393c8be41aee4fd3353247f729330d99018549df2b8c493",
-      "newestPom": "build/ludwig-bom/pom.xml",
-      "newestPomModified": "2026-10-04T14:17:53.420865Z"
+      "pomSetSha": "efa98140f3c017f708f52c40af6d8540c5b580d2a64ffa12d0a126b155b69e63",
+      "newestPom": "sources/odata-filter-spring-boot-starter/pom.xml",
+      "newestPomModified": "2026-10-08T14:19:26.923388Z"
     }
   },
   "modules": [
@@ -76,6 +76,16 @@
       "packageRoot": "ru.ludwigandreas.odatafilter",
       "inRepoDependencies": [
         {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
           "artifactId": "test-support",
           "scope": "test",
           "optional": false
@@ -114,10 +124,11 @@
         "rest"
       ],
       "testDirs": {
-        "integration": "sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration"
+        "integration": "sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/integration",
+        "architecture": "sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/architecture"
       },
       "testClasses": {
-        "surefire": 8,
+        "surefire": 23,
         "failsafe": 1
       },
       "pom": "sources/odata-filter-spring-boot-starter/pom.xml",
@@ -166,6 +177,10 @@
         },
         {
           "artifactId": "observability-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -348,6 +363,10 @@
       ],
       "autoConfigImports": "sources/audit-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0001-create-audit-event.sql",
+        "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0002-migrate-user-setting-audit.sql",
+        "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0003-migrate-sync-audit-record.sql",
+        "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0004-normalise-redaction-marker.sql",
         "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/audit-changelog.xml"
       ],
       "i18nBundles": [
@@ -421,6 +440,7 @@
       ],
       "autoConfigImports": "sources/job-core/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/job-core/src/main/resources/db/changelog/job-core/0001-create-run-lock.sql",
         "sources/job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml"
       ],
       "i18nBundles": [],
@@ -492,6 +512,8 @@
       ],
       "autoConfigImports": "sources/idempotency-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/0001-create-claim.sql",
+        "sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/0002-migrate-notification-idempotency.sql",
         "sources/idempotency-spring-boot-starter/src/main/resources/db/changelog/idempotency/idempotency-changelog.xml"
       ],
       "i18nBundles": [
@@ -721,6 +743,20 @@
       ],
       "autoConfigImports": "sources/export-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0001-create-export-report-run.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0002-unique-idempotency-key.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0003-index-claim.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0004-index-reclaim.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0005-index-requester.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0006-create-export-report-output.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0007-fk-output-run.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0008-index-output-run.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0009-index-output-purge.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0010-create-export-saved-report.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0011-index-saved-report-definition.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0012-create-export-report-subscription.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0013-fk-subscription-saved-report.sql",
+        "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/0014-index-subscription-enabled.sql",
         "sources/export-spring-boot-starter/src/main/resources/db/changelog/export/export-changelog.xml"
       ],
       "i18nBundles": [
@@ -736,7 +772,7 @@
         "architecture": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/architecture"
       },
       "testClasses": {
-        "surefire": 16,
+        "surefire": 17,
         "failsafe": 2
       },
       "pom": "sources/export-spring-boot-starter/pom.xml",
@@ -861,6 +897,10 @@
       "inRepoDependents": [],
       "autoConfigImports": "sources/file-ingest-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0001-create-run.sql",
+        "sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0002-index-run-task-status.sql",
+        "sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0003-create-quarantine.sql",
+        "sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/0004-rename-completed-to-succeeded.sql",
         "sources/file-ingest-spring-boot-starter/src/main/resources/db/changelog/file-ingest/file-ingest-changelog.xml"
       ],
       "i18nBundles": [
@@ -963,6 +1003,8 @@
       ],
       "autoConfigImports": "sources/file-action-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/0001-create-submission.sql",
+        "sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/0002-create-row-reject.sql",
         "sources/file-action-spring-boot-starter/src/main/resources/db/changelog/file-action/file-action-changelog.xml"
       ],
       "i18nBundles": [
@@ -1054,6 +1096,11 @@
       ],
       "autoConfigImports": "sources/outbox-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0001-create-outbox-message.sql",
+        "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0002-index-poll.sql",
+        "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0003-index-ordering-key.sql",
+        "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0004-unique-idempotency-key.sql",
+        "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0005-create-status-history.sql",
         "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/outbox-changelog.xml"
       ],
       "i18nBundles": [],
@@ -1117,6 +1164,17 @@
       "inRepoDependents": [],
       "autoConfigImports": "sources/reconciliation-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0001-create-inbox-record.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0002-index-inbox-claim.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0003-index-inbox-key-history.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0004-index-inbox-stale-and-ops.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0005-index-inbox-fetch-suppression.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0006-create-task-state.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0007-create-remote-job.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0008-index-remote-job.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0009-create-quota-lease.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0010-create-quota-waiter.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0011-create-audit-record.sql",
         "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml"
       ],
       "i18nBundles": [],
@@ -1166,7 +1224,7 @@
         "unit": "sources/pat-core/src/test/java/ru/ludwigandreas/pat/unit"
       },
       "testClasses": {
-        "surefire": 7,
+        "surefire": 8,
         "failsafe": 0
       },
       "pom": "sources/pat-core/pom.xml",
@@ -1252,7 +1310,7 @@
         "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
       },
       "testClasses": {
-        "surefire": 20,
+        "surefire": 24,
         "failsafe": 0
       },
       "pom": "sources/security-spring-boot-starter/pom.xml",
@@ -1314,6 +1372,9 @@
       "inRepoDependents": [],
       "autoConfigImports": "sources/pat-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/0001-create-token.sql",
+        "sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/0002-unique-key-ids.sql",
+        "sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/0003-owner-index.sql",
         "sources/pat-spring-boot-starter/src/main/resources/db/changelog/pat/pat-changelog.xml"
       ],
       "i18nBundles": [
@@ -1330,7 +1391,7 @@
       },
       "testClasses": {
         "surefire": 7,
-        "failsafe": 7
+        "failsafe": 10
       },
       "pom": "sources/pat-spring-boot-starter/pom.xml",
       "readme": "sources/pat-spring-boot-starter/README.md",
@@ -1375,6 +1436,13 @@
       ],
       "autoConfigImports": "sources/identity-projection-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0001-create-security-user.sql",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0002-create-security-user-role.sql",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0003-create-security-partner.sql",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0004-create-security-partner-role.sql",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0005-create-security-grant.sql",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0006-security-grant-dimension-check.sql",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0007-security-user-contact.sql",
         "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml"
       ],
       "i18nBundles": [],
@@ -1750,6 +1818,11 @@
       ],
       "autoConfigImports": "sources/user-settings-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [
+        "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0001-create-user-setting-value.sql",
+        "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0002-user-setting-value-scope-check.sql",
+        "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0003-create-user-setting-audit.sql",
+        "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0004-create-user-consent.sql",
+        "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0005-user-consent-update-guard.sql",
         "sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/user-settings-changelog.xml"
       ],
       "i18nBundles": [
@@ -1806,6 +1879,10 @@
         },
         {
           "artifactId": "object-storage-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "odata-filter-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2104,10 +2181,14 @@
       "inRepoDependents": [],
       "autoConfigImports": null,
       "liquibaseChangelogs": [
-        "services/crud-service-example/src/main/resources/db/changelog/changes/0001-catalog-schema.xml",
-        "services/crud-service-example/src/main/resources/db/changelog/changes/0002-catalog-reference-data.xml",
-        "services/crud-service-example/src/main/resources/db/changelog/changes/0003-catalog-security.xml",
-        "services/crud-service-example/src/main/resources/db/changelog/changes/0004-catalog-watchers.xml",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0001-product-category.sql",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0002-product.sql",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0003-product-indexes.sql",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0004-reference-categories.sql",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0005-product-supplier-partner.sql",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0006-product-scope-indexes.sql",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0007-product-watcher.sql",
+        "services/crud-service-example/src/main/resources/db/changelog/changes/0008-product-watcher-index.sql",
         "services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml"
       ],
       "i18nBundles": [
@@ -2215,12 +2296,23 @@
       "inRepoDependents": [],
       "autoConfigImports": null,
       "liquibaseChangelogs": [
-        "services/notification-service/src/main/resources/db/changelog/changes/0001-notification-schema.xml",
-        "services/notification-service/src/main/resources/db/changelog/changes/0002-notification-recipients.xml",
-        "services/notification-service/src/main/resources/db/changelog/changes/0003-notification-platform-gaps.xml",
-        "services/notification-service/src/main/resources/db/changelog/changes/0004-preferences-move-out.xml",
-        "services/notification-service/src/main/resources/db/changelog/changes/0005-fold-lock-into-job-core.xml",
-        "services/notification-service/src/main/resources/db/changelog/changes/0006-fold-idempotency-into-starter.xml",
+        "services/notification-service/src/main/resources/db/changelog/changes/0001-request.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0002-delivery.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0003-delivery-indexes.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0004-delivery-status-history.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0005-delivery-content.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0006-recipient-profile.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0007-recipient-preference.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0008-suppression.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0009-idempotency.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0010-lock.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0011-rate-limit-window.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0012-template-revision.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0013-record-quiet-hours-deferral.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0014-drop-recipient-preference.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0015-drop-recipient-profile.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0016-drop-lock-table.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0017-drop-idempotency.sql",
         "services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml"
       ],
       "i18nBundles": [

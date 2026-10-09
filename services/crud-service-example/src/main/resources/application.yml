@@ -438,6 +438,17 @@ odata:
     # own message bundle to the web-core pipeline, so query errors come back localized and in the
     # same shape as every other error - which is what this service used to disable that starter's
     # advice and re-handle all seven of its exception types by hand to achieve.
+    metadata:
+      # Setting this is what mounts filter-policy discovery; unset, the endpoint does not exist at all.
+      # It is still per-entity opt-in on top: only ProductEntity declares
+      # @FilterPolicy(metadataName = ...), so GET .../product answers and nothing else does. CategoryEntity
+      # has @Filterable fields and is deliberately NOT published - it has no search endpoint of its own and
+      # is reachable only as `category/code` from a product, so advertising a filterable surface for it
+      # would describe a query no client can send.
+      #
+      # Each caller gets its own answer: a path its roles do not allow is absent from the document rather
+      # than listed as forbidden, so the document never names a column or a privilege the caller cannot use.
+      base-path: /api/v1/filter-metadata
 
 management:
   endpoints:

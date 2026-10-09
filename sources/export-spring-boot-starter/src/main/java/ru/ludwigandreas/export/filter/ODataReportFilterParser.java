@@ -6,6 +6,7 @@ import ru.ludwigandreas.export.api.ReportDefinition;
 import ru.ludwigandreas.export.engine.ReportFilterParser;
 import ru.ludwigandreas.odatafilter.core.ODataFilterService;
 import ru.ludwigandreas.odatafilter.core.ODataQuery;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
 
 /**
  * Parses a requester's {@code $filter} with {@code odata-filter-spring-boot-starter}.
@@ -25,6 +26,9 @@ import ru.ludwigandreas.odatafilter.core.ODataQuery;
  * {@code sort}, which is validated against what the {@code RowSource} can actually order by. An
  * {@code $orderby} accepted here would be a second, unvalidated way to set it, and a source that
  * ignored it would break keyset pagination silently.
+ *
+ * <p>{@link ODataQueryOptions#filterOnly} is how all three of those omissions are stated in one place
+ * rather than as three nulls in a positional argument list.
  */
 public class ODataReportFilterParser implements ReportFilterParser {
 
@@ -42,7 +46,11 @@ public class ODataReportFilterParser implements ReportFilterParser {
             // here means the request carried a filter for a report that declares none at all.
             throw new ReportNotFilterableException(definition.getKey());
         }
-        ODataQuery<?> query = filters.parse(entityType, filter, null, null, null);
-        return Optional.ofNullable(query.predicate());
+        ODataQuery<?> query = filters.parse(entityType, ODataQueryOptions.filterOnly(filter));
+        // Returned straight through. This used to be Optional.ofNullable(query.predicate()), which
+        // could not be empty: the service returned Expressions.TRUE for "no filter", so a report with
+        // no filter had an unconditional AND true appended and the Optional promised a distinction the
+        // service was unable to make. The predicate is now absent when the requester sent no filter.
+        return query.predicate();
     }
 }

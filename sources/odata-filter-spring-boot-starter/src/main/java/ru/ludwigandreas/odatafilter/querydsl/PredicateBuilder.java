@@ -48,7 +48,7 @@ public final class PredicateBuilder {
     private static final int MAX_IN_VALUES = 500;
 
     public Predicate build(EntityFilterPolicy policy, FilterNode node) {
-        return build(rootPath(policy.entityType()), policy, node);
+        return build(ODataPaths.root(policy.entityType()), policy, node);
     }
 
     private BooleanExpression build(PathBuilder<?> root, EntityFilterPolicy policy, FilterNode node) {
@@ -143,12 +143,6 @@ public final class PredicateBuilder {
     private FilterFieldPolicy requireField(EntityFilterPolicy policy, String path) {
         return policy.field(path)
                 .orElseThrow(() -> new UnfilterableFieldException(path, "unknown or not filterable"));
-    }
-
-    private static PathBuilder<?> rootPath(Class<?> entityType) {
-        String simpleName = entityType.getSimpleName();
-        String alias = Character.toLowerCase(simpleName.charAt(0)) + simpleName.substring(1);
-        return new PathBuilder<>(entityType, alias);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fixture: one module that violates every per-file rule once. The include order is deliberately
+  wrong and one include names a file that does not exist.
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <include file="classpath:db/changelog/bad-files/0002-second.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0001-first.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0003-missing.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0004-no-header.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0005-two-changesets.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0006-no-dbms.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0007-no-rollback.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0008-bad-precondition.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0009-suspect-directive.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0010-id-mismatch.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/badname.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/bad-files/0002-duplicate.sql" relativeToChangelogFile="false"/>
+
+</databaseChangeLog>

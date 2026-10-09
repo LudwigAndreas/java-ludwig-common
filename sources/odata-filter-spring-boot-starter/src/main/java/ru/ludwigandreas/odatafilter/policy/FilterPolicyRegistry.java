@@ -14,9 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import ru.ludwigandreas.odatafilter.annotation.FilterPolicy;
 import ru.ludwigandreas.odatafilter.annotation.Filterable;
-import ru.ludwigandreas.odatafilter.config.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.parser.ODataOrderByParser;
 import ru.ludwigandreas.odatafilter.parser.OrderByTerm;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 
 /**
  * Builds and caches the effective {@link EntityFilterPolicy} for a given entity class by

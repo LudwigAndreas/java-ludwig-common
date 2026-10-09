@@ -1,0 +1,46 @@
+{
+  "change": "add-odata-filter-metadata",
+  "contract": {
+    "goal": "a client can learn what it may filter on without probing the endpoint with filters and reading the rejections - the behaviour this module's own README documents as an alerting signal",
+    "output": "a role-filtered, opt-in filter-policy document per entity, projected from the already-resolved EntityFilterPolicy; a registry built from the JPA metamodel; a controller mounted only when a base path is configured; a new metrics counter; crud-service-example as the reference arrangement",
+    "constraints": [
+      "opt-in per entity via @FilterPolicy(metadataName = ...); an entity that does not declare it answers 404, not an empty document",
+      "no endpoint at all until odata.filter.metadata.base-path is configured",
+      "the document is role-filtered by reusing FilterFieldPolicy.permitsRoles - never a second implementation of that rule",
+      "a path the caller may not use is ABSENT, never present-and-marked-forbidden, and no role name appears in the document",
+      "only @Filterable paths appear - the document is a projection of the allow-list, never of the schema",
+      "no cache: design D3. If one is ever added it goes through LudwigCacheRegistry with CachePurpose.SECURITY and a role-set key, never a Caffeine builder",
+      "it is not called $metadata and does not claim to be CSDL",
+      "no new in-repo dependency and no new third-party dependency; no POM changes",
+      "both locale bundles move together"
+    ],
+    "done_when": [
+      "scripts/manifest.sh stale",
+      "scripts/check_image_pins.sh",
+      "mvn -q validate",
+      "mvn -pl :odata-filter-spring-boot-starter -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "mvn clean install",
+      "openspec validate add-odata-filter-metadata"
+    ]
+  },
+  "current_task": "complete",
+  "decisions": [
+    "Carried forward, same environment: builds run with JAVA_HOME=/Users/ludwig/Library/Java/JavaVirtualMachines/temurin-17.0.19/Contents/Home, because Maven defaults to Homebrew JDK 26 here and JaCoCo 0.8.12 cannot instrument class file major version 70.",
+    "Carried forward: scripts/check_api_baseline.sh exits 1 and revapi compares against an empty archive (v1.1.0 tagged, artifacts unreachable). Pre-existing, out of scope by the user's earlier explicit decision, excluded from done_when and recorded in the receipt.",
+    "Carried forward from route-odata-filter-audit-through-audit-core: this module now HAS an ArchitectureTest, with cycles.modules-are-free-of-cycles and configuration-properties.configuration-properties-are-validated disabled as named debt. New code here must not rely on those being off - in particular, the new metadata package must not add an edge that would be a cycle once fix-odata-filter-package-cycles re-enables the rule.",
+    "4.1 DEVIATION: published only ProductEntity, not CategoryEntity as the task said. CategoryEntity has @Filterable fields but there is no CategoryController in the service at all - it is reachable only as category/code from a product. Publishing it would advertise a filterable surface for a resource no client can filter. It now serves as the reference 'filterable but deliberately unpublished' case, which the spec requires to 404, and the service's integration test asserts exactly that.",
+    "1.3: the type-name mapping is a Map lookup, not an if-chain. The chain was a 28-branch method Checkstyle refused (max 15), and a reader would have had to verify it line by line.",
+    "2.2: the 'registry resolves names only' test asserts on method RETURN TYPES, not on a method-name list. The name list broke under JaCoCo instrumentation ($jacocoInit) and was a weaker expression of the constraint anyway - what matters is that this class never produces a document.",
+    "3.4: the endpoint's two conditions (a configured base-path, and enabled) could not sit on one declaration because @ConditionalOnProperty is not repeatable, so the beans live in a nested @Configuration conditional on base-path inside an outer auto-configuration conditional on enabled. The path is applied as a PathMatchConfigurer prefix rather than a @RequestMapping literal, because where discovery sits beside a service's own resources is the deployment's choice.",
+    "Test fixture: Employee in this module's testmodel now declares metadataName = \"employee\", and Department (which has @Filterable fields and no @FilterPolicy) is the unpublished case. No new test entity was needed."
+  ],
+  "failures": [],
+  "open_questions": [],
+  "pending_human": [],
+  "rollback_point": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+  "index_version": "a3e73a09bbcb681b5c5bb8ee608105d5b0e57ea063a45720977d7df7c072f05c"
+}

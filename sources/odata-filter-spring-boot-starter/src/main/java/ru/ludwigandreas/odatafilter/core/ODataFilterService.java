@@ -1,7 +1,6 @@
 package ru.ludwigandreas.odatafilter.core;
 
 import com.querydsl.core.types.Predicate;
-import com.querydsl.core.types.dsl.Expressions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -10,9 +9,10 @@ import java.util.Set;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.odatafilter.ast.FilterNode;
+import ru.ludwigandreas.odatafilter.ast.FilterSummary;
 import ru.ludwigandreas.odatafilter.audit.FilterAppliedEvent;
-import ru.ludwigandreas.odatafilter.config.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.exception.FilterSyntaxException;
 import ru.ludwigandreas.odatafilter.exception.PageSizeExceededException;
 import ru.ludwigandreas.odatafilter.metrics.ODataFilterMetrics;
@@ -21,6 +21,7 @@ import ru.ludwigandreas.odatafilter.parser.ODataOrderByParser;
 import ru.ludwigandreas.odatafilter.parser.OrderByTerm;
 import ru.ludwigandreas.odatafilter.policy.EntityFilterPolicy;
 import ru.ludwigandreas.odatafilter.policy.FilterPolicyRegistry;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.querydsl.PredicateBuilder;
 import ru.ludwigandreas.odatafilter.security.FilterPrincipalResolver;
 import ru.ludwigandreas.odatafilter.validation.DepthValidator;
@@ -41,6 +42,10 @@ import ru.ludwigandreas.odatafilter.validation.FilterValidator;
  * <p>Order of operations, all of which can reject the request: raw-length guard, syntax parsing,
  * depth check, field/operator/role check ({@code @Filterable}), any registered
  * {@link FilterValidator} beans, page-size check, then translation to a QueryDSL predicate.
+ *
+ * <p>The caller's options arrive as one {@link ODataQueryOptions}. They used to be four positional
+ * parameters, two of them {@code String} and two {@code Integer}, which a call site could transpose
+ * and still compile.
  */
 public class ODataFilterService {
 
@@ -51,6 +56,7 @@ public class ODataFilterService {
     private final List<FilterValidator> customValidators;
     private final ApplicationEventPublisher eventPublisher;
     private final ODataFilterMetrics metrics;
+    private final AuditSink auditSink;
 
     private final ODataFilterParser filterParser = new ODataFilterParser();
     private final ODataOrderByParser orderByParser = new ODataOrderByParser();
@@ -62,7 +68,8 @@ public class ODataFilterService {
             FilterPrincipalResolver principalResolver,
             List<FilterValidator> customValidators,
             ApplicationEventPublisher eventPublisher,
-            ODataFilterMetrics metrics) {
+            ODataFilterMetrics metrics,
+            AuditSink auditSink) {
         this.properties = properties;
         this.policyRegistry = policyRegistry;
         this.predicateBuilder = predicateBuilder;
@@ -70,12 +77,13 @@ public class ODataFilterService {
         this.customValidators = List.copyOf(customValidators);
         this.eventPublisher = eventPublisher;
         this.metrics = metrics;
+        this.auditSink = auditSink;
     }
 
-    public <T> ODataQuery<T> parse(Class<T> entityType, String filter, Integer top, Integer skip, String orderBy) {
+    public <T> ODataQuery<T> parse(Class<T> entityType, ODataQueryOptions options) {
         long startNanos = System.nanoTime();
         try {
-            ODataQuery<T> result = doParse(entityType, filter, top, skip, orderBy);
+            ODataQuery<T> result = doParse(entityType, options);
             metrics.recordFilterApplied(entityType.getSimpleName());
             return result;
         } catch (RuntimeException e) {
@@ -86,39 +94,56 @@ public class ODataFilterService {
         }
     }
 
-    private <T> ODataQuery<T> doParse(
-            Class<T> entityType, String filter, Integer top, Integer skip, String orderBy) {
+    private <T> ODataQuery<T> doParse(Class<T> entityType, ODataQueryOptions options) {
         EntityFilterPolicy policy = policyRegistry.policyFor(entityType);
         Set<String> callerRoles = principalResolver.resolveRoles();
+        String filter = options.filter();
 
-        Predicate predicate = Expressions.TRUE;
-        if (filter != null && !filter.isBlank()) {
+        Predicate predicate = null;
+        FilterNode filterAst = null;
+        if (options.hasFilter()) {
             if (filter.length() > properties.getMaxExpressionLength()) {
                 throw new FilterSyntaxException(
                         "$filter exceeds the maximum allowed length of " + properties.getMaxExpressionLength());
             }
-            FilterNode root = filterParser.parse(filter);
-            DepthValidator.validate(root, policy.maxDepth());
-            FieldAccessValidator.validate(policy, root, callerRoles);
+            filterAst = filterParser.parse(filter);
+            DepthValidator.validate(filterAst, policy.maxDepth());
+            FieldAccessValidator.validate(policy, filterAst, callerRoles);
             for (FilterValidator validator : customValidators) {
-                validator.validate(new FilterValidationContext(entityType, filter, root, callerRoles));
+                validator.validate(new FilterValidationContext(entityType, filter, filterAst, callerRoles));
             }
-            predicate = predicateBuilder.build(policy, root);
+            predicate = predicateBuilder.build(policy, filterAst);
         }
 
-        List<OrderByTerm> requestedOrderBy = orderByParser.parse(orderBy);
+        List<OrderByTerm> requestedOrderBy = orderByParser.parse(options.orderBy());
         FieldAccessValidator.validateOrderBy(policy, requestedOrderBy, callerRoles);
 
-        int pageSize = resolvePageSize(policy, top);
-        long offset = resolveOffset(skip);
+        int pageSize = resolvePageSize(policy, options.top());
+        long offset = resolveOffset(options.skip());
         Sort sort = toSort(requestedOrderBy, policy.defaultOrderBy());
         Pageable pageable = new OffsetPageRequest(offset, pageSize, sort);
 
-        if (eventPublisher != null) {
-            eventPublisher.publishEvent(new FilterAppliedEvent(entityType, filter, predicate.toString(), callerRoles));
-        }
+        recordAndPublish(new FilterAppliedEvent(entityType, FilterSummary.of(filterAst), callerRoles));
 
-        return new ODataQuery<>(predicate, pageable, filter);
+        return new ODataQuery<>(predicate, pageable, filter, options.countRequested());
+    }
+
+    /**
+     * Records the application to the platform's one audit sink, then publishes the in-process event.
+     *
+     * <p><b>No try/catch, deliberately.</b> Whether a sink failure fails this query is
+     * {@code AuditFailurePolicy}, resolved from the deployment's configuration and applied by
+     * {@code FailurePolicyAuditSink}. A catch here would override that with a decision hard-coded in a
+     * library - and the deployment that chose {@code FAIL_OPERATION} for this category chose it because
+     * it would rather lose the read than lose the record of it.
+     *
+     * <p>The sink first, the event second: a listener that throws must not be able to stop the trail.
+     */
+    private void recordAndPublish(FilterAppliedEvent event) {
+        auditSink.record(event.toAuditEvent());
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(event);
+        }
     }
 
     private int resolvePageSize(EntityFilterPolicy policy, Integer top) {

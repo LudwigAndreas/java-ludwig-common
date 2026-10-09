@@ -6,12 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.querydsl.core.types.Predicate;
 import org.junit.jupiter.api.Test;
 import ru.ludwigandreas.odatafilter.ast.FilterNode;
-import ru.ludwigandreas.odatafilter.config.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.exception.FilterSyntaxException;
 import ru.ludwigandreas.odatafilter.exception.UnfilterableFieldException;
 import ru.ludwigandreas.odatafilter.parser.ODataFilterParser;
 import ru.ludwigandreas.odatafilter.policy.EntityFilterPolicy;
 import ru.ludwigandreas.odatafilter.policy.FilterPolicyRegistry;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.testmodel.Employee;
 
 class PredicateBuilderTest {

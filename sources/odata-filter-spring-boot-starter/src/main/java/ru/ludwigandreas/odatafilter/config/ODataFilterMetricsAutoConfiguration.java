@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean;
 import ru.ludwigandreas.odatafilter.metrics.MicrometerODataFilterMetrics;
 import ru.ludwigandreas.odatafilter.metrics.NoopODataFilterMetrics;
 import ru.ludwigandreas.odatafilter.metrics.ODataFilterMetrics;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 
 @AutoConfiguration
 @EnableConfigurationProperties(ODataFilterProperties.class)

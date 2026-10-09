@@ -79,7 +79,7 @@ public class FileIngestRun extends GeneratedEntity<UUID> {
      * value: what this module called {@code COMPLETED} the platform calls {@code SUCCEEDED}. Export
      * had the same state under the other spelling and its word was already in a published REST API,
      * so this module's actuator payload was the cheaper of the two to move. The rename is a
-     * Liquibase changeset - {@code ingest-004-rename-completed-to-succeeded} - because the value is
+     * Liquibase changeset - {@code file-ingest-0004-rename-completed-to-succeeded} - because the value is
      * persisted.
      *
      * <p>The three states this module actually reaches stay three. Every one of them is a state an

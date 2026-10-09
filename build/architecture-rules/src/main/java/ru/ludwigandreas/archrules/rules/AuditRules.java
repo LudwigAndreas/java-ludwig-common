@@ -61,8 +61,60 @@ public final class AuditRules implements ArchitectureRuleSet {
     public static final RuleId NO_PRIVATE_AUDIT_LOGGER_NAMES =
             RuleId.of(RuleGroup.AUDIT, "no-private-audit-logger-names");
 
+    /**
+     * A type a module put in an {@code audit} package produces an {@code AuditEvent}, or it is not an
+     * audit type at all.
+     *
+     * <p><b>This closes a gap the first two rules left open, and the gap had a live instance.</b> Both
+     * rules above catch a module that declares <em>something extra</em> - a second SPI, a second logger.
+     * Neither catches a module that declares nothing and <em>also calls no sink</em>:
+     * {@code odata-filter-spring-boot-starter} had a {@code FilterAppliedEvent} in a package named
+     * {@code audit}, with no {@code toAuditEvent()}, no {@code AuditSink} and no dependency on
+     * {@code audit-core}. It published a plain Spring application event and its README told each consumer
+     * to write the forwarding listener. The build was green on the one module whose trail never reached
+     * the platform's sink - not using the mechanism is a way of having a second one, and it is the way
+     * that leaves no evidence.
+     *
+     * <p><b>Why the anchor is a record in an {@code audit} package.</b> A rule over application events
+     * would be both too broad (events have many legitimate uses) and too narrow (a module could publish
+     * through anything). Putting a type in a package called {@code audit} is the module's own written
+     * statement that this is its audit trail; narrowing to records is what makes the rule true rather than
+     * merely suggestive.
+     *
+     * <p>An {@code audit} package legitimately holds a good deal that is not an event, and a first draft of
+     * this rule flagged all of it: {@code FileActionAuditActions} (action-name constants),
+     * {@code FileActionAuditEvent$FileActionAuditEventBuilder} (Lombok's generated builder),
+     * {@code db-core}'s {@code AuditorProvider} (JPA's unrelated sense of "auditing"),
+     * {@code security}'s {@code AuthorizationDeniedAuditListener}, {@code outbox}'s loggers,
+     * {@code user-settings}' {@code SettingsAuditRecorder}. Every one of those is machinery or vocabulary,
+     * and machinery that declares a seam is what the first rule in this set already catches.
+     *
+     * <p>A <em>record</em> there is different: it is a data carrier, which in an audit package means it is
+     * the event. All five compliant modules spell it that way - {@code IdempotencyAuditEvent},
+     * {@code IngestAuditEvent}, {@code HotReloadAuditEntry}, {@code OutboxTransitionAudit},
+     * {@code AccessDecision} - and each has a method returning the envelope. {@code FilterAppliedEvent}
+     * was a record in an audit package with no such method, which is exactly the shape this catches.
+     *
+     * <p><b>The evasions no check can catch</b> are renaming the package and declaring the event as a class
+     * instead of a record. Either silences this rule - and either is visible in review in a way the original
+     * silence was not, which is the whole of the improvement.
+     */
+    public static final RuleId AUDIT_TYPES_PRODUCE_AUDIT_EVENTS =
+            RuleId.of(RuleGroup.AUDIT, "audit-types-produce-audit-events");
+
     /** The package that legitimately declares the platform's audit types. */
     private static final String AUDIT_PACKAGES = "ru.ludwigandreas.audit..";
+
+    /**
+     * The platform envelope's fully-qualified name, matched as a string.
+     *
+     * <p>A string and not a {@code Class} on purpose: {@code architecture-rules} must not depend on
+     * {@code audit-core}. It is a test-scoped rule library that every module uses, and making it depend
+     * on a module it has rules about would invert the direction and pull {@code audit-core} onto the
+     * classpath of every build that only wanted the layering rules. The two rules above already match
+     * audit types by name for the same reason.
+     */
+    private static final String AUDIT_EVENT_TYPE = "ru.ludwigandreas.audit.AuditEvent";
 
     /**
      * A type name that reads as an audit seam.
@@ -99,7 +151,16 @@ public final class AuditRules implements ArchitectureRuleSet {
                 ArchitectureRule.optIn(NO_PRIVATE_AUDIT_LOGGER_NAMES, noPrivateAuditLoggerNames(),
                         "Do not create a logger whose name ends in '.audit'. The platform's trail is on the"
                                 + " ru.ludwigandreas.audit logger, routed to its own appender and retention;"
-                                + " a second audit logger name is a second stream nobody has configured."));
+                                + " a second audit logger name is a second stream nobody has configured."),
+                ArchitectureRule.of(AUDIT_TYPES_PRODUCE_AUDIT_EVENTS, auditTypesProduceAuditEvents(),
+                        "Give this record a toAuditEvent() returning ru.ludwigandreas.audit.AuditEvent, and"
+                                + " hand the result to the platform AuditSink - as ExportAuditEvent,"
+                                + " IdempotencyAuditEvent and the other eight do. A type in a package named"
+                                + " audit that produces no AuditEvent is a trail that reaches nothing: the"
+                                + " deployment's AuditFailurePolicy governs none of it, no redaction runs over"
+                                + " it, and it exists only if every consumer remembers to write the same"
+                                + " listener. If the record is not this module's audit event, move it out of"
+                                + " the audit package."));
     }
 
     /**
@@ -136,6 +197,60 @@ public final class AuditRules implements ArchitectureRuleSet {
                 .and(ArchitecturePredicates.residingIn(List.of("..audit..")))
                 .should(declareAStaticLoggerField())
                 .as("No module keeps an audit logger of its own");
+    }
+
+    /**
+     * Every type a module declares in an {@code audit} package produces the platform envelope.
+     *
+     * <p>{@code audit-core}'s own package is excluded, because the envelope cannot be required to produce
+     * itself.
+     */
+    private static ArchRule auditTypesProduceAuditEvents() {
+        return ArchRuleDefinition.classes()
+                .that(ArchitecturePredicates.residingOutsideOf(List.of(AUDIT_PACKAGES)))
+                .and(ArchitecturePredicates.residingIn(List.of("..audit..")))
+                .and(areTopLevelRecords())
+                .should(produceAnAuditEvent())
+                .as("A record in a module's audit package produces an AuditEvent");
+    }
+
+    /**
+     * A record declared at the top level of a module's audit package.
+     *
+     * <p>Top-level only: a nested record is a component of its enclosing type - a line item, a sub-result -
+     * and a generated builder is not a record at all but is nested for the same reason. Neither is the
+     * module's audit event, and requiring either to produce an envelope would be requiring the wrong thing
+     * of the right code.
+     *
+     * <p>Tested through the raw superclass name rather than a {@code isRecord()} accessor, so the rule does
+     * not depend on which ArchUnit version resolved.
+     */
+    private static DescribedPredicate<JavaClass> areTopLevelRecords() {
+        return DescribedPredicate.describe("top-level records", javaClass ->
+                javaClass.getSuperclass()
+                        .map(superclass -> "java.lang.Record".equals(superclass.toErasure().getName()))
+                        .orElse(false)
+                        && javaClass.getEnclosingClass().isEmpty());
+    }
+
+    /**
+     * Whether the class has a method returning the platform envelope.
+     *
+     * <p>Any such method, not specifically one named {@code toAuditEvent}: the convention is the name but
+     * the contract is the return type, and a rule keyed on the name would pass a method called
+     * {@code asAuditEvent} and fail for no reason. A recorder class that merely <em>calls</em> the sink
+     * satisfies this too, because to call it the class has to produce the envelope somewhere.
+     */
+    private static ArchCondition<JavaClass> produceAnAuditEvent() {
+        return new ArchCondition<>("declare a method returning " + AUDIT_EVENT_TYPE) {
+            @Override
+            public void check(JavaClass item, ConditionEvents events) {
+                boolean produces = item.getMethods().stream()
+                        .anyMatch(method -> AUDIT_EVENT_TYPE.equals(method.getRawReturnType().getName()));
+                events.add(new SimpleConditionEvent(item, produces,
+                        item.getName() + (produces ? " produces" : " produces no") + " AuditEvent"));
+            }
+        };
     }
 
     private static ArchCondition<JavaClass> beNamedLikeAnAuditSeam() {

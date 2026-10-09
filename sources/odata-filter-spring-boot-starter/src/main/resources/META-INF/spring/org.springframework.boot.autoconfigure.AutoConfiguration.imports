@@ -1,3 +1,5 @@
 ru.ludwigandreas.odatafilter.config.ODataFilterAutoConfiguration
 ru.ludwigandreas.odatafilter.config.ODataFilterMetricsAutoConfiguration
+ru.ludwigandreas.odatafilter.config.ODataQueryExecutorAutoConfiguration
+ru.ludwigandreas.odatafilter.config.ODataFilterMetadataAutoConfiguration
 ru.ludwigandreas.odatafilter.config.ODataFilterWebAutoConfiguration

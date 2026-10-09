@@ -602,7 +602,7 @@ Redaction is a fixed marker, not a hash or a truncation: a hash is reversible fo
 small set, and a truncation leaks exactly the part of an identifier that identifies. The marker and that
 argument moved to `audit-core`'s `Redaction.MASK`, which is where the whole platform now reads it from -
 and it changed from `[redacted]` to `***REDACTED***`, which was a **data migration** rather than a
-constant change because this module *persisted* it. The audit module's `audit-004` changeset rewrites the
+constant change because this module *persisted* it. The audit module's `audit-0004` changeset rewrites the
 existing rows; without it the table would spell one concept two ways and no query could tell "redacted
 under the old rule" from "a user whose setting value is literally the string `[redacted]`".
 
@@ -618,7 +618,7 @@ Every change records who, when, which definition, old → new, which layer, and 
 
 **`user_setting_audit` is gone, and so are its entity and repositories.** The trail moved into the
 platform's single `audit_event` table with `category=settings`, and its rows were migrated there by the
-audit module's `audit-002` changeset - a consolidation that started the new trail empty and left the
+audit module's `audit-0002` changeset - a consolidation that started the new trail empty and left the
 history in a table nobody queries would have moved the auditor's problem rather than solved it. The old
 table is *not* dropped: verify the migration against it and drop it yourself. See
 [`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
@@ -831,7 +831,7 @@ outlives deployments, and a retired setting's leftover YAML should not stop a se
 ## Schema
 
 Two tables, applied by an independent `SpringLiquibase` alongside the application's own changelog —
-the same pattern `outbox-spring-boot-starter` uses, with changeset ids namespaced `usrset-NNN`.
+the same pattern `outbox-spring-boot-starter` uses, with changeset ids namespaced `user-settings-NNNN`.
 
 | Table | Holds |
 |---|---|

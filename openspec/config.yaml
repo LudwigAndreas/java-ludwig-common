@@ -115,6 +115,17 @@ context: |
   - Services follow `crud-service-example`: three model layers `web.dto` -> `service.model` ->
     `repository.entity` wired by MapStruct; Lombok instead of boilerplate; transactions in the
     service layer; Liquibase changelogs under `src/main/resources/db/changelog`.
+  - **One migration shape.** Every Liquibase changeset is formatted SQL in its own
+    `NNNN-<slug>.sql` file, id `<prefix>-NNNN-<slug>` and author `ludwig-<prefix>` with the number
+    and slug matching the filename, numbers unique per module and ascending in include order, and
+    every changeset carrying `dbms:postgresql` and a `--rollback` (or `--rollback NOT REQUIRED`).
+    Each module has one XML root changelog holding includes and comments only, pinned to
+    `dbchangelog-4.27.xsd` - it stays XML because formatted SQL has no include directive.
+    Preconditions are limited to table-exists, view-exists and sql-check, the only three the
+    formatted-SQL parser implements, and prose must never begin a line with a directive name.
+    `scripts/check_migrations.sh` enforces this and the gate runs it. The QueryDSL-only rule below
+    is about repository queries in Java and does not apply to a changelog. See the
+    `database-migration` capability.
   - Every container image reference carries name, version **and** `sha256` digest. A bare tag is
     not acceptable anywhere, including in READMEs and `docker run` examples.
   - User-facing text is never hard-coded (Checkstyle `NonAsciiSourceText`); bundle key sets must

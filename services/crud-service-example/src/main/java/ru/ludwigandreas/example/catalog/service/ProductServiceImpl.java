@@ -3,14 +3,14 @@ package ru.ludwigandreas.example.catalog.service;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.example.catalog.repository.CategoryRepository;
 import ru.ludwigandreas.example.catalog.repository.ProductRepository;
 import ru.ludwigandreas.example.catalog.repository.entity.CategoryEntity;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductEntity;
-import ru.ludwigandreas.example.catalog.repository.query.ProductSearchCriteria;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.example.catalog.service.event.ProductEventType;
 import ru.ludwigandreas.example.catalog.service.exception.CategoryNotFoundException;
 import ru.ludwigandreas.example.catalog.service.exception.ProductNotFoundException;
@@ -19,7 +19,6 @@ import ru.ludwigandreas.example.catalog.service.exception.StaleProductVersionExc
 import ru.ludwigandreas.example.catalog.service.mapper.ProductEntityMapper;
 import ru.ludwigandreas.example.catalog.service.model.NewProduct;
 import ru.ludwigandreas.example.catalog.service.model.Product;
-import ru.ludwigandreas.example.catalog.service.model.ProductQuery;
 import ru.ludwigandreas.example.catalog.service.model.ProductUpdate;
 import ru.ludwigandreas.example.catalog.service.notification.StewardNotificationSettings;
 import ru.ludwigandreas.outbox.api.OutboxEvent;
@@ -81,10 +80,10 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Product> search(ProductQuery query) {
-        return productRepository
-                .search(new ProductSearchCriteria(query.filter(), query.orderBy(), query.top(), query.skip()))
-                .map(mapper::toDomain);
+    public ODataPage<Product> search(ODataQueryOptions options) {
+        // The options travel down unparsed. This layer knows nothing about the OData vocabulary and
+        // nothing about ProductEntity's filterable properties, which is why no translation happens here.
+        return productRepository.search(options).map(mapper::toDomain);
     }
 
     @Override

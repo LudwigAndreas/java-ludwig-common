@@ -15,7 +15,7 @@ import ru.ludwigandreas.odatafilter.annotation.Filterable;
 @Entity
 @Table(name = "employees")
 @FilterPolicy(maxDepth = 4, maxPageSize = 50, defaultPageSize = 10, maxNestedPropertyDepth = 2,
-        defaultOrderBy = "id asc")
+        defaultOrderBy = "id asc", metadataName = "employee")
 public class Employee {
 
     @Id

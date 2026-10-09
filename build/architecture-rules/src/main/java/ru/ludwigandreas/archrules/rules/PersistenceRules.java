@@ -51,6 +51,33 @@ public final class PersistenceRules implements ArchitectureRuleSet {
     public static final RuleId PERSISTENCE_CONTEXT_IS_CONFINED =
             RuleId.of(RuleGroup.PERSISTENCE, "persistence-context-is-confined");
 
+    /**
+     * A service does not build a QueryDSL path from a caller-supplied property name.
+     *
+     * <p>{@code PathBuilder} resolves a property path at runtime and is therefore the one construct in
+     * this platform's data access that the compiler does not check: a renamed column becomes a
+     * {@code QueryException} at request time instead of a compile error, which is the whole reason the
+     * QueryDSL-only convention exists. A fixed path belongs on a generated Q-type; the only paths that
+     * legitimately need building are the ones that arrive as strings from a caller, and those belong to
+     * whichever module validated them.
+     *
+     * <p>In this platform that module is {@code odata-filter-spring-boot-starter}: it owns the
+     * {@code @Filterable} vocabulary, so it is the only place that knows a path was checked, and its
+     * {@code ODataPaths} exposes the result. A repository building its own has re-implemented validated
+     * resolution without the validation - and, worse, has taken on an invisible obligation to address
+     * the same query alias the predicate uses. When the two disagree JPQL does not fail; it cross-joins
+     * the table to itself and returns rows that are quietly wrong.
+     *
+     * <p>Two repositories in this repository each held a private copy of that walk before
+     * {@code ODataPaths} existed. This rule is why there cannot be a third.
+     *
+     * <p><b>Why ArchUnit and not Checkstyle:</b> this is a type reference, which is exactly what
+     * bytecode carries. The companion condition - that the alias strings match - is a value and so is
+     * checked at runtime by {@code ODataPaths.requireMatchingAlias} instead; neither tool can read it.
+     */
+    public static final RuleId DYNAMIC_PATHS_ARE_NOT_HAND_BUILT =
+            RuleId.of(RuleGroup.PERSISTENCE, "dynamic-paths-are-not-hand-built");
+
     @Override
     public RuleGroup group() {
         return RuleGroup.PERSISTENCE;
@@ -79,6 +106,12 @@ public final class PersistenceRules implements ArchitectureRuleSet {
                     "Move the EntityManager/JdbcTemplate usage into a repository (or a repository fragment)"
                             + " and call that. An entity fetched outside the persistence layer is detached"
                             + " somewhere unpredictable, and the SQL stops being findable."));
+        rules.add(ArchitectureRule.of(DYNAMIC_PATHS_ARE_NOT_HAND_BUILT, dynamicPathsAreNotHandBuilt(context),
+                    "Take the ordering expressions from the module that validated the paths"
+                            + " (ODataPaths.orderSpecifiers) instead of building a PathBuilder here. A"
+                            + " hand-built path is resolved at runtime, is not checked against the entity's"
+                            + " filterable declarations, and silently cross-joins if its alias differs from"
+                            + " the predicate's."));
         rules.add(ArchitectureRule.of(REPOSITORIES_ARE_INTERFACES, repositoriesAreInterfaces(context),
                     "Declare the repository as an interface and let Spring Data implement it; put hand-written"
                             + " query code in a custom fragment interface with its own Impl class rather than"
@@ -127,6 +160,21 @@ public final class PersistenceRules implements ArchitectureRuleSet {
                         ConventionPredicates.springDataRepositories(context),
                         "repositories - only the service layer queries the database"))
                 .as("Repositories are used only by the service layer");
+    }
+
+    /**
+     * Nothing in a service builds a {@code PathBuilder}. There is no allowed package: the legitimate
+     * users are library modules that own a caller-facing path vocabulary, and a service's analysis never
+     * imports their classes, so an exemption list here would only ever be wrong in one direction.
+     */
+    private static ArchRule dynamicPathsAreNotHandBuilt(RuleContext context) {
+        return ArchRuleDefinition.noClasses()
+                .should().dependOnClassesThat()
+                .haveFullyQualifiedName("com.querydsl.core.types.dsl.PathBuilder")
+                .as("A caller-supplied property path is resolved by the module that validated it")
+                .because("a PathBuilder in a service resolves a property name at runtime that nothing"
+                        + " type-checks, and must address the same query alias as the predicate or the"
+                        + " query cross-joins instead of failing");
     }
 
     private static ArchRule persistenceContextIsConfined(RuleContext context) {

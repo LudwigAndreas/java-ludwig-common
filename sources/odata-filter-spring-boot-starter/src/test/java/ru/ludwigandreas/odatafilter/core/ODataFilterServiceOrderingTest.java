@@ -5,11 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Sort;
+import ru.ludwigandreas.audit.NoopAuditSink;
 import ru.ludwigandreas.odatafilter.annotation.FilterPolicy;
 import ru.ludwigandreas.odatafilter.annotation.Filterable;
-import ru.ludwigandreas.odatafilter.config.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.metrics.NoopODataFilterMetrics;
 import ru.ludwigandreas.odatafilter.policy.FilterPolicyRegistry;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.querydsl.PredicateBuilder;
 import ru.ludwigandreas.odatafilter.security.AnonymousFilterPrincipalResolver;
 import ru.ludwigandreas.odatafilter.testmodel.Employee;
@@ -28,18 +29,20 @@ class ODataFilterServiceOrderingTest {
             new AnonymousFilterPrincipalResolver(),
             List.of(),
             null,
-            new NoopODataFilterMetrics());
+            new NoopODataFilterMetrics(),
+            new NoopAuditSink());
 
     @Test
     void appliesTheEntityDefaultWhenTheCallerAsksForNoOrdering() {
-        Sort sort = service.parse(Employee.class, null, null, null, null).pageable().getSort();
+        Sort sort = service.parse(Employee.class, ODataQueryOptions.none()).pageable().getSort();
 
         assertThat(sort).containsExactly(Sort.Order.asc("id"));
     }
 
     @Test
     void appendsTheEntityDefaultAfterTheCallersOwnOrdering() {
-        Sort sort = service.parse(Employee.class, null, null, null, "name desc").pageable().getSort();
+        Sort sort = service.parse(Employee.class, ODataQueryOptions.of(null, "name desc", null, null))
+                .pageable().getSort();
 
         // Without the appended tie-breaker, two employees sharing a name have no defined order
         // between them, and a row can then repeat across pages or be skipped entirely.
@@ -48,20 +51,22 @@ class ODataFilterServiceOrderingTest {
 
     @Test
     void doesNotLetTheDefaultOverrideADirectionTheCallerChose() {
-        Sort sort = service.parse(Ticket.class, null, null, null, "name desc").pageable().getSort();
+        Sort sort = service.parse(Ticket.class, ODataQueryOptions.of(null, "name desc", null, null))
+                .pageable().getSort();
 
         assertThat(sort).containsExactly(Sort.Order.desc("name"));
     }
 
     @Test
     void ordersByNothingWhenNeitherTheCallerNorTheEntityAsksForAnOrdering() {
-        assertThat(service.parse(Unordered.class, null, null, null, null).pageable().getSort().isSorted())
+        assertThat(service.parse(Unordered.class, ODataQueryOptions.none()).pageable().getSort().isSorted())
                 .isFalse();
     }
 
     @Test
     void translatesNestedOrderPathsToJpaNotation() {
-        Sort sort = service.parse(Employee.class, null, null, null, "department/name asc").pageable().getSort();
+        Sort sort = service.parse(Employee.class, ODataQueryOptions.of(null, "department/name asc", null, null))
+                .pageable().getSort();
 
         assertThat(sort).containsExactly(Sort.Order.asc("department.name"), Sort.Order.asc("id"));
     }

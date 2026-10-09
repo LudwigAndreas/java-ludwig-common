@@ -1,25 +1,16 @@
 package ru.ludwigandreas.example.catalog.repository;
 
-import com.querydsl.core.types.Order;
-import com.querydsl.core.types.OrderSpecifier;
-import com.querydsl.core.types.Predicate;
-import com.querydsl.core.types.dsl.ComparableExpressionBase;
-import com.querydsl.core.types.dsl.PathBuilder;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.support.PageableExecutionUtils;
 import ru.ludwigandreas.db.core.util.Predicates;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductEntity;
 import ru.ludwigandreas.example.catalog.repository.entity.QProductEntity;
-import ru.ludwigandreas.example.catalog.repository.query.ProductSearchCriteria;
-import ru.ludwigandreas.odatafilter.core.ODataFilterService;
-import ru.ludwigandreas.odatafilter.core.ODataQuery;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
+import ru.ludwigandreas.odatafilter.execution.ODataQueryExecutor;
+import ru.ludwigandreas.odatafilter.execution.ODataSearch;
 import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.data.DataAction;
 
@@ -29,9 +20,9 @@ import ru.ludwigandreas.security.data.DataAction;
  *
  * <p>Every query goes through {@link JPAQueryFactory} and the generated {@link QProductEntity}: no
  * JDBC, no JPQL/SQL string, no method-name-derived query. The one dynamic piece is the client's
- * OData {@code $filter}, and that is not free-form either - {@link ODataFilterService} only
- * produces paths that the entity's own {@code @Filterable} annotations allow, rejecting anything
- * else before a query is built.
+ * OData {@code $filter}, and that is not free-form either - {@link ODataQueryExecutor} only produces
+ * paths that the entity's own {@code @Filterable} annotations allow, rejecting anything else before a
+ * query is built.
  */
 @RequiredArgsConstructor
 class ProductQueryRepositoryImpl implements ProductQueryRepository {
@@ -41,16 +32,8 @@ class ProductQueryRepositoryImpl implements ProductQueryRepository {
 
     private static final QProductEntity PRODUCT = QProductEntity.productEntity;
 
-    /**
-     * Same root, same alias as {@link #PRODUCT}, reached dynamically - needed only to turn the
-     * {@code $orderby} clause (property paths resolved at runtime by definition) into
-     * {@code OrderSpecifier}s over the very same query root.
-     */
-    private static final PathBuilder<ProductEntity> ROOT =
-            new PathBuilder<>(ProductEntity.class, PRODUCT.getMetadata().getName());
-
     private final JPAQueryFactory queryFactory;
-    private final ODataFilterService filterService;
+    private final ODataQueryExecutor odataExecutor;
     private final DataAccessGuard dataAccessGuard;
 
     /**
@@ -84,56 +67,21 @@ class ProductQueryRepositoryImpl implements ProductQueryRepository {
      * pager would be wrong; and the database would still have read and shipped those rows. In the
      * {@code WHERE} clause, paging, counting and the index all stay correct, and a caller entitled to
      * nothing simply gets an empty page rather than a 403 that would confirm matching products exist.
+     *
+     * <p>The ordering, the offset, the limit and the conditional count are all
+     * {@link ODataQueryExecutor}'s. This method used to carry them: a {@code PathBuilder} field, an
+     * {@code orderSpecifiers(Sort)}, a reflective {@code orderSpecifier(String, boolean)} with an
+     * unchecked-cast suppression, a {@code PageableExecutionUtils} call and a private {@code count} -
+     * all of which {@code notification-service} also carried, identically.
      */
     @Override
-    public Page<ProductEntity> search(ProductSearchCriteria criteria) {
-        ODataQuery<ProductEntity> query = filterService.parse(
-                ProductEntity.class, criteria.filter(), criteria.top(), criteria.skip(), criteria.orderBy());
-        Pageable pageable = query.pageable();
-        Predicate scoped = dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ)
-                .and(query.predicate());
-
-        List<ProductEntity> content = queryFactory.selectFrom(PRODUCT)
+    public ODataPage<ProductEntity> search(ODataQueryOptions options) {
+        return odataExecutor.search(ProductEntity.class, options, ODataSearch.of(PRODUCT)
+                .and(dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ))
                 // The category is mapped into every response, so fetch it with the page instead of
-                // paying one extra SELECT per row.
-                .leftJoin(PRODUCT.category).fetchJoin()
-                .where(scoped)
-                .orderBy(orderSpecifiers(pageable.getSort()))
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
-
-        return PageableExecutionUtils.getPage(content, pageable, () -> count(scoped));
-    }
-
-    private long count(Predicate predicate) {
-        Long total = queryFactory.select(PRODUCT.count())
-                .from(PRODUCT)
-                .where(predicate)
-                .fetchOne();
-        return total == null ? 0L : total;
-    }
-
-    /**
-     * The sort always carries the entity's {@code @FilterPolicy(defaultOrderBy = ...)} tie-breaker,
-     * appended by the filter service after whatever the caller asked for, so there is no unordered
-     * case to fall back on here.
-     */
-    private OrderSpecifier<?>[] orderSpecifiers(Sort sort) {
-        return sort.stream()
-                .map(order -> orderSpecifier(order.getProperty(), order.isAscending()))
-                .toArray(OrderSpecifier<?>[]::new);
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private OrderSpecifier<?> orderSpecifier(String property, boolean ascending) {
-        String[] segments = property.split("\\.");
-        PathBuilder<?> parent = ROOT;
-        for (int i = 0; i < segments.length - 1; i++) {
-            parent = parent.get(segments[i]);
-        }
-        ComparableExpressionBase path =
-                parent.getComparable(segments[segments.length - 1], Comparable.class);
-        return new OrderSpecifier(ascending ? Order.ASC : Order.DESC, path);
+                // paying one extra SELECT per row. It is a fetch join and therefore belongs only on the
+                // content query - QueryDSL refuses one on a count, and a join that multiplied rows
+                // would change the total.
+                .content(query -> query.leftJoin(PRODUCT.category).fetchJoin()));
     }
 }

@@ -5,11 +5,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
 import ru.ludwigandreas.notification.repository.entity.ChannelKind;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatusHistoryEntity;
 import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntity;
-import ru.ludwigandreas.notification.repository.query.DeliverySearchCriteria;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.notification.repository.query.QueueDepth;
 
 /**
@@ -28,7 +28,7 @@ import ru.ludwigandreas.notification.repository.query.QueueDepth;
 public interface DeliveryQueryRepository {
 
     /** Runs the admin OData search, already narrowed to the caller's data scope. */
-    Page<NotificationDeliveryEntity> search(DeliverySearchCriteria criteria);
+    ODataPage<NotificationDeliveryEntity> search(ODataQueryOptions options);
 
     /** The status trail of one delivery, oldest first. */
     List<DeliveryStatusHistoryEntity> historyOf(UUID deliveryId);

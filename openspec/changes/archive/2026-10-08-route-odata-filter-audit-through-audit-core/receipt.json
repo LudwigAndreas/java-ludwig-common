@@ -1,0 +1,46 @@
+{
+  "change": "route-odata-filter-audit-through-audit-core",
+  "model": "claude-opus-5",
+  "index_version": "a3e73a09bbcb681b5c5bb8ee608105d5b0e57ea063a45720977d7df7c072f05c",
+  "modules_touched": [
+    "odata-filter-spring-boot-starter",
+    "audit-core",
+    "architecture-rules"
+  ],
+  "gate": {
+    "manifest_build": "pass",
+    "manifest_stale": "pass - project-index.json is current (POM-set SHA a3e73a09bbcb681b)",
+    "check_image_pins": "pass - 6 image reference(s), all pinned by digest",
+    "check_api_baseline": "NOT RUN - OUT OF SCOPE, carried forward from the user's explicit decision in add-odata-query-execution. v1.1.0 is tagged but its artifacts are neither in ~/.m2 nor reachable at nexus.example.internal, so the script exits 1 for 25 modules. Pre-existing and independent of this change.",
+    "validate": "pass - mvn -q validate exits 0 across all 33 modules",
+    "install": "pass - `mvn clean install` with NO flags and NO exclusions, Docker running: BUILD SUCCESS across 64 reactor entries, 3021 tests, 0 failures, 0 errors, 0 skipped. This was the THIRD attempt; see retries and unresolved.",
+    "odata_filter_and_its_4_dependents": "pass - covered by the clean install, which builds crud-service-example, export-spring-boot-starter, notification-service and user-settings-spring-boot-starter in the same reactor pass",
+    "audit_core_and_its_14_dependents": "pass - likewise; audit-core gained one AuditCategories constant and nothing else",
+    "architecture_rules": "pass - mvn -pl :architecture-rules -am verify BUILD SUCCESS",
+    "odata_filter_architecture_test": "pass - 57 rules, 57 passed, 0 failed, including audit.audit-types-produce-audit-events. Two rules are DISABLED in this module and that is a known, named debt - see unresolved.",
+    "jacoco": "pass - the enforced gate (70% instruction / 60% branch) was met by every module in the clean install",
+    "aggregate_report": "pass - scripts/check_aggregate_report.py: every jar module is in the report and every one has instructions counted",
+    "revapi": "RAN BUT VACUOUS, as in the previous change. Every module was compared against an EMPTY archive because the 1.1.0 baseline could not be resolved, so the record-component removals and the package move in this change were NOT checked by it.",
+    "openspec_validate": "pass - Change 'route-odata-filter-audit-through-audit-core' is valid (--strict)"
+  },
+  "tests": {
+    "added": 19,
+    "new_test_files": 3,
+    "passed": 3021,
+    "failed": 0,
+    "skipped": 0
+  },
+  "retries": 2,
+  "human_corrections": 2,
+  "rollback_point": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+  "unresolved": [
+    "TWO ARCHUNIT RULES ARE DISABLED IN odata-filter-spring-boot-starter'S ArchitectureTest, as named debt with the reason at the point of the disable. (1) cycles.modules-are-free-of-cycles - 16 violations across roughly eleven distinct cycles, rooted in config -> core -> policy -> config and core <-> validation <-> policy. They pre-date the module having any architecture test, which is why nobody had seen them. (2) configuration-properties.configuration-properties-are-validated - ODataFilterProperties carries no @Validated, and the one-annotation fix needs a validation implementation this module deliberately does not have. Both are handed to the change fix-odata-filter-package-cycles, whose proposal and design are written; its deliverable is re-enabling them.",
+    "A CYCLE I INTRODUCED IN THE PREVIOUS CHANGE was found here and fixed here: ODataQueryExecutor in querydsl depended on ODataFilterService in core while core already depended on querydsl. add-odata-query-execution's receipt should be read together with this one - it reported that change complete without this defect, because the module had no ArchUnit runner to catch it.",
+    "THE MODULE HAD NO ARCHITECTURE TEST AT ALL before this change, so the whole shared rule library - not only the audit group - had never been applied to ru.ludwigandreas.odatafilter. Adding the runner is how the new rule became load-bearing, and it is also how the debt above became visible. Worth checking how many other library modules are in the same position; this change deliberately did not look.",
+    "THE NEW RULE WAS WRONG ON ITS FIRST WRITING and a compliant module caught it, not a test of mine: file-action's constants class and Lombok's generated builder both tripped it. Narrowed to top-level records. The two evasions it still cannot catch are renaming the package and declaring the event as a class instead of a record; both are named in the rule's javadoc.",
+    "FLAKY TEST in a module this change does not touch: pat-spring-boot-starter's PatDirectAuthenticationIT$FilterEnabled.revokedTokenStopsWorking failed the second clean install with StaleObjectStateException on PatEntity - an optimistic-locking conflict between a last-use timestamp update and the revoke. It passed on a targeted rerun, on a full module verify and in the third clean install. Nothing was changed to make it pass, so it is still flaky.",
+    "LATENT DEFECT, still not fixed (web-core): WebCoreLocalizationAutoConfiguration's ValidationMessageConfiguration is conditional on the jakarta.validation API rather than on an implementation. It is why odata-filter excludes that transitive jar and why ODataFilterProperties cannot simply be annotated @Validated. Fixing it is a web-core change with sixteen dependents; recorded in add-odata-query-execution's receipt as well.",
+    "LATENT DEFECT, still not fixed (odata-filter): odataFilterProblemMapper and odataFilterProblemMessageBundle are @Bean methods with @ConditionalOnClass whose return types reference web-core's optional ExceptionProblemMapper - the shape that failed for the springdoc customizer last change. Their own test passes with web-core filtered out, so they were left alone again.",
+    "ENVIRONMENT, not a code defect: Maven defaults to Homebrew JDK 26 here and JaCoCo 0.8.12 cannot instrument class file major version 70, so every build in this change was run with JAVA_HOME pointing at the installed Temurin 17."
+  ]
+}

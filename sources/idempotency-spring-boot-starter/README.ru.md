@@ -348,9 +348,9 @@ jira-client. Другой вопрос с другим ответом: *«мож
 
 ## Переход с локального хранилища
 
-Changelog несёт `idempotency-002-migrate-notification-idempotency`, переносящий `notification_idempotency` в
+Changelog несёт `idempotency-0002-migrate-notification-idempotency`, переносящий `notification_idempotency` в
 `idempotency_claim`. Он `runAlways="true"` с предусловием `tableExists` и двумя анти-джойнами — та же форма,
-что установили `audit-002`/`audit-003`, и по той же причине: порядок между двумя бинами `SpringLiquibase` — не
+что установили `audit-0002`/`audit-0003`, и по той же причине: порядок между двумя бинами `SpringLiquibase` — не
 порядок регистрации их автоконфигураций, а changeset, помеченный как выполненный, больше никогда не
 рассматривается.
 

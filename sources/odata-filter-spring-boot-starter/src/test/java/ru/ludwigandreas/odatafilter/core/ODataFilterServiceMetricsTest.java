@@ -1,7 +1,8 @@
 package ru.ludwigandreas.odatafilter.core;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import ru.ludwigandreas.odatafilter.config.ODataFilterProperties;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.exception.PageSizeExceededException;
 import ru.ludwigandreas.odatafilter.exception.UnfilterableFieldException;
 import ru.ludwigandreas.odatafilter.metrics.ODataFilterMetrics;
@@ -16,12 +17,14 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import ru.ludwigandreas.audit.NoopAuditSink;
 
 class ODataFilterServiceMetricsTest {
 
     private static class RecordingMetrics implements ODataFilterMetrics {
         final List<String> applied = new ArrayList<>();
         final List<String> rejectedReasons = new ArrayList<>();
+        final List<String> metadataServed = new ArrayList<>();
         int durationsRecorded = 0;
 
         @Override
@@ -38,6 +41,11 @@ class ODataFilterServiceMetricsTest {
         public void recordParseDuration(String entityType, Duration duration) {
             durationsRecorded++;
         }
+
+        @Override
+        public void recordMetadataServed(String entityType) {
+            metadataServed.add(entityType);
+        }
     }
 
     private ODataFilterService service(RecordingMetrics metrics) {
@@ -49,14 +57,15 @@ class ODataFilterServiceMetricsTest {
                 new AnonymousFilterPrincipalResolver(),
                 List.of(),
                 null,
-                metrics);
+                metrics,
+                new NoopAuditSink());
     }
 
     @Test
     void recordsAppliedAndDurationOnSuccess() {
         RecordingMetrics metrics = new RecordingMetrics();
 
-        service(metrics).parse(Employee.class, "name eq 'Alice'", null, null, null);
+        service(metrics).parse(Employee.class, ODataQueryOptions.filterOnly("name eq 'Alice'"));
 
         assertThat(metrics.applied).containsExactly("Employee");
         assertThat(metrics.rejectedReasons).isEmpty();
@@ -68,7 +77,7 @@ class ODataFilterServiceMetricsTest {
         RecordingMetrics metrics = new RecordingMetrics();
 
         assertThatThrownBy(() -> service(metrics)
-                .parse(Employee.class, "secretNotes eq 'x'", null, null, null))
+                .parse(Employee.class, ODataQueryOptions.filterOnly("secretNotes eq 'x'")))
                 .isInstanceOf(UnfilterableFieldException.class);
 
         assertThat(metrics.applied).isEmpty();
@@ -80,9 +89,22 @@ class ODataFilterServiceMetricsTest {
     void recordsRejectedWhenPageSizeIsExceeded() {
         RecordingMetrics metrics = new RecordingMetrics();
 
-        assertThatThrownBy(() -> service(metrics).parse(Employee.class, null, 1000, null, null))
+        assertThatThrownBy(() -> service(metrics).parse(Employee.class, ODataQueryOptions.of(null, null, 1000, null)))
                 .isInstanceOf(PageSizeExceededException.class);
 
         assertThat(metrics.rejectedReasons).containsExactly("PageSizeExceededException");
+    }
+
+    @Test
+    @DisplayName("parsing a filter does not touch the metadata counter")
+    void parsingDoesNotCountAsMetadataServed() {
+        RecordingMetrics metrics = new RecordingMetrics();
+
+        service(metrics).parse(Employee.class, ODataQueryOptions.filterOnly("name eq 'Alice'"));
+
+        // The two signals exist to be told apart: a rise in rejections is either a client bug or someone
+        // probing, and this counter is what distinguishes the clients that asked properly.
+        assertThat(metrics.metadataServed).isEmpty();
+        assertThat(metrics.applied).containsExactly("Employee");
     }
 }

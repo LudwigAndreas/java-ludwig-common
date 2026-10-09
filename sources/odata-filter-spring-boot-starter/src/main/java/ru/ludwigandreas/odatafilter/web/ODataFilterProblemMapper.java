@@ -2,8 +2,10 @@ package ru.ludwigandreas.odatafilter.web;
 
 import ru.ludwigandreas.odatafilter.exception.FilterAccessDeniedException;
 import ru.ludwigandreas.odatafilter.exception.FilterDepthExceededException;
+import ru.ludwigandreas.odatafilter.exception.FilterMetadataNotPublishedException;
 import ru.ludwigandreas.odatafilter.exception.FilterSyntaxException;
 import ru.ludwigandreas.odatafilter.exception.FilterValidationException;
+import ru.ludwigandreas.odatafilter.exception.InvalidQueryOptionException;
 import ru.ludwigandreas.odatafilter.exception.ODataFilterException;
 import ru.ludwigandreas.odatafilter.exception.PageSizeExceededException;
 import ru.ludwigandreas.odatafilter.exception.UnfilterableFieldException;
@@ -66,6 +68,18 @@ public class ODataFilterProblemMapper implements ExceptionProblemMapper {
             return ProblemDefinition.of(ProblemStatus.INVALID, CODE_PREFIX + "page-size-exceeded", e.max())
                     .withProperty("maxPageSize", e.max())
                     .withProperty("requestedPageSize", e.requested());
+        }
+        if (exception instanceof FilterMetadataNotPublishedException e) {
+            // 404 rather than an empty document: an empty one confirms the entity exists and merely
+            // publishes nothing, which is how discovery becomes entity-model enumeration.
+            return ProblemDefinition.of(ProblemStatus.NOT_FOUND, CODE_PREFIX + "metadata-not-published")
+                    .withProperty("entity", e.requestedName());
+        }
+        if (exception instanceof InvalidQueryOptionException e) {
+            // Named separately from the syntax error below because the two have different causes and
+            // different fixes: one is a malformed expression, the other a malformed scalar option.
+            return ProblemDefinition.of(ProblemStatus.INVALID, CODE_PREFIX + "invalid-option", e.expected())
+                    .withProperty("property", e.option());
         }
         if (exception instanceof FilterSyntaxException) {
             // The parser's message quotes an offset into the caller's own expression. It is not

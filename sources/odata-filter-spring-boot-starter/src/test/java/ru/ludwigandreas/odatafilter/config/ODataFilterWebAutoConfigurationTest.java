@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.web.ODataFilterExceptionHandler;
 import ru.ludwigandreas.odatafilter.web.ODataFilterProblemMapper;
-import ru.ludwigandreas.odatafilter.web.ODataQueryArgumentResolver;
+import ru.ludwigandreas.odatafilter.web.ODataQueryOptionsArgumentResolver;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
@@ -47,18 +49,19 @@ class ODataFilterWebAutoConfigurationTest {
     }
 
     @Test
-    @DisplayName("the deprecated argument resolver is not registered unless it is asked for")
-    @SuppressWarnings("deprecation")
-    void argumentResolverIsOffByDefault() {
-        runner.run(context -> assertThat(context).doesNotHaveBean(ODataQueryArgumentResolver.class));
+    @DisplayName("the options resolver is registered unconditionally, unlike the one it replaced")
+    void optionsResolverIsAlwaysRegistered() {
+        runner.run(context -> assertThat(context)
+                .hasSingleBean(ODataQueryOptionsArgumentResolver.class)
+                .hasSingleBean(WebMvcConfigurer.class));
     }
 
     @Test
-    @DisplayName("a service that still wants the argument resolver can switch it back on")
-    @SuppressWarnings("deprecation")
-    void argumentResolverCanBeOptedBackIn() {
-        runner.withPropertyValues("odata.filter.web.argument-resolver-enabled=true")
-                .run(context -> assertThat(context).hasSingleBean(ODataQueryArgumentResolver.class));
+    @DisplayName("an application can replace the options resolver with one of its own")
+    void optionsResolverIsReplaceable() {
+        runner.withBean(ODataQueryOptionsArgumentResolver.class, () -> new ODataQueryOptionsArgumentResolver(
+                        new ODataFilterProperties()))
+                .run(context -> assertThat(context).hasSingleBean(ODataQueryOptionsArgumentResolver.class));
     }
 
     @Test

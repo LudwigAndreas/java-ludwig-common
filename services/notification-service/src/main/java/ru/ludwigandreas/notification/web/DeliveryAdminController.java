@@ -4,21 +4,19 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.notification.service.DeliveryAdminService;
-import ru.ludwigandreas.notification.service.model.DeliveryQuery;
-import ru.ludwigandreas.notification.service.model.DeliveryView;
 import ru.ludwigandreas.notification.web.dto.DeliveryContentResponse;
 import ru.ludwigandreas.notification.web.dto.DeliveryResponse;
 import ru.ludwigandreas.notification.web.dto.DeliveryTransitionResponse;
 import ru.ludwigandreas.notification.web.mapper.NotificationDtoMapper;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.webcore.web.PageResponse;
 
 /**
@@ -32,11 +30,11 @@ import ru.ludwigandreas.webcore.web.PageResponse;
  * {@code DeliveryAdminService}. Putting row rules in a controller annotation is the usual way they
  * end up enforced on one endpoint and forgotten on the next.
  *
- * <p>The search endpoint takes the OData options as plain request parameters and passes them down
- * unparsed, to be turned into a predicate by the layer that owns the entity. The starter's
- * deprecated {@code ODataQuery<T>} argument resolver would bind them into a predicate here, but
- * only by naming the JPA entity in the controller signature - and an entity in a controller
- * signature is the thing the layering rules exist to prevent.
+ * <p>The search endpoint takes the OData options as one {@link ODataQueryOptions} and passes them down
+ * unparsed, to be turned into a predicate by the layer that owns the entity. That record names no JPA
+ * entity and carries no predicate, which is what distinguishes it from the removed
+ * {@code ODataQuery<T>} controller parameter - an entity in a controller signature is the thing the
+ * layering rules exist to prevent.
  */
 @Tag(name = "Delivery administration", description = "Inspect delivery history, retry and cancel")
 @RestController
@@ -59,13 +57,9 @@ public class DeliveryAdminController {
             description = "OData $filter/$orderby/$top/$skip over non-PII delivery columns.")
     @GetMapping
     @PreAuthorize("hasAnyRole('NOTIFICATION_SUPPORT', 'NOTIFICATION_ADMIN')")
-    public PageResponse<DeliveryResponse> search(
-            @RequestParam(name = "$filter", required = false) String filter,
-            @RequestParam(name = "$orderby", required = false) String orderBy,
-            @RequestParam(name = "$top", required = false) Integer top,
-            @RequestParam(name = "$skip", required = false) Integer skip) {
-        Page<DeliveryView> page = adminService.search(new DeliveryQuery(filter, orderBy, top, skip));
-        return PageResponse.of(page, mapper::toResponse);
+    public PageResponse<DeliveryResponse> search(ODataQueryOptions options) {
+        ODataPage<DeliveryResponse> page = adminService.search(options).map(mapper::toResponse);
+        return PageResponse.of(page.content(), page.offset(), page.size(), page.totalElements());
     }
 
     @Operation(summary = "Read one delivery")

@@ -29,4 +29,9 @@ public class MicrometerODataFilterMetrics implements ODataFilterMetrics {
     public void recordParseDuration(String entityType, Duration duration) {
         registry.timer(PREFIX + "parse.duration", Tags.of("entityType", entityType)).record(duration);
     }
+
+    @Override
+    public void recordMetadataServed(String entityType) {
+        registry.counter(PREFIX + "metadata.served", Tags.of("entityType", entityType)).increment();
+    }
 }

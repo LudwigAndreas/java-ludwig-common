@@ -342,8 +342,21 @@ public PageResponse<ProductResponse> search(ProductQuery query) {
 ```
 
 ```json
-{ "content": [...], "page": 0, "size": 20, "totalElements": 137, "totalPages": 7 }
+{ "content": [...], "page": 1, "size": 20, "offset": 25, "totalElements": 137, "totalPages": 7 }
 ```
+
+**`offset` is the authoritative position and `page` is derived from it.** `page` is lossy: an offset
+that is not a whole multiple of `size` has no integer page, so at `size=20` the offsets 20 and 25 both
+yield `page=1`. A client paging by absolute offset - which is what OData's `$skip` is, and it is
+explicitly allowed not to align to `$top` - cannot compute its next request from a page number alone.
+`page` stays for the ordinary aligned case; it must never be the only position an envelope reports.
+
+**`totalElements` and `totalPages` are omitted entirely when the caller declined the count** (OData
+spells that `$count=false`), because on a deep-paged filtered query the `SELECT COUNT(*)` is usually
+the slowest part of the request. They are absent from the JSON rather than null, so a client that never
+declines sees no difference. Zero is not available as a sentinel, because zero is a real total. Use
+`PageResponse.of(content, offset, size, totalElements)` for a result that is not a Spring Data `Page` -
+which includes every result with no total, since a `Page` always carries one.
 
 Spring Data's `Page` is not returned directly. Its JSON shape is an implementation detail of the
 persistence library - it has changed between versions, and serializing it emits a `pageable` object

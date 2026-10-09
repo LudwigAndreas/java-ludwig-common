@@ -13,6 +13,7 @@ import ru.ludwigandreas.odatafilter.exception.FilterAccessDeniedException;
 import ru.ludwigandreas.odatafilter.exception.FilterDepthExceededException;
 import ru.ludwigandreas.odatafilter.exception.FilterSyntaxException;
 import ru.ludwigandreas.odatafilter.exception.FilterValidationException;
+import ru.ludwigandreas.odatafilter.exception.InvalidQueryOptionException;
 import ru.ludwigandreas.odatafilter.exception.ODataFilterException;
 import ru.ludwigandreas.odatafilter.exception.PageSizeExceededException;
 import ru.ludwigandreas.odatafilter.exception.UnfilterableFieldException;
@@ -118,5 +119,17 @@ class ODataFilterProblemMapperTest {
     @DisplayName("it registers late, so an application's own mapping wins")
     void registersAtModuleOrder() {
         assertThat(mapper.getOrder()).isEqualTo(ODataFilterProblemMapper.DEFAULT_MODULE_ORDER);
+    }
+
+    @Test
+    @DisplayName("a malformed scalar option names the option, not the filter expression")
+    void mapsAnInvalidQueryOption() {
+        var problem = mapper.map(new InvalidQueryOptionException("$count", "true or false"));
+
+        assertThat(problem.code()).isEqualTo("ludwig.odata.error.invalid-option");
+        assertThat(problem.status()).isEqualTo(ProblemStatus.INVALID);
+        // Separate from the syntax code: a typo in $count is not a filter that could not be parsed,
+        // and telling the caller it was sends it looking in the wrong place.
+        assertThat(problem.properties()).containsEntry("property", "$count");
     }
 }

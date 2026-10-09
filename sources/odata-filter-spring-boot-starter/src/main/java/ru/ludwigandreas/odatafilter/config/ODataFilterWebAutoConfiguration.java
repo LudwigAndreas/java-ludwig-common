@@ -2,28 +2,30 @@ package ru.ludwigandreas.odatafilter.config;
 
 import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
-import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 import ru.ludwigandreas.odatafilter.core.ODataFilterService;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
 import ru.ludwigandreas.odatafilter.web.ODataFilterExceptionHandler;
 import ru.ludwigandreas.odatafilter.web.ODataFilterProblemMapper;
-import ru.ludwigandreas.odatafilter.web.ODataQueryArgumentResolver;
+import ru.ludwigandreas.odatafilter.web.ODataQueryOptionsArgumentResolver;
+import ru.ludwigandreas.odatafilter.web.ODataQueryOptionsOpenApiCustomizer;
+import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
+import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
- * Registers this module's contribution to the application's error responses, and - only when the
- * application asks for it - the deprecated {@code ODataQuery<T>} argument resolver. Only activates
- * in a servlet web application with {@code spring-webmvc} on the classpath, so pulling this starter
- * into a non-web module (e.g. a batch job that only needs {@link ODataFilterService} directly)
- * never drags Spring MVC in.
+ * Registers this module's contribution to the application's error responses and the
+ * {@link ODataQueryOptions} argument resolver. Only activates in a servlet web application with
+ * {@code spring-webmvc} on the classpath, so pulling this starter into a non-web module (e.g. a batch
+ * job that only needs {@link ODataFilterService} directly) never drags Spring MVC in.
  *
  * <h2>How query errors are rendered</h2>
  *
@@ -49,21 +51,17 @@ import ru.ludwigandreas.odatafilter.web.ODataQueryArgumentResolver;
 public class ODataFilterWebAutoConfiguration {
 
     /**
-     * Off unless explicitly enabled - see {@link ODataQueryArgumentResolver} for why binding
-     * straight into a controller parameter cannot be done without naming a JPA entity at the REST
-     * boundary.
+     * Lets a controller take the five OData query options as one parameter.
      *
-     * @deprecated together with the resolver it registers. Replacement: take the OData options as
-     *     {@code @RequestParam} strings and call {@link ODataFilterService#parse} in the
-     *     repository, which is the layer that owns the entity.
+     * <p>Registered unconditionally, unlike the deprecated resolver it replaces, which was off by
+     * default because it could not be used without breaking the platform's layering. See
+     * {@link ODataQueryOptionsArgumentResolver} for why each of those objections applies to what that
+     * resolver produced and not to this one.
      */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnProperty(prefix = "odata.filter.web", name = "argument-resolver-enabled", havingValue = "true")
-    @Deprecated(since = "1.1.0", forRemoval = false)
-    public ODataQueryArgumentResolver odataQueryArgumentResolver(
-            ODataFilterService filterService, ODataFilterProperties properties) {
-        return new ODataQueryArgumentResolver(filterService, properties);
+    public ODataQueryOptionsArgumentResolver odataQueryOptionsArgumentResolver(ODataFilterProperties properties) {
+        return new ODataQueryOptionsArgumentResolver(properties);
     }
 
     /**
@@ -103,24 +101,42 @@ public class ODataFilterWebAutoConfiguration {
         return new ODataFilterExceptionHandler();
     }
 
-    /**
-     * Installs the deprecated argument resolver into Spring MVC when it is present.
-     *
-     * @param resolver the deprecated resolver to install
-     * @return a configurer that registers it
-     * @deprecated together with the resolver it installs. Replacement: take the OData options as
-     *     {@code @RequestParam} strings and call {@link ODataFilterService#parse} in the
-     *     repository.
-     */
+    /** Installs the options resolver into Spring MVC. */
     @Bean
-    @ConditionalOnBean(ODataQueryArgumentResolver.class)
-    @Deprecated(since = "1.1.0", forRemoval = false)
-    public WebMvcConfigurer odataFilterWebMvcConfigurer(ODataQueryArgumentResolver resolver) {
+    public WebMvcConfigurer odataFilterWebMvcConfigurer(ODataQueryOptionsArgumentResolver resolver) {
         return new WebMvcConfigurer() {
             @Override
             public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
                 resolvers.add(resolver);
             }
         };
+    }
+
+    /**
+     * Describes the {@link ODataQueryOptions} parameter in the application's OpenAPI document.
+     *
+     * <p><b>Why this is a nested class and not a {@code @Bean} method with
+     * {@code @ConditionalOnClass} on it.</b> A conditional on a bean method cannot protect a method
+     * whose <em>return type</em> is the thing that might be missing: Spring resolves the method
+     * signature while parsing the configuration class, before the condition is evaluated, and
+     * {@code ODataQueryOptionsOpenApiCustomizer} implements springdoc's {@code OperationCustomizer}.
+     * In a service with springdoc absent - which is most of them, because the dependency is optional -
+     * that threw {@code NoClassDefFoundError: org/springdoc/core/customizers/OperationCustomizer} and
+     * failed the whole application context, not just this bean. A nested configuration class is
+     * skipped by ASM without any type being loaded.
+     *
+     * <p>Conditional on the class rather than on a property: if springdoc is on the classpath the
+     * application has an OpenAPI document, and leaving the five query options out of it is never the
+     * right answer.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springdoc.core.customizers.OperationCustomizer")
+    public static class SpringdocConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        public ODataQueryOptionsOpenApiCustomizer odataQueryOptionsOpenApiCustomizer() {
+            return new ODataQueryOptionsOpenApiCustomizer();
+        }
     }
 }

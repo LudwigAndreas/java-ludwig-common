@@ -151,7 +151,7 @@ query, ordering key and idempotency key). Two ways to apply it:
   registers it as a second, independent `SpringLiquibase` bean against your primary `DataSource`,
   separate from your own `spring.liquibase.change-log`. Disable with `ludwig.outbox.liquibase.enabled=false`.
 
-Changeset ids/author (`outbox-NNN`/`ludwig-outbox`) are namespaced so they never collide with your own
+Changeset ids/author (`outbox-NNNN`/`ludwig-outbox`) are namespaced so they never collide with your own
 changesets in the shared `DATABASECHANGELOG` table.
 
 ## Repositories

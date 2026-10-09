@@ -147,8 +147,8 @@ Three persistent audit stores existed before this module. Two migrate, one delib
 
 | Was | Disposition |
 |---|---|
-| `user_setting_audit` | **Migrated** by `audit-002`; its `[redacted]` marker rewritten by `audit-004` |
-| `sync_audit_record` | **Migrated** by `audit-003` |
+| `user_setting_audit` | **Migrated** by `audit-0002`; its `[redacted]` marker rewritten by `audit-0004` |
+| `sync_audit_record` | **Migrated** by `audit-0003` |
 | `outbox_status_history` | **Stays.** See below |
 
 Both migrations move the **rows**, not just the schema. A consolidation that starts the new trail empty

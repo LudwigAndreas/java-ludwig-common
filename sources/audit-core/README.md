@@ -187,7 +187,7 @@ of a security decision in this repository and none of which stopped being true:
 > empty string, at which point a redacted value and a value that was never set become the same row.
 
 Picking one was a **data migration**, not a constant change: `[redacted]` was not only logged, it was
-persisted into `user_setting_audit.old_value` and `new_value`. The `audit-004` changeset rewrites those
+persisted into `user_setting_audit.old_value` and `new_value`. The `audit-0004` changeset rewrites those
 rows; without it the table would spell one concept two ways and no query could tell "redacted under the
 old rule" from "a user whose setting value is literally the string `[redacted]`". `****` and
 `***REDACTED***` were only ever logged and need nothing.

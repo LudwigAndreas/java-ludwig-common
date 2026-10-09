@@ -1,0 +1,47 @@
+{
+  "change": "fix-odata-filter-package-cycles",
+  "model": "claude-opus-5",
+  "index_version": "efa98140f3c017f7",
+  "modules_touched": [
+    "odata-filter-spring-boot-starter"
+  ],
+  "rules_reenabled": {
+    "cycles.modules-are-free-of-cycles": "ENABLED and passing - confirmed present in target/architecture-report.json with status=passed, not merely absent from the disable list",
+    "configuration-properties.configuration-properties-are-validated": "ENABLED and passing - same evidence"
+  },
+  "gate": {
+    "manifest_build": "pass - the module POM changed (hibernate-validator)",
+    "manifest_stale": "pass - project-index.json is current (POM-set SHA efa98140f3c017f7)",
+    "check_image_pins": "pass - 6 image reference(s), all pinned by digest",
+    "check_api_baseline": "NOT RUN - OUT OF SCOPE, carried forward from the user's explicit decision in add-odata-query-execution. v1.1.0 is tagged but its artifacts are neither in ~/.m2 nor reachable at nexus.example.internal.",
+    "validate": "pass - mvn -q validate exits 0 across all 33 modules",
+    "install": "pass - `mvn clean install` with NO flags and NO exclusions, Docker running: BUILD SUCCESS across 64 reactor entries, 3070 tests, 0 failures, 0 errors, 0 skipped. First attempt.",
+    "odata_filter_architecture_test": "pass - 61 rules, 61 passed, with BOTH previously-disabled rules enabled. The nine disables that remain all describe a library that is not a service; none hides a finding.",
+    "odata_filter_and_its_4_dependents": "pass - mvn -pl :odata-filter-spring-boot-starter,:crud-service-example -am verify BUILD SUCCESS before the full install; all four dependents green in the clean install",
+    "crud_service_example": "pass - 38 tests including CatalogIntegrationTest 23/23. This is the regression that mattered: no NoClassDefFoundError on hibernate-validator's ResourceBundleLocator, so taking a validation implementation did not reopen the trap that cost 15 integration tests in add-odata-query-execution.",
+    "jacoco": "pass - the enforced gate (70% instruction / 60% branch) was met by every module",
+    "aggregate_report": "pass - every jar module is in the report and every one has instructions counted",
+    "revapi": "RAN BUT VACUOUS, as in all three previous changes: every module was compared against an EMPTY archive because the 1.1.0 baseline could not be resolved. The package move in this change is binary-incompatible and was NOT checked by it.",
+    "openspec_validate": "pass - Change 'fix-odata-filter-package-cycles' is valid (--strict)"
+  },
+  "tests": {
+    "added": 6,
+    "new_test_files": 1,
+    "passed": 3070,
+    "failed": 0,
+    "skipped": 0
+  },
+  "retries": 1,
+  "human_corrections": 0,
+  "rollback_point": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+  "unresolved": [
+    "THE DONE_WHEN I WROTE WAS TOO LITERAL AND I DID NOT MEET IT AS WRITTEN. Its first two entries say a grep for each rule id in the ArchitectureTest must return 0. It returns 2, because both ids appear in that class's javadoc explaining that they are now enabled. The contract's intent - neither rule is disabled - is met and proven by the architecture report; the check as phrased would have been satisfied by deleting the explanation, which is worse. Recorded rather than quietly reinterpreted.",
+    "DESIGN D2 WAS WRONG AND THE TRACE CAUGHT IT. It predicted a core <-> validation <-> policy cycle and proposed merging two packages to cut it. There is no such cycle: validation is a pass-through in all four cycles it appears in, and policy does not depend on core at all. Had the restructuring been done from the prediction, two packages would have been merged for no reason. This is the case for tracing before moving, and it is why task 1 was task 1.",
+    "A SECOND-ORDER VIOLATION APPEARED FROM THE FIX AND IS FIXED PROPERLY, NOT SUPPRESSED: moving the properties class made spring.configuration-classes-reside-in-config-packages fail, because that rule's CONFIGURATION annotation role includes @ConfigurationProperties and it accepts only ..config../..configuration... Resolved with the rule library's own mechanism, architecture.rules.conventions.packages.configuration.add = ..properties.., which is exactly what file-ingest-spring-boot-starter did for its ..autoconfigure.. wiring. A @Configuration class dropped anywhere else in this module is still a violation.",
+    "THE 'CONSUMER WITH NO VALIDATION IMPLEMENTATION' PATH IS NOT EXERCISED BY ANY IN-REPO MODULE. All four dependents ship spring-boot-starter-validation, so the gate cannot prove what @Validated on ODataFilterProperties does in an application that has neither hibernate-validator nor any other implementation. hibernate-validator is optional here so it does not reach a consumer, and Spring Boot skips configuration-properties validation when no Validator is available - but that is reasoning, not a test result, and it is stated as such.",
+    "defaultPageSize is NOT checked against maxPageSize. It is a cross-field invariant needing a class-level constraint or a Validator bean, and the resolved per-entity policy - where a @FilterPolicy override can change either number - is the only place the comparison is meaningful. A test asserts the omission so it reads as a decision rather than a gap.",
+    "The inconsistency with file-ingest-spring-boot-starter stands deliberately: it keeps properties in ..config.. and wiring in ..autoconfigure..; this module does the opposite. Both are acyclic. The reason for the difference is that an auto-configuration class's FQN is configuration API (a deployment excludes one by name in YAML, which no compiler checks), so renaming the wiring package breaks an exclusion silently at runtime while moving the properties class breaks a compile. Recorded in both the module's architecture-rules.properties and the moved class's javadoc.",
+    "CARRIED FORWARD, still not fixed: web-core's ValidationMessageConfiguration is conditional on the jakarta.validation API rather than an implementation, and odata-filter's two problem-pipeline @Bean methods have the @ConditionalOnClass-on-a-bean-method shape that failed for the springdoc customizer. Both recorded in the earlier receipts; this change made the first one less likely to bite THIS module by taking an implementation, but the web-core condition is still wrong for every other module.",
+    "ENVIRONMENT, not a code defect: Maven defaults to Homebrew JDK 26 here and JaCoCo 0.8.12 cannot instrument class file major version 70, so every build was run with JAVA_HOME pointing at the installed Temurin 17."
+  ]
+}

@@ -1,0 +1,25 @@
+cycles.modules-are-free-of-cycles, 20 violations, captured at task 1.1
+(`mvn -pl :odata-filter-spring-boot-starter -am test -Dtest=ArchitectureTest`)
+
+Distinct cycles, normalised:
+
+ 1. config -> querydsl -> policy -> config
+ 2. config -> execution -> core -> querydsl -> policy -> config
+ 3. config -> execution -> querydsl -> policy -> config
+ 4. config -> web -> core -> querydsl -> policy -> config
+ 5. config -> core -> querydsl -> policy -> config
+ 6. config -> web -> metadata -> policy -> config
+ 7. config -> metadata -> policy -> config
+ 8. config -> execution -> core -> policy -> config
+ 9. config -> execution -> core -> config
+10. config -> execution -> core -> validation -> policy -> config
+11. config -> web -> core -> policy -> config
+12. config -> core -> policy -> config
+13. config -> web -> core -> config
+14. config -> core -> config
+15. config -> web -> core -> validation -> policy -> config
+16. config -> core -> validation -> policy -> config
+17. config -> web -> config
+18. config -> web -> policy -> config
+19. config -> validation -> policy -> config
+20. config -> policy -> config

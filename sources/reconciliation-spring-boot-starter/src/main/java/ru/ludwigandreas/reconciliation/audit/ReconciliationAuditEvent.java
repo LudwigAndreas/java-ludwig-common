@@ -80,7 +80,7 @@ public record ReconciliationAuditEvent(String taskName,
      *
      * <p>{@link Category} becomes an attribute rather than {@link AuditEvent#category()}: that column names
      * the subsystem and these five name a kind of event within it, and collapsing them would make the column
-     * mean two different things depending on the row. The {@code audit-003} migration of
+     * mean two different things depending on the row. The {@code audit-0003} migration of
      * {@code sync_audit_record} maps it the same way, so a migrated row and a new one are the same shape.
      *
      * <p>The actor is the operator for an {@link Category#OPERATOR} event and {@code system} otherwise,

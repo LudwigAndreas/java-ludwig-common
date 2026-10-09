@@ -27,7 +27,7 @@ import ru.ludwigandreas.audit.config.AuditProperties;
  * <h2>Why it must also run after the modules it migrates from</h2>
  *
  * <p>This changelog is the only one in the platform that reads another module's tables: the
- * {@code audit-002} and {@code audit-003} changesets move {@code user_setting_audit} and
+ * {@code audit-0002} and {@code audit-0003} changesets move {@code user_setting_audit} and
  * {@code sync_audit_record} into {@code audit_event}. Both are guarded by a {@code tableExists}
  * precondition with {@code onFail="MARK_RAN"}, so that a service using neither module is not broken by
  * them - but that guard has a consequence: a changeset marked as ran is never reconsidered, so if this

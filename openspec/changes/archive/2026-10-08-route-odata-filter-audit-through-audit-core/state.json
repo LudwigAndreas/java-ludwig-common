@@ -1,0 +1,50 @@
+{
+  "change": "route-odata-filter-audit-through-audit-core",
+  "contract": {
+    "goal": "odata-filter stops being the one module whose audit trail bypasses audit-core's single AuditSink, and stops carrying the caller's literal values in the event it publishes",
+    "output": "FilterAppliedEvent with a paths-and-operators summary and a toAuditEvent(); ODataFilterService records to the AuditSink with no try/catch; the Spring application event kept but demoted; one new ArchUnit rule in RuleGroup.AUDIT closing the gap that let this pass",
+    "constraints": [
+      "major release: removing record components is permitted",
+      "no try/catch around AuditSink.record - AuditFailurePolicy owns whether a sink failure fails the caller",
+      "no caller literal value reaches the event in any form - not hashed, not truncated; rawFilter goes too, not just predicate.toString()",
+      "ODataFilterService must keep working with no EntityManager and no Spring MVC",
+      "audit-core must not gain a dependency on anything; the new edge runs odata-filter -> audit-core only",
+      "architecture-rules must NOT start depending on audit-core - its existing AUDIT rules use type names as strings",
+      "both locale bundles and both READMEs move together"
+    ],
+    "done_when": [
+      "scripts/manifest.sh build && scripts/manifest.sh stale",
+      "scripts/check_image_pins.sh",
+      "mvn -q validate",
+      "mvn -pl :odata-filter-spring-boot-starter -am verify",
+      "mvn -pl :architecture-rules -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "mvn clean install",
+      "openspec validate route-odata-filter-audit-through-audit-core"
+    ]
+  },
+  "current_task": "complete",
+  "decisions": [
+    "Carried forward from add-odata-query-execution, same environment: builds run with JAVA_HOME=/Users/ludwig/Library/Java/JavaVirtualMachines/temurin-17.0.19/Contents/Home, because Maven defaults to Homebrew JDK 26 here and JaCoCo 0.8.12 cannot instrument class file major version 70.",
+    "Carried forward: scripts/check_api_baseline.sh exits 1 for 25 modules (v1.1.0 tagged, artifacts unreachable) and revapi compares against an empty archive. Pre-existing and out of scope by the user's earlier explicit decision; excluded from done_when and to be recorded in the receipt.",
+    "Category: added AuditCategories.QUERY to audit-core on the user's explicit decision. ACCESS is documented as 'Authorization decisions' and a filtered read is not one. audit-core is therefore a touched module and the proposal's table and non-goals were corrected to say so.",
+    "4.1 SCOPE ADDITION, deliberate: odata-filter-spring-boot-starter had NO architecture test at all, so the AUDIT group - and every other group - had never been applied to the module the new rule was written for. A service's run analyses only the service's own packages, so tasks 4.2/4.3 as written could never have seen ru.ludwigandreas.odatafilter. Added ArchitectureTest + architecture-rules.properties + the test-scoped architecture-rules dependency. The rule and its runner are one change; either alone enforces nothing.",
+    "4.2 the rule fires, with evidence: on first run it failed with 'ru.ludwigandreas.odatafilter.audit.FilterSummary produces no AuditEvent'. Taking the rule's own remediation ('if the type is not an audit type, move it out of the audit package'), FilterSummary moved to ..ast.., where it belongs - it describes a filter, not an audit concept. The rule now passes and FilterAppliedEvent is the only type in the audit package.",
+    "Fixed in passing, my own regression from add-odata-query-execution: ODataQueryOptionsArgumentResolver.parseInt caught NumberFormatException in the web layer, which exceptions.controllers-do-not-catch-checked-exceptions refuses. Replaced with a shape guard, so the rule is satisfied rather than suppressed.",
+    "User chose option 4: finish this change with the two rules disabled as named debt, fix my own core <-> querydsl cycle, and raise the rest as its own change (fix-odata-filter-package-cycles, artifacts written).",
+    "Cycle fix: ODataQueryExecutor, ODataSearch and ODataPage moved from ..querydsl.. to a new ..execution.. package, and ODataPaths.requireMatchingAlias became public so the executor can still call it. core -> querydsl stays (PredicateBuilder); execution -> core and execution -> querydsl are new and neither points back, so core <-> querydsl is gone. Breaking for a consumer's imports; the release is major.",
+    "4.1 ATTEMPT 2 - the rule as first written was wrong and a compliant module proved it. The full install failed on file-action with two violations: FileActionAuditActions (action-name constants) and FileActionAuditEvent$FileActionAuditEventBuilder (Lombok's generated builder). Surveying every audit package showed the premise was too broad - they legitimately hold recorders, listeners, actor resolvers, correlation providers, constants, and in db-core's case JPA's unrelated sense of auditing. Narrowed to TOP-LEVEL RECORDS in an audit package: all five compliant modules spell their event that way and each has a method returning AuditEvent, while every false positive is not a record. The narrowing did not defang it - FilterSummary, which it caught on the first run, was itself a top-level record.",
+    "ODataFilterProperties keeps no @Validated and the rule stays disabled: the naive fix needs a validation implementation, and the jakarta.validation-api exclusion in this module's POM exists precisely because that API jar alone activates web-core's validator wiring and failed 15 integration tests last change. Handed to fix-odata-filter-package-cycles with the options written out in its design D3."
+  ],
+  "failures": [
+    "The new ArchitectureTest surfaced two violations this change will not fix silently. (1) cycles.modules-are-free-of-cycles, 16 violations across ~11 distinct cycles: config -> core -> policy -> config and core <-> validation <-> policy are PRE-EXISTING, and core <-> querydsl is a REGRESSION I INTRODUCED in add-odata-query-execution (ODataQueryExecutor in querydsl needs ODataFilterService in core, while ODataFilterService needs PredicateBuilder in querydsl). (2) configuration-properties.configuration-properties-are-validated: ODataFilterProperties carries no @Validated, pre-existing - and adding it would require a validation implementation, which is exactly the transitive dependency excluded from this module's POM in the previous change. Reported rather than fixed or disabled: disabling either is weakening a rule, and restructuring packages is a scope the change did not ask for.",
+    "FLAKY TEST, not caused by this change and not fixed: the second full clean install failed on pat-spring-boot-starter's PatDirectAuthenticationIT$FilterEnabled.revokedTokenStopsWorking with StaleObjectStateException on PatEntity - an optimistic-locking conflict between a last-use timestamp update and the revoke. The module is untouched by this change (it depends on audit-core, which gained one string constant). It passed on a targeted rerun, passed on a full module verify, and passed in the third clean install. Reported as flaky rather than fixed, because nothing was changed to make it pass."
+  ],
+  "open_questions": [],
+  "pending_human": [],
+  "rollback_point": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+  "index_version": "9e2d3d9a1cc9ffaf439b469743cef362f7a7db7304e73a45c4e7d23e5aaeb529"
+}

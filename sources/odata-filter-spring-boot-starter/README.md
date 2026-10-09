@@ -72,7 +72,8 @@ input, so they need no `@Filterable` - a surrogate key no client may filter on i
 choice - but they are checked against the entity's fields when the policy is first resolved, so a
 typo fails loudly instead of reaching the database.
 
-Then parse the caller's options **in the layer that owns the entity**: the repository.
+Then run the query **in the layer that owns the entity**: the repository. One call does the whole of
+it - predicate, ordering, offset, limit, and the count unless the caller declined it:
 
 ```java
 @Repository
@@ -81,67 +82,85 @@ class ProductQueryRepositoryImpl implements ProductQueryRepository {
 
     private static final QProduct PRODUCT = QProduct.product;
 
-    private final JPAQueryFactory queryFactory;
-    private final ODataFilterService filterService;
+    private final ODataQueryExecutor odataExecutor;
 
     @Override
-    public Page<Product> search(ProductSearchCriteria criteria) {   // criteria = the raw strings
-        ODataQuery<Product> query = filterService.parse(
-                Product.class, criteria.filter(), criteria.top(), criteria.skip(), criteria.orderBy());
-        Pageable pageable = query.pageable();
-
-        List<Product> content = queryFactory.selectFrom(PRODUCT)
-                .where(query.predicate())
-                .orderBy(orderSpecifiers(pageable.getSort()))
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
-
-        return PageableExecutionUtils.getPage(content, pageable, () -> count(query.predicate()));
+    public ODataPage<Product> search(ODataQueryOptions options) {
+        return odataExecutor.search(Product.class, options, ODataSearch.of(PRODUCT));
     }
 }
 ```
 
-A Spring Data repository is just as good, and shorter - `query.predicate()` is built dynamically via
-QueryDSL's `PathBuilder` against Spring Data's default `SimpleEntityPathResolver` alias convention
-(the uncapitalized simple class name), so no `QProduct` generation is needed for it to line up:
+`ODataSearch` is where a repository says what else its query needs. Everything on it is optional:
 
 ```java
-Page<Product> page = repository.findAll(query.predicate(), query.pageable());
+return odataExecutor.search(Product.class, options, ODataSearch.of(PRODUCT)
+        // ANDed into the content query AND the count query, so the page and the total agree. This is
+        // where a caller's data scope goes.
+        .and(dataAccessGuard.predicate("product", DataAction.READ))
+        // Shapes only the content query - QueryDSL refuses a fetch join on a count, and a join that
+        // multiplied rows would change the total.
+        .content(query -> query.leftJoin(PRODUCT.category).fetchJoin()));
 ```
 
-The one thing to watch for in hand-written QueryDSL is that alias: a root declared as
-`new QProduct("p")` addresses a different alias than the predicate does, and the two would
-silently cross-join rather than fail.
+**Pass the generated default instance as the root.** `QProduct.product` is aliased `product`, which is
+the alias the predicate and the ordering are built against; `new QProduct("p")` is not, and two
+different aliases do not fail in JPQL - they cross-join the table to itself and return rows that are
+quietly wrong. The executor checks and refuses rather than trusting, naming both aliases. That check is
+deliberately at runtime: the alias is the *value* of a string a `Q`-type was constructed with, which
+neither Checkstyle nor ArchUnit can read.
 
-The controller takes the options as plain strings and passes them down unparsed, so no JPA entity
+If you must drive the query yourself - a projection, a window function, something the two hooks cannot
+express - take the ordering from this module rather than writing the path walk again:
+
+```java
+OrderSpecifier<?>[] order = ODataPaths.orderSpecifiers(Product.class, query.pageable().getSort());
+```
+
+A Spring Data `QuerydslPredicateExecutor` repository also still works, because the predicate is built
+against Spring Data's own `SimpleEntityPathResolver` alias convention:
+
+```java
+Page<Product> page = repository.findAll(query.predicate().orElse(null), query.pageable());
+```
+
+The controller takes the five options as one parameter and passes them down unparsed, so no JPA entity
 and no QueryDSL type ever appears above the repository:
 
 ```java
 @GetMapping
-public PageResponse<ProductResponse> search(
-        @RequestParam(name = "$filter", required = false) String filter,
-        @RequestParam(name = "$orderby", required = false) String orderBy,
-        @RequestParam(name = "$top", required = false) Integer top,
-        @RequestParam(name = "$skip", required = false) Integer skip) {
-    Page<Product> page = productService.search(new ProductQuery(filter, orderBy, top, skip));
-    return PageResponse.of(page.map(mapper::toResponse));
+public PageResponse<ProductResponse> search(ODataQueryOptions options) {
+    ODataPage<ProductResponse> page = productService.search(options).map(mapper::toResponse);
+    return PageResponse.of(page.content(), page.offset(), page.size(), page.totalElements());
 }
 ```
 
 ```
-GET /products?$filter=price lt 100 and category/code eq 'TOOLS'&$top=20&$orderby=name desc
+GET /products?$filter=price lt 100 and category/code eq 'TOOLS'&$top=20&$orderby=name desc&$count=false
 ```
 
 [`crud-service-example`](../../services/crud-service-example/README.md) is this arrangement end to end:
 controller -> service -> repository, with the caller's data scope ANDed into the same `WHERE`
 clause as the `$filter`.
 
-### Why not bind it straight into the controller parameter
+### What the response says about where you are
 
-The module used to document a one-liner: declare `ODataQuery<Product>` as a controller parameter and
-let an argument resolver fill it in. That resolver still exists, is deprecated, and is **off by
-default** (`odata.filter.web.argument-resolver-enabled=true` brings it back). Four reasons it went:
+`PageResponse` reports `offset` as well as `page`, and the reason is `$skip`: OData's offset is
+absolute and explicitly need not be a multiple of `$top`, so an unaligned `$skip` has no integer page.
+At `$top=20`, `$skip=20` and `$skip=25` both derive `page=1`, and a client paging by offset could not
+compute its next request from the response. `offset` is the authoritative position; `page` is the
+convenience for the aligned case.
+
+`totalElements` and `totalPages` are **absent** - omitted from the JSON, not null, not zero - when the
+caller sent `$count=false`. No count query is issued in that case, which on a deep-paged filtered
+query over a large table is usually the slowest part of the request. Zero is not available as a
+sentinel because zero is a real total.
+
+### Why not bind a parsed query into the controller parameter
+
+This module used to ship an `ODataQueryArgumentResolver` that filled in an `ODataQuery<Product>`
+directly. It was deprecated, off by default, and is now **removed**. Four reasons, and each is worth
+reading because each is about what that resolver *produced* rather than how it read the request:
 
 - `ODataQuery<Product>` names a JPA entity in a controller signature, which
   [`architecture-rules`](../../build/architecture-rules/README.md)' `web.controllers-do-not-expose-entities`
@@ -150,13 +169,26 @@ default** (`odata.filter.web.argument-resolver-enabled=true` brings it back). Fo
   must therefore either hold a repository - `layering.controllers-do-not-access-persistence`, plus a
   query running outside any transaction - or pass the predicate down, which puts the entity in the
   service API instead.
-- springdoc cannot describe the parameter, so `$filter`, `$top`, `$skip` and `$orderby` disappear
-  from the OpenAPI document. Declared as `@RequestParam`s they document themselves.
+- springdoc cannot describe a resolver-bound parameter, so `$filter`, `$top`, `$skip` and `$orderby`
+  disappear from the OpenAPI document.
 - Argument resolution runs before the handler's `@PreAuthorize`, so a caller who may not use the
   endpoint at all can still learn from a 403 which fields are filterable.
 
-Nothing is lost by dropping it: `ODataFilterService` has no dependency on Spring MVC, which is also
-what lets a batch job or a GraphQL resolver replay a saved filter.
+`ODataQueryOptions` is the replacement, and none of the four applies to it: it has no type parameter
+and names no entity, it carries the request rather than a query plan, its five parameters are added to
+the OpenAPI document by `ODataQueryOptionsOpenApiCustomizer` (active whenever springdoc is on the
+classpath), and it evaluates no policy - the only way its resolver can fail is a malformed scalar
+option, which is a 400 about the request that says nothing about the data model.
+
+The request-reading half of the old resolver is exactly what the new one kept, including the
+non-`$`-prefixed aliases for gateways that mangle a leading `$`
+(`odata.filter.web.dollar-prefixed-parameters-only=true` turns them off).
+
+Parsing stays in the repository, and `ODataFilterService` keeps its independence from Spring MVC and
+from JPA - which is what lets `export-spring-boot-starter` replay a saved filter on a worker thread
+with no request and no `EntityManager`. `ODataQueryExecutor` is the part that needs a
+`JPAQueryFactory`, and it lives in its own auto-configuration conditional on one, so a module that
+only parses filters still starts.
 
 ## What's enforced, and where it's configured
 
@@ -169,6 +201,7 @@ what lets a batch job or a GraphQL resolver replay a saved filter.
 | Raw `$filter` string length | `max-expression-length` (2048) | - |
 | Ordering appended to `$orderby` | - | `defaultOrderBy` |
 | `$top` over the max | `page-size-exceeded-strategy` (`REJECT`/`CLAMP`) | - |
+| Whether a total is computed | the caller's `$count` (default: yes) | - |
 
 Per-field, via `@Filterable`: which operators are allowed (`ops`), which roles may use it
 (`roles`), and whether it's sortable (`sortable`).
@@ -188,8 +221,34 @@ FilterValidator orderDateRangeValidator() {
 }
 ```
 
-Every applied filter also publishes a `FilterAppliedEvent` (entity type, raw filter, resolved
-predicate, caller roles) - write an `@EventListener` for it to build an audit trail.
+### The audit trail
+
+Every applied filter is recorded to [`audit-core`](../audit-core/README.md)'s single `AuditSink`, under the
+`query` category and the `query.filtered` action, naming the entity as the resource. **What it records is
+the property paths and the operators, never the values**: `properties=email, name` and
+`operators=email eq, name contains` say that a caller filtered on an e-mail address without saying which
+one.
+
+That is not a nicety. An audit trail is retained for years and read by people who are not entitled to the
+data it guards, so a value in it is a leak with a long tail - and the values are not hashed or truncated
+either, because a hash is reversible for anything drawn from a small set (a status, a channel, a country
+code) and a truncation leaks exactly the identifying prefix. The only safe treatment of a value nobody
+needs is not to collect it, which is why `FilterSummary` is derived from the parsed AST and never reads a
+literal.
+
+**Whether a sink outage fails the query is the deployment's decision, not this module's.** The sink is
+called with no `try`/`catch`: `AuditFailurePolicy`, resolved from configuration, decides whether a failed
+audit write rolls the read back or is logged and survived. A `catch` here would override that with a
+choice hard-coded in a library. Configure the policy for the `query` category accordingly - a deployment
+that would rather lose the read than lose the record of it sets `FAIL_OPERATION`, and most do not.
+
+An application that has not added `audit-spring-boot-starter` has no sink bean, and the trail then goes to
+`audit-core`'s `NoopAuditSink` rather than failing startup.
+
+The `FilterAppliedEvent` Spring application event is **still published**, and is still worth listening for
+as an in-process hook - a metric, a cache invalidation. What it is no longer is the way a filter reaches
+the audit trail: it used to be the only way, which meant the trail existed only if every consuming service
+wrote the same forwarding listener, nothing was redacted, and `AuditFailurePolicy` governed none of it.
 
 ## Role resolution
 
@@ -206,11 +265,13 @@ associations with `/` (e.g. `department/manager/name`). String, integer, decimal
 date, date-time-offset, GUID and enum literals. Not supported (by design, for a bounded, reviewable
 surface): arithmetic, `any`/`all`, `$select`/`$expand`, and other OData functions.
 
-`$count` is not implemented either, and is ignored rather than rejected. It used to be parsed into a
-flag on `ODataQuery` that nothing could act on - `Page` always carries a total, and so does the
-`PageResponse` these endpoints return, so `$count=false` bought the caller nothing while looking
-like it did. Skipping the count query is a decision for the repository (return a `Slice`, or count
-conditionally), not something a query parameter can ask for here.
+`$count` **is** implemented, and honoured: `$count=false` skips the count query and the response then
+carries no total. This module previously argued the flag bought the caller nothing, and that was true
+for as long as nothing here executed the query - a flag on `ODataQuery` that no code could act on is
+worse than no flag. `ODataQueryExecutor` is the one place that can act on it, so it does. A value that
+is neither `true` nor `false` is a 400 naming `$count` in a `property` member; `Boolean.parseBoolean`
+is deliberately not used, because it would read `$count=yes` as `false` and take the caller's total
+away without saying so.
 
 Two further traps worth knowing, both inherited from SQL rather than from this library: a filter
 over a nested path (`department/name eq 'Sales'`) becomes an inner join, so rows whose association
@@ -255,6 +316,86 @@ re-handle all seven exception types by hand, which every consumer then did ident
 plus the bundle removes both halves of that: the meaning is declared here once, the text ships here
 in every locale this module supports, and the application can still override any of it.
 
+## Discovering what is filterable
+
+A client should not have to learn the filterable surface by sending filters and reading the rejections -
+which is the only alternative, and is the behaviour the `odata.filter.rejected` counter below is documented
+as an alerting signal for. Switch discovery on and a caller can ask:
+
+```
+GET /api/v1/filter-metadata/product
+```
+
+```json
+{
+  "entity": "product",
+  "maxDepth": 4,
+  "maxPageSize": 100,
+  "defaultPageSize": 20,
+  "maxNestedPropertyDepth": 2,
+  "defaultOrderBy": "createdAt desc, id asc",
+  "properties": [
+    { "path": "category/code", "type": "string",  "operators": ["contains", "endswith", "eq", "ge", "gt", "in", "le", "lt", "ne", "startswith"], "sortable": true },
+    { "path": "name",          "type": "string",  "operators": ["contains", "endswith", "eq", "startswith"], "sortable": true },
+    { "path": "price",         "type": "decimal", "operators": ["eq", "ge", "gt", "le", "lt", "ne"], "sortable": true }
+  ]
+}
+```
+
+Two things to switch on, and both are deliberate:
+
+```yaml
+odata:
+  filter:
+    metadata:
+      base-path: /api/v1/filter-metadata   # unset = the endpoint does not exist at all
+```
+
+```java
+@Entity
+@FilterPolicy(maxPageSize = 100, defaultOrderBy = "createdAt desc, id asc",
+        metadataName = "product")          // unset = this entity publishes nothing, and 404s
+public class ProductEntity { }
+```
+
+**Unset means absent, not refusing.** A metadata document maps the queryable surface, which is as useful to
+someone enumerating it as to a client, so the surface should not exist until a deployment decided it should.
+An endpoint that existed and answered 403 would still confirm the feature and still be one misconfiguration
+away from answering. The same reasoning makes it per-entity: an entity nobody named answers 404, and so does
+a name nobody used - telling the two apart would make this a way to enumerate the entity model.
+
+**Each caller gets its own document.** Roles come from the same `FilterPrincipalResolver` the query path
+uses, and a path the caller may not filter on is **absent** - not present and marked forbidden. A caller
+learning that `supplierCost` exists and needs `ROLE_ADMIN` has learned a column name and a privilege name
+from an endpoint whose purpose is to tell it less. No role name appears in the document for the same reason,
+and a restricted association hides every path beneath it.
+
+**It is a projection of the policy, never a second list.** Every field comes from the resolved
+`EntityFilterPolicy`, which comes from the entity's own annotations, so what the document advertises is
+exactly what the query path accepts. A field list maintained beside the annotations would drift, and would
+drift invisibly in the two cases that matter: a field opened in code and still absent from the document, and
+one closed in code and still advertised. A test asserts the agreement directly, because "these two
+computations agree" is a property of their output that neither ArchUnit nor Checkstyle can see.
+
+**Only `@Filterable` paths appear.** An unannotated field is invisible to the filter and stays invisible to
+discovery - the document projects the allow-list, not the schema.
+
+### Why it is not called `$metadata`
+
+OData's `$metadata` is a CSDL document describing a service: entity sets, navigation properties, actions, an
+entity container. This module implements `$filter`, `$orderby`, `$top`, `$skip` and `$count` and none of the
+rest, so a document calling itself `$metadata` while describing only the filterable subset would mislead
+every generic OData client that found it. That is worse than not having one.
+
+### Why there is no cache
+
+The resolved policy is already memoized by `FilterPolicyRegistry`, so what a request costs is a stream over a
+few dozen map entries. A cache would have to be keyed on the caller's **resolved role set** rather than on the
+entity - anything else serves an administrator's field list to an unprivileged caller - which means a
+`CachePurpose.SECURITY` declaration whose TTL is how long a revoked role keeps seeing a field. Paying that
+correctness cost to save a map traversal is the wrong trade. If one is ever needed it goes through
+`LudwigCacheRegistry` with that purpose and that key, never a `Caffeine` builder of its own.
+
 ## Metrics
 
 Optional (only if Micrometer is on the classpath, enabled by default via
@@ -264,6 +405,11 @@ exception's simple name - `FilterSyntaxException`, `FilterAccessDeniedException`
 `PageSizeExceededException`, ...), and `odata.filter.parse.duration` times the whole `parse` call
 regardless of outcome. A sustained spike in `rejected` is either a client bug or someone probing for
 what's filterable - worth alerting on either way.
+
+`odata.filter.metadata.served` counts documents handed out by the discovery endpoint, tagged by entity. It
+exists to be read next to `rejected`: a rise in rejections is either a client bug or someone probing for what
+is filterable, and this counter is what tells the clients that asked properly apart from the ones probing -
+which the rejection counter alone cannot do.
 
 ## Testing
 

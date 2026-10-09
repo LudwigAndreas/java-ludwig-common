@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-10-08
+# A package graph is not a behaviour: no requirement in openspec/specs/ describes which package
+# declares a type, and inventing one to satisfy validation would be writing a spec about an
+# implementation detail. The two re-enabled ArchUnit rules are the mechanical check instead.
+skip_specs: true

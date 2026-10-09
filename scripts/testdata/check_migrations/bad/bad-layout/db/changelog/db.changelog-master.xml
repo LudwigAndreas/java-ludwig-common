@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fixture: a scope with two XML changelogs, one of which still declares a changeset, pinned to the
+  wrong XSD, and a SQL file nothing includes.
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <include file="classpath:db/changelog/changes/0001-legacy.xml" relativeToChangelogFile="false"/>
+
+</databaseChangeLog>

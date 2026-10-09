@@ -381,9 +381,9 @@ caller's session.
 
 ## Migrating from a local store
 
-The changelog carries `idempotency-002-migrate-notification-idempotency`, which moves
+The changelog carries `idempotency-0002-migrate-notification-idempotency`, which moves
 `notification_idempotency` into `idempotency_claim`. It is `runAlways="true"` with a `tableExists`
-precondition and two anti-joins, which is the shape `audit-002`/`audit-003` established for the same reason:
+precondition and two anti-joins, which is the shape `audit-0002`/`audit-0003` established for the same reason:
 ordering between two `SpringLiquibase` beans is not the order their autoconfigurations are registered in, and
 a changeset marked as ran is never reconsidered.
 

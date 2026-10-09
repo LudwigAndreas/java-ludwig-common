@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -59,15 +60,15 @@ class ODataFilterIntegrationTest {
     void filtersByComparison() throws Exception {
         mockMvc.perform(get("/employees").param("$filter", "age gt 30"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[*].name", containsInAnyOrder("Alice", "Carol")));
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[*].name", containsInAnyOrder("Alice", "Carol")));
     }
 
     @Test
     void filtersAcrossToOneAssociation() throws Exception {
         mockMvc.perform(get("/employees").param("$filter", "department/name eq 'Sales'"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].name", containsInAnyOrder("Carol", "Dave")));
+                .andExpect(jsonPath("$.content[*].name", containsInAnyOrder("Carol", "Dave")));
     }
 
     @Test
@@ -75,22 +76,22 @@ class ODataFilterIntegrationTest {
         mockMvc.perform(get("/employees")
                         .param("$filter", "status eq 'ACTIVE' and (age lt 25 or contains(name,'li'))"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].name", containsInAnyOrder("Alice", "Dave")));
+                .andExpect(jsonPath("$.content[*].name", containsInAnyOrder("Alice", "Dave")));
     }
 
     @Test
     void ordersDescendingAndLimitsWithTop() throws Exception {
         mockMvc.perform(get("/employees").param("$orderby", "age desc").param("$top", "2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("Carol"))
-                .andExpect(jsonPath("$[1].name").value("Alice"));
+                .andExpect(jsonPath("$.content[0].name").value("Carol"))
+                .andExpect(jsonPath("$.content[1].name").value("Alice"));
     }
 
     @Test
     void skipOffsetsIndependentlyOfTop() throws Exception {
         mockMvc.perform(get("/employees").param("$orderby", "age desc").param("$skip", "1").param("$top", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("Alice"));
+                .andExpect(jsonPath("$.content[0].name").value("Alice"));
     }
 
     @Test
@@ -122,6 +123,59 @@ class ODataFilterIntegrationTest {
     void salaryFilterSucceedsWithAdminRole() throws Exception {
         mockMvc.perform(get("/employees").param("$filter", "salary gt 100000"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].name", containsInAnyOrder("Alice", "Carol")));
+                .andExpect(jsonPath("$.content[*].name", containsInAnyOrder("Alice", "Carol")));
+    }
+
+    @Test
+    @DisplayName("$skip need not be a multiple of $top, and the envelope reports the offset it used")
+    void unalignedSkipIsReportedAsAnOffset() throws Exception {
+        // The whole reason OffsetPageRequest exists: 3 is not a multiple of 2, so there is no integer
+        // page for it, and a page number alone could not tell this request from $skip=2.
+        mockMvc.perform(get("/employees").param("$orderby", "age desc").param("$skip", "3").param("$top", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.offset").value(3))
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].name").value("Dave"))
+                .andExpect(jsonPath("$.totalElements").value(4));
+    }
+
+    @Test
+    @DisplayName("$count=false returns the page with no total at all, not a total of zero")
+    void countFalseOmitsTheTotal() throws Exception {
+        mockMvc.perform(get("/employees").param("$top", "2").param("$count", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.totalElements").doesNotExist())
+                .andExpect(jsonPath("$.totalPages").doesNotExist())
+                .andExpect(jsonPath("$.offset").value(0));
+    }
+
+    @Test
+    @DisplayName("the total is there unless the caller declined it")
+    void countIsReportedByDefault() throws Exception {
+        mockMvc.perform(get("/employees").param("$top", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(4))
+                .andExpect(jsonPath("$.totalPages").value(2));
+    }
+
+    @Test
+    @DisplayName("ordering over a nested path reaches the database as a join, not as a sort in memory")
+    void ordersOverANestedPath() throws Exception {
+        mockMvc.perform(get("/employees").param("$orderby", "department/name asc, name asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].department").value("Engineering"))
+                .andExpect(jsonPath("$.content[0].name").value("Alice"))
+                .andExpect(jsonPath("$.content[3].department").value("Sales"))
+                .andExpect(jsonPath("$.content[3].name").value("Dave"));
+    }
+
+    @Test
+    @DisplayName("$count=yes is a 400 naming $count, not a complaint about the filter")
+    void nonBooleanCountIsRejected() throws Exception {
+        mockMvc.perform(get("/employees").param("$count", "yes"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ludwig.odata.error.invalid-option"))
+                .andExpect(jsonPath("$.property").value("$count"));
     }
 }

@@ -115,6 +115,46 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- The platform's one audit sink. Not optional: "who queried what" is this module's own
+             trail, and a trail that is present only when a consumer remembered a dependency is a
+             trail an auditor cannot rely on. audit-core has zero in-repo dependencies, which is what
+             makes it safe for any module to take. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>audit-core</artifactId>
+        </dependency>
+
+        <!-- Optional: describes the ODataQueryOptions parameter in the application's OpenAPI document.
+             Without it the five query options vanish from the document, which is one of the four
+             objections that made the deleted ODataQueryArgumentResolver unusable - inheriting it would
+             have been the same defect in a new place. The -common artifact, not -webmvc-ui: this module
+             contributes a customizer and has no business adding swagger-ui to a service. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-common</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Optional: validates this starter's own bound properties at startup. The constraints on
+             ODataFilterProperties are real - a max-page-size of 0 was accepted until this was added, and
+             made every query fail at the first request instead of failing the context.
+
+             It is an IMPLEMENTATION and not just jakarta.validation-api, and that distinction is the whole
+             history of this dependency. swagger-core drags the API in transitively, and the API alone on
+             the classpath activates Spring Boot's and web-core's validation wiring, which then needs an
+             implementation - which this module did not have, so every one of its integration tests failed
+             with NoClassDefFoundError on hibernate-validator's ResourceBundleLocator. That was fixed by
+             excluding the API from springdoc; now the API arrives deliberately, with something able to run
+             it, and the exclusion is gone because it would contradict this.
+
+             Optional, so it does not reach a consumer. Every in-repo consumer already ships one through
+             spring-boot-starter-validation. -->
+        <dependency>
+            <groupId>org.hibernate.validator</groupId>
+            <artifactId>hibernate-validator</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Optional: role resolution from the security context, only if the app uses Spring Security -->
         <dependency>
             <groupId>org.springframework.security</groupId>
@@ -168,6 +208,15 @@
             The platform's container images, singleton containers and fixtures. One test-scoped
             dependency; the digests live in its images.properties, not here.
         -->
+        <!-- The shared ArchUnit rule library, applied to this module by its own ArchitectureTest. It had
+             none until the audit rule below needed one: a rule nothing runs is prose, and the AUDIT group
+             had therefore never been applied to the very module it was written for. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>test-support</artifactId>

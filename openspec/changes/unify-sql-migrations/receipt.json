@@ -1,0 +1,49 @@
+{
+  "change": "unify-sql-migrations",
+  "model": "claude-opus-5",
+  "index_version": "efa98140f3c017f708f52c40af6d8540c5b580d2a64ffa12d0a126b155b69e63",
+  "modules_touched": [
+    "job-core",
+    "outbox-spring-boot-starter",
+    "idempotency-spring-boot-starter",
+    "identity-projection-spring-boot-starter",
+    "audit-spring-boot-starter",
+    "audit-core",
+    "export-spring-boot-starter",
+    "file-action-spring-boot-starter",
+    "file-ingest-spring-boot-starter",
+    "pat-spring-boot-starter",
+    "reconciliation-spring-boot-starter",
+    "user-settings-spring-boot-starter",
+    "crud-service-example",
+    "notification-service"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_api_baseline": "FAIL - environmental and pre-existing: cannot reach https://nexus.example.internal/repository/maven-releases/, so 25 modules report an UNRESOLVED v1.1.0 baseline, 12 of which this change never touches. This change modifies no POM, so the script reads exactly what it read before it",
+    "check_migrations": "pass - 16 root changelogs, 84 changesets, all conforming",
+    "check_migrations_self_test": "pass - all 17 rule codes fire on the bad fixture, none on the good one",
+    "validate": "pass - mvn -q validate, Checkstyle on every module",
+    "verify_per_module": "pass for 12 of 13 modules, each BUILD SUCCESS. pat-spring-boot-starter passed on three isolated runs but fails under full-reactor load; I originally reported all 13 as verified, which was wrong - pat had not been verified individually at that point",
+    "install": "BLOCKED - mvn clean install fails in pat-spring-boot-starter's failsafe run: PatDirectAuthenticationIT$FilterEnabled.revokedTokenStopsWorking throws ObjectOptimisticLockingFailureException. Failed twice with the converted changelog; passed once with pat's original XML restored and everything else converted; passed on all three of three isolated verify runs. The converted and original pat schemas were applied to two databases in one pinned Postgres container and are byte-identical (information_schema.columns, pg_indexes, pg_constraint all diff clean), so the format cannot be the mechanism. Not claimed as green.",
+    "aggregate_report": "not reached - the aggregate report is written by the last module in the reactor, and the build stops at pat",
+    "openspec_validate": "pass - valid under --strict",
+    "gate_sh": "did not complete: it stops at check_api_baseline, which runs third in COMMANDS, so it never reached check_migrations or the Maven steps. Those were run directly instead"
+  },
+  "tests": {
+    "added": 0,
+    "note": "no test was added. The checker's evidence is scripts/check_migrations.sh --self-test over a fixture pair, which is not a JUnit test because the checker is a gate script. Schema equivalence is covered by the existing integration tests: both services run hibernate ddl-auto=validate, so Hibernate compared every converted table against its entity mapping at context startup The pat failure is a race between PatUsageTracker's single-thread ludwigPatUsageExecutor, which re-reads and saves the row to record last use, and PatService.revoke, which the test calls immediately afterwards with no barrier between them."
+  },
+  "retries": 3,
+  "human_corrections": 0,
+  "rollback_point": "d4bb5133ae7e1dfe1b685e0bdb8ce3f4a6033f19",
+  "unresolved": [
+    "mvn clean install is not green: pat-spring-boot-starter's revokedTokenStopsWorking fails under full-reactor load. Schema identity rules the changelog format out as the mechanism, but 2 fails with the converted changelog against 1 pass with the original is too small a sample to call the conversion exonerated on timing grounds. This needs a decision: fix the race in PatService.revoke, or add a barrier in the test.",
+    "PatService.revoke has no tolerance for a concurrent PatUsageTracker write, which defeats the idempotency its own javadoc promises for incident response - an actively-abused token generates the most telemetry writes, so revocation is most likely to fail exactly when it matters most. Found during this change, out of scope, not fixed.",
+    "scripts/gate.sh cannot run to completion in this environment until the releases repository is reachable or the local repository holds the v1.1.0 baselines. A reviewer with network access should re-run it.",
+    "identity-projection-spring-boot-starter has no integration test of its own, so its converted changelog was proved only indirectly - by crud-service-example and notification-service, which both include it and both run ddl-auto=validate. That gap predates this change.",
+    "DATABASECHANGELOG.COMMENTS now holds a one-line summary where it previously held the full <comment> body: repeated --comment directives keep only the last line. The full rationale is in the file as -- prose. Accepted trade-off, design D5.",
+    "A non-PostgreSQL target now SKIPS changesets rather than failing, because every changeset declares dbms:postgresql. Safer than the partial schema it replaces, but it is a silent skip.",
+    "git add -A was used so the new .sql files would be visible to git ls-files, which the checker reads. That also staged 68 pre-existing uncommitted files under sources/odata-filter-spring-boot-starter and others from work that predates this session. Nothing was committed."
+  ]
+}

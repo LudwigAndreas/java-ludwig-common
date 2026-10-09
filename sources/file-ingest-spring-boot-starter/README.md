@@ -401,7 +401,7 @@ while this module's was in an actuator payload - so this was the cheaper of the 
 loudly rather than letting somebody discover it:
 
 - **The `status` column of `file_ingest_run` is migrated** by changeset
-  `ingest-004-rename-completed-to-succeeded`, which is guarded by a precondition and is therefore a
+  `file-ingest-0004-rename-completed-to-succeeded`, which is guarded by a precondition and is therefore a
   no-op on a clean install and idempotent on a re-run. It has a rollback.
 - **The `fileingest` actuator payload changed shape.** The loose `status`, `startedAt`, `finishedAt`
   and `failure` members of each run are replaced by a single `operation` member carrying the platform
@@ -424,7 +424,7 @@ what makes adding one later a rename rather than a redesign.
 ## Schema
 
 `db/changelog/file-ingest/file-ingest-changelog.xml`, changeset ids and author namespaced
-(`ingest-NNN` / `ludwig-file-ingest`), applied by its own `FileIngestLiquibaseAutoConfiguration` —
+(`file-ingest-NNNN` / `ludwig-file-ingest`), applied by its own `FileIngestLiquibaseAutoConfiguration` —
 which copies `JobCoreLiquibaseAutoConfiguration` exactly, including `@AutoConfigureAfter(
 LiquibaseAutoConfiguration.class)` and the guard-by-**name** (a type guard makes the bean suppress
 itself). Gate with `ludwig.ingest.liquibase.enabled`.

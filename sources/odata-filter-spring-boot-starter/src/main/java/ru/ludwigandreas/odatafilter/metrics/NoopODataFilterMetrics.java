@@ -18,4 +18,9 @@ public class NoopODataFilterMetrics implements ODataFilterMetrics {
     public void recordParseDuration(String entityType, Duration duration) {
         // no-op
     }
+
+    @Override
+    public void recordMetadataServed(String entityType) {
+        // no-op
+    }
 }
