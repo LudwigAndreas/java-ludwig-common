@@ -37,8 +37,28 @@ import ru.ludwigandreas.restclient.observability.UriCardinalityLimit;
  * <p>All of it is conditional: a service without the observability starter gets a working client with
  * no correlation id and no trace id, which is the honest outcome rather than a second, divergent
  * implementation of both.
+ *
+ * <h2>Why this runs before {@link RestClientAutoConfiguration}, and after observability</h2>
+ *
+ * <p>Both orderings are load-bearing. {@code RestClientAutoConfiguration} declares the no-identity
+ * {@link CallContextSource} as a fallback under {@code @ConditionalOnMissingBean}, and a missing-bean
+ * condition sees only what was registered before it. While this configuration ran <em>after</em>
+ * that one, the fallback always registered, the platform source was then added beside it, and the
+ * client builder - which takes one - failed the whole context with "expected single matching bean
+ * but found 2". No service could use this starter together with the observability starter. Running
+ * first is what lets the fallback back off.
+ *
+ * <p>After observability's own auto-configuration, because the platform beans here are conditional
+ * on its {@code CorrelationContext} bean, and that condition too sees only what is already
+ * registered. It used to hold by the accident that {@code ru.ludwigandreas.observability} sorts
+ * before {@code ru.ludwigandreas.restclient}. Named as a string, so that this class still loads when
+ * the observability starter is absent.
+ *
+ * <p>{@code CallContextSourceWiringTest} boots both starters together and fails if either ordering
+ * is lost.
  */
-@AutoConfiguration(after = RestClientAutoConfiguration.class)
+@AutoConfiguration(before = RestClientAutoConfiguration.class,
+        afterName = "ru.ludwigandreas.observability.config.ObservabilityCoreAutoConfiguration")
 @ConditionalOnProperty(prefix = RestClientProperties.PREFIX, name = "enabled",
         havingValue = "true", matchIfMissing = true)
 public class RestClientObservabilityAutoConfiguration {
@@ -103,6 +123,10 @@ public class RestClientObservabilityAutoConfiguration {
         /**
          * The ambient identity of the current unit of work, from the platform's own sources.
          *
+         * <p>Backs off for a source the application declares itself. With neither, this one
+         * registers and {@code RestClientAutoConfiguration}'s fallback backs off in turn - see the
+         * class comment for the ordering that depends on.
+         *
          * @param correlationContext      the platform's correlation store
          * @param observabilityProperties for the configured header name
          * @param tracer                  Micrometer's tracer, when one is present
@@ -111,6 +135,7 @@ public class RestClientObservabilityAutoConfiguration {
          */
         @Bean
         @ConditionalOnBean(CorrelationContext.class)
+        @ConditionalOnMissingBean(CallContextSource.class)
         public CallContextSource ludwigRestClientPlatformCallContextSource(
                 CorrelationContext correlationContext, ObservabilityProperties observabilityProperties,
                 ObjectProvider<Tracer> tracer, ObjectProvider<PrincipalSupplier> principals) {

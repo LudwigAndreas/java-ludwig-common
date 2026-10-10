@@ -34,6 +34,9 @@ public class ObservabilityProperties {
     private final Build build = new Build();
 
     @NestedConfigurationProperty
+    private final Server server = new Server();
+
+    @NestedConfigurationProperty
     private final Tracing tracing = new Tracing();
 
     @NestedConfigurationProperty
@@ -59,6 +62,10 @@ public class ObservabilityProperties {
 
     public Build getBuild() {
         return build;
+    }
+
+    public Server getServer() {
+        return server;
     }
 
     public Tracing getTracing() {
@@ -247,6 +254,40 @@ public class ObservabilityProperties {
         /** These properties as the record the rest of the module passes around. */
         public BuildIdentity toIdentity() {
             return new BuildIdentity(commitId, abbreviatedCommitId, branch, timestamp, ciBuildNumber, dirty);
+        }
+    }
+
+    /** What the service says about itself over HTTP: {@code ludwig.observability.server.*}. */
+    public static class Server {
+
+        @NestedConfigurationProperty
+        private final Info info = new Info();
+
+        public Info getInfo() {
+            return info;
+        }
+
+        /**
+         * The {@code GET /server/info} endpoint: {@code ludwig.observability.server.info.*}.
+         *
+         * <p>One switch and no path. The path is the same in every service on purpose - see
+         * {@link ru.ludwigandreas.observability.web.ServerInfoController}.
+         */
+        public static class Info {
+
+            /**
+             * Whether the service answers {@code GET /server/info}. Switch it off when the service
+             * maps that path itself, or must not describe itself at all.
+             */
+            private boolean enabled = true;
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
         }
     }
 

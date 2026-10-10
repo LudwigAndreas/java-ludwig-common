@@ -462,6 +462,8 @@ ludwig:
     public-paths:
       - /actuator/health/**
       - /actuator/info
+      # A curated allow-list of five fields, built for a UI footer, so it is safe without credentials.
+      - /server/info
       - /api/v1/notifications/receipts
       - /v3/api-docs/**
       - /swagger-ui/**

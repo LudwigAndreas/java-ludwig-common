@@ -366,6 +366,17 @@ ludwig:
       audiences: product-catalog
       tenant-claim: tenant_id
 
+    # Served without credentials. A list here REPLACES the security starter's default rather than
+    # extending it, which is why the three actuator entries are restated: a block holding only the
+    # new path would put the health probes behind authentication. /server/info is the observability
+    # starter's five-field description of this service for a UI footer - a curated allow-list, which
+    # is what makes it safe to publish.
+    public-paths:
+      - /actuator/health
+      - /actuator/health/**
+      - /actuator/info
+      - /server/info
+
     # Partner access over mTLS, terminated by Envoy. trusted-proxies is the load-bearing setting:
     # x-forwarded-client-cert is an ordinary header, and what makes it trustworthy is that only the
     # sidecar can reach this port. The partner registry itself lives in the security_partner table

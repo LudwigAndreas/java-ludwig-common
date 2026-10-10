@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-10T13:13:57.591572Z",
+    "generatedAt": "2026-10-10T14:30:09.519918Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 33,
-    "commit": "c1fc5b81ecfa20e1b3418002a5ace90473d6734c",
-    "commitShort": "c1fc5b8",
+    "commit": "fb2ecb0928a182cd41ec9d5a4da5cde154b2d2e6",
+    "commitShort": "fb2ecb0",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "3c7f3b2d4bd62c1cc675a28651a2381931fd4e4164b1f73a7efd5657c837df40",
-      "newestPom": "build/ludwig-service-parent/pom.xml",
-      "newestPomModified": "2026-10-10T12:50:56.278418Z"
+      "pomSetSha": "ab3c9ccd588a22cecb33ceef49a1befabfcf8cc8fb73f3505d43bae0a561ef58",
+      "newestPom": "services/crud-service-example/pom.xml",
+      "newestPomModified": "2026-10-10T14:30:07.028241Z"
     }
   },
   "modules": [
@@ -1637,6 +1637,10 @@
       ],
       "inRepoDependents": [
         {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
           "artifactId": "export-spring-boot-starter",
           "scope": "compile"
         },
@@ -1665,15 +1669,15 @@
       "liquibaseChangelogs": [],
       "i18nBundles": [],
       "surfaces": [
-        "none"
+        "rest"
       ],
       "testDirs": {
         "unit": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit",
         "integration": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration"
       },
       "testClasses": {
-        "surefire": 17,
-        "failsafe": 1
+        "surefire": 18,
+        "failsafe": 2
       },
       "pom": "sources/observability-spring-boot-starter/pom.xml",
       "readme": "sources/observability-spring-boot-starter/README.md",
@@ -2148,6 +2152,11 @@
           "optional": false
         },
         {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
           "artifactId": "odata-filter-spring-boot-starter",
           "scope": "compile",
           "optional": false
@@ -2336,7 +2345,7 @@
       },
       "testClasses": {
         "surefire": 27,
-        "failsafe": 19
+        "failsafe": 20
       },
       "pom": "services/notification-service/pom.xml",
       "readme": "services/notification-service/README.md",

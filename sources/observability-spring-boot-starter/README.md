@@ -240,6 +240,41 @@ off one line.
 that can reach the management port. That is deliberate. A deployment that cannot disclose them narrows
 `management.endpoints.web.exposure.include`.
 
+### Server info for a user interface
+
+A servlet service with this starter answers `GET /server/info` on its application port:
+
+```json
+{"service": "product-catalog", "version": "1.4.2", "environment": "prod", "commit": "c1fc5b8", "built": "2026-09-16"}
+```
+
+It is the footer-sized subset of the two identities above, for a user interface that talks to
+several services and wants to show which one answered, at which version. The path is the same in
+every service and is not configurable: a UI appends it to each service it already calls, and a prefix
+in front of a service belongs to whatever routes to it.
+
+**The five members are an allow-list.** The branch, the dirty flag, the CI build number and the full
+commit id are operator facts and stay on `/actuator/info`; the namespace and the instance are left
+out too, the instance because it names a replica. `built` is a date because the build time is only
+recorded to the day. A value that could not be resolved is left out of the body - never `null`, never
+`unknown` - and a process with no identity at all answers `200` with `{}`, so "no provenance" cannot
+be mistaken for "no such endpoint".
+
+**Publishing it is the service's decision.** The starter adds no security rule, so behind
+`security-spring-boot-starter` the path requires authentication until the service lists it:
+
+```yaml
+ludwig:
+  security:
+    # A list here replaces the default list, it does not extend it - restate what you still need.
+    public-paths: [/actuator/health, /actuator/health/**, /actuator/info, /server/info]
+```
+
+The allow-list is what makes that a safe line to add. Read the endpoint once per page load: nothing
+in it changes while a process lives, though two replicas answer differently in the middle of a
+rolling deployment, which is correct. `ludwig.observability.server.info.enabled=false` removes it,
+for a service that maps the path itself.
+
 ### MDC handling
 
 MDC entries are nested under `labels` by default. Flattening them lets an application key called
@@ -400,6 +435,7 @@ needing to know this module exists.
 | `ludwig.observability.build.timestamp` | `build.time` in `META-INF/build-info.properties` | Truncated to the day by the platform's build |
 | `ludwig.observability.build.ci-build-number` | `build.ci.build-number` in `META-INF/build-info.properties` | Present only when the build was given `-Dludwig.ci.build-number` |
 | `ludwig.observability.build.dirty` | `git.dirty` in `git.properties` | Unset means not known, which is not clean |
+| `ludwig.observability.server.info.enabled` | `true` | Serves `GET /server/info`; the path itself is fixed |
 | `ludwig.observability.logging.json.enabled` | `true`; `false` under the `local` profile | An explicit value wins in either direction |
 | `spring.main.banner-mode` | `off` when the format is JSON | Boot's own property; untouched under text |
 | `ludwig.observability.logging.json.field-set` | `ecs` | `ecs`, `otel` or `flat` |

@@ -757,6 +757,19 @@ components:
       - recipients
       - templateKey
       type: object
+    ServerInfoResponse:
+      properties:
+        built:
+          type: string
+        commit:
+          type: string
+        environment:
+          type: string
+        service:
+          type: string
+        version:
+          type: string
+      type: object
     SuppressionRequest:
       properties:
         address:
@@ -1728,6 +1741,24 @@ paths:
       summary: Read a submitted request
       tags:
       - Notifications
+  /server/info:
+    get:
+      operationId: serverInfo
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerInfoResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - server-info-controller
 tags:
 - description: Provider callbacks - HMAC authenticated
   name: Delivery receipts

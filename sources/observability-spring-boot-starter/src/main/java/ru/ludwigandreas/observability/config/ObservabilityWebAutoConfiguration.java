@@ -13,12 +13,15 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ru.ludwigandreas.observability.core.BuildIdentity;
+import ru.ludwigandreas.observability.core.ServiceIdentity;
 import ru.ludwigandreas.observability.correlation.CorrelationContext;
 import ru.ludwigandreas.observability.correlation.CorrelationIdResolver;
 import ru.ludwigandreas.observability.tracing.TraceContextAccessor;
 import ru.ludwigandreas.observability.web.CorrelationIdFilter;
 import ru.ludwigandreas.observability.web.CorrelationPropagatingRequestInterceptor;
 import ru.ludwigandreas.observability.web.ForceSamplingHintFilter;
+import ru.ludwigandreas.observability.web.ServerInfoController;
 
 /**
  * Wires correlation into the servlet request path and onto outgoing HTTP calls.
@@ -67,6 +70,21 @@ public class ObservabilityWebAutoConfiguration {
         String headerName = properties.getTracing().getSampling().getForceHeader();
         ForceSamplingHintFilter filter = new ForceSamplingHintFilter(headerName);
         return register(filter, filter.getOrder());
+    }
+
+    /**
+     * The curated self-description a user interface reads, at {@code /server/info}.
+     *
+     * <p>On by default: the response is an allow-list that is safe to publish, and it is still
+     * behind authentication until the service lists the path among its public paths. This
+     * configuration adds no security rule of its own - publishing is the service's decision.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "ludwig.observability.server.info", name = "enabled", matchIfMissing = true)
+    public ServerInfoController ludwigServerInfoController(
+            ServiceIdentity serviceIdentity, BuildIdentity buildIdentity) {
+        return new ServerInfoController(serviceIdentity, buildIdentity);
     }
 
     private <T extends Filter> FilterRegistrationBean<T> register(T filter, int order) {

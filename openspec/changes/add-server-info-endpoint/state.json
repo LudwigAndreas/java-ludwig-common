@@ -1,0 +1,49 @@
+{
+  "change": "add-server-info-endpoint",
+  "contract": {
+    "goal": "a curated, UI-facing GET /server/info served by observability-spring-boot-starter, and served publicly by both in-repo services",
+    "output": "ServerInfoController + ServerInfoResponse + ludwig.observability.server.info.enabled in observability-spring-boot-starter; notification-service and crud-service-example list /server/info in public-paths, test it and carry it in their committed OpenAPI documents; crud-service-example depends on observability-spring-boot-starter; rest-client-spring-boot-starter starts together with observability-spring-boot-starter, with exactly one CallContextSource",
+    "constraints": [
+      "body is exactly the allow-list service, version, environment, commit, built; absent values omitted",
+      "path /server/info is fixed, not configurable",
+      "no change to security-spring-boot-starter, BuildIdentity, ServiceIdentity, the root POM, ludwig-bom or ludwig-service-parent",
+      "a test broken by adding the starter to crud-service-example is fixed in that service's test configuration, never by changing the starter or weakening a rule",
+      "the rest-client fix is confined to auto-configuration ordering and one condition; no public type or @Bean method is removed"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_api_baseline.sh",
+      "scripts/check_migrations.sh",
+      "scripts/check_build_metadata.sh",
+      "mvn -q validate",
+      "mvn -pl :observability-spring-boot-starter -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :file-action-spring-boot-starter -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :reconciliation-spring-boot-starter -am verify",
+      "mvn -pl :rest-client-spring-boot-starter -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "openspec validate add-server-info-endpoint"
+    ]
+  },
+  "current_task": "6.1",
+  "decisions": [
+    "Task 2.6's proving command was wrong and is corrected, the test is unchanged: library modules bind no failsafe (only job-core does, per the root POM) and surefire there has no IT/IntegrationTest exclusion, so ServerInfoEndpointIntegrationTest runs at `test`. Proven with `mvn -pl :observability-spring-boot-starter surefire:test -Dtest=ServerInfoEndpointIntegrationTest` (5 run, 0 failed), not with -Dit.test, which selects nothing in this module.",
+    "Tasks 3.3 and 4.5: the API document refresh must be run with -am (`mvn -pl :<service> -am verify -Dit.test=ApiDocumentIT -Dfailsafe.failIfNoSpecifiedTests=false -Dludwig.apidocs.write=true`). The command in docs/api/README.md and in the task has no -am, so it resolves observability-spring-boot-starter from ~/.m2 and regenerates against the previously installed jar - the first refresh produced no diff for that reason. With -am the notification-service diff is +31 lines: the /server/info path and the ServerInfoResponse schema, nothing else.",
+    "SCOPE CHANGE, chosen by the user on 2026-10-10 (option 1 of three offered after the 4.2 failure): the change is widened to fix rest-client-spring-boot-starter's duplicate CallContextSource (design D9, new capability outbound-call-context). The contract's output, constraints and done_when were extended accordingly - done_when gains the rest-client gate (`mvn -pl :rest-client-spring-boot-starter -am verify`, already-listed dependents). Nothing was removed from the contract.",
+    "tasks.md renumbered for the scope change: the rest-client fix is the new group 4; the crud-service-example group moved from 4 to 5 and the gate from 5 to 6. Earlier entries in this file that say 4.1/4.2/4.5 mean what is now 5.1/5.2/5.5.",
+    "5.2 after the rest-client fix: `mvn -pl :crud-service-example -am verify` ran 44 integration tests with exactly one failure, ApiDocumentIT.committedDocumentIsCurrent on the new path - the expected one. No existing test needed a configuration change to run with the starter on. 5.5: the crud-service-example document diff is +31 lines, the /server/info path and the ServerInfoResponse schema only.",
+    "5.4: the health assertion in crud-service-example's ServerInfoIT is 'not 401 and not 403' rather than 200, because whether the service is healthy in a test context is a different question from whether an anonymous caller may ask.",
+    "6.1: with the gate stopped at the API baseline, every other gate command was run by hand on 2026-10-10 and passed: check_image_pins.sh, check_migrations.sh, check_build_metadata.sh, manifest.sh stale, manifest.sh layout (all exit 0); `mvn -q validate` (exit 0); one reactor run `mvn -pl :observability-spring-boot-starter,:rest-client-spring-boot-starter,:export-spring-boot-starter,:file-action-spring-boot-starter,:reconciliation-spring-boot-starter,:user-settings-spring-boot-starter,:notification-service,:crud-service-example -am verify` (BUILD SUCCESS, 29 modules, 3001 tests run, 0 failures, 0 errors, 0 skipped) in place of the eight separate per-module verifies; `openspec validate add-server-info-endpoint` (exit 0). Tasks 6.1, 6.2 and 6.3 stay unticked: the gate as one command has not passed, the baseline was not compared, and the receipt is written once, after it has."
+  ],
+  "failures": [
+    "3.3 attempt 1: refresh without -am produced an unchanged document (stale starter jar from ~/.m2). Fixed by adding -am; not a code defect.",
+    "4.2 attempt 1: `mvn -pl :crud-service-example -am verify` fails - 41 integration tests error because the application context does not start: NoUniqueBeanDefinitionException, 'expected single matching bean but found 2: ludwigRestClientCallContextSource, ludwigRestClientPlatformCallContextSource' at RestClientAutoConfiguration.ludwigClientRuntimeBuilder parameter 7. Cause is in rest-client-spring-boot-starter, not in this change's code and not in a test: RestClientAutoConfiguration registers the NONE fallback under @ConditionalOnMissingBean, RestClientObservabilityAutoConfiguration is ordered AFTER it and adds the platform source unconditionally whenever a CorrelationContext bean exists, so with observability on the classpath there are always two. No in-repo service combined rest-client with observability before, and no rest-client test boots both. Not retried: a second attempt would need an edit outside the contract.",
+    "6.1 attempt 1: `scripts/gate.sh --change add-server-info-endpoint observability-spring-boot-starter rest-client-spring-boot-starter notification-service crud-service-example` exited 1 at its second command, scripts/check_api_baseline.sh: all 28 published modules are UNRESOLVED because the 2.0.0 baseline exists but could not be fetched from the releases repository (nexus.example.internal). Environmental and not specific to this change - untouched modules fail identically. Not retried and not bypassed: the script itself says an unresolvable baseline is not an absent one."
+  ],
+  "open_questions": [],
+  "pending_human": [
+    "The Java API baseline could not be checked: scripts/check_api_baseline.sh needs the 2.0.0 release artifacts, which are neither reachable at the releases repository from this machine nor in ~/.m2. Restore access (or populate the local repository) and rerun `scripts/gate.sh --change add-server-info-endpoint observability-spring-boot-starter rest-client-spring-boot-starter notification-service crud-service-example`; then 6.1-6.3 can be closed. The change adds public types and a property and removes none, but that is an expectation, not a comparison."
+  ]
+}

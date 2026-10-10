@@ -125,6 +125,19 @@
         </dependency>
 
         <!--
+            Tracing, JSON logging with masking, correlation id across HTTP and Kafka - and
+            GET /server/info, the self-description a UI footer reads.
+
+            Declared here because nothing brings it transitively: export, file-action and rest-client
+            each declare it optional, so without this line their observability integrations stay
+            dormant and this service writes none of the platform's log stream.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>observability-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
             Outbound HTTP to the other services in the estate. Every dependency this service calls is
             declared under ludwig.rest-client.clients with its own pool, timeouts, identity and
             resilience policy; nothing about a client lives in a @Configuration class here.

@@ -162,6 +162,15 @@
             <artifactId>jakarta.servlet-api</artifactId>
             <optional>true</optional>
         </dependency>
+        <!--
+            Optional: used by the /server/info response only, to leave an unresolved member out of
+            the body. Declared rather than picked up from whatever else happens to bring it in.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!-- Optional: outbound propagation for RestTemplate / RestClient / WebClient. -->
         <dependency>

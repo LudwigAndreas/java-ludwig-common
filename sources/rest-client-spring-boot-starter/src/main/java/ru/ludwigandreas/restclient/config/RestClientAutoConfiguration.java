@@ -145,7 +145,13 @@ public class RestClientAutoConfiguration {
                 io.micrometer.core.instrument.simple.SimpleMeterRegistry::new));
     }
 
-    /** With neither observability nor security present, calls carry no ambient identity. */
+    /**
+     * With neither observability nor security present, calls carry no ambient identity.
+     *
+     * <p>A fallback, and only one because {@link RestClientObservabilityAutoConfiguration} is
+     * evaluated before this class: the platform source it registers, or one the application
+     * declares, is what this condition has to be able to see.
+     */
     @Bean
     @ConditionalOnMissingBean
     public CallContextSource ludwigRestClientCallContextSource() {

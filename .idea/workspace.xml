@@ -6,18 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CHANGELOG.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PROJECT_INDEX.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_INDEX.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/runbook.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/runbook.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/project-index.json" beforeDir="false" afterPath="$PROJECT_DIR$/project-index.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/config/OpenApiConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/config/OpenApiConfig.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

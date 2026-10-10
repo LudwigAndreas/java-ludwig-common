@@ -6,9 +6,9 @@
 |---|---|
 | revision | `1.1.0-SNAPSHOT` |
 | modules | 33 |
-| commit | `c1fc5b8` (`master`) |
-| generated | 2026-10-10T13:13:57.591572Z |
-| **freshness** | POM-set SHA `3c7f3b2d4bd62c1c` · newest POM `build/ludwig-service-parent/pom.xml` @ 2026-10-10T12:50:56.278418Z |
+| commit | `fb2ecb0` (`master`) |
+| generated | 2026-10-10T14:30:09.519918Z |
+| **freshness** | POM-set SHA `ab3c9ccd588a22ce` · newest POM `services/crud-service-example/pom.xml` @ 2026-10-10T14:30:07.028241Z |
 
 The freshness row is how you tell this index is stale: `scripts/manifest.sh stale` recomputes the POM-set SHA and exits non-zero if it differs. It is content-based, not timestamp-based, so a checkout or a branch switch does not report a false stale.
 
@@ -91,7 +91,7 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 | **identity-projection-spring-boot-starter** | `common` | `ru.ludwigandreas.identity` | none | `db-core`, `messaging-spring-boot-starter`, `security-spring-boot-starter` | `crud-service-example`, `notification-service` |
 | **hot-reload-spring-boot-starter** | `common` | `ru.ludwigandreas.hotreload` | none | `audit-core` | `export-spring-boot-starter`, `notification-service`, `observability-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **web-core-spring-boot-starter** | `common` | `ru.ludwigandreas.webcore` | rest | — | `audit-spring-boot-starter`, `crud-service-example`, `db-core`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `file-ingest-spring-boot-starter`, `idempotency-spring-boot-starter`, `messaging-spring-boot-starter`, `notification-service`, `object-storage-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `pat-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter`, `user-settings-spring-boot-starter` |
-| **observability-spring-boot-starter** | `common` | `ru.ludwigandreas.observability` | none | `audit-core`, `hot-reload-spring-boot-starter`, `web-core-spring-boot-starter` | `export-spring-boot-starter`, `file-action-spring-boot-starter`, `notification-service`, `reconciliation-spring-boot-starter`, `rest-client-spring-boot-starter`, `user-settings-spring-boot-starter` |
+| **observability-spring-boot-starter** | `common` | `ru.ludwigandreas.observability` | rest | `audit-core`, `hot-reload-spring-boot-starter`, `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `notification-service`, `reconciliation-spring-boot-starter`, `rest-client-spring-boot-starter`, `user-settings-spring-boot-starter` |
 | **rest-client-spring-boot-starter** | `common` | `ru.ludwigandreas.restclient` | rest | `audit-core`, `observability-spring-boot-starter`, `web-core-spring-boot-starter` | `crud-service-example`, `export-spring-boot-starter`, `reconciliation-spring-boot-starter` |
 | **user-settings-spring-boot-starter** | `common` | `ru.ludwigandreas.usersettings` | rest | `architecture-rules` (test), `audit-spring-boot-starter`, `cache-spring-boot-starter`, `db-core`, `hot-reload-spring-boot-starter`, `messaging-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `security-spring-boot-starter`, `test-support` (test), `web-core-spring-boot-starter` | `notification-service` |
 
@@ -99,7 +99,7 @@ carries no dependent edges. Changing it, or `ludwig-service-parent`, means a ful
 
 | module | parent POM | package root | surfaces | in-repo deps | dependents |
 |---|---|---|---|---|---|
-| **crud-service-example** | `ludwig-service-parent` | `ru.ludwigandreas.example.catalog` | rest | `architecture-rules` (test), `db-core`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `identity-projection-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter`, `test-support-security` (test), `web-core-spring-boot-starter` | — |
+| **crud-service-example** | `ludwig-service-parent` | `ru.ludwigandreas.example.catalog` | rest | `architecture-rules` (test), `db-core`, `export-spring-boot-starter`, `file-action-spring-boot-starter`, `identity-projection-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `rest-client-spring-boot-starter`, `security-spring-boot-starter`, `test-support-security` (test), `web-core-spring-boot-starter` | — |
 | **notification-service** | `ludwig-service-parent` | `ru.ludwigandreas.notification` | actuator, rest | `architecture-rules` (test), `db-core`, `hot-reload-spring-boot-starter`, `idempotency-spring-boot-starter`, `identity-projection-spring-boot-starter`, `job-core`, `messaging-spring-boot-starter`, `observability-spring-boot-starter`, `odata-filter-spring-boot-starter`, `outbox-spring-boot-starter`, `security-spring-boot-starter`, `test-support-security` (test), `user-settings-spring-boot-starter` (provided), `web-core-spring-boot-starter` | — |
 
 ### test-support (2)
@@ -232,6 +232,7 @@ crud-service-example                       -> db-core
 crud-service-example                       -> export-spring-boot-starter
 crud-service-example                       -> file-action-spring-boot-starter
 crud-service-example                       -> identity-projection-spring-boot-starter
+crud-service-example                       -> observability-spring-boot-starter
 crud-service-example                       -> odata-filter-spring-boot-starter
 crud-service-example                       -> outbox-spring-boot-starter
 crud-service-example                       -> rest-client-spring-boot-starter
@@ -530,7 +531,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - Liquibase: `services/notification-service/src/main/resources/db/changelog/changes/0001-request.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0002-delivery.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0003-delivery-indexes.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0004-delivery-status-history.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0005-delivery-content.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0006-recipient-profile.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0007-recipient-preference.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0008-suppression.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0009-idempotency.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0010-lock.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0011-rate-limit-window.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0012-template-revision.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0013-record-quiet-hours-deferral.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0014-drop-recipient-preference.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0015-drop-recipient-profile.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0016-drop-lock-table.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0017-drop-idempotency.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0018-inbox-item.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0019-inbox-item-content.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0020-announcement.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0021-announcement-content.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0022-announcement-marker.sql`, `services/notification-service/src/main/resources/db/changelog/changes/0023-announcement-email-run.sql`, `services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml`
 - i18n: `services/notification-service/src/main/resources/i18n/notification-messages.properties`, `services/notification-service/src/main/resources/i18n/notification-messages_ru.properties`
 - test dirs: architecture (`services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture`), integration (`services/notification-service/src/test/java/ru/ludwigandreas/notification/integration`), unit (`services/notification-service/src/test/java/ru/ludwigandreas/notification/unit`)
-- test classes: 27 surefire, 19 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 27 surefire, 20 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :notification-service -am verify`
 
 ### `object-storage-spring-boot-starter`
@@ -552,11 +553,11 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - directory `sources/observability-spring-boot-starter/`
 - package root `ru.ludwigandreas.observability`
 - README [`sources/observability-spring-boot-starter/README.md`](sources/observability-spring-boot-starter/README.md) · [`sources/observability-spring-boot-starter/README.ru.md`](sources/observability-spring-boot-starter/README.ru.md)
-- surfaces: none
+- surfaces: rest
 - auto-configuration: `sources/observability-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - test dirs: integration (`sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration`), unit (`sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit`)
-- test classes: 17 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
-- **gate**: `mvn -q validate`, then `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
+- test classes: 18 surefire, 2 failsafe (`*IT` / `*IntegrationTest`)
+- **gate**: `mvn -q validate`, then `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `odata-filter-spring-boot-starter`
 

@@ -23,6 +23,7 @@ top of them looks like.
 | Reliable events | Every write records its event in the transactional outbox in the same transaction |
 | Resource-level access | `@PreAuthorize` per endpoint; roles come from the local projection of the OIDC user stream, never from token claims |
 | Data-level access | A caller's scope is ANDed into the search query and re-checked on every load by id - one `DataScopeMapping` bean is the only security code this service writes |
+| Telling a UI which service answered | `GET /server/info` from the [observability starter](../../sources/observability-spring-boot-starter/README.md) - service, version, environment, short commit and build date, nothing else - published by one line in `ludwig.security.public-paths` |
 | A user-submitted file performing an action | One `RowBinding`, one `RowHandler` and a block of YAML; the file-action starter owns the upload edge, the bounded spreadsheet reader, the confirm step, the reject report and the operation envelope |
 
 ## Architecture test
@@ -405,6 +406,16 @@ a client never has to know which layer denied it.
   stops falling back to auto-configuration packages for entity scanning.
 - The Maven build sets `-parameters` (spring-boot-starter-parent would normally do this), without
   which `@PathVariable UUID id` cannot resolve its name.
+- `observability-spring-boot-starter` is declared in this service's own POM. Nothing brings it in
+  transitively - export, file-action and rest-client each declare it optional - so without that
+  line their observability integrations stay dormant. With it, the console is structured JSON
+  outside the `local` profile (text under `local`), every log event carries the service, version
+  and commit, a correlation id crosses inbound HTTP, outbound HTTP and Kafka, and tracing runs at
+  the starter's default sampling. Nothing under `ludwig.observability` is set here: the defaults
+  are the platform's position, and a reference service that overrides them teaches the override.
+- `ludwig.security.public-paths` restates the three actuator entries beside `/server/info`. A list
+  in YAML replaces the security starter's default rather than extending it, so naming only the new
+  path would put the health probes behind authentication. `ServerInfoIT` asserts both halves.
 
 ## Testing
 
