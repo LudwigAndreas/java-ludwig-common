@@ -1,0 +1,33 @@
+{
+  "change": "fix-defects-found-by-local-run",
+  "contract": {
+    "goal": "fix the four defects the notification-service local run found, each where it lives and each with a test that fails without the fix, and remove the workarounds for them",
+    "output": "security-spring-boot-starter: audience check for any JwtDecoder type. identity-projection-spring-boot-starter: IdentityKafkaAutoConfiguration ordered after messaging. user-settings-spring-boot-starter: hot-reload auto-configuration conditional on a mode. test-support: shared containers ignore stop(). notification-service test sources: identity consumer on, wrong-audience test asserts 401, no user-settings launch argument. READMEs and changelogs",
+    "constraints": [
+      "no dependency added or removed, no POM changed",
+      "no new configuration property and no public method signature changed",
+      "nothing under services/notification-service/src/main changes",
+      "each fix has a test that was seen to fail before the fix",
+      "rest-client-spring-boot-starter is not touched"
+    ],
+    "done_when": [
+      "scripts/manifest.sh stale && mvn -q validate",
+      "scripts/gate.sh --change fix-defects-found-by-local-run --full",
+      "openspec validate fix-defects-found-by-local-run --strict"
+    ]
+  },
+  "current_task": "8.2",
+  "decisions": [
+    "the user said 'fix all' after the report listing four defects; scope is those four plus removing their workarounds. rest-client's optional dependencies, named in an earlier report, are a stated non-goal",
+    "8.2: mvn clean install run 4: BUILD SUCCESS, 35 reactor entries, 3509 tests, 0 failures; check_aggregate_report passes",
+    "scope: test-support-local's StubFaultIT and sample application.yml were edited to remove a flake the full builds exposed; logged here as a scope change to the contract's output"
+  ],
+  "failures": [
+    "8.2 attempt 1: scripts/gate.sh --full stopped at check_api_baseline.sh (releases repository unreachable). 'mvn clean install' by hand FAILED in test-support-local on StubFaultIT.slow, a timing flake in a test from add-ludwig-test-fixtures, not in any of the four fixes; 29 modules had passed. Test fixed (awaits the request count) and the build resumed from that module",
+    "8.2: mvn clean install run 2 failed in audit-core (ClassNotFoundException for ru.ludwigandreas.audit.* in its own unit tests) with IntelliJ IDEA open on the project; audit-core is untouched and passed in every other run. Run 3 failed on StubFaultIT.slow again; cause was rest-client's zero-headroom retry budget, fixed in the sample configuration"
+  ],
+  "open_questions": [],
+  "pending_human": [
+    "8.2: rerun scripts/gate.sh --change fix-defects-found-by-local-run --full once the releases repository is reachable"
+  ]
+}

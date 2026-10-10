@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>test-support-local</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Test support (local run, partner stubs, seed fixtures)</name>
+    <description>
+        Starts a service's real entry point on a developer machine with the backing services it names,
+        an HTTP stand-in per rest-client name with switchable faults, and ordered seed fixtures. The
+        same stubs and fixtures serve an integration test. Added as a single test-scoped dependency.
+    </description>
+
+    <!--
+        ============================================================================================
+        WHY THIS IS A THIRD MODULE, AND WHAT MAY NEVER DEPEND ON IT
+        ============================================================================================
+        A stub is keyed by rest-client name and the launcher checks RestClientRegistry, so this module
+        needs rest-client-spring-boot-starter. test-support must depend on nothing in this repository
+        (see its POM), which is the same reason test-support-security is a module of its own.
+
+        Maven builds its reactor DAG from *all* declared dependencies, whatever their scope. This
+        module depends on rest-client-spring-boot-starter, which depends on audit-core,
+        observability-spring-boot-starter and web-core-spring-boot-starter. None of those four may
+        ever declare this module, at any scope, `test` and `optional` included: it closes a cycle and
+        the whole reactor fails to build. That failure is the check; nothing else enforces it.
+
+        Ordinary `jar` packaging and not `test-jar`, for the reasons test-support's POM gives.
+    -->
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+            The container half: pinned images, the per-JVM singletons, @ServiceConnection wiring and
+            DatabaseCleaner. Declared so that a service adds one dependency and gets both.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- SpringApplication and its hook, which is what starts a service's own main. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <!-- ContextCustomizerFactory and the test-context lookup the stub reset uses. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+        </dependency>
+        <!-- TransactionTemplate: one transaction per seed fixture. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!--
+            ==== Optional, and deliberately so ====
+
+            The same position test-support takes: each of these is needed by one part of this module,
+            and a service that does not use that part should not acquire its tree. A consumer that
+            forgets gets a NoClassDefFoundError naming the missing type, or - for a backing service
+            named on LocalRun - a start-up failure naming the dependency before any container starts.
+        -->
+        <!-- RestClientRegistry, for the launcher's client-implies-stub check. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>rest-client-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <!-- The stub servers. The shaded artifact, as ludwig-bom's note requires. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- LocalRunRulesTest, the build-time client-implies-stub rule. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- KafkaOperations and ProducerRecord, for seeding and duplicate delivery. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>localstack</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- The in-process mail server behind LocalRun.mail(). A library, so there is no image to pin. -->
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail-junit5</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            ==== This module's own tests ====
+
+            No service consumes this module yet, so it carries a sample application - one rest
+            client, one table, one topic - and boots it through the launcher. An unbooted launcher is
+            an untested one; test-support's PostgresFixtureIntegrationTest is the precedent.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JavaMailSender, so the sample can send through the local mail server. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Neither is used by this module. Both are declared `optional` by
+            rest-client-spring-boot-starter, and a full @SpringBootApplication context does not start
+            without them: RestClientAuthAutoConfiguration names ClientRegistrationRepository in a bean
+            method signature, and NamedClientFactory links ClientRequestObservationConvention. The
+            sample application boots the whole starter, as a service does, so it carries what the two
+            reference services carry.
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                Failsafe, for the reason job-core and messaging-spring-boot-starter bind it: the suite
+                starts containers and a broker, which `mvn test` should not do. Named *IT, run at
+                `verify`.
+
+                No JaCoCo gate is bound, as in test-support: this module's classes run in the services'
+                suites, and -Djacoco.skip is deliberately not set in a POM.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,41 @@
+{
+  "change": "add-ludwig-test-fixtures",
+  "model": "claude-opus-5-5",
+  "index_version": "5efb2fe76d5ea3831ef0a266bf65dd7a5d9e51e3574a1c4c00ff521e0ab9d374",
+  "modules_touched": [
+    "test-support-local",
+    "ludwig-bom",
+    "ludwig-service-parent",
+    "common",
+    "jacoco-aggregate",
+    "test-support"
+  ],
+  "gate": {
+    "scripts/gate.sh --change add-ludwig-test-fixtures --full": "FAIL at scripts/check_api_baseline.sh: 2.0.0 baselines UNRESOLVED, releases repository unreachable from this machine; the script stopped before the reactor build",
+    "scripts/check_image_pins.sh": "pass",
+    "scripts/check_api_baseline.sh": "fail (environment: baselines cannot be fetched)",
+    "scripts/check_migrations.sh": "pass (run by hand)",
+    "scripts/check_build_metadata.sh": "pass (run by hand)",
+    "mvn -q validate": "pass",
+    "mvn clean install": "pass (run by hand): 35 reactor entries SUCCESS, 06:39 min",
+    "python3 scripts/check_aggregate_report.py": "pass (run by hand)",
+    "openspec validate add-ludwig-test-fixtures --strict": "pass"
+  },
+  "tests": {
+    "added": 63,
+    "passed": 3473,
+    "failed": 0
+  },
+  "retries": 7,
+  "human_corrections": 0,
+  "rollback_point": "a1bc1888287b18dd22778b6477f0ddd2cd72ab0e",
+  "unresolved": [
+    "the verification gate has not passed: scripts/check_api_baseline.sh cannot resolve the 2.0.0 baselines here, so task 10.3 is open",
+    "no service consumes the module; its API is designed against one sample application",
+    "rest-client-spring-boot-starter does not start in a full @SpringBootApplication context without its 'optional' spring-security-oauth2-client and spring-webflux; worked around with test-scoped dependencies in this module, not fixed",
+    "test-support's PostgresContainerConfiguration lets a closing context stop the shared per-JVM container when Testcontainers reuse is off; avoided in LocalRun, not fixed in test-support",
+    "'no Kafka container is started when Kafka is not named' is asserted only as 'no broker address is published', because containers are per-JVM singletons another test class starts",
+    "the build runs on JDK 26 on this machine; JaCoCo 0.8.12 logs 'Unsupported class file major version 70' while instrumenting JDK classes, in every module, before and after this change",
+    "CLAUDE.md's build/ row (4) and docs/agent-operations.md's '29-module' were stale before this change and are left as found"
+  ]
+}

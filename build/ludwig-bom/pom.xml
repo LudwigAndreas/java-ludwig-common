@@ -301,6 +301,11 @@
             </dependency>
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
+                <artifactId>test-support-local</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
                 <artifactId>checkstyle-rules</artifactId>
                 <version>${project.version}</version>
             </dependency>

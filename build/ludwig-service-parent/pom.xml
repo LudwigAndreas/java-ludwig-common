@@ -548,6 +548,24 @@
                                          second silently wins and the first is a lie. -->
                                     <banDuplicatePomDependencyVersions/>
                                     <!--
+                                        test-support, test-support-security and
+                                        test-support-local hold containers, a local authentication
+                                        fixture and HTTP stand-ins for a service's partners. At
+                                        compile or runtime scope they would be packaged into the
+                                        image, and a stand-in must never be able to answer for a
+                                        partner in a deployed service. ArchUnit and Checkstyle
+                                        cannot see a dependency's scope, so the rule is here.
+                                    -->
+                                    <bannedDependencies>
+                                        <excludes>
+                                            <exclude>ru.ludwigandreas:test-support*:*:*:compile</exclude>
+                                            <exclude>ru.ludwigandreas:test-support*:*:*:runtime</exclude>
+                                        </excludes>
+                                        <message>A test-support artifact is on this service's compile
+                                            or runtime classpath. Declare it with
+                                            &lt;scope&gt;test&lt;/scope&gt;.</message>
+                                    </bannedDependencies>
+                                    <!--
                                         A plugin with no version builds differently on two
                                         machines and Maven only warns about it. Here it fails.
                                         The reactor root carries the same rule for the library

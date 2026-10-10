@@ -33,7 +33,7 @@
 | Тип | Что это |
 |---|---|
 | `LudwigTestImages` | `POSTGRES`, `KAFKA`, `LOCALSTACK`, `REDIS` как `DockerImageName` из `images.properties`, с уже применённым `asCompatibleSubstituteFor(...)` |
-| `Containers` | По одному контейнеру на образ на JVM, ленивый старт, без остановки |
+| `Containers` | По одному контейнеру на образ на JVM, ленивый старт, остановить нельзя: `stop()` и `close()` ничего не делают |
 | `PostgresContainerConfiguration` | `@TestConfiguration`, отдающая Postgres через `@ServiceConnection` |
 | `KafkaPropertiesInitializer` | Наводит `spring.kafka.bootstrap-servers` на общий брокер |
 | `LocalStackS3Initializer` | Наводит `ludwig.storage.s3.*` на общий LocalStack |
@@ -41,7 +41,7 @@
 | `Containers.redis()` | Общий Redis для общего слоя `cache-spring-boot-starter`. `GenericContainer` и один проброшенный порт, который читается из контейнера, а не предполагается: `Containers.REDIS_PORT` — это порт *внутри* него |
 | `@LudwigPostgresTest`, `@LudwigKafkaTest`, `@LudwigLocalStackTest` | Составные аннотации; каждая документирует, что включает и когда её брать не нужно |
 | `DatabaseCleaner` | `TRUNCATE ... RESTART IDENTITY CASCADE` всех таблиц, кроме ликвибейзовых |
-| `GreenMailFixture`, `WireMockFixture` | SMTP и HTTP в процессе — образа нет, закреплять нечего |
+| `GreenMailFixture`, `WireMockFixture` | SMTP и HTTP в процессе — образа нет, закреплять нечего. Заглушка, привязанная к `@LudwigRestClient` по имени, с переключаемыми сбоями — в [`test-support-local`](../test-support-local/README.ru.md) |
 | `TestClock` | Изменяемый `Clock`: `advance(Duration)`, `set(Instant)` и фабрика фиксированного |
 
 ## Как включить
@@ -107,6 +107,15 @@ void reset() {
 Это не про аккуратность. Когда тест проверяет именно разделяемое состояние кластера — аренду, окно
 рейт-лимита, строку outbox, — оставшаяся строка не мелочь для уборки, а тест, который проходит или падает
 в зависимости от того, что шло до него. `LocalStackS3.clearBucket(...)` — то же самое для S3.
+
+Общий контейнер также не может быть *остановлен* тем, кто им пользуется. Контейнер реализует
+`AutoCloseable`, поэтому всё, чему его передали, считает себя вправе его закрыть: Spring Boot закрывает
+бин-контейнер при закрытии контекста (если не включено переиспользование Testcontainers, а по умолчанию
+и в CI оно выключено), JUnit останавливает поле `@Container` после своего класса, `try`-with-resources
+закрывает то, что получил. Любой из них раньше отнимал базу у всех остальных контекстов в JVM: один
+тестовый контекст, не сумевший загрузиться, превращался в девяносто восемь ошибок `connection refused`
+в следующих классах. Поэтому синглтоны игнорируют `stop()` и `close()`; Ryuk удаляет их при выходе JVM.
+Тест, которому действительно нужен останавливаемый контейнер, создаёт собственный из `LudwigTestImages`.
 
 ## Конфигурация форков: проверена, а не предположена
 

@@ -19,6 +19,62 @@ either.
 
 ## [Unreleased]
 
+### Added
+
+- **`test-support-local`: run a service locally with its backing services, partner stubs and seed
+  data.** A new test-scoped module. A service's `Local<Name>Application`, in `src/test`, starts the
+  service's own `main` through `LocalRun` with the PostgreSQL, Kafka, LocalStack and Redis it names, one
+  HTTP stand-in per `@LudwigRestClient` name (`PartnerStub`, wired by setting that client's `base-url`
+  ahead of every other property source), and ordered `SeedFixture`s with `reset` / `keep` / `none`
+  modes. A stub can be made `unavailable`, `slow`, `reset`, `empty` or `refused` from test code, a
+  start-up property, or WireMock's admin API while the service is paused at a breakpoint. The same
+  stubs serve an integration test through `@WithPartnerStubs`. `KafkaDeliveries` delivers one record
+  more than once. The API is provisional until a service adopts it.
+- **`notification-service` runs whole on a developer machine.** `LocalNotificationApplication`, in the
+  service's test sources, starts the service's own `main` with PostgreSQL, Kafka, a mail server,
+  stand-ins for the identity provider, the chat API and a webhook receiver, and seed data; every channel
+  and both ingresses are on. Tokens are real - signed by the stand-in issuer and validated by the
+  production decoder - and the start-up summary prints a ready `curl` per seeded caller. Start it with
+  `mvn -pl :notification-service spring-boot:test-run
+  -Dspring-boot.run.main-class=ru.ludwigandreas.notification.local.LocalNotificationApplication`. The
+  service README's "Running locally" is the reference example of `test-support-local`.
+- **`test-support-local`: partners that are not rest clients, and mail.** A stub publishes its address
+  where `PartnerStub.address()` says - a rest client's `base-url` (the default), any property
+  (`StubAddress.property`), or nowhere (`StubAddress.none`, for a partner whose address is data).
+  `LocalRun.mail()` starts an in-process SMTP and IMAP server, readable through `LocalMailbox`. A
+  `SummaryContributor` bean and `PartnerStub.summaryLines` add to the start-up summary.
+
+### Changed
+
+- **`ludwig-service-parent` fails a service that has a `test-support` artifact outside test scope.**
+  A new enforcer rule bans `ru.ludwigandreas:test-support*` at compile and runtime scope. A service
+  that declares `test-support`, `test-support-security` or `test-support-local` without
+  `<scope>test</scope>` now fails at `validate`; both reference services already comply.
+- **`test-support-local`: `PartnerStub.clientName()` is now `name()`.** The stub's name is no longer
+  necessarily a rest-client name. The launcher also refuses a stub whose address property no other
+  source configures, whatever kind of address it has.
+
+### Fixed
+
+- **`security-spring-boot-starter`: a configured audience is now enforced when the decoder is built
+  from `issuer-uri`. THIS CHANGES WHAT A DEPLOYMENT ACCEPTS.** `ludwig.security.jwt.audiences` was
+  applied only to a `NimbusJwtDecoder` bean. With
+  `spring.security.oauth2.resourceserver.jwt.issuer-uri` Spring Boot's decoder bean is a lazy
+  `SupplierJwtDecoder`, so the check was silently skipped and a token the same issuer minted for
+  another service was accepted. The check is now installed on any `JwtDecoder`. A caller that was
+  presenting a token for another audience starts receiving 401, which is what the configuration
+  always said.
+- **`identity-projection-spring-boot-starter`: the Kafka consumer starts.** With
+  `ludwig.identity.kafka.enabled=true` an application failed on a missing
+  `identityKafkaListenerContainerFactory`, because the auto-configuration was evaluated before the
+  messaging one whose bean its condition looks for. It is now ordered after it.
+- **`user-settings-spring-boot-starter`: present with no mode enabled, it no longer stops start-up.**
+  Its hot-reload auto-configuration is now conditional on `ludwig.user-settings.enabled` and on a
+  mode being enabled, like the configuration it serves.
+- **`test-support`: a shared container can no longer be stopped by a context or a test.**
+  `Containers`' per-JVM singletons ignore `stop()` and `close()`. A context holding one as a bean used
+  to stop it on close, or on a failed load, for every other context in the JVM.
+
 ## [2.0.0]
 
 A **major** release: it contains binary-breaking changes to published APIs, each marked **BREAKING**

@@ -28,6 +28,12 @@ statement that none does and why. **The second list is the backlog**, and it is 
 | One audit sink, no second audit SPI, no `*.audit` logger | ArchUnit `RuleGroup.AUDIT` | pre-existing |
 | No second redaction mask | Checkstyle `SecondRedactionMask` | pre-existing |
 | No second operation status vocabulary | ArchUnit `RuleGroup.OPERATIONS` | pre-existing |
+| A rest client with no partner stub and no pass-through, in a service that has a local application | ArchUnit `LocalRunRulesTest`, shipped by `test-support-local` and subclassed by the service; and the launcher's start-up check against `RestClientRegistry` | **yes** — `LocalRunRulesSelfTest` evaluates the rule against a client with no stub; `StubCoverageIT` launches without one |
+| `LocalRun` used outside a package named `local` | the same `LocalRunRulesTest` | **yes** — `LocalRunRulesSelfTest` |
+| A partner stub nothing would call: its address property is set by no other source | `StubAddressCheck` at local-application start-up, for a rest-client stub and a property-addressed one alike | **yes** — `StubCoverageIT` launches with a dead stub of each kind, and without the rest-client starter |
+| In `notification-service`, an outbound HTTP client built outside `NotificationChannelConfig` | ArchUnit `OutboundHttpRulesTest`, local to the service | **yes** — the same test evaluates the rule against `RogueHttpClient` |
+| `notification-service`'s local application stops starting | `LocalNotificationApplicationIT` launches it through its own entry point | **yes** — it runs at `verify` |
+| A `test-support*` artifact at compile or runtime scope in a service | Maven enforcer `bannedDependencies` in `ludwig-service-parent`'s `enforce-platform-rules` | **yes** — removing `<scope>test</scope>` from `test-support-security` in `crud-service-example` failed `validate` |
 | No module-local Caffeine builder or second cache SPI | ArchUnit `RuleGroup.CACHING` | **was inert until this change** — it was written as `noClasses().should(notDependOnClassesThat(..))`, and `noClasses()` wraps the condition in ArchUnit's `never()`, which inverts each event; a helper that reports only violations therefore produces zero findings while the rule reports as passed. Measured against a fixture (0 violations over 5 classes that provably had the dependency), switched to `classes().should(..)`, and the same defect fixed in `KafkaRules.noPrivateDeadLetterRecoverer` |
 | Nothing presents a time or a number from a JVM default (`Locale.getDefault`, `TimeZone.getDefault`, `ZoneId.systemDefault`, `Clock.systemDefaultZone`) | ArchUnit `RuleGroup.PRESENTATION` / `noAmbientDefaultLocaleOrZone` | **yes** — `PresentationRulesTest` asserts it names the offending fixture class, not merely that the rule ran |
 | No second type holding the caller's locale-and-zone pair | ArchUnit `RuleGroup.PRESENTATION` / `noSecondCallerPreferenceType` | **yes** — the same test asserts it fires on the restated pair and stays silent on the per-subject shape and on a zone with no locale, in one run |
@@ -262,6 +268,14 @@ fields on `ConstraintValidator` implementations would catch the common form and 
 the misplaced rule itself, nothing mechanical: a predicate over the row inside `apply` is
 indistinguishable from the cross-row fold that belongs there. Stated on `DocumentHandler.apply`, on
 `RowBinding`, and at length in the module's README under "Where a validation rule goes".
+
+**21. A seed fixture written as a SQL script instead of code.** `test-support-local`'s fixtures are
+meant to write through the service's own repositories, so that a renamed column breaks the fixture at
+compile time or first launch. A `data.sql` under `src/test/resources` seeds stale columns silently and
+the local application still starts.
+*What it would take:* nothing mechanical. A seed script is indistinguishable from any other test
+resource a service may legitimately have, so a rule against one is a rule against all of them. Stated
+on `SeedFixture` and in the module's README.
 
 ## The shape of the gap
 

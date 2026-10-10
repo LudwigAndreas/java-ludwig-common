@@ -6,7 +6,9 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.event.EventListener;
 import ru.ludwigandreas.hotreload.binding.HotReloadTypedConfigFactory;
 import ru.ludwigandreas.hotreload.binding.RefreshableConfig;
@@ -35,9 +37,18 @@ import ru.ludwigandreas.usersettings.resolve.SettingDefaultsProvider;
  * module was built to avoid.
  */
 @Slf4j
+/*
+ * The last two conditions are the ones on UserSettingsAutoConfiguration, repeated on purpose. This
+ * class serves that one - its reload listener needs the settings cache created there - so it must
+ * be active exactly when that one is. Conditional on the hot-reload factory alone, it was active in
+ * a service that merely had this module on its classpath with no mode enabled, and that service
+ * failed to start on a missing cache for a feature it was not using. UserSettingsHotReloadInertTest.
+ */
 @AutoConfiguration(before = UserSettingsAutoConfiguration.class)
 @ConditionalOnClass(HotReloadTypedConfigFactory.class)
 @ConditionalOnBean(HotReloadTypedConfigFactory.class)
+@ConditionalOnProperty(prefix = "ludwig.user-settings", name = "enabled", matchIfMissing = true)
+@Conditional(SettingsModeCondition.class)
 public class UserSettingsHotReloadAutoConfiguration {
 
     /** The configuration prefix the defaults are bound from; the same one the properties bean uses. */

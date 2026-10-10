@@ -1,0 +1,58 @@
+{
+  "change": "adopt-local-run-in-notification-service",
+  "contract": {
+    "goal": "notification-service has a local application that runs the whole service against stand-ins and seed data, and is the reference example of test-support-local; the module gains only what that adoption forces",
+    "output": "test-support-local: StubAddress, PartnerStub.name()/address()/summaryLines(), generalised dead-stub check, LocalRun.mail() and LocalMailbox, README en/ru. notification-service (test sources only): LocalNotificationApplication, application-localrun.yml, ChatApiStub, WebhookReceiverStub, IdentityProviderStub, NotificationStubs, five seed fixtures, LocalNotificationApplicationIT, ChatOutageIT, SlowWebhookIT, DuplicateIngressIT, LocalRunArchitectureTest, the outbound-HTTP rule, README en/ru. CHANGELOG en/ru, docs/harness-enforcement.md, docs/runbook.md",
+    "constraints": [
+      "nothing under services/notification-service/src/main changes",
+      "none of the three structural POMs (root pom.xml, ludwig-bom, ludwig-service-parent) changes; if dependencyConvergence forces a ludwig-bom edit, stop and record it first",
+      "no header-based or profile-based authentication bypass, in main or test sources",
+      "no new container image; mail server and every stand-in are in-process",
+      "NotificationTestBase and the tests built on it are not rewritten",
+      "if the service cannot start with every channel, both consumers and the poller on without a src/main change, stop at task 4.3"
+    ],
+    "done_when": [
+      "git diff --exit-code a1bc188 -- services/notification-service/src/main",
+      "scripts/manifest.sh build && scripts/manifest.sh stale && scripts/manifest.sh layout",
+      "mvn -q validate",
+      "scripts/gate.sh --change adopt-local-run-in-notification-service test-support-local notification-service",
+      "openspec validate adopt-local-run-in-notification-service --strict"
+    ]
+  },
+  "current_task": "12.4",
+  "decisions": [
+    "chat and webhook channels keep their own RestClient; stubs are generalised to property-addressed instead",
+    "local authentication is a stand-in issuer with real token validation, living in notification-service test sources",
+    "1.1: implementation started although add-ludwig-test-fixtures is not archived (its gate task 10.3 is blocked on the unreachable releases repository). The prerequisite is about spec ordering at archive time; the code this change builds on is in the working tree. The archive half of 1.1 stays open and is in pending_human",
+    "2.2: the start-up check is split in two classes - StubAddressCheck (dead stub, any address kind, always registered) and StubCoverageCheck (rest client without a stub, only with the rest-client starter)",
+    "4.3: continuing with the identity projection's Kafka consumer left off in application-localrun.yml, documented there and asserted in LocalNotificationApplicationIT. The spec requirement that the identity projection is enabled is NOT met; recipients are seeded directly, so no other task depends on that consumer",
+    "5.3: the wrong-audience scenario is pinned as a KNOWN DEFECT test asserting the current 200, so a fix in the starter is noticed; the spec scenario 'wrong audience is 401' is NOT met. The local profile deliberately does not set Boot's own spring.security.oauth2.resourceserver.jwt.audiences, which would make the local run validate what a deployment does not",
+    "6.x: seed notifications and the announcement are submitted over the service's own REST API with a minted administrator token (LocalApi), not by calling application services directly: it needs no principal plumbing and cannot create state the API would not have produced",
+    "6.1: there is no 'webhook recipient' - DefaultRecipientResolver returns no per-user webhook address; a request names the URL as an ADDRESS recipient. The webhook stand-in's URL is printed in the summary instead of seeded on a user",
+    "11.1: RecipientSeed now writes through SecurityUserRepository directly; PreferenceSeed and the opted-out and quiet-hours recipients are removed. The deployed service has no preference store, so the spec requirement for those two recipient shapes is NOT met and should be dropped from notification-local-run",
+    "11.1 run by hand with 'mvn -pl :notification-service spring-boot:test-run -Dspring-boot.run.main-class=ru.ludwigandreas.notification.local.LocalNotificationApplication': summary printed; pasted local-admin command -> 200; pasted ada command -> 200 with the seeded 'welcome' inbox item; printed chat fault command -> 200; a chat notification submitted with the admin token settled as FAILED after 1 attempt with 'chat API returned 503'; printed clear command -> 200; no token -> 401. test-run needs -Dspring-boot.run.main-class because the plugin otherwise resolves the service's own start class",
+    "9.1: the service README's two locales already differed in heading structure before this change (60 headings in README.md, 57 in README.ru.md; the Russian file has no 'Build and test' section). The task's whole-file heading diff therefore cannot pass; parity was checked for the new 'Running locally' section only (9 headings in each). The pre-existing gap is left as found",
+    "8.x: LocalNotificationApplication exposes start(String...) and keeps the launcher private, so the launch tests in the integration package do not use LocalRun themselves and the 'LocalRun only in a local package' rule holds without an exemption",
+    "12.4: after the connection fix, 'mvn -pl :notification-service verify' passes: Tests run: 293 (surefire), Tests run: 188 (failsafe), 'All coverage checks have been met', BUILD SUCCESS",
+    "after fix-defects-found-by-local-run: the identity projection's consumer is on in application-localrun.yml and LocalNotificationApplicationIT asserts 401 for a wrong audience; both previously unmet requirements of notification-local-run are met, and LaunchedApplication no longer sets a user-settings property"
+  ],
+  "failures": [
+    "4.3 attempt 1: with ludwig.identity.kafka.enabled=true the service fails to start - 'No bean named identityKafkaListenerContainerFactory'. Cause: IdentityKafkaAutoConfiguration (identity-projection-spring-boot-starter) guards that factory with @ConditionalOnBean(ListenerContainerFactoryBuilder) but is ordered only after IdentityProjectionAutoConfiguration; it sorts before MessagingAutoConfiguration, so the condition is false when evaluated. No src/main change in notification-service can fix it; the fix is one 'after' entry in a starter outside this change's scope",
+    "5.3 attempt 1: a token minted for another audience is ACCEPTED (200, expected 401). AudienceValidatingJwtDecoderPostProcessor (security-spring-boot-starter) only wraps a NimbusJwtDecoder bean; with spring.security.oauth2.resourceserver.jwt.issuer-uri Boot's decoder bean is a SupplierJwtDecoder, so the audience validator is never installed ('JWT audience validation enabled' is logged 0 times). Affects any deployment configured by issuer-uri. Not fixable from notification-service",
+    "6.3 attempt 1: a WEBHOOK delivery died on 'template.not-found [welcome, WEBHOOK, en]' - no template the service ships has a webhook variant. Fixed with a test-resource template (src/test/resources/templates/local-order-shipped/webhook/en)",
+    "6.3 attempt 1: the announcement is not in /api/v1/inbox; announcements are served by /api/v1/announcements. The spec scenario's wording was wrong, the test now reads the right endpoint",
+    "11.1 attempt 1: 'mvn spring-boot:test-run' failed with ClassNotFoundException: ru.ludwigandreas.usersettings.projection.SettingsProjectionService. user-settings-spring-boot-starter is a provided dependency that notification-service's spring-boot-maven-plugin <excludes> keeps off the run classpath; RecipientFixtures (and the opt-out / quiet-hours seed built on it) needs it. Failsafe has the starter on its classpath, so every integration test passed. Found only by running it by hand, which is what task 11.1 is for",
+    "12.4 attempt 1: scripts/gate.sh stopped at scripts/check_api_baseline.sh (2.0.0 baselines unresolvable, releases repository unreachable), as for add-ludwig-test-fixtures. Run by hand: 'mvn -pl :test-support-local -am verify' passed; 'mvn -pl :notification-service -am verify' FAILED - Tests run: 181, Failures: 3, Errors: 98",
+    "12.4 cause A: PostgreSQL 'FATAL: sorry, too many clients already'. Each cached test context holds a 20-connection Hikari pool against a 100-connection server; ChatOutageIT and SlowWebhookIT added two contexts and the launched applications a 20-connection pool each. A context that then failed to load was closed, which stopped the shared container through PostgresContainerConfiguration (the test-support hazard found in the first change), and every later test got 'connection refused'. Fixed by one shared PartnerStubsTestBase context with a 3-connection pool and a 5-connection pool for launched applications",
+    "12.4 cause B: LocalNotificationApplicationIT did not start on the failsafe classpath after ludwig.user-settings.projection.enabled was removed from application-localrun.yml: UserSettingsHotReloadAutoConfiguration (user-settings-spring-boot-starter) requires a LudwigCache that only an enabled mode creates, and is not conditional on a mode. I had re-run it only under spring-boot:test-run, where the starter is absent. Fixed by passing the property from the build's launcher helper (LaunchedApplication), as NotificationTestBase does"
+  ],
+  "open_questions": [
+    "should the stand-in issuer move to a shared module when crud-service-example adopts the launcher"
+  ],
+  "pending_human": [
+    "1.1: archive add-ludwig-test-fixtures before archiving this change; its requirement 'A stub is an HTTP server for one rest-client name' must be reworded then",
+    "4.3: decide how to handle the identity-projection starter defect - fix IdentityKafkaAutoConfiguration's ordering (widens this change to a third module), or accept the local run without that consumer and amend the notification-local-run spec",
+    "SECURITY: security-spring-boot-starter does not enforce ludwig.security.jwt.audiences when the decoder is configured by issuer-uri. Decide who fixes it and when; LocalNotificationApplicationIT.wrongAudienceIsNotRejectedYet pins the current behaviour",
+    "12.4: scripts/check_api_baseline.sh needs the 2.0.0 release artifacts; rerun scripts/gate.sh --change adopt-local-run-in-notification-service test-support-local notification-service once the releases repository is reachable"
+  ]
+}

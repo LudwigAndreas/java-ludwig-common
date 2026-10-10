@@ -33,7 +33,7 @@ failure along the way.
 | Type | What it is |
 |---|---|
 | `LudwigTestImages` | `POSTGRES`, `KAFKA`, `LOCALSTACK`, `REDIS` as `DockerImageName`, loaded from `images.properties`, with `asCompatibleSubstituteFor(...)` already applied |
-| `Containers` | One container per image per JVM, started lazily, never stopped |
+| `Containers` | One container per image per JVM, started lazily, and impossible to stop: `stop()` and `close()` do nothing |
 | `PostgresContainerConfiguration` | `@TestConfiguration` exposing Postgres via `@ServiceConnection` |
 | `KafkaPropertiesInitializer` | Points `spring.kafka.bootstrap-servers` at the shared broker |
 | `LocalStackS3Initializer` | Points `ludwig.storage.s3.*` at the shared LocalStack |
@@ -41,7 +41,7 @@ failure along the way.
 | `Containers.redis()` | The shared Redis, for `cache-spring-boot-starter`'s shared tier. A `GenericContainer` and one exposed port, read from the container rather than assumed - `Containers.REDIS_PORT` is the port *inside* it |
 | `@LudwigPostgresTest`, `@LudwigKafkaTest`, `@LudwigLocalStackTest` | Composed annotations, each documenting what it turns on and when not to use it |
 | `DatabaseCleaner` | `TRUNCATE ... RESTART IDENTITY CASCADE` of every table but Liquibase's |
-| `GreenMailFixture`, `WireMockFixture` | In-process SMTP and HTTP stubs - no image, nothing to pin |
+| `GreenMailFixture`, `WireMockFixture` | In-process SMTP and HTTP stubs - no image, nothing to pin. For a stub wired to a `@LudwigRestClient` by name, with switchable faults, see [`test-support-local`](../test-support-local/README.md) |
 | `TestClock` | A mutable `Clock`: `advance(Duration)`, `set(Instant)`, plus a fixed factory |
 
 ## Switching it on
@@ -107,6 +107,15 @@ void reset() {
 This is not merely tidiness. When what a test exercises *is* shared cluster-wide state - a lease, a
 rate-limit window, an outbox row - a leftover row is not a tidy-up detail but a test that passes or fails
 depending on what ran before it. `LocalStackS3.clearBucket(...)` is the S3 counterpart.
+
+A shared container also cannot be *stopped* by one of the things sharing it. A container is
+`AutoCloseable`, so whatever is handed one feels entitled to close it: Spring Boot closes a container
+bean when its context closes (unless Testcontainers reuse is on, which it is not by default or in CI),
+JUnit stops a `@Container` field after its class, a `try`-with-resources closes what it was given. Any
+of them used to take the database away from every other context in the JVM - one test context failing
+to load turned into ninety-eight `connection refused` errors in the classes after it. The singletons
+therefore ignore `stop()` and `close()`; Ryuk removes them when the JVM exits. A test that really needs
+a container it can stop creates its own from `LudwigTestImages`.
 
 ## Fork configuration, checked rather than assumed
 

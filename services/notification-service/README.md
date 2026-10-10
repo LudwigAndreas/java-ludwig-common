@@ -1620,6 +1620,148 @@ Stated plainly rather than buried.
 
 ---
 
+## Running locally
+
+The whole service on your machine, with a breakpoint wherever you want one. This section is also the
+reference example of [`test-support-local`](../../sources/test-support-local/README.md): copy from
+here when another service needs the same.
+
+```bash
+mvn -pl :notification-service spring-boot:test-run \
+    -Dspring-boot.run.main-class=ru.ludwigandreas.notification.local.LocalNotificationApplication
+```
+
+or run `LocalNotificationApplication` (in `src/test/java/.../local`) from the IDE in debug mode. Docker
+has to be running; nothing else is needed - no environment variable, no container started by hand.
+
+### What starts
+
+`LocalNotificationApplication` starts the service's own `NotificationApplication.main`, unchanged, and
+adds:
+
+| | What | How the service finds it |
+|---|---|---|
+| PostgreSQL, Kafka | `test-support`'s digest-pinned containers | connection details, `spring.kafka.bootstrap-servers` |
+| Mail | an in-process SMTP and IMAP server | `spring.mail.host`, `spring.mail.port` |
+| Identity provider | `IdentityProviderStub`: real discovery metadata and signing keys | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
+| Chat API | `ChatApiStub` | `ludwig.notification.channels.chat.base-url` |
+| A webhook receiver | `WebhookReceiverStub` | nothing - its URL is a recipient address; the summary prints it |
+
+The email, chat, webhook and in-app channels, the REST and Kafka ingresses and the queue poller are all
+**on**, and so is the identity projection's consumer. Nothing is switched off to make the service
+start.
+
+### The summary, and calling the service
+
+When it is up the service logs where everything is:
+
+```text
+Local run is ready.
+  Backing services
+    postgres      jdbc:postgresql://localhost:57185/test?loggerLevel=OFF
+    kafka         localhost:57179
+  Partner stubs
+    chat          http://127.0.0.1:57183   admin http://127.0.0.1:57183/__admin   fault none
+        set a fault:  curl -X PUT http://127.0.0.1:57183/__admin/scenarios/fault/state -H 'Content-Type: application/json' -d '{"state":"unavailable"}'   (unavailable | slow | reset | empty)
+        clear it:     curl -X PUT http://127.0.0.1:57183/__admin/scenarios/fault/state
+    webhooks      http://127.0.0.1:57184   ...
+        use as a WEBHOOK recipient address:  http://127.0.0.1:57184/hooks/orders   (template local-order-shipped, variable orderId)
+  Call the service (tokens valid 12h, this process only)
+    api docs      http://localhost:8080/swagger-ui/index.html
+    local-admin:  curl -H 'Authorization: Bearer eyJ...' http://localhost:8080/api/v1/notifications/deliveries
+    ada:  curl -H 'Authorization: Bearer eyJ...' http://localhost:8080/api/v1/inbox
+  Mail
+    smtp          127.0.0.1:57181   (the service sends here)
+    imap          127.0.0.1:57180   (log in as the recipient's address, any password, no TLS)
+  Seed fixtures (mode reset)
+    RecipientSeed, AnnouncementSeed, IngressSeed, NotificationSeed
+```
+
+Paste a `curl` line and you are calling the service as that person. The token is real: it is signed by
+the stand-in issuer and validated by the service's production decoder. There is no authentication
+bypass, in main or test sources. A token says who you are; what you may do comes from the identity
+projection, which is why each caller is also a seeded user with roles (`LocalCaller`).
+
+### What is seeded
+
+| Who | Reachable by | For |
+|---|---|---|
+| `local-admin` | email | calling as an administrator and announcer |
+| `ada` | email, chat (`@ada`), inbox | an ordinary user with something in every channel |
+| `grace` | email only | the recipient of the request seeded on the Kafka topic, and of the queued notification |
+| `dennis` | - | a deactivated user, to whom nothing is sent |
+
+plus a `welcome` notification to Ada over in-app, email and chat (delivered by the poller within a few
+seconds), a `password-reset` to Grace scheduled for tomorrow (so one delivery stays queued), an
+announcement to everyone, and one request on the Kafka ingress topic. The notifications and the
+announcement are submitted through the service's own REST API, so seed data cannot be in a state the
+API would not have produced.
+
+`ludwig.local.fixtures.mode` decides what the next start does with it: `reset` (default) empties the
+database and seeds again, `keep` leaves your data alone, `none` does neither.
+
+### Making a partner fail
+
+At a breakpoint, or at any time, paste the `set a fault` line the summary printed for that stand-in:
+
+```bash
+curl -X PUT http://127.0.0.1:57183/__admin/scenarios/fault/state \
+     -H 'Content-Type: application/json' -d '{"state":"unavailable"}'
+```
+
+The next chat delivery gets a 503 from a real server, the channel's own classification calls it
+retryable, and the queue's own backoff schedules the next attempt - the delivery reads `FAILED`,
+`attempts: 1`, `chat API returned 503`. `PUT` with no body clears the fault. `slow` exceeds the read
+timeout; `reset` and `empty` cut the connection. To start with a fault already in force, add
+`--ludwig.local.stubs.chat.fault=unavailable`.
+
+### Reading sent mail
+
+Point a mail client at the IMAP address in the summary and log in as the recipient's address with any
+password. In a test, `LocalMailbox.received()`.
+
+### The same stand-ins in tests
+
+| Test | Shows |
+|---|---|
+| `LocalNotificationApplicationIT` | starts the local application itself and uses it over HTTP - what keeps this section true |
+| `ChatOutageIT` | `@WithPartnerStubs` on an ordinary `NotificationTestBase` test: outage, then recovery |
+| `SlowWebhookIT` | a webhook slower than the read timeout |
+| `DuplicateIngressIT` | one Kafka request delivered twice with `KafkaDeliveries.duplicate`, one email sent |
+| `LocalRunArchitectureTest`, `OutboundHttpRulesTest` | the launcher is only used from the `local` package; an outbound HTTP client is only built in `NotificationChannelConfig` |
+
+### Where local configuration lives
+
+Under `src/test`, all of it: `application-localrun.yml`, the stand-ins, the fixtures, a webhook template.
+It cannot be packaged, so there is no local profile or local secret that could be active in a
+deployment, and `ludwig-service-parent` fails the build if a `test-support` artifact leaves test scope.
+
+### What the local run found
+
+Running the whole service against real stand-ins for the first time surfaced four defects in other
+modules within the first hour. All four are fixed; they are listed because they are the argument for
+running a service this way.
+
+- **A token for another audience was accepted.** `security-spring-boot-starter` installed its audience
+  check only on a `NimbusJwtDecoder`; with `issuer-uri`, which is how this service is configured
+  everywhere, Spring Boot's decoder is a different type and the check never ran. It now wraps any
+  decoder. `LocalNotificationApplicationIT` asserts the 401 against a real issuer.
+- **The identity projection's Kafka consumer could not start.** With
+  `IDENTITY_PROJECTION_ENABLED=true` the service failed on a missing bean, because
+  `IdentityKafkaAutoConfiguration` was evaluated before the messaging auto-configuration it depends
+  on. It is now ordered after it, and the consumer is on in the local run.
+- **`user-settings-spring-boot-starter`, present but not enabled, stopped start-up** when hot-reload
+  was on. Its hot-reload auto-configuration is now conditional on a mode being enabled.
+- **A test context that closed or failed to load stopped the shared PostgreSQL container**, which
+  turned one failure into ninety-eight. `test-support`'s shared containers now ignore `stop()`.
+
+Two things the local run does differently from what you might expect, both deliberate:
+
+- **No shipped template has a webhook variant** - a deployment mounts its own - so the local run brings
+  one (`local-order-shipped`) as a test resource.
+- **No recipient with an opt-out or quiet hours is seeded**, because the service has no preference
+  store yet ("Today: no preference store", above) and would not read them.
+
 ## Build and test
 
 ```bash

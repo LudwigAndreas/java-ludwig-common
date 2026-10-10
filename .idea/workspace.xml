@@ -5,7 +5,29 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CHANGELOG.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PROJECT_INDEX.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_INDEX.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/harness-enforcement.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/harness-enforcement.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/runbook.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/runbook.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/openspec/config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/config.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/project-index.json" beforeDir="false" afterPath="$PROJECT_DIR$/project-index.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityKafkaAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityKafkaAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/authn/jwt/AudienceValidatingJwtDecoderPostProcessor.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/authn/jwt/AudienceValidatingJwtDecoderPostProcessor.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/test-support/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/test-support/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/test-support/src/main/java/ru/ludwigandreas/testsupport/container/Containers.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/src/main/java/ru/ludwigandreas/testsupport/container/Containers.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/src/main/java/ru/ludwigandreas/usersettings/config/UserSettingsHotReloadAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/src/main/java/ru/ludwigandreas/usersettings/config/UserSettingsHotReloadAutoConfiguration.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -13,7 +35,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="183" />
+    <option name="cachedIndexableFilesCount" value="3043" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -28,23 +50,23 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.0" />
-      <entry key="MS500" value="1.0000061541882266" />
-      <entry key="S2" value="1.0498072649095598" />
-      <entry key="S5" value="1.3012430787486966" />
-      <entry key="S10" value="1.5488561548791235" />
-      <entry key="S30" value="1.8187528905537786" />
-      <entry key="S60" value="1.9048496508004955" />
-      <entry key="M2" value="1.9512358544548745" />
-      <entry key="M5" value="1.9802013236115479" />
-      <entry key="M10" value="1.9900511722186627" />
-      <entry key="M15" value="1.9933564015471685" />
-      <entry key="M30" value="1.9966726651951325" />
-      <entry key="H1" value="1.9983349463958138" />
-      <entry key="H2" value="1.9991671263586557" />
-      <entry key="H4" value="1.9995834764333873" />
-      <entry key="D1" value="1.9999305673544496" />
-      <entry key="W1" value="1.9999900807554662" />
+      <entry key="MS100" value="1.0000000002247103" />
+      <entry key="MS500" value="1.0202496779233818" />
+      <entry key="S2" value="1.6495825445392192" />
+      <entry key="S5" value="2.4519979043669995" />
+      <entry key="S10" value="3.0239824694992263" />
+      <entry key="S30" value="3.6099735689356174" />
+      <entry key="S60" value="3.7951649087261594" />
+      <entry key="M2" value="3.8949716925099036" />
+      <entry key="M5" value="3.9573409912470163" />
+      <entry key="M10" value="3.978560735651749" />
+      <entry key="M15" value="3.9856826297811687" />
+      <entry key="M30" value="3.9928290169851888" />
+      <entry key="H1" value="3.9964114275771796" />
+      <entry key="H2" value="3.998204942753269" />
+      <entry key="H4" value="3.999102278516897" />
+      <entry key="D1" value="3.999850352958172" />
+      <entry key="W1" value="3.9999786211948605" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
@@ -66,23 +88,23 @@
       <entry key="W1" value="0.0" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.536109380858127E-10" />
-      <entry key="MS500" value="0.010897106444221472" />
-      <entry key="S2" value="0.35171480486349177" />
-      <entry key="S5" value="0.8777811403437548" />
-      <entry key="S10" value="1.2890533638063708" />
-      <entry key="S30" value="1.7165192579031205" />
-      <entry key="S60" value="1.8513379861090742" />
-      <entry key="M2" value="1.9238416438364208" />
-      <entry key="M5" value="1.9690850290269963" />
-      <entry key="M10" value="1.9844661257763498" />
-      <entry key="M15" value="1.9896270247692383" />
-      <entry key="M30" value="1.994804961790774" />
-      <entry key="H1" value="1.9974003392899444" />
-      <entry key="H2" value="1.9986996337481528" />
-      <entry key="H4" value="1.9993496828378867" />
-      <entry key="D1" value="1.9998915951849134" />
-      <entry key="W1" value="1.9999845131417417" />
+      <entry key="MS100" value="0.0551689373403264" />
+      <entry key="MS500" value="0.5696649748242225" />
+      <entry key="S2" value="1.285669653247378" />
+      <entry key="S5" value="2.120793364575249" />
+      <entry key="S10" value="2.7837789682979155" />
+      <entry key="S30" value="3.5034732991340864" />
+      <entry key="S60" value="3.737677848785044" />
+      <entry key="M2" value="3.8650818715553292" />
+      <entry key="M5" value="3.945097942576789" />
+      <entry key="M10" value="3.972390318526203" />
+      <entry key="M15" value="3.9815580748870487" />
+      <entry key="M30" value="3.9907612480577606" />
+      <entry key="H1" value="3.9953761665286973" />
+      <entry key="H2" value="3.997686967617353" />
+      <entry key="H4" value="3.9988432047377622" />
+      <entry key="D1" value="3.9998071620162605" />
+      <entry key="W1" value="3.999972450766881" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -96,6 +118,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Application.LocalNotificationApplication.executor": "Debug",
     "JUnit.CatalogIntegrationTest.executor": "Debug",
     "Maven.common [clean,install].executor": "Run",
     "Maven.common [clean,verify,-pl...].executor": "Run",
@@ -114,6 +137,7 @@
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "git-widget-placeholder": "master",
     "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/Users/ludwig/vault/projects/ludwig-platform/src/java-ludwig-common",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -136,7 +160,20 @@
       <command value="mvn clean verify -pl services/crud-service-example -am" />
     </option>
   </component>
-  <component name="RunManager" selected="JUnit.CatalogIntegrationTest">
+  <component name="RunManager" selected="Application.LocalNotificationApplication">
+    <configuration name="LocalNotificationApplication" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="ru.ludwigandreas.notification.local.LocalNotificationApplication" />
+      <module name="notification-service" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="ru.ludwigandreas.notification.local.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="CatalogIntegrationTest" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
       <module name="crud-service-example" />
       <extension name="coverage">
@@ -181,6 +218,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Application.LocalNotificationApplication" />
         <item itemvalue="JUnit.CatalogIntegrationTest" />
       </list>
     </recent_temporary>
@@ -201,6 +239,7 @@
       <option name="presentableId" value="Default" />
       <updated>1786817614729</updated>
       <workItem from="1786817616340" duration="102896000" />
+      <workItem from="1791636263581" duration="11041000" />
     </task>
     <servers />
   </component>

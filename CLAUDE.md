@@ -114,7 +114,7 @@ Every module sits one level down, in the directory its role dictates. Nothing el
 |---|---|---|
 | `build/` | what every other module inherits, imports or is checked by: `ludwig-bom`, `ludwig-service-parent`, `checkstyle-rules`, `architecture-rules` | 4 |
 | `services/` | modules parented by `ludwig-service-parent`, shipped as container images | 2 |
-| `sources/` | every library, starter and test-support module, parented by the reactor root | 23 |
+| `sources/` | every library, starter and test-support module, parented by the reactor root | 27 |
 
 Two consequences that bite:
 

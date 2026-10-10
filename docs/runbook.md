@@ -148,6 +148,23 @@ Identical to section 2 with two differences:
 
 **Write the failing test first, in the same change.** A fix with no test is a fix that returns.
 
+### 3.1 Reproducing it locally
+
+A service that has a local application runs whole on your machine - its real `main`, with pinned
+containers, stand-ins for its partners and seed data - so that reproducing a bug is "start it, set a
+breakpoint, paste a `curl`":
+
+```bash
+mvn -pl :notification-service spring-boot:test-run \
+    -Dspring-boot.run.main-class=ru.ludwigandreas.notification.local.LocalNotificationApplication
+```
+
+The start-up log prints every address, a ready command for calling the service as each seeded
+caller, and the command that makes a partner fail. `notification-service` is the reference example:
+see "Running locally" in [its README](../services/notification-service/README.md#running-locally),
+and [`test-support-local`](../sources/test-support-local/README.md) for adding the same to another
+service.
+
 ---
 
 ## 4. Versions, branches and IFT

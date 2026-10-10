@@ -1,0 +1,39 @@
+{
+  "change": "fix-defects-found-by-local-run",
+  "model": "claude-opus-5-5",
+  "index_version": "e325cfcb99c8d3e83ae151ee02dc0dcdb76f412e39d578e4dc5afb0ca729e08f",
+  "modules_touched": [
+    "security-spring-boot-starter",
+    "identity-projection-spring-boot-starter",
+    "user-settings-spring-boot-starter",
+    "test-support",
+    "notification-service",
+    "test-support-local"
+  ],
+  "gate": {
+    "scripts/gate.sh --change fix-defects-found-by-local-run --full": "FAIL at scripts/check_api_baseline.sh: 2.0.0 baselines UNRESOLVED, releases repository unreachable from this machine",
+    "mvn -q validate": "pass",
+    "scripts/check_migrations.sh": "pass (run by hand)",
+    "scripts/check_image_pins.sh": "pass (run by hand)",
+    "scripts/check_build_metadata.sh": "pass (run by hand)",
+    "mvn clean install": "pass on the fourth run: 35 reactor entries SUCCESS, 07:24 min, 3509 tests, 0 failures. Run 1 failed on StubFaultIT.slow (a flaky test of the first change); run 2 failed in audit-core with ClassNotFoundException for its own classes while IntelliJ IDEA had the project open; run 3 failed on StubFaultIT.slow again, which led to its real cause",
+    "python3 scripts/check_aggregate_report.py": "pass",
+    "openspec validate fix-defects-found-by-local-run --strict": "pass"
+  },
+  "tests": {
+    "added": 11,
+    "passed": 3509,
+    "failed": 0
+  },
+  "retries": 3,
+  "human_corrections": 0,
+  "rollback_point": "a1bc1888287b18dd22778b6477f0ddd2cd72ab0e",
+  "unresolved": [
+    "the gate script has not passed: scripts/check_api_baseline.sh cannot resolve the 2.0.0 baselines here; task 8.2 is open",
+    "test-support-local was touched although the proposal did not list it: a flaky test (StubFaultIT.slow) and the sample's retry budget, found by this change's full builds",
+    "rest-client-spring-boot-starter's default retry budget has no headroom for connecting, so the last retry is skipped whenever an attempt overruns its read timeout by a few milliseconds; not fixed",
+    "rest-client-spring-boot-starter's not-really-optional dependencies; stated non-goal",
+    "LocalPostgresConfiguration's javadoc in test-support-local still describes the container hazard as current; the hazard is fixed, the class is kept",
+    "one full build failed in audit-core with missing classes while IntelliJ IDEA was open on the project; not reproduced, cause not established beyond that coincidence"
+  ]
+}

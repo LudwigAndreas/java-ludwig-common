@@ -34,7 +34,16 @@ import ru.ludwigandreas.messaging.consumer.ListenerContainerFactoryBuilder;
  * then a dead-letter topic, which means the dead-letter topic for the OIDC user stream has to be provisioned
  * before this ships. See this module's README.
  */
-@AutoConfiguration(after = IdentityProjectionAutoConfiguration.class)
+/*
+ * After the messaging auto-configuration, by name. The container factory below is behind
+ * @ConditionalOnBean(ListenerContainerFactoryBuilder.class), and a bean condition sees only what has
+ * been registered so far. Unrelated auto-configurations are ordered alphabetically, and this package
+ * sorts before ru.ludwigandreas.messaging - so without this the condition was evaluated first,
+ * answered false, and an application with ludwig.identity.kafka.enabled=true failed to start on the
+ * listener's missing factory. IdentityKafkaOrderingTest holds the order.
+ */
+@AutoConfiguration(after = IdentityProjectionAutoConfiguration.class,
+        afterName = "ru.ludwigandreas.messaging.config.MessagingAutoConfiguration")
 @ConditionalOnClass(KafkaListener.class)
 @ConditionalOnProperty(prefix = "ludwig.identity.kafka", name = "enabled", matchIfMissing = true)
 public class IdentityKafkaAutoConfiguration {

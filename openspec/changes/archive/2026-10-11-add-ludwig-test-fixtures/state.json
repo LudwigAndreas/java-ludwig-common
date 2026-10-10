@@ -1,0 +1,52 @@
+{
+  "change": "add-ludwig-test-fixtures",
+  "contract": {
+    "goal": "one test-scoped module that lets a service start its real main locally with pinned backing services, partner stubs keyed by rest-client name with switchable faults, and ordered seed fixtures",
+    "output": "new module sources/test-support-local (launcher, stubs, faults, fixtures, Kafka helpers, LocalRunRulesTest, sample app + integration tests, README en/ru); one ludwig-bom entry; one root <module>; one jacoco-aggregate dependency; one bannedDependencies rule in ludwig-service-parent; repository docs updated",
+    "constraints": [
+      "D2: in-repo edges are exactly test-support (compile) and rest-client-spring-boot-starter (optional); no other sibling dependency, and no cycle",
+      "D5: stubs are plain objects started before context refresh; base-url published at highest precedence; WireMockFixture in test-support unchanged",
+      "D11: no second audit sink, operation envelope, cache, ProblemDetail handling, redaction mask or endpoint; images only from LudwigTestImages; summary through SLF4J",
+      "no code or POM change in test-support; no service sources touched; no new container image; no third-party version added or moved",
+      "the module registers no auto-configuration and activates nothing by itself",
+      "if stub base-url precedence over application.yml cannot be made to hold, stop at task 3.2"
+    ],
+    "done_when": [
+      "scripts/manifest.sh build && scripts/manifest.sh stale && scripts/manifest.sh layout",
+      "mvn -q validate",
+      "scripts/gate.sh --change add-ludwig-test-fixtures --full",
+      "python3 scripts/check_aggregate_report.py",
+      "scripts/check_migrations.sh && scripts/check_image_pins.sh",
+      "openspec validate add-ludwig-test-fixtures --strict"
+    ]
+  },
+  "current_task": "10.3",
+  "decisions": [
+    "module artifactId is test-support-local, not ludwig-test-fixtures: project_index.py assigns the test-support role by artifactId prefix",
+    "stubs ship as canned answers plus fault switching; no stateful fake is built",
+    "faults are WireMock scenario states switched over WireMock's own admin API; no controller is written",
+    "integration tests are named *IT and the module binds failsafe (as job-core and messaging do): in library modules surefire has no exclusions and failsafe only matches *IT, so a *IntegrationTest would run at 'test' under surefire; tasks.md renamed accordingly",
+    "the launcher uses SpringApplication.withHook directly instead of SpringApplication.from(...).with(...): Augmented can add sources and profiles but not ApplicationContextInitializers, and the stubs must be an initializer (D5). withHook is the mechanism from() itself is built on",
+    "test-scoped spring-security-oauth2-client and spring-webflux added to the module's own tests: rest-client-spring-boot-starter declares both optional but a full @SpringBootApplication context fails without them (RestClientAuthAutoConfiguration, NamedClientFactory). Finding about that starter, not fixed here",
+    "3.2 precedence holds: StubWiringIT.stubAddressBeatsTheServicesOwnConfiguration passes with application.yml naming https://partner.invalid/api",
+    "clearing a fault over HTTP is PUT /__admin/scenarios/fault/state with no body (WireMock's single-scenario reset); naming the state 'Started' is rejected with 422 because no mapping references it",
+    "LocalRunConfiguration and LocalRunPlan are public so the configuration can be started in a test without the launcher (FilteredClassLoader proof that it starts without the rest-client starter)",
+    "LocalRun connects PostgreSQL through JdbcConnectionDetails and LiquibaseConnectionDetails beans read from Containers.postgres() (LocalPostgresConfiguration) instead of delegating to PostgresContainerConfiguration, so a closing context cannot stop the shared container. Deviation from design D4's 'delegating to test-support's existing configuration'; finding about PostgresContainerConfiguration reported, test-support not changed",
+    "7.2 observed: with <scope>test</scope> removed from test-support-security in crud-service-example, 'mvn -pl :crud-service-example validate' fails with 'Rule 4: org.apache.maven.enforcer.rules.dependency.BannedDependencies failed ... ru.ludwigandreas:test-support-security:jar:1.1.0-SNAPSHOT <--- banned via the exclude/include list'; POM restored from git, no diff",
+    "9.2 module counts set to the real numbers (sources/ 27, reactor 34), not the task's 24 and 30: CLAUDE.md and openspec/config.yaml were already stale by three source modules before this change. The build/ row (4, while build/ holds jacoco-aggregate as a fifth) and docs/agent-operations.md's '29-module' are left as found"
+  ],
+  "failures": [
+    "3.2 attempt 1: loopback test picked utun6 (172.19.0.1), a tunnel interface that accepts a connection to any port; fixed by skipping point-to-point interfaces and requiring a control probe on a closed port to be refused",
+    "4.2 attempt 1: 'stub for a client that does not exist' never fired, because a stub publishes base-url for its name and the registry then reports that name as a client. Fixed by checking that direction against configuration from every property source except the stubs' own",
+    "5.2 attempt 1: SeedFixtureIT lost its database mid-class. LocalRun registered test-support's PostgresContainerConfiguration, whose @ServiceConnection bean hands the shared container's lifecycle to the context; closing a launched context stopped the per-JVM singleton (Testcontainers reuse is not enabled on this machine) and every other context's pool pointed at a dead port",
+    "10.3 attempt 1: scripts/gate.sh --change add-ludwig-test-fixtures --full stopped at its second command, scripts/check_api_baseline.sh: the 2.0.0 baselines of every published module are UNRESOLVED because https://nexus.example.internal/repository/maven-releases cannot be reached from this machine and they are not in ~/.m2. Not caused by this change (test-support-local is reported ABSENT by construction). The remaining gate commands are being run by hand to get their real results",
+    "post-gate: StubFaultIT.slow is timing-dependent and failed once in a full reactor build ('Expected exactly 2 requests ... but received 1'): WireMock journals a request when it finishes answering, and a slow stub is still in its delay when the client has timed out. Fixed by awaiting the count",
+    "post-gate, second look at StubFaultIT.slow: awaiting the count did not fix it - only one request was ever made. Real cause: rest-client's default retry budget is max-attempts x read-timeout + waits (815 ms in the sample) with no headroom for connecting, so a cold first attempt overruns it and the retry is skipped. Fixed by setting resilience.retry.max-elapsed-time=10s in the sample's application.yml. The zero-headroom default is a finding about rest-client-spring-boot-starter, not fixed"
+  ],
+  "open_questions": [
+    "should LocalRun also offer a movable Clock bean for services that already inject Clock (deferred, does not affect specs)"
+  ],
+  "pending_human": [
+    "10.3: scripts/check_api_baseline.sh needs the 2.0.0 release artifacts. Restore access to the releases repository (or populate ~/.m2 with the 2.0.0 artifacts) and rerun scripts/gate.sh --change add-ludwig-test-fixtures --full. Every other gate command was run by hand and passed."
+  ]
+}

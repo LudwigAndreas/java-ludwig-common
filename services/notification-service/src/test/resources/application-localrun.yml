@@ -1,0 +1,57 @@
+# What a local run of notification-service needs beyond the service's own defaults.
+#
+# This file is a TEST resource on purpose: it cannot be packaged into the image, so there is no
+# local profile, local secret or stand-in address that could ever be active in a deployment. It is
+# activated by LocalNotificationApplication and by the integration tests written in the same style.
+#
+# The rule of the file: nothing is switched off to make the service start. The service's own
+# application.yml defaults the chat and webhook channels, the Kafka ingress and the identity
+# projection to OFF, because a deployment turns them on by environment. Here they are all on, which
+# is the point - the code under a breakpoint is the code production runs.
+ludwig:
+  notification:
+    ingress:
+      kafka-enabled: true
+    channels:
+      email:
+        from-address: no-reply@notifications.local
+      chat:
+        enabled: true
+        # A placeholder the chat stand-in overrides. It has to be here: the launcher refuses a stub
+        # whose address property nothing else configures, and the service's own default is empty.
+        base-url: https://chat.invalid
+        api-token: local-chat-token
+      webhook:
+        enabled: true
+        signing-secret: local-webhook-signing-secret
+    receipts:
+      signing-secret: local-receipt-signing-secret
+    events:
+      enabled: true
+    preferences:
+      declinable-categories: campaigns,marketing
+    announcements:
+      enabled: true
+      allowed-audiences: EVERYONE,ROLE
+      targetable-roles: ADMIN,SUPPORT
+      max-visibility-window: 30d
+      categories:
+        platform-release:
+          category-class: PLATFORM
+          channels: IN_APP
+        feature-tips:
+          category-class: MARKETING
+          channels: IN_APP
+        platform-incident:
+          category-class: PLATFORM
+          channels: IN_APP,EMAIL
+  # Nothing about ludwig.user-settings here, deliberately. That starter is a `provided` dependency
+  # the Spring Boot plugin keeps out of what runs, so a deployment has no preference store and
+  # resolves every recipient from the configured defaults. The local run does the same.
+  identity:
+    kafka:
+      enabled: true
+  observability:
+    logging:
+      json:
+        enabled: false

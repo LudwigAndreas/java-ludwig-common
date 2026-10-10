@@ -1,0 +1,32 @@
+# The sample application's own configuration, as a service would write it: the partner's address is
+# a remote host. Nothing in a test may reach it - partner.invalid cannot resolve - so a test that gets
+# an answer from the partner has proved the stub's address took precedence over this file.
+spring:
+  main:
+    web-application-type: none
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+  kafka:
+    consumer:
+      # The listener must see a record published before its partitions were assigned.
+      auto-offset-reset: earliest
+
+ludwig:
+  rest-client:
+    clients:
+      partner:
+        base-url: https://partner.invalid/api
+        connect-timeout: 1s
+        # Short, so the slow-fault test exceeds it in well under a second.
+        read-timeout: 400ms
+        default-headers:
+          X-Sample-Caller: sample
+        resilience:
+          retry:
+            max-attempts: 2
+            wait-duration: 10ms
+            # Explicit, because the starter's default budget is exactly attempts x read-timeout plus
+            # the waits - 815 ms here - with no allowance for connecting. A cold first request
+            # overruns it by a few milliseconds, the retry is then not attempted, and a test that
+            # asserts "the retry ran" fails one build in three.
+            max-elapsed-time: 10s

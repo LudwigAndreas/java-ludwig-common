@@ -1,0 +1,41 @@
+{
+  "change": "adopt-local-run-in-notification-service",
+  "model": "claude-opus-5-5",
+  "index_version": "e325cfcb99c8d3e83ae151ee02dc0dcdb76f412e39d578e4dc5afb0ca729e08f",
+  "modules_touched": [
+    "test-support-local",
+    "notification-service"
+  ],
+  "gate": {
+    "scripts/gate.sh --change adopt-local-run-in-notification-service test-support-local notification-service": "FAIL at scripts/check_api_baseline.sh: 2.0.0 baselines UNRESOLVED, releases repository unreachable from this machine",
+    "git diff --exit-code a1bc188 -- services/notification-service/src/main": "pass",
+    "scripts/manifest.sh build && stale && layout": "pass",
+    "mvn -q validate": "pass",
+    "scripts/check_migrations.sh": "pass (run by hand)",
+    "scripts/check_build_metadata.sh": "pass (run by hand)",
+    "scripts/check_image_pins.sh": "pass",
+    "mvn -pl :test-support-local -am verify": "pass (run by hand)",
+    "mvn -pl :notification-service -am verify": "first run FAILED (181 integration tests, 3 failures, 98 errors: connection exhaustion); after the fix 'mvn -pl :notification-service verify' passes - 293 unit, 188 integration, coverage gate met. The -am form was not re-run after the fix; its upstream modules passed in the first run and were not changed since",
+    "openspec validate adopt-local-run-in-notification-service --strict": "pass"
+  },
+  "tests": {
+    "added": 32,
+    "passed": 481,
+    "failed": 0
+  },
+  "retries": 11,
+  "human_corrections": 0,
+  "rollback_point": "a1bc1888287b18dd22778b6477f0ddd2cd72ab0e",
+  "unresolved": [
+    "the verification gate has not passed: scripts/check_api_baseline.sh cannot resolve the 2.0.0 baselines here; task 12.4 is open",
+    "task 1.1's precondition is not met: add-ludwig-test-fixtures is not archived, so this change's partner-stub and local-run deltas have no base spec yet",
+    "SECURITY, not fixed: security-spring-boot-starter does not enforce ludwig.security.jwt.audiences when the decoder is configured by issuer-uri; notification-service accepts a token minted for another audience. Pinned by LocalNotificationApplicationIT.wrongAudienceIsNotRejectedYet; the spec scenario 'wrong audience is 401' is unmet",
+    "not fixed: identity-projection-spring-boot-starter's Kafka consumer cannot start (auto-configuration ordering); it is off in the local profile and the spec requirement that it is enabled is unmet",
+    "not fixed: user-settings-spring-boot-starter does not start when it is on the classpath with no mode enabled and hot-reload is on (UserSettingsHotReloadAutoConfiguration)",
+    "not fixed: PostgresContainerConfiguration (test-support) lets a context that closes or fails to load stop the shared container; it turned one 'too many clients' failure into 98 errors",
+    "the suite is close to PostgreSQL's connection limit: every cached test context holds a 20-connection pool. The new contexts use 3 and 5; the existing ones were not changed",
+    "the build's launch tests set ludwig.user-settings.projection.enabled=true, which a developer's spring-boot:test-run does not; the two launches are not on the same classpath",
+    "README.ru.md of notification-service was already three headings short of README.md before this change (no 'Build and test' section); not fixed",
+    "the stand-in issuer lives in notification-service's test sources; crud-service-example will need it too"
+  ]
+}

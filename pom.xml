@@ -68,6 +68,8 @@
              most upstream modules can use it without closing a reactor cycle; see its POM. -->
     <module>sources/test-support</module>
     <module>sources/test-support-security</module>
+    <!-- Needs rest-client-spring-boot-starter, which test-support may not depend on; see its POM. -->
+    <module>sources/test-support-local</module>
     <module>build/checkstyle-rules</module>
     <module>sources/jira-client</module>
     <!-- Services: parented by ludwig-service-parent, consumed as container images. -->

@@ -309,6 +309,29 @@
             <artifactId>test-support-security</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            The local application (src/test/.../local) and the stand-ins and seed fixtures it shares
+            with the integration tests. Test scope is enforced, not merely chosen: ludwig-service-parent
+            fails this build if any test-support artifact reaches the compile or runtime classpath.
+
+            The two below are `optional` in test-support-local, so the service that uses those parts
+            declares them: WireMock for the partner stand-ins, ArchUnit for LocalRunRulesTest.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-local</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

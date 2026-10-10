@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      Includes only. The sample application's one table, in the shape the database-migration
+      capability requires of every changelog in this repository, test sources included.
+    -->
+    <include file="classpath:db/changelog/0001-create-widget.sql" relativeToChangelogFile="false"/>
+
+</databaseChangeLog>

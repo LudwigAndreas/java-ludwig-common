@@ -1469,3 +1469,145 @@ diff, а не только внутри запущенного процесса.
 
 15. **Не сделано:** адаптеры квитанций под конкретных провайдеров и пошаблонные переопределения на
    тенанта. Дайджест реализован, но поставляется **выключенным**.
+
+## Локальный запуск
+
+Весь сервис на вашей машине, с точкой останова где угодно. Этот раздел - ещё и эталонный пример
+[`test-support-local`](../../sources/test-support-local/README.ru.md): копируйте отсюда, когда то же
+понадобится другому сервису.
+
+```bash
+mvn -pl :notification-service spring-boot:test-run \
+    -Dspring-boot.run.main-class=ru.ludwigandreas.notification.local.LocalNotificationApplication
+```
+
+или запустите `LocalNotificationApplication` (в `src/test/java/.../local`) из IDE в режиме отладки.
+Нужен работающий Docker и больше ничего: ни переменных окружения, ни контейнеров, запущенных вручную.
+
+### Что запускается
+
+`LocalNotificationApplication` запускает собственный `NotificationApplication.main` сервиса без
+изменений и добавляет:
+
+| | Что | Как сервис это находит |
+|---|---|---|
+| PostgreSQL, Kafka | закреплённые по digest контейнеры `test-support` | параметры подключения, `spring.kafka.bootstrap-servers` |
+| Почта | SMTP- и IMAP-сервер в процессе | `spring.mail.host`, `spring.mail.port` |
+| Провайдер идентификации | `IdentityProviderStub`: настоящие метаданные и ключи подписи | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
+| API чата | `ChatApiStub` | `ludwig.notification.channels.chat.base-url` |
+| Получатель вебхуков | `WebhookReceiverStub` | никак - его URL это адрес получателя; он напечатан в сводке |
+
+Каналы email, chat, webhook и in-app, входы REST и Kafka и опрос очереди **включены**. Ничто не
+выключено ради того, чтобы сервис стартовал; включён и потребитель проекции идентичности.
+
+### Сводка и вызов сервиса
+
+После старта сервис пишет в лог, что где находится:
+
+```text
+Local run is ready.
+  Backing services
+    postgres      jdbc:postgresql://localhost:57185/test?loggerLevel=OFF
+    kafka         localhost:57179
+  Partner stubs
+    chat          http://127.0.0.1:57183   admin http://127.0.0.1:57183/__admin   fault none
+        set a fault:  curl -X PUT http://127.0.0.1:57183/__admin/scenarios/fault/state -H 'Content-Type: application/json' -d '{"state":"unavailable"}'   (unavailable | slow | reset | empty)
+        clear it:     curl -X PUT http://127.0.0.1:57183/__admin/scenarios/fault/state
+    webhooks      http://127.0.0.1:57184   ...
+        use as a WEBHOOK recipient address:  http://127.0.0.1:57184/hooks/orders   (template local-order-shipped, variable orderId)
+  Call the service (tokens valid 12h, this process only)
+    api docs      http://localhost:8080/swagger-ui/index.html
+    local-admin:  curl -H 'Authorization: Bearer eyJ...' http://localhost:8080/api/v1/notifications/deliveries
+    ada:  curl -H 'Authorization: Bearer eyJ...' http://localhost:8080/api/v1/inbox
+  Mail
+    smtp          127.0.0.1:57181   (the service sends here)
+    imap          127.0.0.1:57180   (log in as the recipient's address, any password, no TLS)
+  Seed fixtures (mode reset)
+    RecipientSeed, AnnouncementSeed, IngressSeed, NotificationSeed
+```
+
+Вставьте строку `curl` - и вы вызываете сервис от имени этого человека. Токен настоящий: он подписан
+подменным издателем и проверяется боевым декодером сервиса. Обхода аутентификации нет ни в основных,
+ни в тестовых исходниках. Токен говорит, кто вы; что вам можно, берётся из проекции идентичности,
+поэтому каждый вызывающий - это ещё и заведённый пользователь с ролями (`LocalCaller`).
+
+### Какие данные заведены
+
+| Кто | Доступен через | Зачем |
+|---|---|---|
+| `local-admin` | email | вызовы от имени администратора и автора объявлений |
+| `ada` | email, чат (`@ada`), inbox | обычный пользователь, у которого есть что-то в каждом канале |
+| `grace` | только email | получатель запроса из топика Kafka и отложенного уведомления |
+| `dennis` | - | деактивированный пользователь, которому ничего не отправляется |
+
+плюс уведомление `welcome` для Ады по in-app, email и чату (опрос очереди доставит его за несколько
+секунд), `password-reset` для Грейс, запланированный на завтра (одна доставка остаётся в очереди),
+объявление для всех и один запрос во входном топике Kafka. Уведомления и объявление отправляются через
+собственный REST API сервиса, поэтому начальные данные не могут оказаться в состоянии, которое API не
+создал бы.
+
+`ludwig.local.fixtures.mode` определяет, что с ними сделает следующий старт: `reset` (по умолчанию)
+очищает базу и заполняет заново, `keep` не трогает ваши данные, `none` не делает ни того ни другого.
+
+### Как уронить партнёра
+
+В точке останова или в любой момент вставьте строку `set a fault`, напечатанную в сводке для этой
+заглушки:
+
+```bash
+curl -X PUT http://127.0.0.1:57183/__admin/scenarios/fault/state \
+     -H 'Content-Type: application/json' -d '{"state":"unavailable"}'
+```
+
+Следующая доставка в чат получит 503 от настоящего сервера, собственная классификация канала назовёт
+сбой повторяемым, а собственный backoff очереди назначит следующую попытку: доставка показывает
+`FAILED`, `attempts: 1`, `chat API returned 503`. `PUT` без тела снимает сбой. `slow` превышает таймаут
+чтения; `reset` и `empty` рвут соединение. Чтобы стартовать уже со сбоем, добавьте
+`--ludwig.local.stubs.chat.fault=unavailable`.
+
+### Как прочитать отправленную почту
+
+Подключите почтовый клиент к адресу IMAP из сводки и войдите под адресом получателя с любым паролем.
+В тесте - `LocalMailbox.received()`.
+
+### Те же заглушки в тестах
+
+| Тест | Что показывает |
+|---|---|
+| `LocalNotificationApplicationIT` | запускает само локальное приложение и работает с ним по HTTP - то, что сохраняет этот раздел верным |
+| `ChatOutageIT` | `@WithPartnerStubs` на обычном тесте от `NotificationTestBase`: отказ, затем восстановление |
+| `SlowWebhookIT` | вебхук медленнее таймаута чтения |
+| `DuplicateIngressIT` | один запрос Kafka доставлен дважды через `KafkaDeliveries.duplicate`, отправлено одно письмо |
+| `LocalRunArchitectureTest`, `OutboundHttpRulesTest` | запуск используется только из пакета `local`; исходящий HTTP-клиент строится только в `NotificationChannelConfig` |
+
+### Где лежит локальная конфигурация
+
+Вся в `src/test`: `application-localrun.yml`, заглушки, фикстуры, шаблон вебхука. Её нельзя упаковать,
+поэтому не существует локального профиля или локального секрета, который мог бы быть активен в
+развёртывании, а `ludwig-service-parent` валит сборку, если артефакт `test-support` покидает область
+test.
+
+### Что нашёл локальный запуск
+
+Первый запуск всего сервиса против настоящих заглушек за первый же час выявил четыре дефекта в других
+модулях. Все четыре исправлены; они перечислены, потому что это и есть довод в пользу такого запуска.
+
+- **Токен для другой аудитории принимался.** `security-spring-boot-starter` устанавливал проверку
+  аудитории только на `NimbusJwtDecoder`; при `issuer-uri`, а этот сервис везде настроен именно так,
+  декодер Spring Boot другого типа, и проверка не выполнялась. Теперь он оборачивает любой декодер.
+  `LocalNotificationApplicationIT` проверяет 401 против настоящего издателя.
+- **Потребитель Kafka проекции идентичности не мог стартовать.** С `IDENTITY_PROJECTION_ENABLED=true`
+  сервис падал на отсутствующем бине, потому что `IdentityKafkaAutoConfiguration` вычислялась раньше
+  автоконфигурации messaging, от которой зависит. Теперь она упорядочена после неё, и потребитель
+  включён в локальном запуске.
+- **`user-settings-spring-boot-starter`, присутствующий, но не включённый, останавливал старт** при
+  включённом hot-reload. Его автоконфигурация hot-reload теперь зависит от включённого режима.
+- **Тестовый контекст, который закрылся или не загрузился, останавливал общий контейнер PostgreSQL**,
+  превращая один сбой в девяносто восемь. Общие контейнеры `test-support` теперь игнорируют `stop()`.
+
+Две вещи локальный запуск делает не так, как можно ожидать, и обе намеренно:
+
+- **Ни один поставляемый шаблон не имеет варианта для вебхука** - развёртывание монтирует свои, -
+  поэтому локальный запуск приносит свой (`local-order-shipped`) как тестовый ресурс.
+- **Получатель с отказом от рассылки или тихими часами не заводится**, потому что у сервиса пока нет
+  хранилища предпочтений («Сегодня: хранилища настроек нет», выше) и он не стал бы их читать.

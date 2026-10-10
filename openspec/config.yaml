@@ -10,7 +10,7 @@ schema: spec-driven
 context: |
   ## What this repository is
 
-  `ludwig-common` is a 29-module Maven reactor (Java 17, Spring Boot 3.3.5, group
+  `ludwig-common` is a 34-module Maven reactor (Java 17, Spring Boot 3.3.5, group
   `ru.ludwigandreas`) publishing an internal platform: a BOM, a service parent POM, starters and
   plain libraries, and two runnable services that consume them. Every module has a detailed
   `README.md` + `README.ru.md` stating its design decisions. Read the module README before
@@ -28,7 +28,7 @@ context: |
 
   Every module sits one level below the root, in the directory its role dictates: `build/` for
   `ludwig-bom`, `ludwig-service-parent`, `checkstyle-rules` and `architecture-rules`; `services/`
-  for the two runnable services; `sources/` for all 23 libraries, starters and test-support
+  for the two runnable services; `sources/` for all 27 libraries, starters and test-support
   modules. Two consequences that bite: a module POM parented by `common` must declare
   `<relativePath>../../pom.xml</relativePath>`, because Maven's `../pom.xml` default resolves to a
   directory with no POM and it silently falls back to a stale `common` in `~/.m2` rather than

@@ -111,7 +111,7 @@ public final class Containers {
 
         @SuppressWarnings("resource") // Ryuk reaps it at JVM exit; closing it would defeat sharing.
         private static final PostgreSQLContainer<?> INSTANCE =
-                new PostgreSQLContainer<>(LudwigTestImages.POSTGRES).withReuse(true);
+                new SharedPostgres().withReuse(true);
 
         static {
             INSTANCE.start();
@@ -125,7 +125,7 @@ public final class Containers {
 
         @SuppressWarnings("resource") // See PostgresHolder.
         private static final KafkaContainer INSTANCE =
-                new KafkaContainer(LudwigTestImages.KAFKA).withReuse(true);
+                new SharedKafka().withReuse(true);
 
         static {
             INSTANCE.start();
@@ -139,7 +139,7 @@ public final class Containers {
 
         @SuppressWarnings("resource") // See PostgresHolder.
         private static final GenericContainer<?> INSTANCE =
-                new GenericContainer<>(LudwigTestImages.REDIS)
+                new SharedRedis()
                         .withExposedPorts(REDIS_PORT)
                         .withReuse(true);
 
@@ -155,7 +155,7 @@ public final class Containers {
 
         @SuppressWarnings("resource") // See PostgresHolder.
         private static final LocalStackContainer INSTANCE =
-                new LocalStackContainer(LudwigTestImages.LOCALSTACK)
+                new SharedLocalStack()
                         .withServices(LocalStackContainer.Service.S3)
                         .withReuse(true);
 
@@ -164,6 +164,74 @@ public final class Containers {
         }
 
         private LocalStackHolder() {
+        }
+    }
+
+    /*
+     * ============================================================================================
+     * A SHARED CONTAINER CANNOT BE STOPPED. The four classes below exist to make that true.
+     * ============================================================================================
+     * Each container here is used by every application context in the JVM, and none of them owns it.
+     * But a container is Startable and AutoCloseable, so anything that is handed one feels entitled
+     * to close it: Spring Boot closes a container bean when its context closes (unless Testcontainers
+     * reuse is enabled on the machine, which it is not by default or in CI), JUnit stops a @Container
+     * field after its class, and a try-with-resources closes whatever it was given. Any one of them
+     * took the database away from every other context still running.
+     *
+     * That is not hypothetical. In notification-service's suite one test context failed to load on a
+     * connection limit, Spring closed it, the PostgreSQL container went with it, and the ninety-eight
+     * tests after it failed with "connection refused" - pointing everywhere except at the cause.
+     *
+     * So stop() does nothing, and close() - which calls stop() - does nothing either. Ryuk removes
+     * the containers when the JVM exits, exactly as before. A test that genuinely needs a container
+     * it can stop creates one of its own from LudwigTestImages.
+     */
+
+    private static final class SharedPostgres extends PostgreSQLContainer<SharedPostgres> {
+
+        SharedPostgres() {
+            super(LudwigTestImages.POSTGRES);
+        }
+
+        @Override
+        public void stop() {
+            // Shared by every context in the JVM; see the note above.
+        }
+    }
+
+    private static final class SharedKafka extends KafkaContainer {
+
+        SharedKafka() {
+            super(LudwigTestImages.KAFKA);
+        }
+
+        @Override
+        public void stop() {
+            // Shared by every context in the JVM; see the note above.
+        }
+    }
+
+    private static final class SharedRedis extends GenericContainer<SharedRedis> {
+
+        SharedRedis() {
+            super(LudwigTestImages.REDIS);
+        }
+
+        @Override
+        public void stop() {
+            // Shared by every context in the JVM; see the note above.
+        }
+    }
+
+    private static final class SharedLocalStack extends LocalStackContainer {
+
+        SharedLocalStack() {
+            super(LudwigTestImages.LOCALSTACK);
+        }
+
+        @Override
+        public void stop() {
+            // Shared by every context in the JVM; see the note above.
         }
     }
 }

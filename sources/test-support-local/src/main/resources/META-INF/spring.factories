@@ -1,0 +1,2 @@
+org.springframework.test.context.ContextCustomizerFactory=\
+  ru.ludwigandreas.testsupport.local.stub.PartnerStubsContextCustomizerFactory

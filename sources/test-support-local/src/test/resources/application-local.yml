@@ -1,0 +1,4 @@
+# Stands in for a service's existing `local` profile. LocalRun must not activate it unless asked,
+# and LocalRunIT reads this marker to prove it.
+sample:
+  local-profile-applied: true

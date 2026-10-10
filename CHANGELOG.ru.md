@@ -17,6 +17,63 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`test-support-local`: локальный запуск сервиса с его инфраструктурой, заглушками партнёров и
+  начальными данными.** Новый модуль в области test. `Local<Name>Application` сервиса, в `src/test`,
+  запускает собственный `main` сервиса через `LocalRun` с названными PostgreSQL, Kafka, LocalStack и
+  Redis, одной HTTP-заглушкой на имя `@LudwigRestClient` (`PartnerStub`; привязывается установкой
+  `base-url` этого клиента впереди всех остальных источников свойств) и упорядоченными `SeedFixture`
+  с режимами `reset` / `keep` / `none`. Заглушку можно сделать `unavailable`, `slow`, `reset`, `empty`
+  или `refused` из кода теста, свойством при старте или через admin API WireMock, пока сервис стоит в
+  точке останова. Те же заглушки работают в интеграционном тесте через `@WithPartnerStubs`.
+  `KafkaDeliveries` доставляет одну запись несколько раз. API предварительный, пока его не подключит
+  сервис.
+- **`notification-service` целиком запускается на машине разработчика.** `LocalNotificationApplication`
+  в тестовых исходниках сервиса запускает собственный `main` сервиса с PostgreSQL, Kafka, почтовым
+  сервером, заглушками провайдера идентификации, API чата и получателя вебхуков и с начальными
+  данными; все каналы и оба входа включены. Токены настоящие - подписаны подменным издателем и
+  проверяются боевым декодером, - а сводка при старте печатает готовый `curl` для каждого заведённого
+  вызывающего. Запуск: `mvn -pl :notification-service spring-boot:test-run
+  -Dspring-boot.run.main-class=ru.ludwigandreas.notification.local.LocalNotificationApplication`.
+  Раздел «Локальный запуск» в README сервиса - эталонный пример `test-support-local`.
+- **`test-support-local`: партнёры, не являющиеся rest-клиентами, и почта.** Заглушка публикует адрес
+  там, где указывает `PartnerStub.address()`: в `base-url` rest-клиента (по умолчанию), в любом
+  свойстве (`StubAddress.property`) или нигде (`StubAddress.none`, для партнёра, адрес которого -
+  данные). `LocalRun.mail()` запускает SMTP- и IMAP-сервер в процессе, читаемый через `LocalMailbox`.
+  Бин `SummaryContributor` и `PartnerStub.summaryLines` дополняют сводку при старте.
+
+### Changed
+
+- **`ludwig-service-parent` валит сборку сервиса с артефактом `test-support` вне области test.**
+  Новое правило enforcer запрещает `ru.ludwigandreas:test-support*` в областях compile и runtime.
+  Сервис, объявивший `test-support`, `test-support-security` или `test-support-local` без
+  `<scope>test</scope>`, теперь падает на `validate`; оба эталонных сервиса уже соответствуют.
+- **`test-support-local`: `PartnerStub.clientName()` теперь `name()`.** Имя заглушки больше не
+  обязательно имя rest-клиента. Запуск также отказывает заглушке, адресное свойство которой не задаёт
+  ни один другой источник, какого бы вида адрес ни был.
+
+### Fixed
+
+- **`security-spring-boot-starter`: настроенная аудитория теперь проверяется, когда декодер построен
+  из `issuer-uri`. ЭТО МЕНЯЕТ ТО, ЧТО ПРИНИМАЕТ РАЗВЁРТЫВАНИЕ.** `ludwig.security.jwt.audiences`
+  применялась только к бину `NimbusJwtDecoder`. При
+  `spring.security.oauth2.resourceserver.jwt.issuer-uri` бин декодера Spring Boot - ленивый
+  `SupplierJwtDecoder`, поэтому проверка молча пропускалась и токен, выпущенный тем же издателем для
+  другого сервиса, принимался. Теперь проверка устанавливается на любой `JwtDecoder`. Вызывающий,
+  предъявлявший токен для другой аудитории, начнёт получать 401 - как всегда и было сказано в
+  конфигурации.
+- **`identity-projection-spring-boot-starter`: потребитель Kafka стартует.** С
+  `ludwig.identity.kafka.enabled=true` приложение падало на отсутствующем
+  `identityKafkaListenerContainerFactory`, потому что автоконфигурация вычислялась раньше
+  автоконфигурации messaging, бин которой ищет её условие. Теперь она упорядочена после неё.
+- **`user-settings-spring-boot-starter`: присутствуя без включённого режима, больше не останавливает
+  старт.** Его автоконфигурация hot-reload теперь зависит от `ludwig.user-settings.enabled` и от
+  включённого режима, как и конфигурация, которую она обслуживает.
+- **`test-support`: общий контейнер больше нельзя остановить контекстом или тестом.** Синглтоны
+  `Containers` на JVM игнорируют `stop()` и `close()`. Контекст, державший такой контейнер как бин,
+  раньше останавливал его при закрытии или неудачной загрузке для всех остальных контекстов в JVM.
+
 ## [2.0.0]
 
 **Мажорный** выпуск: он содержит бинарно несовместимые изменения опубликованных API, каждое из которых
