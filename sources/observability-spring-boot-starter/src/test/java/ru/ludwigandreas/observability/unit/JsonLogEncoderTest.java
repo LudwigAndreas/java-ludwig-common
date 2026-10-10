@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.MarkerFactory;
 import org.slf4j.event.KeyValuePair;
 import ru.ludwigandreas.observability.config.ObservabilityProperties;
+import ru.ludwigandreas.observability.core.BuildIdentity;
 import ru.ludwigandreas.observability.core.ServiceIdentity;
 import ru.ludwigandreas.observability.logging.json.JsonLogEncoder;
 import ru.ludwigandreas.observability.logging.json.JsonLogEncoderConfig;
@@ -28,6 +29,9 @@ class JsonLogEncoderTest {
     private static final ServiceIdentity IDENTITY =
             new ServiceIdentity("catalog", "commerce", "1.4.2", "prod", "catalog-7d9f-xk2");
 
+    private static final BuildIdentity BUILD = new BuildIdentity(
+            "c1fc5b81ecfa20e1b3418002a5ace90473d6734c", "c1fc5b8", "master", "2026-10-10T00:00:00Z", "4711", true);
+
     @Test
     void writesOneJsonObjectPerLineWithTheCoreFields() throws Exception {
         JsonNode line = encode(config(LogFieldNames.ecs()), event(Level.INFO, "order {} shipped", "4711"));
@@ -38,6 +42,35 @@ class JsonLogEncoderTest {
         assertThat(line.get("service.name").asText()).isEqualTo("catalog");
         assertThat(line.get("service.version").asText()).isEqualTo("1.4.2");
         assertThat(line.get("service.environment").asText()).isEqualTo("prod");
+    }
+
+    @Test
+    void writesTheAbbreviatedCommitOnEveryLineAndNothingElseOfTheBuild() throws Exception {
+        JsonNode line = encode(config(LogFieldNames.ecs()), event(Level.INFO, "tick"));
+
+        assertThat(line.get("service.commit.id").asText()).isEqualTo("c1fc5b8");
+        // The full hash, the branch, the timestamp, the CI build and the dirty flag belong to the
+        // startup identity event, which is written once. A line is written millions of times.
+        assertThat(line.toString()).doesNotContain("c1fc5b81ecfa20e1b3418002a5ace90473d6734c", "master", "4711");
+    }
+
+    @Test
+    void omitsTheCommitFieldWhenTheArtifactHasNoProvenance() throws Exception {
+        JsonNode line = encode(configBuilder(LogFieldNames.ecs()).build(BuildIdentity.absent()),
+                event(Level.INFO, "tick"));
+
+        // Absent, not "unknown" and not an empty string: either would look like a real value.
+        assertThat(line.has("service.commit.id")).isFalse();
+        assertThat(line.toString()).doesNotContain("unknown");
+    }
+
+    @Test
+    void readsTheCommitFromTheResolvedIdentityAndNotFromTheMdc() throws Exception {
+        LoggingEvent event = eventWithMdc(Map.of("commitId", "deadbee", "service.commit.id", "deadbee"), "handling");
+
+        JsonNode line = encode(configBuilder(LogFieldNames.ecs()).build(BuildIdentity.absent()), event);
+
+        assertThat(line.has("service.commit.id")).isFalse();
     }
 
     @Test
@@ -229,8 +262,12 @@ class JsonLogEncoderTest {
         }
 
         private JsonLogEncoderConfig build() {
+            return build(BUILD);
+        }
+
+        private JsonLogEncoderConfig build(BuildIdentity build) {
             ObservabilityProperties.Logging.Json defaults = new ObservabilityProperties.Logging.Json();
-            return new JsonLogEncoderConfig(names, IDENTITY, staticFields, true, List.of(), List.of(),
+            return new JsonLogEncoderConfig(names, IDENTITY, build, staticFields, true, List.of(), List.of(),
                     true, "labels", defaults.getMaskedKeys(), "traceId", "spanId", "correlationId",
                     maxMessageLength, 12288, true, true, false);
         }

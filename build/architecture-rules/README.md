@@ -68,7 +68,7 @@ class ArchitectureTest extends ArchitectureRulesTest {
 
 ## What is checked
 
-Twenty groups, 47 rules. Every id below is a selector: pass the group id to toggle the group, the
+Twenty-six groups, 68 rules. Every id below is a selector: pass the group id to toggle the group, the
 full id to toggle one rule.
 
 Rules that check against a name only the consuming organisation can supply - the base exception, the
@@ -496,6 +496,54 @@ Two more conventions in the credential area cannot be checked by any build:
    already shipped - carry the traffic. No check can assert that a deployment removed the filter once its
    edge could do the exchange. A deprecation note on the property is the whole mitigation, and it will be
    read by whoever is already looking at the property rather than by whoever should be.
+
+### `logging` - there is one log pipeline and one build identity, and nobody writes a second one
+
+| Rule id | What it enforces |
+|---|---|
+| `logging.no-second-log-encoder` | No class outside `ru.ludwigandreas.observability..` implements Logback's `Encoder` or `Layout` |
+| `logging.no-second-build-provenance-type` | No class outside it is nothing but a commit, a branch and a build time |
+| `logging.no-runtime-repository-access` | No class launches an operating-system process or depends on JGit |
+
+`observability-spring-boot-starter` decides the field names every log line is written with, stamps the
+commit on each event, and reads that commit from resources packaged at build time. The three rules are the
+three ways that stops being one mechanism.
+
+**A second encoder is not a service's own logging configuration, and the difference is the rule.** A service
+that writes a `logback-spring.xml` and attaches an appender is choosing its own output: it affects that
+service alone, the starter deliberately leaves such an appender exactly as it found it, and nothing here
+forbids it. A module that declares a type *implementing* `Encoder` or `Layout` is publishing a second field
+vocabulary for other modules to write through - and two vocabularies are found to disagree only once both
+are deployed and the aggregator's index template has the wrong mapping for one of them. So the rule polices
+a type, which is a bytecode fact, and never a configuration file, which is a resource ArchUnit cannot see
+and which forbidding would make a reasoned escape hatch unreachable. It matches on *assignable to*, so
+extending `EncoderBase` or `PatternLayout` is caught as well as implementing the interface directly.
+
+**The provenance rule asks for "and nothing else".** It reports a type whose declared instance fields are
+all provenance - at least one naming the commit, at least one naming the branch, the build time, the build
+number or the dirty flag - with no other state. That is the discriminator `presentation` arrived at for the
+caller-preference pair, for the same reason: asking only that a commit and a branch be present would report
+every domain object that legitimately records them, such as a release note or a deployment record about
+some other service. One unrelated field evades it, and that is accepted: the rule exists to catch the
+reasonable local decision - "I need the commit here, I will make a small record" - not a determined evasion.
+
+**The third rule is broader than its name, and has to be.** The requirement is that nothing invokes `git`
+or reads a `.git` directory from a running process, because a container has no checkout and a process that
+found one would report the machine it runs on. But `new ProcessBuilder("git", ...)` and
+`new ProcessBuilder("pg_dump", ...)` are the same bytecode with a different string constant, and ArchUnit
+cannot read a string constant's value. The rule therefore reports *every* process launch - `ProcessBuilder`
+and `Runtime.exec`, not the rest of `Runtime` - outside a list of exempt types named in the rule itself.
+Nothing in the platform launches a process today, so that list is empty; a module with a real reason to
+launch one adds its type there with the reason, which is a claim that the process is not `git`, made where
+it is reviewed.
+
+**What no build can check here.** Opening a `.git` path through `java.io` or `java.nio` is a string constant
+too, so ArchUnit cannot see it - and it is deliberately not handed to Checkstyle, because a source-text rule
+matching `.git` would fire on `.gitignore`, on every repository URL and on the javadoc that explains why not
+to read it. That one remains a review question, recorded as a requirement of the `build-identity`
+capability. What the build *can* check beside these rules is the other end: `scripts/check_build_metadata.sh`
+fails the gate when `ludwig-service-parent` stops packaging the two provenance resources, which is the
+reason nobody should need to ask the repository at runtime in the first place.
 
 ## Configuring the conventions
 

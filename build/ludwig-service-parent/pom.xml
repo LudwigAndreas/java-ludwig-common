@@ -230,6 +230,37 @@
             For a build with no git checkout - a source tarball, or a scratch project - pass the
             value in instead:  -Dgit.commit.id=&lt;sha&gt;
         -->
+
+        <!-- ==== Build provenance ==== -->
+        <!--
+            The build time written into META-INF/build-info.properties, TRUNCATED TO THE DAY, and
+            the truncation is the point.
+
+            build-info.properties lands in a jar layer that jib hashes. jib keeps creationTime and
+            filesModificationTime at the epoch precisely so that building one commit twice yields
+            one image digest, and a build time at full precision would undo that on every build.
+
+            What day precision buys: two builds of one commit on the same UTC day - a CI retry, a
+            local reproduction check - produce the same digest.
+            What it does not buy: stability across midnight UTC. A rebuild of the same commit the
+            next day has a different digest, and that is accepted rather than hidden - the
+            alternatives are no build time at all, or the commit time under a name that says
+            "build", and git.properties already carries the commit time.
+
+            maven.build.timestamp is always UTC, which is why the literal Z below is honest. The
+            format has to stay parseable by java.time.Instant, because that is how the build-info
+            goal reads it.
+        -->
+        <maven.build.timestamp.format>yyyy-MM-dd'T'00:00:00'Z'</maven.build.timestamp.format>
+        <ludwig.build.time>${maven.build.timestamp}</ludwig.build.time>
+        <!--
+            The CI build number, empty unless the pipeline passes -Dludwig.ci.build-number=<n>.
+
+            Empty means ABSENT: the `ci-build-number` profile below is what writes it into
+            build-info.properties, and it activates only on a non-empty value, so a local build
+            carries no build number rather than a fabricated one. Never give this a default.
+        -->
+        <ludwig.ci.build-number/>
     </properties>
 
     <!--
@@ -699,9 +730,11 @@
                                 <org.opencontainers.image.title>${project.artifactId}</org.opencontainers.image.title>
                                 <org.opencontainers.image.description>${project.name}</org.opencontainers.image.description>
                                 <org.opencontainers.image.version>${project.version}</org.opencontainers.image.version>
-                                <!-- The commit this image was built from: the only reliable way back
-                                     from a running pod to the source. git-commit-id-maven-plugin
-                                     supplies it; see the default in <properties>. -->
+                                <!-- The commit this image was built from, readable from the registry.
+                                     git-commit-id-maven-plugin supplies it; see the note in
+                                     <properties> on why it has no default. The same commit is also
+                                     in git.properties inside the jar, which is what makes it
+                                     readable from a log line as well. -->
                                 <org.opencontainers.image.revision>${git.commit.id}</org.opencontainers.image.revision>
                                 <org.opencontainers.image.source>${ludwig.image.source}</org.opencontainers.image.source>
                                 <org.opencontainers.image.base.name>${ludwig.image.base}</org.opencontainers.image.base.name>
@@ -790,10 +823,27 @@
                 <artifactId>jacoco-maven-plugin</artifactId>
             </plugin>
             <!--
-                Supplies ${git.commit.id} for the image label, and drops a git.properties into the
-                jar that Boot's actuator serves from /actuator/info. failOnNoGitDirectory=false so
-                that a build from an exported tarball - or from the scratch project used to check
-                this parent resolves standalone - still works; the labels then read "unknown".
+                Supplies ${git.commit.id} for the image label, and writes git.properties into
+                target/classes so that it is packaged into the jar. That file is what the platform
+                reads build provenance from at runtime (observability's BuildIdentityResolver) and
+                what Boot's actuator serves as the `git` section of /actuator/info.
+
+                generateGitPropertiesFile and the filename are restated here although
+                spring-boot-starter-parent's pluginManagement sets the same two values. A setting
+                that exists only in someone else's parent is one a Boot upgrade can remove without
+                a line of this repository changing; scripts/check_build_metadata.sh reads THIS
+                file and fails the gate if the setting leaves it.
+
+                includeOnlyProperties is the allow-list of what ships. Unfiltered, the plugin also
+                writes the committer's e-mail address, the build host name and the remote URL into
+                every artifact - none of which is provenance, and all of which /actuator/info would
+                then serve. The five below are the ones the build-identity capability names.
+
+                failOnNoGitDirectory=false so that a build from an exported tarball - or from the
+                scratch project used to check this parent resolves standalone - still works. The
+                plugin then does nothing at all: no git.properties is written, so the provenance is
+                absent rather than present with placeholder values, and ${git.commit.id} in the
+                image label is left for -Dgit.commit.id to supply (see <properties>).
             -->
             <plugin>
                 <groupId>io.github.git-commit-id</groupId>
@@ -801,12 +851,71 @@
                 <configuration>
                     <failOnNoGitDirectory>false</failOnNoGitDirectory>
                     <failOnUnableToExtractRepoInfo>false</failOnUnableToExtractRepoInfo>
+                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
+                    <generateGitPropertiesFilename>${project.build.outputDirectory}/git.properties</generateGitPropertiesFilename>
+                    <includeOnlyProperties>
+                        <includeOnlyProperty>^git\.commit\.id$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.commit\.id\.abbrev$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.branch$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.commit\.time$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.dirty$</includeOnlyProperty>
+                    </includeOnlyProperties>
                 </configuration>
+            </plugin>
+            <!--
+                Removes a git.properties that carries no commit, which is what makes "absent
+                rather than empty" true for a build with no git checkout.
+
+                It should not be needed and is: with no .git directory git-commit-id-maven-plugin
+                8.0.2 logs "dotGitDirectory is null, aborting execution!" and then writes the file
+                anyway, holding its header comment and nothing else. Verified against a copy of
+                this tree with .git removed. A header-only file is not harmless - Boot keys its
+                GitProperties bean on the resource EXISTING, so /actuator/info would grow an empty
+                `git` section that reads as "provenance was recorded and is blank".
+
+                The plugin has no switch for this, and a profile activated on a missing .git cannot
+                do it either: file activation resolves against each module's own basedir, and where
+                .git sits relative to a module is a fact about someone's checkout. So the file is
+                judged by its content, after the fact. generate-resources, because the plugin above
+                writes at `initialize` and nothing reads the file before process-resources.
+                scripts/check_build_metadata.sh fails the gate if this execution is removed.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>prune-empty-git-properties</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete quiet="true">
+                                    <fileset dir="${project.build.outputDirectory}" erroronmissingdir="false">
+                                        <include name="git.properties"/>
+                                        <not>
+                                            <contains text="git.commit.id="/>
+                                        </not>
+                                    </fileset>
+                                </delete>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <!--
                 Boot's repackage step. spring-boot-starter-parent configures it but does not switch
                 it on, so it is activated here and every service gets an executable jar without
                 declaring anything.
+
+                The build-info execution writes META-INF/build-info.properties - group, artifact,
+                name, version and build time - into target/classes. spring-boot-starter-parent
+                does NOT bind this goal, so without the execution below the file does not exist;
+                scripts/check_build_metadata.sh fails the gate if the binding is removed. The time
+                is ${ludwig.build.time}, truncated to the day - see that property for what the
+                truncation buys and what it does not.
             -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
@@ -821,6 +930,17 @@
                         </exclude>
                     </excludes>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>build-info</id>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                        <configuration>
+                            <time>${ludwig.build.time}</time>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!--
@@ -839,6 +959,46 @@
     </build>
 
     <profiles>
+        <!--
+            Writes the CI build number into build-info.properties as build.ci.build-number.
+
+            A profile rather than an unconditional <additionalProperties> entry, for a mechanical
+            reason: the build-info goal rejects an additional property whose value is empty, so an
+            unconditional entry would fail every local build. Activation on the property means
+            the entry exists only when a value does - which is also the behaviour wanted: absent
+            on a workstation, never fabricated. Maven treats an empty -D value as not set here.
+
+            Unlike `ci` below this one IS activated by a property, and the two are not in
+            tension: it is activated by the very value it writes, passed explicitly on the command
+            line, not by a marker in the environment that someone else set.
+        -->
+        <profile>
+            <id>ci-build-number</id>
+            <activation>
+                <property>
+                    <name>ludwig.ci.build-number</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>build-info</id>
+                                <configuration>
+                                    <additionalProperties>
+                                        <ci.build-number>${ludwig.ci.build-number}</ci.build-number>
+                                    </additionalProperties>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!--
             CI. The ONLY place jib is bound to a lifecycle phase, and it is reached only by passing
             -Pci explicitly. Never activated from env.JENKINS_URL or any similar marker: a build

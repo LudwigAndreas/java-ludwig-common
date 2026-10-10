@@ -19,8 +19,33 @@ either.
 
 ## [Unreleased]
 
+## [2.0.0]
+
+A **major** release: it contains binary-breaking changes to published APIs, each marked **BREAKING**
+below. Read those entries before moving a consumer from `1.1.x`.
+
 ### Added
 
+- **Build provenance in every service artifact and on every log line.** `ludwig-service-parent` now packages
+  `META-INF/build-info.properties` (group, artifact, name, version, build time, and the CI build number when
+  the build is given `-Dludwig.ci.build-number`) beside `git.properties`, and
+  `observability-spring-boot-starter` reads both at startup into a new `BuildIdentity` record. The
+  abbreviated commit is written on every log event - `service.commit.id` (`ecs`), `ServiceCommitId` (`otel`),
+  `commit_id` (`flat`) - and one `Application identity:` event at startup carries the full commit, branch,
+  build timestamp, CI build number and dirty flag. An unresolved field is omitted, never written as
+  `unknown`. **A log aggregator with a strict index template needs the new field mapped before a service
+  carrying it writes to a shared index.** `BuildIdentity` is deliberately separate from `ServiceIdentity`,
+  so none of it becomes a metric tag. `/actuator/info` gains a `build` section.
+- **`observability-spring-boot-starter`: `ludwig.observability.build.*`**, six properties holding the resolved
+  provenance; each defaults from the packaged resources and can be set explicitly by an artifact built some
+  other way.
+- **`architecture-rules`: the `logging` rule group**, on by default: no type outside the observability module
+  implements a Logback `Encoder` or `Layout`, no type restates the build identity, and no production class
+  launches an operating-system process or depends on JGit. A service's own `logback-spring.xml` is not
+  affected. The third rule reports *every* process launch, because bytecode cannot say which program is
+  run; a legitimate one is exempted by name in the rule.
+- **`scripts/check_build_metadata.sh`**, run by the gate: fails when `ludwig-service-parent` stops being
+  configured to produce either provenance resource.
 - **`odata-filter-spring-boot-starter`: filter-policy discovery.** A client can ask what it may filter on
   instead of finding out by sending filters and reading the rejections - which was the only alternative, and
   is the behaviour `odata.filter.rejected` is documented as an alerting signal for. `GET <base-path>/<entity>`
@@ -151,6 +176,28 @@ either.
 
 ### Changed
 
+- **`observability-spring-boot-starter`: the console format default now depends on the active profile.**
+  JSON everywhere, human-readable text under the `local` profile - so a service started with
+  `--spring.profiles.active=local` gets a text console where it previously got JSON. An explicit
+  `ludwig.observability.logging.json.enabled` still wins in either direction, so a service that already
+  sets it for `local` is unaffected and can drop the override.
+- **`observability-spring-boot-starter`: the text format is no longer Spring Boot's default pattern.** With
+  JSON off, each line now carries `[name/version@commit env=... instance=...]` and
+  `[correlation id,trace id,span id]`; previously switching format lost all of it. A pattern set through
+  `logging.pattern.console` / `logging.pattern.file`, and any appender with a hand-configured encoder, is
+  left as it is.
+- **`observability-spring-boot-starter`: `spring.main.banner-mode` defaults to `off` when the format is
+  JSON.** Spring Boot prints the banner straight to standard output, around the logging system, so a
+  structured stream previously opened with seven lines of ASCII art. An explicit `spring.main.banner-mode`
+  wins.
+- **`ludwig-service-parent`: `git.properties` is narrowed to five keys** - commit id, abbreviated commit id,
+  branch, commit time, dirty flag. It previously also carried the committer's name and e-mail address, the
+  build host name and the remote URL, all of which `/actuator/info` served. A build with no git checkout now
+  packages no `git.properties` at all, rather than an empty one.
+- **`ludwig-service-parent`: `maven.build.timestamp.format` is set** to day precision, because it feeds the
+  build time in `build-info.properties` and a full-precision time would give every build of one commit a
+  different image digest. A service that reads `${maven.build.timestamp}` for its own purposes inherits the
+  format and should override the property.
 - **BREAKING for a database that already applied these changesets - every Liquibase changeset in the
   platform is now formatted SQL.** All 84 changesets across 13 modules moved out of Liquibase's XML
   change vocabulary into `--liquibase formatted sql` files, one changeset per file, named
@@ -260,6 +307,10 @@ either.
 
 ### Fixed
 
+- **`observability-spring-boot-starter`: the version fallback that could never fire.**
+  `ServiceIdentityResolver` fell back to a `build.version` Environment property that nothing published. It
+  now reads `build.version` from `META-INF/build-info.properties`, so a service run from an exploded layout
+  reports its version.
 - **Two ArchUnit rules that reported as passing while checking nothing.**
   `RuleGroup.CACHING`'s `noPrivateCaffeineCache` and `RuleGroup.KAFKA`'s
   `noPrivateDeadLetterRecoverer` were written as `noClasses().should(notDependOnClassesThat(..))`.

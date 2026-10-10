@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Fixture for scripts/check_build_metadata.sh - -self-test: the state the repository was in
+    before the check existed, and the one it exists to catch.
+
+    The comment below says git.properties is generated. Nothing here generates it: the plugin is
+    only managed, never declared, and build-info is bound nowhere. A text search for
+    generateGitPropertiesFile is satisfied by this file; the checker must not be.
+
+    Fires: E_GIT_PROPERTIES_OFF, E_BUILD_INFO_UNBOUND, E_EMPTY_GIT_PROPERTIES_KEPT.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>fixture</groupId>
+    <artifactId>absent</artifactId>
+    <version>1</version>
+    <packaging>pom</packaging>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- generateGitPropertiesFile=true drops a git.properties into the jar. -->
+                <plugin>
+                    <groupId>io.github.git-commit-id</groupId>
+                    <artifactId>git-commit-id-maven-plugin</artifactId>
+                    <configuration>
+                        <generateGitPropertiesFile>true</generateGitPropertiesFile>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>repackage</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

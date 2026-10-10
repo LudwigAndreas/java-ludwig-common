@@ -9,14 +9,16 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import ru.ludwigandreas.observability.correlation.CorrelationContext;
 import ru.ludwigandreas.observability.correlation.CorrelationIdResolver;
+import ru.ludwigandreas.observability.core.BuildIdentity;
 import ru.ludwigandreas.observability.core.ServiceIdentity;
+import ru.ludwigandreas.observability.logging.StartupIdentityLogger;
 import ru.ludwigandreas.observability.tracing.TraceContextAccessor;
 
 /**
- * The beans every other part of this module builds on: who the service is, what the correlation id
- * is, and how to read the current trace.
+ * The beans every other part of this module builds on: who the service is, what it was built from,
+ * what the correlation id is, and how to read the current trace.
  *
- * <p>Separated from the signal-specific autoconfigurations because these four have no optional
+ * <p>Separated from the signal-specific autoconfigurations because these have no optional
  * dependencies at all - they work in a batch worker with no servlet container, no broker and no
  * exporter - and because each of the others needs some of them. Keeping them in one always-on
  * configuration is what lets the rest be guarded on classpath conditions without any of them having
@@ -41,6 +43,32 @@ public class ObservabilityCoreAutoConfiguration {
         ObservabilityProperties.Service service = properties.getService();
         return new ServiceIdentity(service.getName(), service.getNamespace(), service.getVersion(),
                 service.getEnvironment(), service.getInstance());
+    }
+
+    /**
+     * The build provenance, bound straight from properties for the same reason the service identity
+     * is: {@link ObservabilityEnvironmentPostProcessor} already resolved it from the packaged
+     * resources, and binding here means this bean and the commit id on every log line come from
+     * that one resolution.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public BuildIdentity ludwigBuildIdentity(ObservabilityProperties properties) {
+        return properties.getBuild().toIdentity();
+    }
+
+    /**
+     * Logs who this process is and what it was built from, once, when startup completes.
+     *
+     * <p>Not conditional on anything but the module itself: the event is useful in either console
+     * format and with or without tracing, and a service that could switch it off is one whose logs
+     * no longer answer "which build is this" when that is the question.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public StartupIdentityLogger ludwigStartupIdentityLogger(ServiceIdentity serviceIdentity,
+            BuildIdentity buildIdentity) {
+        return new StartupIdentityLogger(serviceIdentity, buildIdentity);
     }
 
     @Bean

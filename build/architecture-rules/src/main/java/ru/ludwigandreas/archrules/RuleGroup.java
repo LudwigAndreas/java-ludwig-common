@@ -159,6 +159,26 @@ public enum RuleGroup {
      */
     CREDENTIALS("credentials", true),
 
+    /**
+     * There is one log pipeline and one statement of what a build was made from, and nobody writes a second.
+     *
+     * <p>On by default, and vacuous for a module that shapes no log output and launches no process - it then
+     * has no Logback encoder, no provenance record and no {@code ProcessBuilder} to find. See
+     * {@link ru.ludwigandreas.archrules.rules.LoggingRules} for the three rules and for the two things in
+     * this area that a build cannot check.
+     *
+     * <h2>The distinction this group turns on</h2>
+     *
+     * <p>A second encoder <b>implementation</b> is forbidden; a service's own logging <b>configuration</b> is
+     * not. A module that declares a type implementing Logback's {@code Encoder} or {@code Layout} publishes a
+     * second field vocabulary for other modules to write through, and two vocabularies disagree silently
+     * until the aggregator's index has the wrong mapping for one of them. A service that attaches an appender
+     * in its own {@code logback-spring.xml} is choosing its own output: it affects that service alone, the
+     * observability starter deliberately leaves such an appender as it found it, and forbidding the file
+     * would make a reasoned escape hatch unreachable. The group therefore polices a type, never a file.
+     */
+    LOGGING("logging", true),
+
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);
 

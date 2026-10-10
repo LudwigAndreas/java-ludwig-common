@@ -6,9 +6,9 @@
 |---|---|
 | revision | `1.1.0-SNAPSHOT` |
 | modules | 33 |
-| commit | `2a725e3` (`master`) |
-| generated | 2026-10-09T22:11:20.953739Z |
-| **freshness** | POM-set SHA `8251d1fa05bf0f1f` · newest POM `services/crud-service-example/pom.xml` @ 2026-10-09T22:02:58.287978Z |
+| commit | `c1fc5b8` (`master`) |
+| generated | 2026-10-10T13:13:57.591572Z |
+| **freshness** | POM-set SHA `3c7f3b2d4bd62c1c` · newest POM `build/ludwig-service-parent/pom.xml` @ 2026-10-10T12:50:56.278418Z |
 
 The freshness row is how you tell this index is stale: `scripts/manifest.sh stale` recomputes the POM-set SHA and exits non-zero if it differs. It is content-based, not timestamp-based, so a checkout or a branch switch does not report a false stale.
 
@@ -295,7 +295,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - package root `ru.ludwigandreas.archrules`
 - README [`build/architecture-rules/README.md`](build/architecture-rules/README.md) · [`build/architecture-rules/README.ru.md`](build/architecture-rules/README.ru.md)
 - surfaces: rest
-- test classes: 10 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 11 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :architecture-rules -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `audit-core`
@@ -357,7 +357,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - Liquibase: `services/crud-service-example/src/main/resources/db/changelog/changes/0001-product-category.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0002-product.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0003-product-indexes.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0004-reference-categories.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0005-product-supplier-partner.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0006-product-scope-indexes.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0007-product-watcher.sql`, `services/crud-service-example/src/main/resources/db/changelog/changes/0008-product-watcher-index.sql`, `services/crud-service-example/src/main/resources/db/changelog/db.changelog-master.xml`
 - i18n: `services/crud-service-example/src/main/resources/i18n/messages.properties`, `services/crud-service-example/src/main/resources/i18n/messages_ru.properties`
 - test dirs: architecture (`services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/architecture`), integration (`services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/integration`), unit (`services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/unit`)
-- test classes: 4 surefire, 4 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 4 surefire, 5 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :crud-service-example -am verify`
 
 ### `db-core`
@@ -555,7 +555,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - surfaces: none
 - auto-configuration: `sources/observability-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - test dirs: integration (`sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration`), unit (`sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit`)
-- test classes: 13 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 17 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :observability-spring-boot-starter -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :rest-client-spring-boot-starter -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `odata-filter-spring-boot-starter`

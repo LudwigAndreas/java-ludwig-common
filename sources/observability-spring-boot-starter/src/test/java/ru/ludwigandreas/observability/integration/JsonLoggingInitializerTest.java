@@ -2,12 +2,17 @@ package ru.ludwigandreas.observability.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.LoggingEvent;
 import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.OutputStreamAppender;
 import ch.qos.logback.core.encoder.Encoder;
-import ch.qos.logback.core.encoder.LayoutWrappingEncoder;
+import ch.qos.logback.core.encoder.EncoderBase;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -17,11 +22,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.DefaultBootstrapContext;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.mock.env.MockEnvironment;
 import ru.ludwigandreas.observability.config.ObservabilityProperties;
+import ru.ludwigandreas.observability.logging.JsonLoggingInitializer;
 import ru.ludwigandreas.observability.logging.json.JsonLogEncoder;
 
 /**
@@ -76,6 +86,16 @@ class JsonLoggingInitializerTest {
     }
 
     @Test
+    void stampsTheResolvedCommitOntoEveryLine() {
+        try (ConfigurableApplicationContext context = run(
+                "ludwig.observability.logging.json.enabled=true",
+                "ludwig.observability.build.abbreviated-commit-id=c1fc5b8")) {
+
+            assertThat(jsonEncoders().get(0).config().build().abbreviatedCommitId()).isEqualTo("c1fc5b8");
+        }
+    }
+
+    @Test
     void bindsTheNestedConfigurationRatherThanSilentlyFallingBackToDefaults() {
         // The initializer binds ObservabilityProperties by hand, outside the container, long before
         // @ConfigurationProperties would. If that binding quietly produced defaults, every knob under
@@ -111,11 +131,96 @@ class JsonLoggingInitializerTest {
     }
 
     @Test
-    void leavesLogbackAloneWhenJsonLoggingIsSwitchedOff() {
-        try (ConfigurableApplicationContext context = run("ludwig.observability.logging.json.enabled=false")) {
+    void installsTheHumanReadablePatternWhenJsonLoggingIsSwitchedOff() {
+        try (ConfigurableApplicationContext context = run(
+                "ludwig.observability.logging.json.enabled=false",
+                "spring.application.name=catalog",
+                "ludwig.observability.build.abbreviated-commit-id=c1fc5b8")) {
             assertThat(jsonEncoders()).isEmpty();
-            assertThat(appenders()).allSatisfy(appender ->
-                    assertThat(appender.getEncoder()).isInstanceOf(LayoutWrappingEncoder.class));
+            // Text, but not Spring Boot's default pattern: that one carries no identity and no
+            // correlation id, so "JSON off" used to mean losing every piece of metadata as well.
+            assertThat(appenders()).isNotEmpty().allSatisfy(appender ->
+                    assertThat(appender.getEncoder()).isInstanceOfSatisfying(PatternLayoutEncoder.class, encoder ->
+                            assertThat(encoder.getPattern())
+                                    .contains("catalog", "@c1fc5b8")
+                                    .contains("%mdc{correlationId:-}", "%mdc{traceId:-}", "%mdc{spanId:-}")));
+        }
+    }
+
+    @Test
+    void selectsTheHumanReadablePatternFromTheLocalProfileAlone() {
+        // No logging property at all: the profile is the only input, as it is for a new service.
+        try (ConfigurableApplicationContext context = run("spring.profiles.active=local")) {
+            assertThat(jsonEncoders()).isEmpty();
+            assertThat(appenders()).isNotEmpty().allSatisfy(appender ->
+                    assertThat(appender.getEncoder()).isInstanceOf(PatternLayoutEncoder.class));
+        }
+    }
+
+    @Test
+    void honoursAnExplicitJsonSettingUnderTheLocalProfile() {
+        try (ConfigurableApplicationContext context = run(
+                "spring.profiles.active=local", "ludwig.observability.logging.json.enabled=true")) {
+            assertThat(jsonEncoders()).isNotEmpty();
+        }
+    }
+
+    @Test
+    void leavesAPatternTheServiceChoseForItselfAlone() {
+        try (ConfigurableApplicationContext context = run(
+                "ludwig.observability.logging.json.enabled=false",
+                "logging.pattern.console=%msg%n")) {
+            assertThat(appenders()).isNotEmpty().allSatisfy(appender ->
+                    assertThat(appender.getEncoder()).isInstanceOfSatisfying(PatternLayoutEncoder.class, encoder ->
+                            assertThat(encoder.getPattern()).doesNotContain("%mdc{")));
+        }
+    }
+
+    @Test
+    void survivesAServiceNameThatIsNotAValidPatternLiteral() {
+        // A name is somebody's configuration. A % or a parenthesis in it must not stop the service
+        // from starting, and must come out the way it went in.
+        try (ConfigurableApplicationContext context = run(
+                "ludwig.observability.logging.json.enabled=false",
+                "ludwig.observability.service.name=catalog (eu) 100%")) {
+            PatternLayoutEncoder encoder = (PatternLayoutEncoder) appenders().get(0).getEncoder();
+
+            LoggingEvent event = new LoggingEvent();
+            event.setLoggerName("com.example.OrderService");
+            event.setLevel(Level.INFO);
+            event.setMessage("tick");
+            event.setTimeStamp(1_700_000_000_000L);
+            event.setThreadName("main");
+            event.setMDCPropertyMap(Map.of());
+
+            assertThat(new String(encoder.encode(event), StandardCharsets.UTF_8)).contains("[catalog (eu) 100%");
+        }
+    }
+
+    @Test
+    void leavesAHandConfiguredEncoderAloneInEitherFormat() {
+        // An appender whose encoder is not Logback's layout-wrapping kind was configured on purpose
+        // by the service. Run against the live context directly, because a SpringApplication resets
+        // Logback on the way in and would discard the appender before the initializer saw it.
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        Encoder<ILoggingEvent> handConfigured = new HandConfiguredEncoder();
+        OutputStreamAppender<ILoggingEvent> appender = new OutputStreamAppender<>();
+        appender.setContext(loggerContext);
+        appender.setName("hand-configured");
+        appender.setEncoder(handConfigured);
+        appender.setOutputStream(new ByteArrayOutputStream());
+        ch.qos.logback.classic.Logger root = loggerContext.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        root.addAppender(appender);
+        try {
+            for (String json : List.of("true", "false")) {
+                new JsonLoggingInitializer().onApplicationEvent(new ApplicationEnvironmentPreparedEvent(
+                        new DefaultBootstrapContext(), new SpringApplication(), new String[0],
+                        new MockEnvironment().withProperty("ludwig.observability.logging.json.enabled", json)));
+
+                assertThat(appender.getEncoder()).as("json.enabled=%s", json).isSameAs(handConfigured);
+            }
+        } finally {
+            root.detachAppender(appender);
         }
     }
 
@@ -171,5 +276,24 @@ class JsonLoggingInitializerTest {
 
     @Configuration(proxyBeanMethods = false)
     static class EmptyApplication {
+    }
+
+    /** Stands in for whatever encoder a service attached in its own logback configuration. */
+    private static final class HandConfiguredEncoder extends EncoderBase<ILoggingEvent> {
+
+        @Override
+        public byte[] headerBytes() {
+            return new byte[0];
+        }
+
+        @Override
+        public byte[] encode(ILoggingEvent event) {
+            return new byte[0];
+        }
+
+        @Override
+        public byte[] footerBytes() {
+            return new byte[0];
+        }
     }
 }

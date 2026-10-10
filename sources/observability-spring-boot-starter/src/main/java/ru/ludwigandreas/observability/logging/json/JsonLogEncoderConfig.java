@@ -2,6 +2,7 @@ package ru.ludwigandreas.observability.logging.json;
 
 import java.util.List;
 import java.util.Map;
+import ru.ludwigandreas.observability.core.BuildIdentity;
 import ru.ludwigandreas.observability.core.ServiceIdentity;
 
 /**
@@ -20,6 +21,7 @@ import ru.ludwigandreas.observability.core.ServiceIdentity;
  *
  * @param fieldNames         the naming scheme the line is written with
  * @param identity           service identity stamped on every line
+ * @param build              build provenance; only its abbreviated commit id is written per line
  * @param staticFields       constant extra fields, e.g. cluster or region
  * @param includeMdc         whether the MDC is written at all
  * @param mdcIncludeKeys     allow-list; empty means all keys
@@ -39,6 +41,7 @@ import ru.ludwigandreas.observability.core.ServiceIdentity;
 public record JsonLogEncoderConfig(
         LogFieldNames fieldNames,
         ServiceIdentity identity,
+        BuildIdentity build,
         Map<String, String> staticFields,
         boolean includeMdc,
         List<String> mdcIncludeKeys,
@@ -56,6 +59,8 @@ public record JsonLogEncoderConfig(
         boolean includeMessageTemplate) {
 
     public JsonLogEncoderConfig {
+        // Absent, not null: the encoder reads this on every line and should not have to ask.
+        build = build == null ? BuildIdentity.absent() : build;
         staticFields = Map.copyOf(staticFields);
         mdcIncludeKeys = List.copyOf(mdcIncludeKeys);
         mdcExcludeKeys = List.copyOf(mdcExcludeKeys);
@@ -64,5 +69,37 @@ public record JsonLogEncoderConfig(
         maskedKeySubstrings = maskedKeySubstrings.stream()
                 .map(key -> key.toLowerCase(java.util.Locale.ROOT))
                 .toList();
+    }
+
+    /**
+     * The configuration as it was before build provenance joined it: no commit id is written.
+     *
+     * <p>Kept because a record's canonical constructor is part of its published API, and adding a
+     * component replaces it. Prefer the canonical constructor in new code.
+     */
+    // SUPPRESS CHECKSTYLE ParameterNumber - the record's previous canonical signature, kept for API compatibility.
+    @SuppressWarnings("checkstyle:ParameterNumber")
+    public JsonLogEncoderConfig(
+            LogFieldNames fieldNames,
+            ServiceIdentity identity,
+            Map<String, String> staticFields,
+            boolean includeMdc,
+            List<String> mdcIncludeKeys,
+            List<String> mdcExcludeKeys,
+            boolean nestMdc,
+            String mdcFieldName,
+            List<String> maskedKeySubstrings,
+            String traceIdMdcKey,
+            String spanIdMdcKey,
+            String correlationIdMdcKey,
+            int maxMessageLength,
+            int maxStackTraceLength,
+            boolean includeThreadName,
+            boolean includeMarkers,
+            boolean includeMessageTemplate) {
+        this(fieldNames, identity, BuildIdentity.absent(), staticFields, includeMdc, mdcIncludeKeys,
+                mdcExcludeKeys, nestMdc, mdcFieldName, maskedKeySubstrings, traceIdMdcKey, spanIdMdcKey,
+                correlationIdMdcKey, maxMessageLength, maxStackTraceLength, includeThreadName, includeMarkers,
+                includeMessageTemplate);
     }
 }

@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-09T22:11:20.953739Z",
+    "generatedAt": "2026-10-10T13:13:57.591572Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 33,
-    "commit": "2a725e366c2194aab1e2ef70ba84d448313c4227",
-    "commitShort": "2a725e3",
+    "commit": "c1fc5b81ecfa20e1b3418002a5ace90473d6734c",
+    "commitShort": "c1fc5b8",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "8251d1fa05bf0f1fb329f328b747909ef5344c884eba0ac4bee8aa5c5b74ffe8",
-      "newestPom": "services/crud-service-example/pom.xml",
-      "newestPomModified": "2026-10-09T22:02:58.287978Z"
+      "pomSetSha": "3c7f3b2d4bd62c1cc675a28651a2381931fd4e4164b1f73a7efd5657c837df40",
+      "newestPom": "build/ludwig-service-parent/pom.xml",
+      "newestPomModified": "2026-10-10T12:50:56.278418Z"
     }
   },
   "modules": [
@@ -1672,8 +1672,8 @@
         "integration": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration"
       },
       "testClasses": {
-        "surefire": 13,
-        "failsafe": 0
+        "surefire": 17,
+        "failsafe": 1
       },
       "pom": "sources/observability-spring-boot-starter/pom.xml",
       "readme": "sources/observability-spring-boot-starter/README.md",
@@ -1902,7 +1902,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 10,
+        "surefire": 11,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",
@@ -2205,7 +2205,7 @@
       },
       "testClasses": {
         "surefire": 4,
-        "failsafe": 4
+        "failsafe": 5
       },
       "pom": "services/crud-service-example/pom.xml",
       "readme": "services/crud-service-example/README.md",

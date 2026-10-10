@@ -1,0 +1,70 @@
+{
+  "change": "add-build-identity-logging",
+  "contract": {
+    "goal": "bake build provenance into every service artifact, resolve it at runtime into a BuildIdentity separate from ServiceIdentity, carry the abbreviated commit id on every log event in both console formats, make the console format default profile-dependent, and give each new rule a mechanical check",
+    "output": "ludwig-service-parent emitting git.properties + build-info.properties; scripts/check_build_metadata.{sh,py} registered in gate.sh; BuildIdentity, BuildIdentityResolver, profile-dependent default, commit field, text pattern and startup event in observability-spring-boot-starter; RuleGroup.LOGGING in architecture-rules; BuildProvenanceIntegrationTest in crud-service-example",
+    "constraints": [
+      "ServiceIdentity is not widened and no published type gains a breaking revapi difference",
+      "no new in-repo dependency for any touched module",
+      "only ludwig-service-parent's POM changes; root pom.xml and ludwig-bom are untouched",
+      ".mvn/maven.config, the -Prelease profile and the pipeline are not touched",
+      "no file appender; stdout only",
+      "a service-authored appender is still left alone (only LayoutWrappingEncoder instances are touched)",
+      "an unresolved provenance field is absent, never a placeholder",
+      "no Checkstyle rule is added; no existing Checkstyle or ArchUnit rule is weakened",
+      "specs, proposal and design are not edited by the implementation"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_api_baseline.sh",
+      "scripts/check_migrations.sh",
+      "scripts/check_build_metadata.sh",
+      "mvn -q validate",
+      "mvn clean install",
+      "python3 scripts/check_aggregate_report.py",
+      "openspec validate add-build-identity-logging"
+    ]
+  },
+  "rollback_point": "c1fc5b81ecfa20e1b3418002a5ace90473d6734c",
+  "current_task": "done except 3.5 and 8.3 (pending_human)",
+  "decisions": [
+    "code-index MCP server is not connected in this session (no mcp__code-index__* tool is exposed and tool search finds none), so navigation is by PROJECT_INDEX.md, scripts/manifest.sh and direct file reads; rg/grep is used where those cannot answer",
+    "proposal.md's premise that no artifact contains git.properties is inaccurate: spring-boot-starter-parent 3.3.5's pluginManagement already sets generateGitPropertiesFile=true and services/crud-service-example/target/classes/git.properties exists before this change, with ~27 keys including git.commit.user.email, git.build.host and git.remote.origin.url. Task 1.1 still applies as written - it makes the setting explicit in ludwig-service-parent (where the gate script can see it) and narrows the emitted keys to the five the spec names. build-info.properties is genuinely absent, as the proposal says",
+    "design D4 adds a component to the public record LogFieldNames, and the encoder needs the build identity through the public record JsonLogEncoderConfig. A new record component changes the canonical constructor, which is the same revapi break D1 rejects for ServiceIdentity. Resolved within the design's own goal (additive under revapi): each record keeps an explicit constructor with its previous signature that delegates to the new canonical one, so the old constructor still exists and only additions are reported",
+    "build time day-truncation (D8) is done with maven.build.timestamp.format = yyyy-MM-dd'T'00:00:00'Z' feeding ${ludwig.build.time}, not a new plugin: maven.build.timestamp is UTC and nothing else in the repository reads it",
+    "CI build number (task 1.3) is written by a `ci-build-number` profile activated on -Dludwig.ci.build-number, not an unconditional additionalProperties entry: the build-info goal rejects an empty additional-property value, and Maven does not activate the profile on an empty value, which is exactly 'absent, not fabricated'. Key is build.ci.build-number",
+    "task 1.5 proof command archives HEAD, which does not contain the uncommitted POM edit, and writes to /tmp; run instead against a tar of the working tree (git ls-files -co --exclude-standard) in the session scratchpad. Same assertion",
+    "added a maven-antrun-plugin execution (prune-empty-git-properties, generate-resources) to ludwig-service-parent, beyond the two plugins design D7 names: it is the only way found to satisfy the spec's 'git provenance resource SHALL be absent'. antrun's version is already managed by spring-boot-starter-parent, so the BOM and root POM stay untouched",
+    "check_build_metadata.py checks three things beyond the two task 2.1 names, each with a fixture: the git.properties path, that includeOnlyProperties still admits the five required keys, and that the prune-empty-git-properties execution exists (the mechanical half of task 1.5's rule). It reads only the service parent's own POM, never spring-boot-starter-parent, on purpose",
+    "task 2.3's proof command passes `:observability-spring-boot-starter` to gate.sh, which rejects the colon form ('not a module in project-index.json'); gate.sh takes the bare module name. Ran `scripts/gate.sh --list observability-spring-boot-starter | grep check_build_metadata` instead. gate.sh's argument handling is not changed by this change",
+    "BuildIdentity.buildTimestamp is String (ISO-8601 text as build-info writes it), not Instant: a malformed explicit override must not fail property binding in an initializer that runs before the context exists. dirty is a nullable Boolean - null means not known, which is not clean",
+    "the resolved build identity is published as ludwig.observability.build.{commit-id,abbreviated-commit-id,branch,timestamp,ci-build-number,dirty}; JsonLoggingInitializer and the BuildIdentity bean bind those properties rather than calling the resolver again (design D2)",
+    "ServiceIdentityResolver's dead environment.getProperty(\"build.version\") fallback now reads build.version from META-INF/build-info.properties through the main class's class loader",
+    "text mode (task 5.3) also leaves an appender alone when the service set Spring Boot's logging.pattern.console (console appenders) or logging.pattern.file (others): an explicit pattern is the same kind of deliberate choice as a hand-configured appender. Not in the task text; flagged for review",
+    "text pattern shape: `<ts> <level> [name/version@commit env=<env> instance=<instance>] [correlation,trace,span] [thread] logger : msg`. Absent identity parts are omitted; the three id slots are positional and empty when not in scope",
+    "startup identity event (task 5.5) is a StartupIdentityLogger bean on ApplicationStartedEvent, guarded to fire once; the identity is in the message (readable as text) and the build fields are SLF4J key-values build.commit.id / build.branch / build.timestamp / build.ci.build-number / build.dirty (fields under JSON)",
+    "ADDED BEYOND THE TASK LIST: ObservabilityEnvironmentPostProcessor now publishes spring.main.banner-mode=off as a default whenever the effective console format is JSON. LogStreamFormatIntegrationTest (task 5.6), asserting the spec scenario 'every line it writes, from the first, is a structured record', failed because Spring Boot prints its banner straight to stdout around the logging system. The module README already claimed the banner was JSON; it was not. Lowest precedence like every other default, so an explicit spring.main.banner-mode wins. Flagged for review",
+    "task 5.6's test is named LogStreamFormatIntegrationTest as required, but observability-spring-boot-starter does not bind failsafe (the root POM says only job-core does), so surefire runs it at `test` via its default *Test include and -Dit.test has no effect. No POM was changed to bind failsafe: design D7 limits POM changes to ludwig-service-parent",
+    "RuleGroup.LOGGING rule ids: logging.no-second-log-encoder, logging.no-second-build-provenance-type, logging.no-runtime-repository-access",
+    "the provenance restatement rule reports a type whose declared instance fields are ALL provenance-named (>=1 commit-like, >=1 of branch/dirty/build time/build number) and nothing else - the 'and nothing else' discriminator PresentationRules uses, so a domain object that records a commit beside its own state is not reported",
+    "logging.no-runtime-repository-access is broader than the spec's wording, deliberately: ArchUnit cannot read a string constant, so it cannot tell `git` from any other program or see a `.git` path literal. The rule reports every ProcessBuilder use, every Runtime.exec call and any dependency on org.eclipse.jgit, with an in-rule exemption list (empty: nothing in the repository launches a process today). Opening a .git path via java.io/java.nio is NOT checkable and is stated so in LoggingRules' javadoc and both READMEs, per 'encode every rule twice'. Flagged for review",
+    "architecture-rules README said 'Twenty groups, 47 rules', already stale at HEAD (25 rule sets); corrected to the measured 26 groups / 68 rule ids in both locales. The README still has no section for the presentation and uploads groups - pre-existing, not addressed here",
+    "BuildProvenanceIntegrationTest asserts git.properties hard (present, 40-hex commit, exactly the five allow-listed keys) and does not skip when it is absent: a skip would re-create the original drift. Consequence: a build from a tree with no .git cannot pass crud-service-example's integration tests and must skip them; stated in the test's javadoc",
+    "added [Unreleased] entries to CHANGELOG.md and CHANGELOG.ru.md (Added/Changed/Fixed), matching heading sets. Not in tasks.md; the repository's changelog convention is one entry per consumer-visible change",
+    "tasks 8.1 and 8.2 were run before the full build and both passed (manifest current, layout ok: 33 modules; `Change 'add-build-identity-logging' is valid`)",
+    "after the full build: tasks 5.7, 7.1, 7.2, 8.1, 8.2, 8.4 ticked on their own proofs (mvn clean install BUILD SUCCESS, 34 reactor entries, 6784 tests, 0 failures; BuildProvenanceIntegrationTest 3/3 under failsafe; architecture-report.json lists the three logging.* rules; aggregate report 30/30 modules). 3.5 and 8.3 are left unticked because their proof commands include scripts/check_api_baseline.sh",
+    "archived 2026-10-10 at the user's direction with tasks 3.5 and 8.3 open (API baseline unresolvable; gate red on check_api_baseline.sh). Main specs build-identity and service-log-stream were synced following the code, not the delta as written: added the five-key allow-list, day-precision build time, empty-resource prune, the broader process-launch rule and the unchecked .git-path limit, the banner default under JSON, logging.pattern.* deference, and the startup event's fields. The delta specs in the archive are unchanged"
+  ],
+  "failures": [
+    "pre-existing, before any edit: scripts/check_api_baseline.sh exits 1 on the clean tree at c1fc5b8 - tag v1.1.0 exists, and the 1.1.0 baseline of 25 modules cannot be fetched from https://nexus.example.internal/repository/maven-releases (0 compared, 3 absent by construction). gate.sh stops at the first failing command, so scripts/gate.sh --full cannot go green in this environment regardless of this change, and revapi compares against nothing",
+    "task 1.5 attempt 1: with no .git, git-commit-id-maven-plugin 8.0.2 logs 'dotGitDirectory is null, aborting execution!' and still writes a header-only git.properties, so `test ! -f` failed. failOnNoGitDirectory=false alone does not omit the file. Attempt 2 (prune step) passed",
+    "task 3.5 cannot be ticked: its proof is `mvn -pl :observability-spring-boot-starter -am verify && scripts/check_api_baseline.sh`. The verify half passes (BUILD SUCCESS, 160 tests). The baseline half fails for the pre-existing reason above, and revapi logged 'comparing the new archives against an empty archive' for this module, so 'no breaking revapi difference' is NOT proven by revapi. Substitute evidence only: a javap -protected diff of the previously installed 1.1.0-SNAPSHOT jar (built 2026-10-09) against the new classes shows 0 members removed and ServiceIdentity unchanged",
+    "LogStreamFormatIntegrationTest first run: 4 failures. 3 were the banner (real defect, fixed in the post-processor, see decisions); 1 was the test's own expectation - under surefire Spring deduces ForkedBooter as the main class and reports surefire's manifest version 3.5.3 as service.version (pre-existing behaviour of ServiceIdentityResolver in tests), fixed by pinning the version in the test",
+    "task 8.3: `scripts/gate.sh --change add-build-identity-logging --full` exits 1 at its second command, scripts/check_api_baseline.sh - the same pre-existing failure recorded first in this list, unrelated to the change. Because gate.sh stops at the first failure, the remaining commands were run by hand in gate order; their results are in receipt.json"
+  ],
+  "open_questions": [],
+  "pending_human": [
+    "the releases repository (or a populated ~/.m2 with the 1.1.0 artifacts) is needed for scripts/check_api_baseline.sh and a real revapi comparison; tasks 3.5 and 8.3 name it in their proof",
+    "rerun scripts/gate.sh --full once the 1.1.0 baseline is resolvable; the change was archived without a real revapi comparison"
+  ]
+}

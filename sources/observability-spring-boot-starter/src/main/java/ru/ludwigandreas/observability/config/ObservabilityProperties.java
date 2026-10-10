@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
+import ru.ludwigandreas.observability.core.BuildIdentity;
 
 /**
  * Everything the starter can be configured with, under {@code ludwig.observability}.
@@ -30,6 +31,9 @@ public class ObservabilityProperties {
     private final Service service = new Service();
 
     @NestedConfigurationProperty
+    private final Build build = new Build();
+
+    @NestedConfigurationProperty
     private final Tracing tracing = new Tracing();
 
     @NestedConfigurationProperty
@@ -51,6 +55,10 @@ public class ObservabilityProperties {
 
     public Service getService() {
         return service;
+    }
+
+    public Build getBuild() {
+        return build;
     }
 
     public Tracing getTracing() {
@@ -137,6 +145,108 @@ public class ObservabilityProperties {
 
         public void setInstance(String instance) {
             this.instance = instance;
+        }
+    }
+
+    /**
+     * What this process was built from: {@code ludwig.observability.build.*}.
+     *
+     * <p>Normally nobody sets any of these. {@code ludwig-service-parent} packages
+     * {@code git.properties} and {@code META-INF/build-info.properties} into every service artifact,
+     * and {@code ObservabilityEnvironmentPostProcessor} publishes what it reads from them here as
+     * defaults. The properties exist so that the resolved values have one home the log encoder and
+     * the startup event both read, and so that an artifact built some other way - a different build
+     * tool, a repackaged jar - can still state its provenance.
+     *
+     * <p>Every one is optional, and an unresolved one stays unset rather than becoming a
+     * placeholder. See {@link BuildIdentity} for why these are
+     * kept apart from {@link Service} and must never become metric tags.
+     */
+    public static class Build {
+
+        /** The full commit hash. Defaults to {@code git.commit.id} in {@code git.properties}. */
+        private String commitId;
+
+        /**
+         * The short commit hash, written on every log event. Defaults to
+         * {@code git.commit.id.abbrev} in {@code git.properties}.
+         */
+        private String abbreviatedCommitId;
+
+        /** The branch built from. Defaults to {@code git.branch} in {@code git.properties}. */
+        private String branch;
+
+        /**
+         * When the artifact was built, as ISO-8601 instant text. Defaults to {@code build.time} in
+         * {@code META-INF/build-info.properties}, which the platform's build truncates to the day.
+         */
+        private String timestamp;
+
+        /**
+         * The CI run that produced the artifact. Defaults to {@code build.ci.build-number} in
+         * {@code META-INF/build-info.properties}, which is written only when the pipeline passes
+         * {@code -Dludwig.ci.build-number}; unset on a local build.
+         */
+        private String ciBuildNumber;
+
+        /**
+         * Whether the working tree had uncommitted changes at build time. Defaults to
+         * {@code git.dirty} in {@code git.properties}. Unset means not known, which is not the same
+         * as clean.
+         */
+        private Boolean dirty;
+
+        public String getCommitId() {
+            return commitId;
+        }
+
+        public void setCommitId(String commitId) {
+            this.commitId = commitId;
+        }
+
+        public String getAbbreviatedCommitId() {
+            return abbreviatedCommitId;
+        }
+
+        public void setAbbreviatedCommitId(String abbreviatedCommitId) {
+            this.abbreviatedCommitId = abbreviatedCommitId;
+        }
+
+        public String getBranch() {
+            return branch;
+        }
+
+        public void setBranch(String branch) {
+            this.branch = branch;
+        }
+
+        public String getTimestamp() {
+            return timestamp;
+        }
+
+        public void setTimestamp(String timestamp) {
+            this.timestamp = timestamp;
+        }
+
+        public String getCiBuildNumber() {
+            return ciBuildNumber;
+        }
+
+        public void setCiBuildNumber(String ciBuildNumber) {
+            this.ciBuildNumber = ciBuildNumber;
+        }
+
+        public Boolean getDirty() {
+            return dirty;
+        }
+
+        public void setDirty(Boolean dirty) {
+            this.dirty = dirty;
+        }
+
+        /** These properties as the record the rest of the module passes around. */
+        public BuildIdentity toIdentity() {
+            return new BuildIdentity(commitId, abbreviatedCommitId, branch, timestamp, ciBuildNumber, dirty);
         }
     }
 
@@ -442,13 +552,24 @@ public class ObservabilityProperties {
              * Whether the console appender writes one JSON object per line instead of Logback's
              * human-readable pattern.
              *
-             * <p><strong>On by default</strong>, which is a deliberate and slightly opinionated
-             * choice. A log line only becomes queryable - "every ERROR for this correlation id
-             * across all four services" - once the aggregator gets fields rather than a sentence,
+             * <p><strong>The default depends on the active profile</strong>: on everywhere, except
+             * under the {@code local} profile, where it is off. Both halves are deliberate.
+             *
+             * <p>On, because a log line only becomes queryable - "every ERROR for this correlation
+             * id across all four services" - once the aggregator gets fields rather than a sentence,
              * and a starter whose structured logging has to be switched on is one every service
-             * forgets to switch on. The cost lands on developers reading a local console, which is
-             * why {@code ludwig.observability.logging.json.enabled: false} belongs in the
-             * {@code local} profile of the service template.
+             * forgets to switch on. Off under {@code local}, because the cost of that default lands
+             * on a developer reading a console, and the override that used to live in every service
+             * template's {@code local} profile was copy-paste a new service forgot.
+             *
+             * <p>The profile-dependent value is published by
+             * {@code ObservabilityEnvironmentPostProcessor} at the lowest precedence, so setting
+             * this property anywhere - {@code application.yml}, an environment variable, a system
+             * property - wins in either direction. The initial value of this field is the fallback
+             * for an environment that post-processor never saw, and it is the safe half: structured.
+             *
+             * <p>Switching this off does not lose the metadata. The human-readable pattern carries
+             * the service identity, the commit and the correlation, trace and span ids too.
              */
             private boolean enabled = true;
 

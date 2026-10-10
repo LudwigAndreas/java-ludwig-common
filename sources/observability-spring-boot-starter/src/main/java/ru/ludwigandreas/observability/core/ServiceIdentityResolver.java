@@ -9,8 +9,8 @@ import org.springframework.core.env.Environment;
  * <p>Every field follows the same rule: an explicit {@code ludwig.observability.service.*} value
  * wins, and only when it is absent is something inferred. The inferences are deliberately taken from
  * places that are already correct in a normally-built, normally-deployed Spring Boot service - the
- * application name, the jar manifest, the pod's hostname - rather than from a new convention
- * operators would have to be taught.
+ * application name, the jar manifest or the build-info resource, the pod's hostname - rather than
+ * from a new convention operators would have to be taught.
  *
  * <p>This is a static derivation over the {@code Environment} rather than a bean, because it is
  * needed twice at two very different points in the lifecycle: once by
@@ -62,9 +62,14 @@ public final class ServiceIdentityResolver {
                 return mainPackage.getImplementationVersion();
             }
         }
-        // Present whenever the build-info goal ran; unlike the manifest it also survives an
-        // exploded layout, which is how most containers actually run a Boot application.
-        return environment.getProperty("build.version");
+        // META-INF/build-info.properties, which ludwig-service-parent's build-info execution writes
+        // into every service artifact. Unlike the manifest it also survives an exploded layout,
+        // which is how most containers actually run a Boot application. Read as a resource rather
+        // than as an Environment property: nothing publishes build.version into the Environment,
+        // and an earlier version of this method that looked for it there could never find it.
+        ClassLoader classLoader = mainClass != null ? mainClass.getClassLoader() : null;
+        return BuildIdentityResolver.readResource(classLoader, BuildIdentityResolver.BUILD_INFO_RESOURCE)
+                .getProperty("build.version");
     }
 
     private static String resolveEnvironment(Environment environment) {

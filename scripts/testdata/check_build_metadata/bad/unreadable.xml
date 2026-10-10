@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Fixture for scripts/check_build_metadata.sh - -self-test: not well-formed, on purpose. A POM
+    the checker cannot parse must be a finding, not a pass with nothing examined.
+
+    Fires: E_POM_UNREADABLE.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <build>
+        <plugins>
+</project>

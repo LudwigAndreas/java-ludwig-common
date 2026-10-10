@@ -1,5 +1,6 @@
 package ru.ludwigandreas.observability.config;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.boot.SpringApplication;
@@ -7,6 +8,8 @@ import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.MutablePropertySources;
+import ru.ludwigandreas.observability.core.BuildIdentity;
+import ru.ludwigandreas.observability.core.BuildIdentityResolver;
 import ru.ludwigandreas.observability.core.ServiceIdentity;
 import ru.ludwigandreas.observability.core.ServiceIdentityResolver;
 
@@ -39,6 +42,20 @@ public class ObservabilityEnvironmentPostProcessor implements EnvironmentPostPro
     /** Named so it is recognisable in {@code /actuator/env} and in an "where did this come from" hunt. */
     static final String PROPERTY_SOURCE_NAME = "ludwig-observability-defaults";
 
+    /**
+     * The one profile under which the console defaults to human-readable text.
+     *
+     * <p>A constant, and deliberately NOT a property. If the name were configurable, a deployment
+     * could name production's own profile here and get text logs in production - which is exactly
+     * the failure a structured default exists to prevent, reintroduced as a setting. A developer who
+     * wants text elsewhere, or JSON locally, sets {@code ludwig.observability.logging.json.enabled}
+     * explicitly; that is one property with one meaning, and it always wins over this default.
+     *
+     * <p>No check can enforce "do not make this configurable", so the rule is stated here, at the
+     * point where someone would make the change.
+     */
+    static final String LOCAL_PROFILE = "local";
+
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         if (!environment.getProperty("ludwig.observability.enabled", Boolean.class, true)) {
@@ -52,6 +69,8 @@ public class ObservabilityEnvironmentPostProcessor implements EnvironmentPostPro
 
         Map<String, Object> defaults = new LinkedHashMap<>();
         applyServiceIdentity(environment, application, defaults);
+        applyBuildIdentity(environment, application, defaults);
+        applyLoggingDefaults(environment, defaults);
         applyActuatorDefaults(defaults);
         applyTracingDefaults(defaults);
         applyMetricsDefaults(defaults);
@@ -86,6 +105,61 @@ public class ObservabilityEnvironmentPostProcessor implements EnvironmentPostPro
         // where the property path ends and the map key begins; the brackets say so explicitly.
         identity.toResourceAttributes().forEach((key, value) ->
                 defaults.put("management.opentelemetry.resource-attributes[" + key + "]", value));
+    }
+
+    /**
+     * Resolves the build provenance once and publishes it as {@code ludwig.observability.build.*}.
+     *
+     * <p>Same reasoning as the service identity above: this is the one point that runs before the
+     * logging system is reconfigured, so resolving here and publishing the result means the log
+     * encoder, the startup identity event and {@code ObservabilityProperties} all read one set of
+     * values through the {@code Environment}, instead of each parsing the two resources again and
+     * being able to disagree. An unresolved field is left out rather than written empty, so
+     * "absent" stays distinguishable from "blank" all the way to the log line.
+     */
+    private void applyBuildIdentity(ConfigurableEnvironment environment, SpringApplication application,
+            Map<String, Object> defaults) {
+        BuildIdentity build = BuildIdentityResolver.resolve(environment, application.getClassLoader());
+
+        putIfPresent(defaults, "ludwig.observability.build.commit-id", build.commitId());
+        putIfPresent(defaults, "ludwig.observability.build.abbreviated-commit-id", build.abbreviatedCommitId());
+        putIfPresent(defaults, "ludwig.observability.build.branch", build.branch());
+        putIfPresent(defaults, "ludwig.observability.build.timestamp", build.buildTimestamp());
+        putIfPresent(defaults, "ludwig.observability.build.ci-build-number", build.ciBuildNumber());
+        if (build.dirty() != null) {
+            defaults.put("ludwig.observability.build.dirty", build.dirty().toString());
+        }
+    }
+
+    /**
+     * Chooses the console format: structured JSON everywhere, human-readable text under
+     * {@link #LOCAL_PROFILE}.
+     *
+     * <p>Both halves matter. JSON as the default means no service reaches production writing text
+     * the aggregator cannot parse - a structured format that has to be switched on is one every
+     * service forgets to switch on. Text under {@code local} means no developer reads JSON on a
+     * workstation, and removes the override every new service otherwise had to remember to copy.
+     *
+     * <p>It is a default like every other value in this source: published last, so an explicit
+     * {@code ludwig.observability.logging.json.enabled} in {@code application.yml}, an environment
+     * variable or a system property still wins, in either direction. The active profiles are known
+     * here because this post-processor runs after config data - see the class javadoc.
+     */
+    private void applyLoggingDefaults(ConfigurableEnvironment environment, Map<String, Object> defaults) {
+        boolean local = Arrays.asList(environment.getActiveProfiles()).contains(LOCAL_PROFILE);
+        defaults.put("ludwig.observability.logging.json.enabled", String.valueOf(!local));
+
+        // Spring Boot prints its banner straight to standard output, not through the logging
+        // system, so no encoder ever sees it: a structured stream would open with seven lines of
+        // ASCII art that a shipper expecting JSON either rejects or uses to guess the wrong format.
+        // Read back through the environment rather than from `local`, so that a service which
+        // explicitly chose JSON under the local profile gets a stream that is JSON from line one.
+        // SpringApplication binds spring.main.* after this post-processor has run, which is why a
+        // default published here is in time. Like everything else here it loses to an explicit
+        // spring.main.banner-mode.
+        if (environment.getProperty("ludwig.observability.logging.json.enabled", Boolean.class, !local)) {
+            defaults.put("spring.main.banner-mode", "off");
+        }
     }
 
     private void applyActuatorDefaults(Map<String, Object> defaults) {

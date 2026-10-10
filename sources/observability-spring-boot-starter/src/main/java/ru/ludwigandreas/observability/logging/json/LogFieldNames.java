@@ -24,6 +24,9 @@ import ru.ludwigandreas.observability.config.ObservabilityProperties;
  * as a prefix in others produces a mapping conflict that rejects the whole batch.
  *
  * @param severityNumber present only for schemes that carry a numeric severity; null otherwise
+ * @param commitId       the abbreviated commit the artifact was built from. Every scheme names it,
+ *                       because a field present in one set and missing from another defeats the
+ *                       point of offering a set the aggregator needs no mapping for
  */
 public record LogFieldNames(
         String timestamp,
@@ -44,7 +47,43 @@ public record LogFieldNames(
         String errorType,
         String errorMessage,
         String stackTrace,
-        String markers) {
+        String markers,
+        String commitId) {
+
+    /**
+     * The field set as it was before the commit id joined it, with no name for that field - so the
+     * encoder does not write it.
+     *
+     * <p>Kept because a record's canonical constructor is part of its published API: adding a
+     * component replaces that constructor, and code that built a custom field set with the nineteen
+     * names would stop compiling. Prefer the canonical constructor in new code.
+     */
+    // SUPPRESS CHECKSTYLE ParameterNumber - the record's previous canonical signature, kept for API compatibility.
+    @SuppressWarnings("checkstyle:ParameterNumber")
+    public LogFieldNames(
+            String timestamp,
+            String level,
+            String severityNumber,
+            String logger,
+            String thread,
+            String message,
+            String messageTemplate,
+            String traceId,
+            String spanId,
+            String correlationId,
+            String serviceName,
+            String serviceNamespace,
+            String serviceVersion,
+            String serviceEnvironment,
+            String serviceInstance,
+            String errorType,
+            String errorMessage,
+            String stackTrace,
+            String markers) {
+        this(timestamp, level, severityNumber, logger, thread, message, messageTemplate, traceId, spanId,
+                correlationId, serviceName, serviceNamespace, serviceVersion, serviceEnvironment,
+                serviceInstance, errorType, errorMessage, stackTrace, markers, null);
+    }
 
     /** Elastic Common Schema, for an Elasticsearch or OpenSearch backend. */
     public static LogFieldNames ecs() {
@@ -52,7 +91,10 @@ public record LogFieldNames(
                 "@timestamp", "log.level", null, "log.logger", "process.thread.name",
                 "message", "event.original", "trace.id", "span.id", "correlation.id",
                 "service.name", "service.namespace", "service.version", "service.environment",
-                "service.node.name", "error.type", "error.message", "error.stack_trace", "tags");
+                "service.node.name", "error.type", "error.message", "error.stack_trace", "tags",
+                // ECS defines no field for a commit. service.* is where the rest of the identity
+                // already lives, so the custom field goes beside it rather than in a new namespace.
+                "service.commit.id");
     }
 
     /** OpenTelemetry log data model, for a collector-based pipeline. */
@@ -61,7 +103,8 @@ public record LogFieldNames(
                 "Timestamp", "SeverityText", "SeverityNumber", "InstrumentationScope", "ThreadName",
                 "Body", "BodyTemplate", "TraceId", "SpanId", "CorrelationId",
                 "service.name", "service.namespace", "service.version", "deployment.environment",
-                "service.instance.id", "ExceptionType", "ExceptionMessage", "ExceptionStackTrace", "Markers");
+                "service.instance.id", "ExceptionType", "ExceptionMessage", "ExceptionStackTrace", "Markers",
+                "ServiceCommitId");
     }
 
     /** Short, shallow, snake_case names for a stack with no schema of its own. */
@@ -70,7 +113,8 @@ public record LogFieldNames(
                 "timestamp", "level", null, "logger", "thread",
                 "message", "message_template", "trace_id", "span_id", "correlation_id",
                 "service", "namespace", "version", "environment",
-                "instance", "error_type", "error_message", "stack_trace", "markers");
+                "instance", "error_type", "error_message", "stack_trace", "markers",
+                "commit_id");
     }
 
     public static LogFieldNames of(ObservabilityProperties.Logging.FieldSet fieldSet) {

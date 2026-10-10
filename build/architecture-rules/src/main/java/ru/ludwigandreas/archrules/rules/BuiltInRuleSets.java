@@ -38,7 +38,8 @@ public final class BuiltInRuleSets {
             new CachingRules(),
             new PresentationRules(),
             new UploadRules(),
-            new CredentialRules());
+            new CredentialRules(),
+            new LoggingRules());
 
     private BuiltInRuleSets() {
     }

@@ -173,6 +173,12 @@ public class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
         writeIfPresent(json, names.serviceVersion(), identity.version());
         writeIfPresent(json, names.serviceEnvironment(), identity.environment());
         writeIfPresent(json, names.serviceInstance(), identity.instance());
+        // From the resolved build identity, not the MDC: the commit is a constant of the process,
+        // and the MDC is per-thread state that a pooled thread may not have. The abbreviated form
+        // only - a line is written millions of times, and the full hash, the branch and the rest
+        // are on the startup identity event, which is written once. Omitted when the artifact has
+        // no provenance; never a placeholder.
+        writeIfPresent(json, names.commitId(), config.build().abbreviatedCommitId());
     }
 
     private void writeStaticFields(JsonGenerator json) throws IOException {

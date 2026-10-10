@@ -67,7 +67,7 @@ fi
   die "repository layout check failed" 1
 }
 
-# Three file-only checks, before Maven, because they cost milliseconds and catch a class of defect
+# Four file-only checks, before Maven, because they cost milliseconds and catch a class of defect
 # the build cannot see:
 #
 #   check_image_pins     a container image referenced by tag alone. Not a Java fact and not a POM
@@ -79,7 +79,10 @@ fi
 #                        its filename, a missing rollback, an un-namespaced id, an include that
 #                        resolves to nothing, or a migration file nothing includes. A changelog is a
 #                        resource, so ArchUnit cannot see it and Checkstyle is not pointed at it.
-COMMANDS=("scripts/check_image_pins.sh" "scripts/check_api_baseline.sh" "scripts/check_migrations.sh" "mvn -q validate")
+#   check_build_metadata the service parent no longer configured to write git.properties or
+#                        build-info.properties into a service artifact. Whether a plugin goal is
+#                        bound is POM text, which ArchUnit and Checkstyle both cannot see.
+COMMANDS=("scripts/check_image_pins.sh" "scripts/check_api_baseline.sh" "scripts/check_migrations.sh" "scripts/check_build_metadata.sh" "mvn -q validate")
 
 if [ "$FULL" = 1 ]; then
   COMMANDS+=("mvn clean install")

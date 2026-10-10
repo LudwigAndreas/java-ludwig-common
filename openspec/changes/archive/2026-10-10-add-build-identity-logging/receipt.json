@@ -1,0 +1,41 @@
+{
+  "change": "add-build-identity-logging",
+  "model": "claude-opus-5-5",
+  "index_version": "3c7f3b2d4bd62c1cc675a28651a2381931fd4e4164b1f73a7efd5657c837df40",
+  "modules_touched": [
+    "ludwig-service-parent",
+    "observability-spring-boot-starter",
+    "architecture-rules",
+    "crud-service-example"
+  ],
+  "gate": {
+    "gate_sh_full": "FAIL - scripts/gate.sh --change add-build-identity-logging --full stops at scripts/check_api_baseline.sh; the commands below were then run by hand in gate order",
+    "check_image_pins": "pass",
+    "check_api_baseline": "FAIL - pre-existing on c1fc5b8: 1.1.0 baseline of 25 modules not resolvable from nexus.example.internal; 0 compared",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass (self-test: 7 of 7 rules fire, good fixture 0 findings)",
+    "validate": "pass",
+    "clean_install": "pass - BUILD SUCCESS, all 34 reactor entries",
+    "check_aggregate_report": "pass - 30 of 30 jar modules, 74.7% instruction / 64.0% branch",
+    "openspec_validate": "pass"
+  },
+  "tests": {
+    "added": 57,
+    "passed": 6784,
+    "failed": 0
+  },
+  "retries": 2,
+  "human_corrections": 0,
+  "rollback_point": "c1fc5b81ecfa20e1b3418002a5ace90473d6734c",
+  "unresolved": [
+    "tasks 3.5 and 8.3 not ticked: revapi compared every module against an empty archive, so 'no breaking API difference' is unproven by the gate. Substitute evidence only: javap diff against the previously installed snapshot jar shows 0 members removed",
+    "code-index MCP server was not available in this session; navigation was by manifest, direct reads and grep",
+    "logging.no-runtime-repository-access forbids every process launch, not only git; reading a .git path through java.io is not checked by anything",
+    "three additions beyond tasks.md need review: maven-antrun prune step in ludwig-service-parent, spring.main.banner-mode=off default under JSON, deference to logging.pattern.console/file in text mode",
+    "proposal.md states no artifact contained git.properties; it did (via spring-boot-starter-parent), unfiltered. Artifacts were not edited by the implementation",
+    "a build from a tree with no .git cannot pass BuildProvenanceIntegrationTest and must skip integration tests",
+    "design migration step 4 (publish the new commit field name to the log index owner before rollout) is outside the repository and not done",
+    "JaCoCo 0.8.12 logs 'Unsupported class file major version 70' for JDK classes under the local Java 26; non-fatal, pre-existing",
+    "nothing is committed; work is uncommitted on master"
+  ]
+}

@@ -45,7 +45,7 @@ A request now produces this log line - one JSON object, already in fields:
  "trace.id":"0af7651916cd43dd8448eb211c80319c","span.id":"b7ad6b7169203331",
  "correlation.id":"0af7651916cd43dd8448eb211c80319c","service.name":"product-catalog",
  "service.version":"1.4.2","service.environment":"prod","service.node.name":"catalog-7d9f-xk2",
- "labels":{"tenant":"acme"}}
+ "service.commit.id":"c1fc5b8","labels":{"tenant":"acme"}}
 ```
 
 this response:
@@ -103,7 +103,7 @@ trying to diagnose.
 | Sampling override | `X-Ludwig-Force-Trace` forces one request to be traced | Not possible at all without a custom `Sampler` |
 | Span hygiene | `/actuator/**` server spans dropped at export | Probes otherwise outnumber real traffic in the backend |
 | Correlation | One id across HTTP in, HTTP out, Kafka in, Kafka out, and the MDC | Entirely absent from Spring Boot |
-| Logs | JSON, ECS/OTel/flat field sets, masking, truncation | Boot 3.3 has no structured logging |
+| Logs | JSON (readable text under `local`), ECS/OTel/flat field sets, the commit on every line, masking, truncation | Boot 3.3 has no structured logging |
 | Metrics | Identity tags, URI cardinality cap, SLO histogram, probe paths excluded | Boot removed `max-uri-tags`; the rest was never there |
 | Annotations | `@Timed`, `@Counted`, `@Observed` actually work | Micrometer ships the aspects and registers none of them |
 | Probes | Liveness and readiness split, graceful shutdown | Off by default in Boot |
@@ -143,30 +143,102 @@ whatever the caller chose to send.
 
 ## Structured logging
 
-**JSON is on by default.** This is deliberate and slightly opinionated: a starter whose structured
-logging must be switched on is one every service forgets to switch on. The cost lands on developers
-reading a local console, so the service template's `local` profile should carry:
+**JSON is the default everywhere except under the `local` profile, where the default is readable
+text.** Both halves are deliberate. A starter whose structured logging must be switched on is one
+every service forgets to switch on, so no service can reach production writing text the aggregator
+cannot parse. And the cost of that default used to land on developers reading a local console, with an
+override every service template had to remember to copy - which is exactly the copy-paste a new
+service forgets. There is nothing to copy now: start with `--spring.profiles.active=local` and the
+console is text.
+
+The profile name is fixed and is not configurable on purpose: a setting that names "the text profile"
+is a setting somebody points at production. To choose the format yourself, in either direction, set
+the property - it is a default like every other, so an explicit value always wins:
 
 ```yaml
 ludwig:
   observability:
     logging:
       json:
-        enabled: false
+        enabled: true   # JSON on a workstation; false forces text anywhere
 ```
+
+A service that already carries `enabled: false` in its `local` profile keeps working unchanged.
+
+**Switching to text does not lose the metadata.** The text format is not Spring Boot's default
+pattern, which carries no identity and no correlation id. It is this module's own, with the same
+fields the JSON has:
+
+```text
+2026-09-16T12:12:13.481+03:00  INFO [product-catalog/1.4.2@c1fc5b8 env=local instance=dev-laptop] [order-4711,0af7651916cd43dd8448eb211c80319c,b7ad6b7169203331] [http-nio-8080-exec-3] com.example.OrderService : order 4711 accepted
+```
+
+That is `[name/version@commit env=... instance=...]`, then `[correlation id,trace id,span id]`. An
+identity part that could not be resolved is left out - run from an IDE there is no version and no
+commit, and the line says `[product-catalog env=local ...]` rather than inventing one. The three ids
+keep their positions, so an unsampled request reads `[order-4711,,]`.
+
+A pattern you chose yourself through Spring Boot's `logging.pattern.console` or `logging.pattern.file`
+is left exactly as it is, and so is any appender you configured with your own encoder in a
+`logback-spring.xml`. Those are decisions somebody made on purpose; this module replaces only the
+pattern encoders a default configuration installs.
 
 Pick the field set your aggregator already understands, and no ingest-time mapping is needed:
 
-| `field-set` | Names | For |
-|-------------|-------|-----|
-| `ecs` (default) | `@timestamp`, `log.level`, `trace.id` | Elasticsearch, OpenSearch |
-| `otel` | `Timestamp`, `SeverityText`, `TraceId` | OpenTelemetry collector |
-| `flat` | `timestamp`, `level`, `trace_id` | Loki, and stacks with no schema |
+| `field-set` | Names | Commit field | For |
+|-------------|-------|--------------|-----|
+| `ecs` (default) | `@timestamp`, `log.level`, `trace.id` | `service.commit.id` | Elasticsearch, OpenSearch |
+| `otel` | `Timestamp`, `SeverityText`, `TraceId` | `ServiceCommitId` | OpenTelemetry collector |
+| `flat` | `timestamp`, `level`, `trace_id` | `commit_id` | Loki, and stacks with no schema |
 
-The encoder is installed before the application logs anything - it runs immediately after Spring Boot
-initializes the logging system, so the banner, the profile list, the Liquibase migrations and any
-bootstrap failure are already JSON. Switching format later would leave a stream that is half text and
-half JSON, which most shippers handle by dropping the half they were not configured for.
+The commit field is new in every set. An aggregator with a strict index template needs it mapped - a
+short keyword string - before the first service carrying it writes to a shared index.
+
+The format is installed before the application logs anything - it runs immediately after Spring Boot
+initializes the logging system, so the profile list, the Liquibase migrations and any bootstrap
+failure are already in the selected format. Switching format later would leave a stream that is half
+text and half JSON, which most shippers handle by dropping the half they were not configured for.
+
+The banner is the one thing that never passes through the logging system: Spring Boot prints it
+straight to standard output. So under JSON this module defaults `spring.main.banner-mode` to `off` -
+otherwise a structured stream opens with seven lines of ASCII art. Under text it is left alone, and an
+explicit `spring.main.banner-mode` wins either way.
+
+### Build identity
+
+Every log event carries the **abbreviated commit** the artifact was built from, next to the service
+name and version that were already there. That is what turns a log line into something that can be
+resolved to source. It adds no field that varies on its own: a commit and a version move together.
+
+The rest of the provenance is logged **once**, when startup completes - a line is written millions of
+times and this event once, so the branch, the build timestamp and the dirty flag belong here:
+
+```text
+Application identity: service=product-catalog version=1.4.2 environment=prod instance=catalog-7d9f-xk2 commit=c1fc5b81ecfa20e1b3418002a5ace90473d6734c branch=master built=2026-09-16T00:00:00Z ci-build=4711 tree=clean
+```
+
+Under JSON the same event also carries `build.commit.id`, `build.branch`, `build.timestamp`,
+`build.ci.build-number` and `build.dirty` as fields. Anything that could not be resolved is left out
+of both: a local build has no `ci-build`, and a process started from an IDE has no commit at all.
+Nothing is ever written as `unknown`.
+
+**Where it comes from.** `ludwig-service-parent` packages `git.properties` and
+`META-INF/build-info.properties` into every service artifact, and this module reads those two files
+from the classpath at startup. It never runs `git` and never looks for a `.git` directory: a container
+has no checkout, and a process that found one would be reporting the machine it runs on. Reading what
+was packaged is what makes one artifact report the same commit in staging and after promotion to
+production. The build timestamp is truncated to the day, so that building one commit twice still
+yields one image digest; treat it as a date.
+
+**It is not a metric tag, and must not become one.** `BuildIdentity` is a separate record from
+`ServiceIdentity` precisely so that a branch name or a dirty flag cannot end up multiplying every
+series in the registry. `ServiceIdentity` is what backends group by; `BuildIdentity` is only ever read
+off one line.
+
+**What it discloses.** The same two files give `/actuator/info` a `git` and a `build` section, and
+`info` is in the default exposure list - so the branch name and commit id are readable by anything
+that can reach the management port. That is deliberate. A deployment that cannot disclose them narrows
+`management.endpoints.web.exposure.include`.
 
 ### MDC handling
 
@@ -313,7 +385,7 @@ needing to know this module exists.
 |----------|---------|-------|
 | `ludwig.observability.enabled` | `true` | Master switch |
 | `ludwig.observability.service.name` | `${spring.application.name}` | Stamped on metrics, spans and logs alike |
-| `ludwig.observability.service.version` | jar manifest | `Implementation-Version`, else `build.version` |
+| `ludwig.observability.service.version` | jar manifest | `Implementation-Version`, else `build.version` in `META-INF/build-info.properties` |
 | `ludwig.observability.service.environment` | first active profile | A guess; set it explicitly in deployments |
 | `ludwig.observability.service.instance` | `$HOSTNAME` | The pod name, under Kubernetes |
 | `ludwig.observability.tracing.excluded-paths` | `/actuator/**` | Dropped at export, not at sampling |
@@ -322,7 +394,14 @@ needing to know this module exists.
 | `ludwig.observability.correlation.additional-inbound-headers` | `[X-Request-Id]` | Tried in order |
 | `ludwig.observability.correlation.max-length` | `128` | Startup failure if not positive |
 | `ludwig.observability.correlation.allowed-pattern` | `[A-Za-z0-9_.:-]+` | Non-matching values are replaced |
-| `ludwig.observability.logging.json.enabled` | `true` | Switch off in the `local` profile |
+| `ludwig.observability.build.commit-id` | `git.commit.id` in `git.properties` | Unset when the artifact has no provenance |
+| `ludwig.observability.build.abbreviated-commit-id` | `git.commit.id.abbrev` in `git.properties` | The one written on every log event |
+| `ludwig.observability.build.branch` | `git.branch` in `git.properties` | Startup event only |
+| `ludwig.observability.build.timestamp` | `build.time` in `META-INF/build-info.properties` | Truncated to the day by the platform's build |
+| `ludwig.observability.build.ci-build-number` | `build.ci.build-number` in `META-INF/build-info.properties` | Present only when the build was given `-Dludwig.ci.build-number` |
+| `ludwig.observability.build.dirty` | `git.dirty` in `git.properties` | Unset means not known, which is not clean |
+| `ludwig.observability.logging.json.enabled` | `true`; `false` under the `local` profile | An explicit value wins in either direction |
+| `spring.main.banner-mode` | `off` when the format is JSON | Boot's own property; untouched under text |
 | `ludwig.observability.logging.json.field-set` | `ecs` | `ecs`, `otel` or `flat` |
 | `ludwig.observability.logging.json.max-message-length` | `16384` | `0` disables truncation |
 | `ludwig.observability.logging.levels.revert-on-removal` | `true` | |
@@ -346,6 +425,9 @@ name for a knob that already has one.
   and set the header itself.
 - **It does not export logs over OTLP.** Logs go to stdout as JSON for the node agent to collect,
   which is what every Kubernetes log pipeline already does.
+- **It does not write log files.** These services ship as container images; a default-on file
+  appender writes into the ephemeral layer, competes with the node agent for the same bytes and
+  vanishes on restart. Standard output is the only destination.
 
 ## Integration with the other modules
 
@@ -361,12 +443,12 @@ name for a knob that already has one.
 ```text
 ru.ludwigandreas.observability
 ├── config/        autoconfiguration, properties, environment defaults
-├── core/          ServiceIdentity and its derivation from the environment
+├── core/          ServiceIdentity, BuildIdentity and their derivation
 ├── correlation/   the correlation id, its storage and its validation
 ├── tracing/       sampler, span export filtering, trace context access
 ├── web/           servlet filters and outbound HTTP propagation
 ├── kafka/         producer and consumer correlation
-├── logging/       JSON encoder, its installation, runtime log levels
+├── logging/       JSON encoder, text pattern, startup identity event, runtime log levels
 └── metrics/       RED meter filters and the cardinality cap
 ```
 
