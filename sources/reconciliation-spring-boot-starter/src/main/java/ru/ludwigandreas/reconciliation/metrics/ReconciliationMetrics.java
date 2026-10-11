@@ -152,4 +152,58 @@ public interface ReconciliationMetrics {
      * @param resolution how it was resolved - {@code adopted}, {@code orphaned} or {@code resubmitted}
      */
     void recordAmbiguousSubmit(String task, String resolution);
+
+    // The methods below serve enumeration tasks. They are default methods, and do nothing, so that a
+    // service that replaced this bean before enumerations existed still compiles and still starts;
+    // it simply reports nothing for them until it overrides these too.
+
+    /**
+     * Records one walk of one scope.
+     *
+     * @param task     enumeration name
+     * @param kind     {@code full} or {@code incremental}
+     * @param outcome  {@code completed}, {@code interrupted}, {@code failed} or {@code removed}
+     * @param duration how long the walk took in this run
+     */
+    default void recordScopeWalk(String task, String kind, String outcome, Duration duration) {
+    }
+
+    /**
+     * Records what happened to one member.
+     *
+     * @param task    enumeration name
+     * @param outcome {@code applied}, {@code unchanged}, {@code skipped}, {@code failed},
+     *                {@code quarantined} or {@code left}
+     */
+    default void recordMemberOutcome(String task, String outcome) {
+    }
+
+    /**
+     * Records a member that left a scope while the integration defined nothing to do about it.
+     *
+     * @param task enumeration name
+     */
+    default void recordMemberLeftUnhandled(String task) {
+    }
+
+    /**
+     * Registers the enumeration's freshness gauge: how far the most overdue scope is past its due
+     * time, in seconds, and zero while every scope is within its configured intervals.
+     *
+     * @param task       enumeration name
+     * @param lagSeconds supplies the current lag
+     */
+    default void registerScopeFreshnessLag(String task, Supplier<Number> lagSeconds) {
+    }
+
+    /**
+     * Registers the gauges an operator has to act on: members whose budget is spent, and sweeps
+     * withheld for confirmation.
+     *
+     * @param task        enumeration name
+     * @param quarantined supplies the number of quarantined members
+     * @param sweepsHeld  supplies the number of scopes with a withheld sweep
+     */
+    default void registerScopeAttention(String task, Supplier<Number> quarantined, Supplier<Number> sweepsHeld) {
+    }
 }

@@ -25,7 +25,7 @@ import ru.ludwigandreas.audit.Resource;
  * the note there - so a call site hands the sink an {@code AuditEvent} without naming either type.
  *
  * @param taskName      the task this concerns
- * @param category      {@code RUN}, {@code RECORD}, {@code JOB}, {@code LEASE} or {@code OPERATOR}
+ * @param category      {@code RUN}, {@code RECORD}, {@code JOB}, {@code LEASE}, {@code OPERATOR} or {@code SCOPE}
  * @param event         the specific event, for example {@code record.quarantined}
  * @param subject       the thing it happened to: a correlation key, a job id, a quota name
  * @param fromState     previous state, for a transition
@@ -64,7 +64,13 @@ public record ReconciliationAuditEvent(String taskName,
         LEASE,
 
         /** A human did something through the actuator endpoint. */
-        OPERATOR
+        OPERATOR,
+
+        /**
+         * An enumeration walked a scope, or a member left one. Last on purpose: appending keeps every
+         * existing constant's ordinal, so adding it is not a change to anything already published.
+         */
+        SCOPE
     }
 
     /** The resource type every reconciliation event is about. */

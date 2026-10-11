@@ -27,5 +27,8 @@
     <include file="classpath:db/changelog/reconciliation/0009-create-quota-lease.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/reconciliation/0010-create-quota-waiter.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/reconciliation/0011-create-audit-record.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/reconciliation/0012-create-scope-state.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/reconciliation/0013-create-scope-member.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/reconciliation/0014-index-scope-state-due.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

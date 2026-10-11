@@ -42,6 +42,13 @@ more than the import.
 
 `Fetcher` is `sealed` on purpose. A file is not a fifth fetch shape.
 
+What is no longer a reason to look elsewhere is a **collection listed by the partner** - the issues a
+query returns, the records under a source, the pages under a page. A record with no local row is
+dropped by a `SyncTask`, by design, and created by an [enumeration task](#enumeration-tasks-mirroring-a-collection),
+which is the second task kind this module has. The line between that and a file is volume and shape: an
+enumeration keeps one narrow row per member and walks a paged feed, which is right for a mirrored
+collection and wrong for millions of rows a day arriving as one file.
+
 ## Quick start
 
 ```xml
@@ -406,6 +413,217 @@ That is also why `architecture-rules`' `operations.no-second-operation-vocabular
 of these are not, so it is a richer lifecycle rather than a second spelling of the same six states.
 
 
+## Enumeration tasks: mirroring a collection
+
+Everything above refreshes local rows whose keys the service already holds. An **enumeration task**
+answers the question that comes first: *list everything the partner has under this scope, and make my
+copy match* - including the items that have no local row yet, and the ones that stopped being listed.
+
+| | `SyncTask` | `EnumerationTask` |
+|---|---|---|
+| Starts from | local records that need external state | a local **scope** row and the partner's listing under it |
+| A partner record with no local row | is dropped - the row was deleted locally | is handed to you to create |
+| Paging state | one cursor per task and tier | one cursor, watermark and generation **per scope** |
+| Retry unit | a staged record, without re-calling the partner | the next walk, which lists the item again |
+| "Gone upstream" | `NotFound` for a key that was asked about | absent from a completed full walk |
+
+A *scope* is a local row you already have - a stored search, a source, a root page. A *member* is an
+item the partner lists under it. Three shapes that look different are the same thing here:
+
+- **one fixed query** - `ScopeSource.single(key, scope)`, no local row at all;
+- **one query per local row** - the scope source pages through those rows;
+- **a tree** - the engine does not model one. Either one task per level (task A's reconciler saves the
+  rows task B's scope source reads), or one task whose scope source reads the rows its own reconciler
+  writes. Each scope is fresh on its own clock; there is no snapshot across levels.
+
+```java
+@ReconciliationEnumeration("jira-issues")
+public class JiraIssuesTask implements EnumerationTask<SavedSearch, UUID, JiraIssue, String> {
+
+    @Override public String name() { return "jira-issues"; }
+
+    @Override public ScopeSource<SavedSearch, UUID> scopes() {
+        return new ScopeSource<>() {
+            @Override public List<SavedSearch> page(UUID after, int limit) { return searches.pageAfter(after, limit); }
+            @Override public Optional<SavedSearch> byKey(UUID key)        { return searches.findById(key); }
+            @Override public UUID keyOf(SavedSearch search)               { return search.getId(); }
+        };
+    }
+    @Override public KeyCodec<UUID> scopeKeyCodec()        { return KeyCodec.ofUuid(); }
+    @Override public Function<JiraIssue, String> memberKey() { return JiraIssue::key; }
+    @Override public KeyCodec<String> memberKeyCodec()     { return KeyCodec.ofString(); }
+
+    @Override public MemberFeed<SavedSearch, JiraIssue> feed() {
+        return new MemberFeed<>() {
+            @Override public PageResult<JiraIssue> fetchPage(SavedSearch search, String cursor, FeedRequest request) {
+                return jira.search(search.jql(), request.changedSinceOrEmpty(), cursor, request.pageSize());
+            }
+            @Override public boolean supportsChangedSince() { return true; }
+        };
+    }
+
+    @Override public ExternalStamp stampOf(JiraIssue issue) { return ExternalStamp.ofTimestamp(issue.updated()); }
+
+    @Override public MemberReconciler<SavedSearch, JiraIssue, String> reconciler() {
+        return new MemberReconciler<>() {
+            @Override public MemberResult apply(SavedSearch search, JiraIssue issue, MemberContext context) {
+                issues.upsertAndLink(issue, search);          // find by key INCLUDING removed rows
+                return MemberResult.applied("synced " + issue.key());
+            }
+            @Override public LeftResult left(SavedSearch search, String issueKey, MemberContext context) {
+                issues.unlink(issueKey, search);              // your decision: unlink, flag, delete
+                return LeftResult.HANDLED;
+            }
+        };
+    }
+}
+```
+
+```yaml
+ludwig:
+  reconciliation:
+    enumerations:
+      jira-issues:
+        schedule:  { fixed-delay: 1m, run-timeout: 15m }
+        discovery: { fixed-delay: 5m }
+        refresh:   { full-interval: 6h, incremental-interval: 5m }
+        walk:      { page-size: 100, max-concurrency: 2, max-scopes-per-run: 50 }
+        sweep:     { confirm-after-misses: 1, max-fraction: 0.5 }
+        rate-limit: jira
+        rest-client: jira
+```
+
+### How a scope is walked
+
+Two passes per enumeration, each under the task's run lease:
+
+- **discover** pages through the scope source and registers every scope it has not seen, due
+  immediately. It never forgets one; a scope whose local row is gone is noticed by the walk that tries
+  to reload it, and is then forgotten with its membership - without telling you its members left,
+  because you deleted the scope and what happens to its members is your cascade.
+- **walk** takes the scopes that are due, never-walked first, and walks each from its checkpoint.
+
+A walk is **full** when the scope has never completed one, when `refresh.full-interval` has elapsed, or
+when the feed cannot be asked for changes. Otherwise it is **incremental**, bounded by that scope's own
+watermark. That is what makes a first fetch correct: a scope added today gets a full walk however far
+every other scope has advanced.
+
+**A page is the transaction.** The membership lookup, your reconciler's writes, the membership rows and
+the cursor commit together, so the cursor never runs ahead of the data. When a page fails it is replayed
+item by item: the members that apply are recorded, the one that throws is recorded as failed with a
+backoff, and at `retry.max-attempts` it is quarantined. The walk carries on either way.
+
+**An unchanged item never reaches your code.** The engine keeps one narrow row per scope and member in
+`sync_scope_member`, with the hash of the payload last applied. An item arriving with the same hash only
+has its "seen" stamp moved, in one statement per page. That row is the engine's rather than a column on
+your table on purpose - stamping "seen" on a domain row would churn its version, its `updated_at` and
+its audit trail on every full walk.
+
+### Removal is reported, not performed
+
+After a completed full walk, members the walk did not list are reported through `left(scope, memberKey,
+context)`, once each, and the engine deletes **its own** membership row. It never touches yours.
+
+- **It means "left this scope", not "deleted upstream".** An item listed under two scopes that leaves
+  one still exists; unlink it, and remove the item only when nothing links to it.
+- **A member that comes back arrives with `context.isNew() == true`**, because its membership row is
+  gone. That flag describes the engine's row, not your table: your `apply` must look the row up by
+  external id *including rows you flagged as removed* and restore it. With `db-core`'s
+  `SoftDeleteEntity`, the documented `@SQLRestriction("deleted = false")` hides exactly those rows from
+  that lookup, so either flag removal with a plain column, or give the upsert a way to see removed rows.
+  Otherwise a returning member is inserted a second time.
+- **The default `left` does nothing**, and that is counted in `reconciliation.members.left_unhandled`
+  rather than being silent.
+
+Three guards stand between a walk and a removal, each against a failure that produces no error:
+
+| Guard | What it stops |
+|---|---|
+| **Evidence** - only after a full walk that reached its last page and listed nothing it could not apply | an incremental or interrupted walk "proving" that everything it did not read is gone |
+| **Plausibility** - a sweep larger than `sweep.max-fraction` of the scope is withheld | a partner answering 200 with an empty list during an outage, or after a permissions change, emptying the scope |
+| **Drift** - `sweep.confirm-after-misses` consecutive completed full walks must omit the member | an item that shifted between pages of an offset-paged listing and was missed once |
+
+A withheld sweep is confirmed or discarded by an operator. **A scope with one member is always above the
+default fraction**, so its removal is always withheld; set `sweep.max-fraction: 1` for an enumeration of
+very small scopes, and accept that the outage guard is then off for it.
+
+### Enumeration settings
+
+`enumeration-defaults` merges per field under `enumerations.<name>`, the way `defaults` does for tasks.
+
+| Property | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Whether the enumeration runs. A disabled one is still validated |
+| `schedule.fixed-delay` \| `schedule.cron` | `1m` | When the walk pass runs. It only takes scopes that are due |
+| `schedule.run-timeout` | `15m` | Run-lease TTL. A walk still going at the timeout stops at its checkpoint |
+| `discovery.fixed-delay` | `5m` | How often new scopes are looked for |
+| `discovery.page-size` | `1000` | Scopes read per page of the scope source |
+| `refresh.full-interval` | `6h` | How often a scope is listed in full. The longest a removal can go unnoticed |
+| `refresh.incremental-interval` | absent | How often changes are fetched between full walks. Requires `supportsChangedSince()` |
+| `walk.page-size` | `100` | Items per page, and the unit of one transaction |
+| `walk.max-concurrency` | `2` | Scopes walked at once |
+| `walk.max-scopes-per-run` | `50` | Scopes one pass takes |
+| `sweep.confirm-after-misses` | `1` | Consecutive completed full walks that must omit a member |
+| `sweep.max-fraction` | `0.5` | Largest share of a scope one sweep may report unconfirmed |
+| `retry.*` | as for tasks | A member's attempt budget and backoff, and a failing scope's backoff |
+| `audit.enabled` | `true` | Whether walks and removals are audited |
+| `rest-client` / `rate-limit` | absent | Named resources, validated to exist. Quotas are not used: a page fetch is not long-lived remote work |
+
+Startup validation additionally refuses: an enumeration bean with no configuration or the reverse; a
+name that is also a key under `tasks` (the two kinds share run-lock names and the actuator selector);
+`refresh.incremental-interval` over a feed that does not declare `supportsChangedSince()`; and
+`sweep.max-fraction` outside (0, 1] or `sweep.confirm-after-misses` below 1.
+
+Everything under `walk`, `sweep`, `refresh` and `retry` is read where it is used and takes effect on
+the next pass. `schedule.*`, `discovery.fixed-delay` and adding or removing an enumeration require a
+restart, for the reason given above: passes are scheduled once.
+
+### Observing and operating an enumeration
+
+| Metric | Type | What it says |
+|---|---|---|
+| `reconciliation.scope.freshness.lag` | gauge | **The SLO metric.** Seconds the most overdue scope is past its interval |
+| `reconciliation.scope.walk` | timer | One walk of one scope, tagged `kind` and `outcome` |
+| `reconciliation.members.settled` | counter | Tagged `outcome`: applied, unchanged, skipped, failed, quarantined, left |
+| `reconciliation.members.left_unhandled` | counter | Removals the integration defined nothing for |
+| `reconciliation.members.quarantined` | gauge | Members whose budget is spent |
+| `reconciliation.sweep.held` | gauge | Scopes with a sweep withheld. **Alert on any sustained non-zero value** |
+
+The freshness lag is measured from when each scope was last *listed*, not from when it is next
+scheduled. A scope whose walks keep failing is pushed back by its backoff, and a gauge reading the
+schedule would report it as on time for exactly as long as it stayed broken.
+
+Enumerations appear in `GET /actuator/reconciliation` beside the tasks and are addressed by the same
+task selector. A scope is a second selector:
+
+```
+GET  /actuator/reconciliation/{enumeration}            detail: settings, least fresh scopes, quarantine
+POST /actuator/reconciliation/{enumeration}            {"action": "run" | "discover" | "requeue-members"}
+GET  /actuator/reconciliation/{enumeration}/{scope}    one scope: cursor, watermark, generation, members
+POST /actuator/reconciliation/{enumeration}/{scope}    {"action": "...", ...}
+```
+
+| Scope action | Parameters | Effect |
+|---|---|---|
+| `walk` | `kind` | Walks the scope now. `kind=full` forces a full walk; otherwise the planner chooses |
+| `preview` | - | Lists the scope in full and reports new, changed, unchanged and absent, **writing nothing** |
+| `reset-scope` | - | Clears the cursor and watermark, keeps the membership; the next walk is full |
+| `discard-sweep` | - | Drops a withheld sweep and makes the scope due for a full walk |
+| `confirm-sweep` | `confirm` | **Destructive.** Reports the withheld members as having left |
+
+`{scope}` is the scope key as the task's scope codec writes it. A key containing a slash has to be
+percent-encoded by the caller, and a deployment whose firewall rejects encoded slashes cannot address
+such a scope here.
+
+**A sweep is withheld.** Read the scope. If the partner really did remove that much, `confirm-sweep`.
+If it was an outage or a permissions change, `discard-sweep` and fix the cause; the scope is listed
+again in full. Until then the scope keeps walking and applying - only removals wait.
+
+**Members are quarantined.** `GET /actuator/reconciliation/{enumeration}` lists a sample with
+`lastError`. Fix the cause, then `requeue-members`: budgets are reset and the scopes that held them are
+made due for a full walk, which is the only kind certain to list them again. A scope does not sweep
+while a member it lists is quarantined.
+
 ## Configuration
 
 Bound from `@ConfigurationProperties("ludwig.reconciliation")`.
@@ -631,7 +849,7 @@ the old loop had no backoff, no isolation, no leader election and no way to tell
 
 ## Schema (PostgreSQL only)
 
-Seven tables, shipped as `db/changelog/reconciliation/reconciliation-changelog.xml` and applied by
+Nine tables, shipped as `db/changelog/reconciliation/reconciliation-changelog.xml` and applied by
 `ReconciliationLiquibaseAutoConfiguration` as an independent `SpringLiquibase` bean alongside the
 application's own. Set `ludwig.reconciliation.liquibase.enabled=false` to fold it into your own master
 changelog.
@@ -641,6 +859,8 @@ changelog.
 | `sync_inbox_record` | Staged external records, missing markers and fetch-failure tickets |
 | `sync_task_state` | Cursor and watermark, per task and tier |
 | `sync_remote_job` | Asynchronous jobs and everything needed to pick one back up |
+| `sync_scope_state` | Per enumeration and scope: cursor, watermark, generation and due time |
+| `sync_scope_member` | Which members each scope has, the walk that last saw each, and its payload hash |
 | `sync_quota_lease` | Occupied quota slots |
 | `sync_quota_waiter` | The queue in front of each quota |
 | `sync_audit_record` | The persisted audit trail |
@@ -678,6 +898,13 @@ task.
   sharing a quota; a crash between submit and commit producing no resubmit under `assume-submitted`;
   adoption via `listActive()`; job expiry with remote cancellation; and adoption of an in-flight job
   rather than resubmission.
+
+- **Enumerations** (unit, ArchUnit and Testcontainers Postgres) - per-field precedence and every validator
+  case; walk-kind planning; a first walk creating every member; the unchanged-hash short-circuit; a
+  scope added later getting a full first walk while an older one walks incrementally; a member of two
+  scopes leaving one; a walk interrupted by a failed page resuming from its checkpoint; one failing
+  member isolated, quarantined and requeued; the three sweep guards, including a partner that suddenly
+  lists nothing; a self-similar tree walked to a fixed point; the run lease; and the operator actions.
 
 Integration tests need a running Docker daemon.
 

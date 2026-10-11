@@ -6,7 +6,9 @@ import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
 import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
 import org.springframework.boot.actuate.endpoint.annotation.Selector;
 import org.springframework.boot.actuate.endpoint.annotation.WriteOperation;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.lang.Nullable;
 import ru.ludwigandreas.db.core.audit.AuditorProvider;
 import ru.ludwigandreas.reconciliation.api.DemandTier;
 import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent;
@@ -19,6 +21,7 @@ import ru.ludwigandreas.reconciliation.engine.ReconciliationRuntime;
 import ru.ludwigandreas.reconciliation.engine.TaskRegistry;
 import ru.ludwigandreas.reconciliation.engine.TaskRunner;
 import ru.ludwigandreas.reconciliation.engine.TaskStateService;
+import ru.ludwigandreas.reconciliation.engine.enumeration.EnumerationOperations;
 import ru.ludwigandreas.reconciliation.entity.QuotaLease;
 import ru.ludwigandreas.reconciliation.entity.SyncInboxRecord;
 import ru.ludwigandreas.reconciliation.entity.SyncRecordStatus;
@@ -58,6 +61,16 @@ import java.util.UUID;
  * {@code confirm=true} in the call itself even then - two switches, because the environment where
  * they are permissible and the moment they are intended are different decisions.
  *
+ * <h2>Enumerations</h2>
+ *
+ * <p>An enumeration is addressed by the same task selector, and its scopes by a second one:
+ * {@code /actuator/reconciliation/{task}/{scope}}. The scope is a path segment rather than another
+ * parameter on {@link #operate} because adding a parameter changes that method's signature, which is
+ * a breaking change to anything compiled against this class, while adding an operation is not. A
+ * scope key therefore has to survive being a path segment: one containing a slash must be
+ * percent-encoded by the caller, and a deployment whose firewall rejects encoded slashes cannot
+ * address such a scope here.
+ *
  * <p>Secure the endpoint through {@code security-spring-boot-starter} like any other; this class
  * records who did what and refuses what it is not allowed to do, and does not authenticate anybody.
  */
@@ -80,6 +93,9 @@ public class ReconciliationEndpoint {
     private final ReconciliationProperties properties;
     private final AuditSink auditLogger;
     private final AuditorProvider<String> auditor;
+
+    /** Null in a context that wires this endpoint by hand without the enumeration beans. */
+    private EnumerationOperations enumerations;
 
     /**
      * Creates the endpoint.
@@ -122,6 +138,19 @@ public class ReconciliationEndpoint {
     }
 
     /**
+     * Hands the endpoint the second task kind.
+     *
+     * <p>A setter, and optional, rather than a twelfth constructor parameter: the constructor is what
+     * a service that declares this endpoint itself compiles against, and it does not change.
+     *
+     * @param enumerations what an operator can see and do about enumerations
+     */
+    @Autowired(required = false)
+    public void setEnumerations(EnumerationOperations enumerations) {
+        this.enumerations = enumerations;
+    }
+
+    /**
      * Every task, with its schedule, backlog and freshness, plus every quota's saturation.
      *
      * @return the overview
@@ -131,7 +160,14 @@ public class ReconciliationEndpoint {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("tasks", registry.all().stream().map(this::summarize).toList());
         view.put("quotas", quota.names().stream().map(this::summarizeQuota).toList());
-        view.put("passes", runtime.passNames());
+        if (enumerations == null) {
+            view.put("passes", runtime.passNames());
+            return view;
+        }
+        view.put("enumerations", enumerations.summaries());
+        List<String> passes = new ArrayList<>(runtime.passNames());
+        passes.addAll(enumerations.passNames());
+        view.put("passes", passes);
         return view;
     }
 
@@ -143,6 +179,9 @@ public class ReconciliationEndpoint {
      */
     @ReadOperation
     public Map<String, Object> task(@Selector String task) {
+        if (isEnumeration(task)) {
+            return enumerations.detail(task);
+        }
         RegisteredTask<?, ?, ?> registered = require(task);
         TaskSettings settings = registered.settings();
 
@@ -192,8 +231,13 @@ public class ReconciliationEndpoint {
                                        String jobId,
                                        String leaseId,
                                        Boolean confirm) {
-        require(task);
         String operation = action == null ? "" : action.toLowerCase(Locale.ROOT);
+        if (isEnumeration(task)) {
+            Map<String, Object> result = enumerations.operate(task, operation);
+            audit(task, operation, String.valueOf(result));
+            return result;
+        }
+        require(task);
         Map<String, Object> result = switch (operation) {
             case "run" -> run(task, tier);
             case "dry-run" -> runner.dryRun(require(task), tierOf(tier));
@@ -209,6 +253,61 @@ public class ReconciliationEndpoint {
         };
         audit(task, operation, String.valueOf(result));
         return result;
+    }
+
+    /**
+     * One scope of an enumeration: where its walk got to, when it was last listed, and whether a
+     * sweep is being withheld.
+     *
+     * @param task  the enumeration name
+     * @param scope the scope key, in the form the enumeration's scope codec writes
+     * @return the scope view
+     */
+    @ReadOperation
+    public Map<String, Object> scope(@Selector String task, @Selector String scope) {
+        return requireEnumerations(task).scope(task, scope);
+    }
+
+    /**
+     * Performs an operation on one scope of an enumeration.
+     *
+     * @param task    the enumeration name
+     * @param scope   the scope key, in the form the enumeration's scope codec writes
+     * @param action  one of {@code walk}, {@code preview}, {@code reset-scope}, {@code discard-sweep},
+     *                {@code confirm-sweep}
+     * @param kind    {@code full} to force a full walk, for {@code walk}; otherwise the planner chooses
+     * @param confirm required for {@code confirm-sweep}; see the class comment
+     * @return what happened
+     */
+    @WriteOperation
+    public Map<String, Object> operateScope(@Selector String task,
+                                            @Selector String scope,
+                                            String action,
+                                            @Nullable String kind,
+                                            @Nullable Boolean confirm) {
+        EnumerationOperations operations = requireEnumerations(task);
+        String operation = action == null ? "" : action.toLowerCase(Locale.ROOT);
+        if (EnumerationOperations.isDestructive(operation)) {
+            requireDestructive(operation, confirm);
+        }
+        Map<String, Object> result = operations.operateScope(task, scope, operation, kind);
+        // A preview writes nothing and changes nothing, so it is not an operator action to record.
+        if (!"preview".equals(operation)) {
+            audit(task, operation, scope + ": " + result);
+        }
+        return result;
+    }
+
+    private boolean isEnumeration(String task) {
+        return enumerations != null && enumerations.knows(task);
+    }
+
+    private EnumerationOperations requireEnumerations(String task) {
+        if (!isEnumeration(task)) {
+            throw new IllegalArgumentException("No such enumeration: '" + task + "'. Enumerations: "
+                    + (enumerations == null ? "(none)" : String.join(", ", enumerations.names())));
+        }
+        return enumerations;
     }
 
     private Map<String, Object> run(String task, String tier) {

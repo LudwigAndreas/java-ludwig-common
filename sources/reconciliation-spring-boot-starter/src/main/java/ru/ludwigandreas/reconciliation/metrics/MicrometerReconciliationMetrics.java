@@ -120,6 +120,33 @@ public class MicrometerReconciliationMetrics implements ReconciliationMetrics {
                 Tags.of("task", task, "resolution", resolution)).increment();
     }
 
+    @Override
+    public void recordScopeWalk(String task, String kind, String outcome, Duration duration) {
+        registry.timer(PREFIX + "scope.walk", Tags.of("task", task, "kind", kind, "outcome", outcome))
+                .record(duration);
+    }
+
+    @Override
+    public void recordMemberOutcome(String task, String outcome) {
+        registry.counter(PREFIX + "members.settled", Tags.of("task", task, "outcome", outcome)).increment();
+    }
+
+    @Override
+    public void recordMemberLeftUnhandled(String task) {
+        registry.counter(PREFIX + "members.left_unhandled", Tags.of("task", task)).increment();
+    }
+
+    @Override
+    public void registerScopeFreshnessLag(String task, Supplier<Number> lagSeconds) {
+        gauge(PREFIX + "scope.freshness.lag", Tags.of("task", task), lagSeconds);
+    }
+
+    @Override
+    public void registerScopeAttention(String task, Supplier<Number> quarantined, Supplier<Number> sweepsHeld) {
+        gauge(PREFIX + "members.quarantined", Tags.of("task", task), quarantined);
+        gauge(PREFIX + "sweep.held", Tags.of("task", task), sweepsHeld);
+    }
+
     private void gauge(String name, Tags tags, Supplier<Number> value) {
         Gauge.builder(name, value, supplier -> supplier.get().doubleValue())
                 .tags(tags)

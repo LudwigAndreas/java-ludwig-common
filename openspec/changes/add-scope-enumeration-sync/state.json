@@ -1,0 +1,53 @@
+{
+  "change": "add-scope-enumeration-sync",
+  "contract": {
+    "goal": "a second task kind in reconciliation-spring-boot-starter that mirrors a partner-side collection under a local scope row: per-scope paged walks, member create/update, membership tracking, guarded removal reporting",
+    "output": "EnumerationTask SPI, sync_scope_state + sync_scope_member tables, discover and walk passes, sweep with its three guards, configuration + validation, metrics, audit, actuator actions, README en+ru",
+    "constraints": [
+      "only reconciliation-spring-boot-starter is touched; no POM change, no new in-repo dependency",
+      "SyncTask, the four Fetcher shapes, RecordApplier and every existing table are unchanged",
+      "no SQL carve-out: QueryDSL and JPA only",
+      "enumeration never writes sync_inbox_record",
+      "no dependency on db-core SoftDeleteEntity; removal is reported to the integration, never performed",
+      "audit only through AuditSink, no try/catch around record"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_api_baseline.sh",
+      "scripts/check_migrations.sh",
+      "scripts/check_build_metadata.sh",
+      "mvn -q validate",
+      "mvn -pl :reconciliation-spring-boot-starter -am verify",
+      "openspec validate add-scope-enumeration-sync"
+    ]
+  },
+  "current_task": "8.8",
+  "rollback_point": "7abdcd43cc58c6043aae2ee882ff9bff9118c7d3",
+  "decisions": [
+    "tables use the module's surrogate UUID id (GeneratedEntity) plus a unique constraint on the natural key, not a composite primary key as design D3 sketched - every existing entity in the module is shaped that way",
+    "generation counts COMPLETED full walks; a full walk in progress stamps members with generation+1 and the counter moves only at completion. Refines design D5: incrementing at walk start would let an abandoned walk count as a miss and break 'N consecutive completed full walks'",
+    "no walk_clean column: a walk is clean when its scope has no member in FAILED or QUARANTINED at completion, which is the same fact read from where it already lives",
+    "API stays additive because revapi treats a changed constructor or method signature as breaking under a minor bump: enumeration gets its own EnumerationRuntime and EnumerationConfigurationValidator instead of new constructor parameters on ReconciliationRuntime / ReconciliationConfigurationValidator; new ReconciliationMetrics methods are default methods; the endpoint receives its enumeration collaborator through an optional setter",
+    "scope-level operator actions are new operations with a second selector, /actuator/reconciliation/{task}/{scope}, on the SAME endpoint id, instead of extra parameters on the existing operate(). Same revapi reason. Design D10 and tasks 3.3/5.1/5.4 are reworded to match; the spec ('through the existing reconciliation management endpoint') is unchanged",
+    "new repository queries are QueryDSL predicates and update/delete clauses, per the data-access capability, even though the module's older repositories use derived methods and JPQL",
+    "integration tests are named ...IntegrationTest, not ...IT: reconciliation-spring-boot-starter binds no failsafe (only job-core does), so surefire's default includes are what runs them and *IT matches none. tasks.md commands changed from -Dit.test=...IT to -Dtest=...IntegrationTest",
+    "freshness lag is measured from each scope's last completed listing (plus the task's interval), not from next_due_at: a failing scope's backoff pushes next_due_at into the future, so a gauge reading it would report a broken scope as on time. Added registered_at for scopes never listed",
+    "the audit check for task 5.2 is an integration test (EnumerationAuditIntegrationTest) against a recording AuditSink bean, not a unit test: audit-core composes every AuditSink bean, so the real trail is observable without mocking the engine",
+    "task 3.4: the module's annotation-processor list is explicit (Lombok, QueryDSL) and does not run spring-boot-configuration-processor, so additional-spring-configuration-metadata.json is hand-written and is the only metadata; the enumeration-defaults keys were added there",
+    "tasks 7.1/7.2 ticked although check_image_pins exits non-zero: its only finding is the archived proposal above; neither README is listed, and openspec validate passes"
+  ],
+  "failures": [
+    "task 5.2, attempt 1: EnumerationAuditIntegrationTest asserted the walk kind appeared in the audit envelope. It does not - ReconciliationAuditEvent.toAuditEvent carries `detail` only into a failure or partial outcome, for every event this module emits. The test's expectation was wrong, not the code; the assertion was removed rather than the shared envelope changed",
+    "gate 8.1: scripts/check_image_pins.sh fails on openspec/changes/archive/2026-10-11-adopt-local-run-in-notification-service/proposal.md:78 - a file committed in 7abdcd4 and untouched by this change, where the prose 'no new image: the mail server' is read as an unpinned image reference. Neither the archived proposal nor the checker was edited. It lists no file of this change",
+    "gate 8.2: scripts/check_api_baseline.sh fails for every module: the 2.0.0 baseline cannot be fetched from nexus.example.internal and is not in ~/.m2. Environmental and pre-existing, but it means revapi compared this change against nothing - API compatibility with 2.0.0 is unverified",
+    "gate 8.8: scripts/gate.sh stops at its first command (8.1), so the remaining commands were run individually: check_migrations, check_build_metadata, mvn -q validate, mvn -pl :reconciliation-spring-boot-starter -am verify (215 tests, BUILD SUCCESS) and openspec validate all pass"
+  ],
+  "open_questions": [
+    "should discovery be skippable for a task that only uses ScopeSource.single?",
+    "does TaskRunner.execute advance an existing SyncTask watermark past unread pages when a paged walk stops at the per-run cap? (outside this change)"
+  ],
+  "pending_human": [
+    "check_image_pins fails on an archived proposal already on master - decide whether to reword that line or teach the checker about prose",
+    "check_api_baseline cannot reach the releases repository - rerun where the 2.0.0 artifacts resolve, so revapi actually checks this change"
+  ]
+}

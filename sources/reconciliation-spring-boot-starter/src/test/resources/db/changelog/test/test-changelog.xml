@@ -18,5 +18,6 @@
       "ludwig-reconciliation-test", so it cannot be mistaken for one of the module's own.
     -->
     <include file="classpath:db/changelog/test/0001-create-local-order.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/test/0002-create-local-collection.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

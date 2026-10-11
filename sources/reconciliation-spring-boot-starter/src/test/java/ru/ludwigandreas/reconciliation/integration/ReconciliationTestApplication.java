@@ -6,6 +6,8 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import ru.ludwigandreas.db.core.repository.BaseRepositoryImpl;
+import ru.ludwigandreas.reconciliation.integration.testmodel.RecordingAuditSink;
+import ru.ludwigandreas.reconciliation.integration.testmodel.StubCollectionPartner;
 import ru.ludwigandreas.reconciliation.integration.testmodel.StubPartner;
 
 /**
@@ -38,6 +40,16 @@ public class ReconciliationTestApplication {
     @Bean
     public StubPartner stubPartner() {
         return new StubPartner();
+    }
+
+    @Bean
+    public StubCollectionPartner stubCollectionPartner() {
+        return new StubCollectionPartner();
+    }
+
+    @Bean
+    public RecordingAuditSink recordingAuditSink() {
+        return new RecordingAuditSink();
     }
 
     // The three task beans are NOT declared here. @ReconciliationTask is meta-annotated @Component, so

@@ -111,4 +111,41 @@ class ReconciliationArchitectureTest {
 
         rule.check(CLASSES);
     }
+
+    /**
+     * Nothing in this module knows how an integration removes a row.
+     *
+     * <p>An enumeration reports that a member left a scope and stops there; whether that is a soft
+     * delete, a hard delete or an unlink is the integration's decision. A dependency on
+     * {@code db-core}'s soft-delete base type would be the engine quietly making it, and would tie
+     * every integration to one answer.
+     */
+    @Test
+    void nothingDependsOnTheSoftDeleteBaseEntity() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..reconciliation..")
+                .should().dependOnClassesThat()
+                .haveFullyQualifiedName("ru.ludwigandreas.db.core.entity.SoftDeleteEntity")
+                .because("removal is reported to the integration and never performed by the engine");
+
+        rule.check(CLASSES);
+    }
+
+    /**
+     * The enumeration engine never writes the staging inbox.
+     *
+     * <p>An enumeration applies a page in one transaction and relies on the next walk as its retry;
+     * a staged row per member per walk would cost a table the size of the mirrored data, every walk,
+     * for a retry that re-reads the feed anyway. The integration test asserts the table stays empty;
+     * this stops the dependency from appearing in the first place.
+     */
+    @Test
+    void theEnumerationEngineDoesNotTouchTheStagingInbox() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..reconciliation.engine.enumeration..")
+                .should().dependOnClassesThat().haveSimpleNameStartingWith("SyncInboxRecord")
+                .because("enumeration members are applied directly and never staged");
+
+        rule.check(CLASSES);
+    }
 }

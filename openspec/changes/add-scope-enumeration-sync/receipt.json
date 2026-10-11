@@ -1,0 +1,38 @@
+{
+  "change": "add-scope-enumeration-sync",
+  "model": "claude-opus-5-5",
+  "index_version": "e325cfcb99c8d3e83ae151ee02dc0dcdb76f412e39d578e4dc5afb0ca729e08f",
+  "modules_touched": [
+    "reconciliation-spring-boot-starter"
+  ],
+  "gate": {
+    "check_image_pins": "fail (pre-existing: archived proposal on master, not a file of this change)",
+    "check_api_baseline": "fail (pre-existing: 2.0.0 baseline unresolvable from this machine)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "validate": "pass",
+    "verify": "pass",
+    "openspec_validate": "pass",
+    "gate_sh": "fail (stops at check_image_pins)"
+  },
+  "tests": {
+    "added": 99,
+    "passed": 215,
+    "failed": 0
+  },
+  "retries": 1,
+  "human_corrections": 1,
+  "rollback_point": "7abdcd43cc58c6043aae2ee882ff9bff9118c7d3",
+  "unresolved": [
+    "API compatibility against 2.0.0 is unverified: revapi had no baseline to compare with",
+    "scripts/gate.sh does not pass end to end because of two failures that predate this change",
+    "a scope with a single member always exceeds the default sweep.max-fraction, so its removal is always withheld for an operator; a minimum-size floor would be a spec change",
+    "db-core SoftDeleteEntity's documented @SQLRestriction hides removed rows from an upsert's lookup; an integration using it cannot restore a returning member without a find-including-deleted path (a db-core change, declared a non-goal here)",
+    "the freshness lag holds a scope to the incremental interval whenever one is configured, so a scope whose feed never yields a timestamp (and therefore always walks in full) reads as late between full walks",
+    "discovery reads every scope key on each discover pass; not measured against a large scope table",
+    "the two-statement membership write (bulk mark-seen plus inserts) was chosen over a SQL carve-out and has not been measured under load",
+    "TaskRunner.execute appears to advance an existing SyncTask watermark after a paged walk that stopped at the per-run cap; not verified, outside this change",
+    "the actuator endpoint was exercised by constructing it in tests; routing of the two-selector operations over HTTP was not exercised",
+    "nothing is committed: the new files are only marked intent-to-add so the repository's git-based checks can see them"
+  ]
+}

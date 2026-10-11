@@ -62,6 +62,18 @@ public class ReconciliationProperties {
     @Valid
     private Map<String, Task> tasks = new LinkedHashMap<>();
 
+    /** Applied to every enumeration that does not override them, field by field. */
+    @Valid
+    private final EnumerationDefaults enumerationDefaults = new EnumerationDefaults();
+
+    /**
+     * The enumerations. Each key must match a {@code @ReconciliationEnumeration} bean's value, and
+     * must not also be a key under {@link #tasks}: the two kinds share run-lock names and the
+     * actuator's task selector.
+     */
+    @Valid
+    private Map<String, Enumeration> enumerations = new LinkedHashMap<>();
+
     /** Whether this module applies its own changelog. */
     @Valid
     private final Liquibase liquibase = new Liquibase();
@@ -564,5 +576,129 @@ public class ReconciliationProperties {
          */
         @NotNull
         private Duration staleRecordTimeout = Duration.ofMinutes(5);
+    }
+
+    /**
+     * Enumeration settings that may be set once for every enumeration.
+     *
+     * <p>Every field is nullable so that "not set here" is distinguishable from a value, which is what
+     * lets the resolver merge task, then defaults, then the built-in value per field.
+     */
+    @Getter
+    @Setter
+    public static class EnumerationDefaults {
+
+        /** When the walk pass runs, and how long one run may hold the task's lease. */
+        @Valid
+        private Schedule schedule;
+
+        /** How scopes are discovered. */
+        @Valid
+        private Discovery discovery;
+
+        /** How fresh a scope has to be. */
+        @Valid
+        private Refresh refresh;
+
+        /** How a scope is walked. */
+        @Valid
+        private Walk walk;
+
+        /** The guards on reporting members as having left. */
+        @Valid
+        private Sweep sweep;
+
+        /** The attempt budget and backoff of a member that cannot be applied. */
+        @Valid
+        private Retry retry;
+
+        /** Whether walks and removals are audited. Only {@code enabled} is read. */
+        @Valid
+        private Audit audit;
+    }
+
+    /** One enumeration. */
+    @Getter
+    @Setter
+    public static class Enumeration extends EnumerationDefaults {
+
+        /** Whether the enumeration runs. A disabled one is still validated. */
+        private boolean enabled = true;
+
+        /** A named REST client the feed uses, validated to exist. */
+        private String restClient;
+
+        /** A named rate limit every feed call takes a permit from, validated to exist. */
+        private String rateLimit;
+    }
+
+    /** How an enumeration finds its scopes. */
+    @Getter
+    @Setter
+    public static class Discovery {
+
+        /** How often the scope source is paged through for scopes not yet registered. */
+        private Duration fixedDelay;
+
+        /** Scopes read per page of the scope source. */
+        @Positive
+        private Integer pageSize;
+    }
+
+    /** How fresh a scope has to be. This is the enumeration's freshness contract. */
+    @Getter
+    @Setter
+    public static class Refresh {
+
+        /** How often every member of a scope is listed again. Only a full walk can show one is gone. */
+        private Duration fullInterval;
+
+        /**
+         * How often changes since the scope's watermark are fetched between full walks.
+         *
+         * <p>Absent by default. Setting it for a feed that does not declare changed-since support is
+         * refused at startup.
+         */
+        private Duration incrementalInterval;
+    }
+
+    /** How a scope is walked. */
+    @Getter
+    @Setter
+    public static class Walk {
+
+        /** Items requested per page of the feed. */
+        @Positive
+        private Integer pageSize;
+
+        /** Scopes walked at once by one run. */
+        @Positive
+        private Integer maxConcurrency;
+
+        /** The most scopes one run takes; the rest wait for the next. */
+        @Positive
+        private Integer maxScopesPerRun;
+    }
+
+    /** The guards on reporting members as having left a scope. */
+    @Getter
+    @Setter
+    public static class Sweep {
+
+        /**
+         * How many consecutive completed full walks must omit a member before it is reported.
+         *
+         * <p>One by default. Two for a partner that pages by offset, where an item shifting between
+         * pages mid-walk can be missed once without being gone.
+         */
+        private Integer confirmAfterMisses;
+
+        /**
+         * The largest share of a scope's members one sweep may report without an operator.
+         *
+         * <p>A partner answering with an empty list during an outage is otherwise indistinguishable
+         * from every member having been deleted.
+         */
+        private Double maxFraction;
     }
 }

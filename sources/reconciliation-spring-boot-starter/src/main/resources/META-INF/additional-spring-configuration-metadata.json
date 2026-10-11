@@ -10,6 +10,77 @@
       "name": "ludwig.reconciliation.instance",
       "type": "java.lang.String",
       "description": "Identity written into locked_by and owner_instance columns. Defaults to the shared job-core instance identity, which keeps one pod looking like one instance across every module that claims rows."
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.schedule.fixed-delay",
+      "type": "java.time.Duration",
+      "description": "How often an enumeration's walk pass runs. The pass only takes scopes that are due, so this is how soon a due scope is noticed, not how often the partner is called.",
+      "defaultValue": "1m"
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.schedule.run-timeout",
+      "type": "java.time.Duration",
+      "description": "How long one walk pass may hold the enumeration's run lease. A walk still in progress at the timeout stops at its checkpoint and resumes on the next pass.",
+      "defaultValue": "15m"
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.discovery.fixed-delay",
+      "type": "java.time.Duration",
+      "description": "How often the scope source is paged through for scopes not yet registered. A new scope is walked at most this long after its local row appears.",
+      "defaultValue": "5m"
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.discovery.page-size",
+      "type": "java.lang.Integer",
+      "description": "Scopes read per page of the scope source.",
+      "defaultValue": 1000
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.refresh.full-interval",
+      "type": "java.time.Duration",
+      "description": "How often every member of a scope is listed again. Only a full walk can show that a member is gone, so this is also the longest a removal can go unnoticed.",
+      "defaultValue": "6h"
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.refresh.incremental-interval",
+      "type": "java.time.Duration",
+      "description": "How often changes since a scope's watermark are fetched between full walks. Absent by default; setting it for a feed that does not declare changed-since support is refused at startup."
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.walk.page-size",
+      "type": "java.lang.Integer",
+      "description": "Items requested per page of the feed. A page is applied in one transaction, so this is also the unit that is replayed item by item when one member fails.",
+      "defaultValue": 100
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.walk.max-concurrency",
+      "type": "java.lang.Integer",
+      "description": "Scopes walked at once by one pass.",
+      "defaultValue": 2
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.walk.max-scopes-per-run",
+      "type": "java.lang.Integer",
+      "description": "The most scopes one pass takes; the rest wait for the next. Scopes that have never completed a walk are taken first.",
+      "defaultValue": 50
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.sweep.confirm-after-misses",
+      "type": "java.lang.Integer",
+      "description": "How many consecutive completed full walks must omit a member before it is reported as having left. Use 2 for a partner that pages by offset, where an item shifting between pages mid-walk can be missed once without being gone.",
+      "defaultValue": 1
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.sweep.max-fraction",
+      "type": "java.lang.Double",
+      "description": "The largest share of a scope's members one sweep may report without an operator. A larger sweep is withheld until confirmed or discarded through the reconciliation endpoint, because a partner answering with an empty list during an outage looks exactly like every member having been deleted. Note that a scope with a single member is always above 0.5; set 1 to switch the guard off for enumerations of very small scopes.",
+      "defaultValue": 0.5
+    },
+    {
+      "name": "ludwig.reconciliation.enumeration-defaults.retry.max-attempts",
+      "type": "java.lang.Integer",
+      "description": "Attempts to apply a member, or to report it as having left, before it is quarantined.",
+      "defaultValue": 8
     }
   ],
   "hints": [
