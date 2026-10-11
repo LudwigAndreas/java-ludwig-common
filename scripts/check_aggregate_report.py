@@ -14,7 +14,12 @@ jar - it ships checkstyle.xml and has no .java at all - so zero instructions the
 a missing measurement. Treating "no code to measure" and "code that was not measured" as the same
 thing makes the check cry wolf on the first run, which is how a check gets deleted.
 
-Exit codes: 0 all good, 1 the report disagrees with the manifest, 3 the report is missing.
+It also checks, before anything else, that the root POM's sonar.coverage.jacoco.xmlReportPaths
+names this same report. SonarCloud reads coverage from that one path; if the report moves and the
+property does not, the analysis logs a single warning and reports 0% on a green build.
+
+Exit codes: 0 all good, 1 the report disagrees with the manifest or the Sonar coverage path
+disagrees with the report's location, 3 the report is missing.
 
 Run after `mvn clean install` / `mvn verify`:
 
@@ -28,10 +33,35 @@ import xml.etree.ElementTree as ET
 REPORT = os.path.join("build", "jacoco-aggregate", "target", "site",
                       "jacoco-aggregate", "jacoco.xml")
 
+SONAR_PROPERTY = "sonar.coverage.jacoco.xmlReportPaths"
+POM_NS = "{http://maven.apache.org/POM/4.0.0}"
+
+
+def sonar_path_problem():
+    """Return why the root POM's Sonar coverage path is wrong, or None when it is right."""
+    node = ET.parse("pom.xml").getroot().find(
+        "%sproperties/%s%s" % (POM_NS, POM_NS, SONAR_PROPERTY))
+    declared = (node.text or "").strip() if node is not None else ""
+    expected = "${maven.multiModuleProjectDirectory}/" + REPORT.replace(os.sep, "/")
+    if declared == expected:
+        return None
+    return ("%s in the root POM does not name the aggregate report\n"
+            "  declared: %s\n"
+            "  expected: %s\n"
+            "SonarCloud would read no coverage and still report success.\n"
+            % (SONAR_PROPERTY, declared or "(not set)", expected))
+
 
 def main():
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(root_dir)
+
+    # Before the report-exists check: this is a fact about two files in the tree, and it should
+    # fail the same way whether or not anything has been built.
+    sonar_problem = sonar_path_problem()
+    if sonar_problem:
+        sys.stderr.write(sonar_problem)
+        return 1
 
     if not os.path.isfile(REPORT):
         sys.stderr.write(

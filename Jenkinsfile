@@ -125,6 +125,34 @@ pipeline {
             }
         }
 
+        stage('Sonar analysis') {
+            steps {
+                // A bare goal, not a lifecycle phase, and in the same workspace as the stage
+                // above on purpose: the classes, the execution data and the aggregate coverage
+                // report are already in target/, and `install` has put every module in the local
+                // repository, so the scanner has nothing to rebuild. Run it in a fresh workspace
+                // and it analyses sources with no bytecode and no coverage.
+                //
+                // Full coordinates rather than `sonar:sonar`, so the version is the one pinned in
+                // the root POM's pluginManagement. Organization, project key, host and the
+                // coverage report path are properties of the root POM; nothing is repeated here.
+                //
+                // SONAR_TOKEN is read by the scanner from the environment. It is a Jenkins
+                // secret-text credential bound for this stage only, like the registry password
+                // below, and it appears in no POM.
+                //
+                // The quality gate is reported, not awaited: sonar.qualitygate.wait is not set, so
+                // a failing gate shows in SonarCloud and on the pull request but does not fail
+                // this build. Making it blocking is one -D here, and a decision of its own.
+                withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                        mvn $MAVEN_ARGS -Drevision=$LUDWIG_REVISION \
+                            org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+                    '''
+                }
+            }
+        }
+
         stage('Publish artifacts') {
             when { branch 'master' }
             steps {

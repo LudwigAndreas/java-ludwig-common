@@ -5,29 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CHANGELOG.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Jenkinsfile" beforeDir="false" afterPath="$PROJECT_DIR$/Jenkinsfile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PROJECT_INDEX.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_INDEX.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/harness-enforcement.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/harness-enforcement.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/runbook.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/runbook.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/openspec/config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/config.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/README.ru.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/project-index.json" beforeDir="false" afterPath="$PROJECT_DIR$/project-index.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityKafkaAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/src/main/java/ru/ludwigandreas/identity/config/IdentityKafkaAutoConfiguration.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/authn/jwt/AudienceValidatingJwtDecoderPostProcessor.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/authn/jwt/AudienceValidatingJwtDecoderPostProcessor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support/src/main/java/ru/ludwigandreas/testsupport/container/Containers.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/src/main/java/ru/ludwigandreas/testsupport/container/Containers.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/src/main/java/ru/ludwigandreas/usersettings/config/UserSettingsHotReloadAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/src/main/java/ru/ludwigandreas/usersettings/config/UserSettingsHotReloadAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/check_aggregate_report.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/check_aggregate_report.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -239,7 +224,7 @@
       <option name="presentableId" value="Default" />
       <updated>1786817614729</updated>
       <workItem from="1786817616340" duration="102896000" />
-      <workItem from="1791636263581" duration="11041000" />
+      <workItem from="1791636263581" duration="25002000" />
     </task>
     <servers />
   </component>

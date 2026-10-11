@@ -6,9 +6,9 @@
 |---|---|
 | revision | `1.1.0-SNAPSHOT` |
 | modules | 34 |
-| commit | `a1bc188` (`master`) |
-| generated | 2026-10-10T20:07:12.013617Z |
-| **freshness** | POM-set SHA `e325cfcb99c8d3e8` · newest POM `services/notification-service/pom.xml` @ 2026-10-10T19:47:10.324342Z |
+| commit | `d536246` (`master`) |
+| generated | 2026-10-11T18:26:57.714326Z |
+| **freshness** | POM-set SHA `a8531a62c7a98384` · newest POM `pom.xml` @ 2026-10-11T18:26:47.743706Z |
 
 The freshness row is how you tell this index is stale: `scripts/manifest.sh stale` recomputes the POM-set SHA and exits non-zero if it differs. It is content-based, not timestamp-based, so a checkout or a branch switch does not report a false stale.
 
@@ -456,7 +456,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - auto-configuration: `sources/identity-projection-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - Liquibase: `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0001-create-security-user.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0002-create-security-user-role.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0003-create-security-partner.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0004-create-security-partner-role.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0005-create-security-grant.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0006-security-grant-dimension-check.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0007-security-user-contact.sql`, `sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml`
 - test dirs: unit (`sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit`)
-- test classes: 1 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 2 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :notification-service -am verify`
 
 ### `jacoco-aggregate`
@@ -623,9 +623,9 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/reconciliation-spring-boot-starter/README.md`](sources/reconciliation-spring-boot-starter/README.md) · [`sources/reconciliation-spring-boot-starter/README.ru.md`](sources/reconciliation-spring-boot-starter/README.ru.md)
 - surfaces: actuator
 - auto-configuration: `sources/reconciliation-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Liquibase: `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0001-create-inbox-record.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0002-index-inbox-claim.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0003-index-inbox-key-history.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0004-index-inbox-stale-and-ops.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0005-index-inbox-fetch-suppression.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0006-create-task-state.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0007-create-remote-job.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0008-index-remote-job.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0009-create-quota-lease.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0010-create-quota-waiter.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0011-create-audit-record.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml`
+- Liquibase: `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0001-create-inbox-record.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0002-index-inbox-claim.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0003-index-inbox-key-history.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0004-index-inbox-stale-and-ops.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0005-index-inbox-fetch-suppression.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0006-create-task-state.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0007-create-remote-job.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0008-index-remote-job.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0009-create-quota-lease.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0010-create-quota-waiter.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0011-create-audit-record.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0012-create-scope-state.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0013-create-scope-member.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0014-index-scope-state-due.sql`, `sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml`
 - test dirs: integration (`sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration`), unit (`sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/unit`)
-- test classes: 7 surefire, 3 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 15 surefire, 14 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :reconciliation-spring-boot-starter -am verify`
 
 ### `rest-client-spring-boot-starter`
@@ -650,7 +650,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - auto-configuration: `sources/security-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - i18n: `sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages.properties`, `sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages_ru.properties`
 - test dirs: unit (`sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit`)
-- test classes: 24 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 25 surefire, 0 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :security-spring-boot-starter -am verify`, `mvn -pl :crud-service-example -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :identity-projection-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :test-support-security -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `test-support`
@@ -661,7 +661,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - README [`sources/test-support/README.md`](sources/test-support/README.md) · [`sources/test-support/README.ru.md`](sources/test-support/README.ru.md)
 - surfaces: none
 - test dirs: integration (`sources/test-support/src/test/java/ru/ludwigandreas/testsupport/integration`), unit (`sources/test-support/src/test/java/ru/ludwigandreas/testsupport/unit`)
-- test classes: 1 surefire, 1 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 1 surefire, 2 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :test-support -am verify`, `mvn -pl :audit-spring-boot-starter -am verify`, `mvn -pl :cache-spring-boot-starter -am verify`, `mvn -pl :db-core -am verify`, `mvn -pl :export-spring-boot-starter -am verify`, `mvn -pl :file-action-spring-boot-starter -am verify`, `mvn -pl :file-ingest-spring-boot-starter -am verify`, `mvn -pl :idempotency-spring-boot-starter -am verify`, `mvn -pl :job-core -am verify`, `mvn -pl :messaging-spring-boot-starter -am verify`, `mvn -pl :object-storage-spring-boot-starter -am verify`, `mvn -pl :odata-filter-spring-boot-starter -am verify`, `mvn -pl :outbox-spring-boot-starter -am verify`, `mvn -pl :pat-spring-boot-starter -am verify`, `mvn -pl :reconciliation-spring-boot-starter -am verify`, `mvn -pl :test-support-local -am verify`, `mvn -pl :test-support-security -am verify`, `mvn -pl :user-settings-spring-boot-starter -am verify`
 
 ### `test-support-local`
@@ -696,7 +696,7 @@ jacoco-aggregate                           -> web-core-spring-boot-starter
 - Liquibase: `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0001-create-user-setting-value.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0002-user-setting-value-scope-check.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0003-create-user-setting-audit.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0004-create-user-consent.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/0005-user-consent-update-guard.sql`, `sources/user-settings-spring-boot-starter/src/main/resources/db/changelog/user-settings/user-settings-changelog.xml`
 - i18n: `sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages.properties`, `sources/user-settings-spring-boot-starter/src/main/resources/i18n/ludwig-user-settings-messages_ru.properties`
 - test dirs: architecture (`sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture`), integration (`sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/integration`), unit (`sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/unit`)
-- test classes: 14 surefire, 3 failsafe (`*IT` / `*IntegrationTest`)
+- test classes: 15 surefire, 3 failsafe (`*IT` / `*IntegrationTest`)
 - **gate**: `mvn -q validate`, then `mvn -pl :user-settings-spring-boot-starter -am verify`, `mvn -pl :notification-service -am verify`
 
 ### `web-core-spring-boot-starter`

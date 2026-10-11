@@ -419,6 +419,30 @@ Three tools split the work and do not overlap: `architecture-rules` owns structu
 `checkstyle-rules` owns source text, SonarQube owns bugs and security. Each module's README states
 what it deliberately leaves to the other two.
 
+### Static analysis (SonarCloud)
+
+The third tool runs on SonarCloud and is an explicit command, never a side effect of the build:
+`mvn clean install` does not contact SonarCloud.
+
+```bash
+mvn clean install                                                     # classes, tests, coverage report
+SONAR_TOKEN=... mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+```
+
+The full coordinates are deliberate: the version then comes from the root POM's `pluginManagement`.
+Everything the scanner needs is a property of the root POM - `sonar.host.url`,
+`sonar.organization`, `sonar.projectKey` - so `-Dsonar.projectKey=...` points an analysis elsewhere
+without an edit. There is no `sonar-project.properties`; the Maven scanner does not read one.
+
+Coverage is read from one file, the aggregate JaCoCo report written by `build/jacoco-aggregate`
+(`sonar.coverage.jacoco.xmlReportPaths`). That is why the analysis follows a **full** build: a
+narrow `-pl` build does not produce the report, and the analysis would show 0% coverage.
+`scripts/check_aggregate_report.py` fails if the property and the report's location ever disagree.
+
+The token is the `SONAR_TOKEN` environment variable and appears in no POM. In the pipeline it is
+the Jenkins secret-text credential `sonarcloud-token`, bound for the `Sonar analysis` stage only.
+The quality gate is reported in SonarCloud and does not fail the build.
+
 ## Testing
 
 Each module contains its own test suite. To run all tests:

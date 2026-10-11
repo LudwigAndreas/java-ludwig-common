@@ -132,6 +132,47 @@
     <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
     <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
+    <!--
+            SonarCloud. The third tool of the enforcement triad: architecture-rules owns structure,
+            checkstyle-rules owns source text, Sonar owns bugs and security.
+
+            Configured HERE AND NOWHERE ELSE. The Maven scanner does not read a
+            sonar-project.properties file, so there is none. ludwig-service-parent carries none of
+            this either, although the services do not inherit this file: the scanner is an
+            aggregator that reads the project identity from the execution root, and the JaCoCo XML
+            importer is a project-level sensor that reads the report path from the same place. A
+            copy in the service parent would be published to every downstream service, where the
+            report path below does not exist.
+
+            The scanner is bound to no phase - see its pluginManagement entry. Run it explicitly,
+            after a full build:
+
+                mvn clean install
+                SONAR_TOKEN=... mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+
+            NO TOKEN HERE, EVER. The scanner reads the SONAR_TOKEN environment variable; the
+            Jenkinsfile binds it from a credential for the one stage that needs it. A sonar.token
+            property in this file would be a credential in a POM. No check enforces this, for the
+            reason docs/harness-enforcement.md gives for credentials in general.
+
+            organization and projectKey are properties so that -Dsonar.projectKey=... points an
+            analysis at another project without an edit.
+        -->
+    <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+    <sonar.organization>ludwigandreas</sonar.organization>
+    <sonar.projectKey>LudwigAndreas_java-ludwig-common</sonar.projectKey>
+    <!--
+            ONE coverage input: the aggregate report build/jacoco-aggregate writes at verify. It is
+            the only report that carries cross-module coverage (a starter exercised by a service's
+            integration tests) and the services' merged unit + integration data. Anchored at the
+            reactor root, so it resolves to the same file from every module.
+
+            scripts/check_aggregate_report.py fails when this path and the report's real location
+            disagree. Without that check the failure is silent: Sonar logs one warning about a
+            missing file and reports 0% coverage on a green build.
+        -->
+    <sonar.coverage.jacoco.xmlReportPaths>${maven.multiModuleProjectDirectory}/build/jacoco-aggregate/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
     <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
     <!--
@@ -862,6 +903,18 @@
               </goals>
             </execution>
           </executions>
+        </plugin>
+        <!--
+                    Pinned here and deliberately absent from <build><plugins>: an analysis uploads
+                    source to an external service, so it is a command somebody types, never a
+                    side effect of `mvn install` - the same reasoning as -Pci. Invoke it by full
+                    coordinates, so that the version is this one rather than whatever prefix
+                    resolution finds. Configuration is the sonar.* properties above.
+                -->
+        <plugin>
+          <groupId>org.sonarsource.scanner.maven</groupId>
+          <artifactId>sonar-maven-plugin</artifactId>
+          <version>${sonar-maven-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.jacoco</groupId>

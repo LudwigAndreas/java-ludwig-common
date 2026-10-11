@@ -7,7 +7,11 @@ mvn clean install                      # весь реактор; отчёт с�
 open build/jacoco-aggregate/target/site/jacoco-aggregate/index.html
 ```
 
-Рядом с HTML пишутся XML и CSV — именно их читает сборщик CI или SonarQube.
+Рядом с HTML пишутся XML и CSV. XML — **единственный** источник покрытия для анализа в SonarCloud:
+свойство `sonar.coverage.jacoco.xmlReportPaths` корневого POM указывает на
+`build/jacoco-aggregate/target/site/jacoco-aggregate/jacoco.xml`. Отчёт и это свойство переносятся
+только вместе — `scripts/check_aggregate_report.py` завершается ошибкой, если они расходятся, потому
+что иначе анализ покажет 0% покрытия при зелёной сборке.
 
 ## Что это такое
 

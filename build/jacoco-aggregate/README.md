@@ -7,7 +7,11 @@ mvn clean install                      # the full reactor; the report is written
 open build/jacoco-aggregate/target/site/jacoco-aggregate/index.html
 ```
 
-XML and CSV are written beside the HTML, which is what a CI collector or SonarQube reads.
+XML and CSV are written beside the HTML. The XML is the **only** coverage input of the SonarCloud
+analysis: the root POM's `sonar.coverage.jacoco.xmlReportPaths` names
+`build/jacoco-aggregate/target/site/jacoco-aggregate/jacoco.xml`. Move the report and that property
+together - `scripts/check_aggregate_report.py` fails when they disagree, because the alternative is
+an analysis that reports 0% coverage on a green build.
 
 ## What it is
 

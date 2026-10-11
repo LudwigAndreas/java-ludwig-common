@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-10T20:07:12.013617Z",
+    "generatedAt": "2026-10-11T18:26:57.714326Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 34,
-    "commit": "a1bc1888287b18dd22778b6477f0ddd2cd72ab0e",
-    "commitShort": "a1bc188",
+    "commit": "d53624600c27698ae2fb232a912b8d74cd3878ff",
+    "commitShort": "d536246",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "e325cfcb99c8d3e83ae151ee02dc0dcdb76f412e39d578e4dc5afb0ca729e08f",
-      "newestPom": "services/notification-service/pom.xml",
-      "newestPomModified": "2026-10-10T19:47:10.324342Z"
+      "pomSetSha": "a8531a62c7a98384c49b283b2ed4dc5d2e45e0f8866fa800b89972cf5c97d6d8",
+      "newestPom": "pom.xml",
+      "newestPomModified": "2026-10-11T18:26:47.743706Z"
     }
   },
   "modules": [
@@ -1175,6 +1175,9 @@
         "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0009-create-quota-lease.sql",
         "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0010-create-quota-waiter.sql",
         "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0011-create-audit-record.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0012-create-scope-state.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0013-create-scope-member.sql",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0014-index-scope-state-due.sql",
         "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml"
       ],
       "i18nBundles": [],
@@ -1186,8 +1189,8 @@
         "integration": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration"
       },
       "testClasses": {
-        "surefire": 7,
-        "failsafe": 3
+        "surefire": 15,
+        "failsafe": 14
       },
       "pom": "sources/reconciliation-spring-boot-starter/pom.xml",
       "readme": "sources/reconciliation-spring-boot-starter/README.md",
@@ -1310,7 +1313,7 @@
         "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
       },
       "testClasses": {
-        "surefire": 24,
+        "surefire": 25,
         "failsafe": 0
       },
       "pom": "sources/security-spring-boot-starter/pom.xml",
@@ -1453,7 +1456,7 @@
         "unit": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit"
       },
       "testClasses": {
-        "surefire": 1,
+        "surefire": 2,
         "failsafe": 0
       },
       "pom": "sources/identity-projection-spring-boot-starter/pom.xml",
@@ -1846,7 +1849,7 @@
         "architecture": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture"
       },
       "testClasses": {
-        "surefire": 14,
+        "surefire": 15,
         "failsafe": 3
       },
       "pom": "sources/user-settings-spring-boot-starter/pom.xml",
@@ -2010,7 +2013,7 @@
       },
       "testClasses": {
         "surefire": 1,
-        "failsafe": 1
+        "failsafe": 2
       },
       "pom": "sources/test-support/pom.xml",
       "readme": "sources/test-support/README.md",
