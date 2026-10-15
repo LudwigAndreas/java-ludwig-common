@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>outbound-token-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Outbound token core</name>
+    <description>
+        The one implementation of the credentials an outbound client sends: a machine token cached,
+        renewed before it expires and minted once however many calls ask, the OAuth2
+        client-credentials mint, and the caller's own bearer token for relay. Shared by every client
+        starter, each of which attaches the token to its own transport.
+    </description>
+
+    <!--
+        DEPENDENCY DIRECTION. No in-repo dependency, on purpose: rest-client-spring-boot-starter and
+        grpc-client-spring-boot-starter both depend on this module, so it must reach neither, and a
+        dependency on any platform module would make it the place a cycle could close.
+        ModuleIndependenceTest fails the build if a ru.ludwigandreas type outside this module is
+        ever referenced.
+
+        The two Spring Security modules are OPTIONAL: a service whose clients use a static bearer
+        token or none at all pulls in neither, and loads no class that names them.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-client</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-resource-server</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Jwt, for constructing an inbound token in tests. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

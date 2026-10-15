@@ -1,0 +1,47 @@
+{
+  "change": "consolidate-grpc-contracts-and-tokens",
+  "model": "claude-opus-5-5",
+  "index_version": "93bae9b64a35a71d0d9eabe61bd61f0bfa48f59afa0e36b2c3bcd5001a84fb51",
+  "modules_touched": [
+    "outbound-token-core",
+    "ludwig-grpc-api-parent",
+    "catalog-grpc-api",
+    "rest-client-spring-boot-starter",
+    "grpc-client-spring-boot-starter",
+    "grpc-server-spring-boot-starter",
+    "grpc-core",
+    "crud-service-example",
+    "ludwig-service-parent",
+    "ludwig-bom",
+    "jacoco-aggregate",
+    "common"
+  ],
+  "gate": {
+    "manifest_build_stale_layout": "pass",
+    "manifest_self_test": "pass (7 cases)",
+    "check_protos": "pass",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_image_pins": "fail (pre-existing, archived proposal line from 7abdcd4)",
+    "check_api_baseline": "fail (pre-existing, releases repository unreachable; new modules ABSENT)",
+    "validate": "pass (after install; fails before install on an empty local repository, pre-existing)",
+    "clean_install": "pass, from an empty ru/ludwigandreas local repository",
+    "aggregate_report": "pass",
+    "openspec_validate_strict": "pass"
+  },
+  "tests": {
+    "added": 28,
+    "passed": 3988,
+    "failed": 0
+  },
+  "retries": 9,
+  "human_corrections": 1,
+  "rollback_point": "0a68e84ed9e36d72ee8c1ef5241aed2b4ddcbf52",
+  "unresolved": [
+    "task 7.3: the local profile was not started (no Postgres at localhost:5432 on this machine)",
+    "task 9.2: two gate scripts fail for pre-existing environmental reasons",
+    "the revapi.differences exceptions for the two removed rest-client classes are syntax-checked only; CI is the first comparison against the 2.x baseline",
+    "locally, gRPC on crud-service-example needs a token from the real issuer - the X-Local-* header backdoor is HTTP-only",
+    "add-grpc-starters, beneath this change, is still uncommitted and unarchived"
+  ]
+}

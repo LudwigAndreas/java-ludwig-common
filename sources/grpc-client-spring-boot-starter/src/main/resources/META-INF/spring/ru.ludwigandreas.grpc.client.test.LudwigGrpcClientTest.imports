@@ -1,0 +1,5 @@
+# The auto-configurations @LudwigGrpcClientTest boots: this starter, whole, plus web-core's problem
+# registry (the client's mapper joins it) and audit-core (the client audits into its one sink).
+ru.ludwigandreas.webcore.config.WebCoreProblemAutoConfiguration
+ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration
+ru.ludwigandreas.grpc.client.config.GrpcClientAutoConfiguration

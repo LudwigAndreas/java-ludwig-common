@@ -39,7 +39,8 @@ public final class BuiltInRuleSets {
             new PresentationRules(),
             new UploadRules(),
             new CredentialRules(),
-            new LoggingRules());
+            new LoggingRules(),
+            new GrpcRules());
 
     private BuiltInRuleSets() {
     }

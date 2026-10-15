@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+// E_PLACEMENT: a proto inside a service module.
+package ludwig.billing.v1;
+
+option java_package = "ru.ludwigandreas.billing.grpc.v1";
+option java_multiple_files = true;
+
+message Misplaced {}

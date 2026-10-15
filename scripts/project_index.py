@@ -65,6 +65,10 @@ def module_dirs(root):
     return [m.text.strip() for m in modules.findall(POM_NS + "module") if m.text]
 
 
+CONTRACT_PARENT = "ludwig-grpc-api-parent"
+CONTRACT_SUFFIX = "-grpc-api"
+
+
 def classify(artifact_id, parent_artifact, packaging):
     """Assign the module's role.
 
@@ -76,6 +80,12 @@ def classify(artifact_id, parent_artifact, packaging):
         return "bom"
     if artifact_id == "ludwig-service-parent":
         return "parent"
+    if artifact_id == CONTRACT_PARENT:
+        return "contract-parent"
+    if artifact_id.endswith(CONTRACT_SUFFIX):
+        # Before the name buckets: a contract is not a library. It has no Java, inherits its own
+        # parent, and is subject to check_contracts below.
+        return "contract"
     if artifact_id == "jacoco-aggregate":
         # Build infrastructure, not a library: it has no sources and publishes nothing. Without
         # its own role the name-based buckets below would call it a library and the layout check
@@ -320,7 +330,9 @@ LAYOUT = {
     "parent": "build",
     "rules": "build",
     "aggregate": "build",
+    "contract-parent": "build",
     "service": "services",
+    "contract": "sources",
     "library": "sources",
     "starter": "sources",
     "test-support": "sources",
@@ -335,6 +347,132 @@ def check_layout(modules):
         if expected is not None and m.get("dir") != expected:
             wrong.append((m["name"], m["role"], m.get("dir") or "<root>", expected))
     return wrong
+
+
+def _artifact_ids(pom_path, container_path):
+    """The ru.ludwigandreas artifactIds under one <dependencies> container of a POM."""
+    if not os.path.isfile(pom_path):
+        return set()
+    node = ET.parse(pom_path).getroot()
+    for tag in container_path:
+        node = node.find(POM_NS + tag) if node is not None else None
+    if node is None:
+        return set()
+    return {text(dep, "artifactId") for dep in node.findall(POM_NS + "dependency")
+            if text(dep, "groupId") == GROUP}
+
+
+def _has_file(directory, suffix):
+    for dirpath, dirnames, filenames in os.walk(directory):
+        dirnames[:] = [d for d in dirnames if d not in PRUNE_DIRS]
+        if any(name.endswith(suffix) for name in filenames):
+            return True
+    return False
+
+
+def check_contracts(root):
+    """Return (module, problem) for every gRPC contract module that is incompletely declared.
+
+    A contract module is ten lines a person writes by hand, and two of the ways to get them wrong
+    fail silently or late: a module missing from build/jacoco-aggregate is only noticed after a full
+    build, and one missing from ludwig-bom is only noticed by a consumer. Every check here is a fact
+    about POMs and directories, which is why it lives beside the layout check and not in ArchUnit or
+    Checkstyle (see the grpc-contract-module capability).
+    """
+    problems = []
+    reactor = module_dirs(root)
+    in_reactor = set()
+    bom = _artifact_ids(os.path.join(root, "build", "ludwig-bom", "pom.xml"),
+                        ("dependencyManagement", "dependencies"))
+    aggregate = _artifact_ids(os.path.join(root, "build", "jacoco-aggregate", "pom.xml"), ("dependencies",))
+    for module_dir in reactor:
+        name = os.path.basename(module_dir)
+        if not name.endswith(CONTRACT_SUFFIX):
+            continue
+        in_reactor.add(name)
+        module_path = os.path.join(root, module_dir)
+        pom = ET.parse(os.path.join(module_path, "pom.xml")).getroot()
+        artifact_id = text(pom, "artifactId")
+        parent = pom.find(POM_NS + "parent")
+        if parent is None or text(parent, "artifactId") != CONTRACT_PARENT:
+            problems.append((name, "is not parented by %s - a contract module inherits everything but "
+                                   "its .proto from it" % CONTRACT_PARENT))
+        if artifact_id not in bom:
+            problems.append((name, "has no entry in build/ludwig-bom/pom.xml - consumers could not "
+                                   "depend on it without stating a version"))
+        if artifact_id not in aggregate:
+            problems.append((name, "is not a dependency of build/jacoco-aggregate/pom.xml - "
+                                   "check_aggregate_report.py would fail after a full build"))
+        if _has_file(os.path.join(module_path, "src", "main", "java"), ".java"):
+            problems.append((name, "has Java under src/main/java - a contract module is .proto files "
+                                   "and the code generated from them, nothing else"))
+        if not _has_file(os.path.join(module_path, "src", "main", "proto"), ".proto"):
+            problems.append((name, "has no .proto under src/main/proto - it would build an empty jar"))
+    sources = os.path.join(root, "sources")
+    if os.path.isdir(sources):
+        for name in sorted(os.listdir(sources)):
+            if (name.endswith(CONTRACT_SUFFIX) and name not in in_reactor
+                    and os.path.isfile(os.path.join(sources, name, "pom.xml"))):
+                problems.append((name, "is not a <module> of the root pom.xml - it is never built"))
+    return problems
+
+
+def self_test_contracts():
+    """Builds each contract scenario as a small repository and asserts what check_contracts says."""
+    import tempfile
+
+    def pom(artifact, parent="ludwig-grpc-api-parent", body=""):
+        return ('<project xmlns="http://maven.apache.org/POM/4.0.0"><parent><groupId>%s</groupId>'
+                '<artifactId>%s</artifactId></parent><artifactId>%s</artifactId>%s</project>'
+                % (GROUP, parent, artifact, body))
+
+    def deps(artifacts, managed):
+        inner = "".join("<dependency><groupId>%s</groupId><artifactId>%s</artifactId></dependency>"
+                        % (GROUP, a) for a in artifacts)
+        block = "<dependencies>%s</dependencies>" % inner
+        return "<dependencyManagement>%s</dependencyManagement>" % block if managed else block
+
+    def scenario(root, modules=("sources/x-grpc-api",), parent="ludwig-grpc-api-parent", bom=True,
+                 aggregate=True, java=False, proto=True, stray=False):
+        files = {
+            "pom.xml": '<project xmlns="http://maven.apache.org/POM/4.0.0"><modules>%s</modules></project>'
+                       % "".join("<module>%s</module>" % m for m in modules),
+            "build/ludwig-bom/pom.xml": pom("ludwig-bom", "common", deps(["x-grpc-api"] if bom else [], True)),
+            "build/jacoco-aggregate/pom.xml": pom("jacoco-aggregate", "common",
+                                                  deps(["x-grpc-api"] if aggregate else [], False)),
+            "sources/x-grpc-api/pom.xml": pom("x-grpc-api", parent),
+        }
+        if proto:
+            files["sources/x-grpc-api/src/main/proto/ludwig/x/v1/x.proto"] = 'syntax = "proto3";'
+        if java:
+            files["sources/x-grpc-api/src/main/java/X.java"] = "class X {}"
+        if stray:
+            files["sources/y-grpc-api/pom.xml"] = pom("y-grpc-api")
+        for path, content in files.items():
+            full = os.path.join(root, path)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as handle:
+                handle.write(content)
+        return [problem for _, problem in check_contracts(root)]
+
+    cases = [
+        ("a complete contract module", {}, None),
+        ("another parent", {"parent": "common"}, "is not parented by"),
+        ("missing from the BOM", {"bom": False}, "ludwig-bom"),
+        ("missing from the aggregate", {"aggregate": False}, "jacoco-aggregate"),
+        ("Java in a contract", {"java": True}, "has Java"),
+        ("no .proto", {"proto": False}, "has no .proto"),
+        ("a contract directory outside the reactor", {"stray": True}, "is not a <module>"),
+    ]
+    failures = 0
+    for label, overrides, expected in cases:
+        with tempfile.TemporaryDirectory() as root:
+            problems = scenario(root, **overrides)
+        ok = (not problems) if expected is None else (len(problems) == 1 and expected in problems[0])
+        failures += 0 if ok else 1
+        print("%s  %s%s" % ("ok  " if ok else "FAIL", label, "" if ok else ": %s" % problems))
+    print("contract self-test %s (%d cases)" % ("FAILED" if failures else "passed", len(cases)))
+    return 1 if failures else 0
 
 
 def build(root):
@@ -424,6 +562,7 @@ def build(root):
 GATE_BY_ROLE = {
     "bom": "mvn clean install  (every module imports ludwig-bom)",
     "parent": "mvn clean install  (every service inherits it)",
+    "contract-parent": "mvn clean install  (every gRPC contract module inherits it)",
 }
 
 PREAMBLE = """\
@@ -578,19 +717,28 @@ def render_markdown(data):
 
 
 def main(argv):
+    if "--self-test-contracts" in argv:
+        return self_test_contracts()
     root = repo_root()
     data = build(root)
     if "--check-layout" in argv:
         wrong = check_layout(data["modules"])
+        contracts = check_contracts(root)
         if wrong:
             sys.stderr.write("modules are not in the directory their role requires:\n")
             for name, role, actual, expected in wrong:
-                sys.stderr.write("  %-40s role %-12s in %-10s expected %s/\n"
+                sys.stderr.write("  %-40s role %-15s in %-10s expected %s/\n"
                                  % (name, role, actual + "/", expected))
             sys.stderr.write("\nSee the repository-layout capability in openspec/specs/.\n")
+        if contracts:
+            sys.stderr.write("gRPC contract modules are incompletely declared:\n")
+            for name, problem in contracts:
+                sys.stderr.write("  %-40s %s\n" % (name, problem))
+            sys.stderr.write("\nSee the grpc-contract-module capability in openspec/specs/.\n")
+        if wrong or contracts:
             return 1
-        sys.stdout.write("layout ok: %d modules, each in the directory its role requires\n"
-                         % len(data["modules"]))
+        sys.stdout.write("layout ok: %d modules, each in the directory its role requires; "
+                         "every gRPC contract module complete\n" % len(data["modules"]))
         return 0
     if "--check" in argv:
         # `stale`: recompute the fingerprint and compare with what the committed index claims.

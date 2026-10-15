@@ -36,7 +36,7 @@ context: |
   `scripts/manifest.sh layout` checks placement and the gate runs it. See the `repository-layout`
   capability.
 
-  ## The three-POM split - the thing to get right
+  ## The POM split - the thing to get right
 
   - `pom.xml` (root, artifact `common`) - reactor, and **parent of the library modules only**.
     Imports `spring-boot-dependencies`. Never imports `ludwig-bom` (it is the BOM's parent -
@@ -47,6 +47,9 @@ context: |
     processors in Lombok -> MapStruct -> QueryDSL order, surefire/failsafe split, enforced JaCoCo
     gate (70% instruction / 60% branch), enforcer, Checkstyle, jib. Its parent is
     `spring-boot-starter-parent`.
+  - `ludwig-grpc-api-parent` - what a gRPC contract module needs and nothing else (gRPC and protobuf
+    dependencies, `grpc-core`, generation). A `<service>-grpc-api` module's POM is this parent and an
+    `artifactId`; `scripts/manifest.sh layout` fails one that is incompletely declared.
 
   Consequences: a **library** is parented by the reactor root and imports `ludwig-bom`; a
   **service** (`crud-service-example`, `notification-service`) is parented by
@@ -112,6 +115,16 @@ context: |
     touched resolves from `DEFAULT` and answering from it would make every caller UTC. A *caller's*
     ambient preferences and a *subject's* stored preferences are different things; notification's
     `RecipientPreferences` is the latter and is not to be consolidated.
+  - **gRPC between platform services goes through the two starters.** Contracts are `.proto` files
+    in a `<service>-grpc-api` module parented by `ludwig-grpc-api-parent`
+    (`ludwig.<service>.v<N>`, matching `java_package`,
+    `java_multiple_files`, an `idempotency_level` on every rpc), checked by `scripts/check_protos.sh`
+    in the gate. Serve with `grpc-server-spring-boot-starter`, call with
+    `grpc-client-spring-boot-starter`; never build a channel or server by hand. A
+    `@LudwigGrpcService` is a thin adapter - proxy annotations on it (`@PreAuthorize`,
+    `@Transactional`, ...) are silently not applied because gRPC calls the bound target, not the
+    proxy - and `RuleGroup.GRPC` fails the build on them, on the builders, on an unstereotyped
+    service and on a repository dependency. Retry is read from the contract, never a call site.
   - Services follow `crud-service-example`: three model layers `web.dto` -> `service.model` ->
     `repository.entity` wired by MapStruct; Lombok instead of boilerplate; transactions in the
     service layer; Liquibase changelogs under `src/main/resources/db/changelog`.

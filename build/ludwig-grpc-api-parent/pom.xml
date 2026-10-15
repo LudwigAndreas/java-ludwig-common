@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>ludwig-grpc-api-parent</artifactId>
+    <packaging>pom</packaging>
+
+    <name>gRPC contract parent</name>
+    <description>
+        The parent of every service's gRPC contract module (&lt;service&gt;-grpc-api): the gRPC and
+        protobuf dependencies, grpc-core so a contract can import ludwig/operation/v1/operation.proto,
+        and protobuf generation. A contract module declares this parent, its artifactId, a name and a
+        description, and holds .proto files under src/main/proto - nothing else.
+    </description>
+
+    <!--
+        WHY A PARENT AND NOT A SCRIPT. A contract module used to be sixty lines written by
+        scripts/new_grpc_api.sh, two of which failed silently when wrong. Everything those lines
+        said is said here once; scripts/manifest.sh layout fails the gate when a *-grpc-api module
+        does not inherit this POM or is not registered in the reactor, ludwig-bom and
+        build/jacoco-aggregate, so the ten lines a contract module still has are checked rather
+        than generated.
+
+        WHY IT IS PARENTED BY common. A contract is a published library: it gets exactly what a
+        library gets from the root POM - Checkstyle (no Java to check), JaCoCo (nothing to measure;
+        check_aggregate_report.py accepts a module with no Java), revapi, the enforcer - and nothing
+        a service has. This POM adds dependencies and generation, never a build decision of its own.
+
+        A contract module must not declare dependencies, plugins or dependencyManagement: the
+        pom-topology capability says so, and the only reason to want one is a contract that is
+        not only a contract.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- What the generated messages and stubs compile against. -->
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+        </dependency>
+        <!--
+            Always, not opt-in: its jar is what puts ludwig/operation/v1/operation.proto on the
+            generator's import path and the generated Operation on the compile path, and every
+            consumer of a contract already depends on grpc-core through one of the two starters.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>grpc-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <!--
+            Generation runs in a module that has src/main/proto, which is every contract module and
+            not this POM itself: bound unconditionally, it would run here and fail on a module with
+            no .proto. The profile is inherited; its file condition is evaluated per module. A
+            contract module with no .proto would therefore build an empty jar - which is why
+            manifest.sh layout refuses one.
+        -->
+        <profile>
+            <id>ludwig-grpc-contract</id>
+            <activation>
+                <file>
+                    <exists>${basedir}/src/main/proto</exists>
+                </file>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.github.ascopes</groupId>
+                        <artifactId>protobuf-maven-plugin</artifactId>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

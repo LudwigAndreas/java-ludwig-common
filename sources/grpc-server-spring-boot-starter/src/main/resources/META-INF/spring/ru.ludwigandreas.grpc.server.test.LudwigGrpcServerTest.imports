@@ -1,0 +1,16 @@
+# The auto-configurations @LudwigGrpcServerTest boots: this starter, whole, and the two web-core
+# auto-configurations it cannot run without (the problem registry and the preference resolver).
+# Whole on purpose - a slice that left out the security auto-configuration would pass tests that
+# production fails, which is worse than having no slice.
+#
+# The optional integrations are listed too. Each is behind @ConditionalOnClass and a bean
+# condition, so a slice test gets exactly the stages its classpath and its own beans call for:
+# a JwtDecoder bean turns authentication on, and without one the test says
+# ludwig.grpc.server.security.enabled=false, as a service would have to.
+ru.ludwigandreas.webcore.config.WebCoreProblemAutoConfiguration
+ru.ludwigandreas.webcore.config.WebCorePreferenceAutoConfiguration
+ru.ludwigandreas.grpc.server.config.GrpcServerAutoConfiguration
+ru.ludwigandreas.grpc.server.config.GrpcServerSecurityAutoConfiguration
+ru.ludwigandreas.grpc.server.config.GrpcServerObservabilityAutoConfiguration
+ru.ludwigandreas.grpc.server.config.GrpcServerIdempotencyAutoConfiguration
+ru.ludwigandreas.grpc.server.config.GrpcServerTestAutoConfiguration

@@ -30,6 +30,7 @@
              first because every other module resolves ludwig-bom. -->
     <module>build/ludwig-bom</module>
     <module>build/ludwig-service-parent</module>
+    <module>build/ludwig-grpc-api-parent</module>
     <!-- Library modules: parented by this POM, consumed as jars. -->
     <module>sources/odata-filter-spring-boot-starter</module>
     <module>sources/audit-core</module>
@@ -61,7 +62,12 @@
     <module>sources/hot-reload-spring-boot-starter</module>
     <module>sources/web-core-spring-boot-starter</module>
     <module>sources/observability-spring-boot-starter</module>
+    <module>sources/outbound-token-core</module>
     <module>sources/rest-client-spring-boot-starter</module>
+    <module>sources/grpc-core</module>
+    <module>sources/catalog-grpc-api</module>
+    <module>sources/grpc-server-spring-boot-starter</module>
+    <module>sources/grpc-client-spring-boot-starter</module>
     <module>sources/user-settings-spring-boot-starter</module>
     <module>build/architecture-rules</module>
     <!-- Test-scope infrastructure. test-support depends on no sibling on purpose, so that the
@@ -133,6 +139,26 @@
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
     <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
     <!--
+            Protobuf code generation. Managed in pluginManagement below and bound in NO module by
+            default: a module that owns .proto files declares the plugin with no version and no
+            configuration, and nothing else in the reactor resolves a protobuf compiler.
+
+            protoc.version and protoc-gen-grpc-java.version are the second place these two numbers
+            appear. The first is ludwig-bom's protobuf.version and grpc.version, which decide the
+            RUNTIME; these decide the GENERATOR, and generated code built by one protobuf line and
+            run on another fails with a missing-method error in a generated class, at the first
+            message. They cannot be read from the BOM - a BOM manages dependency versions and a
+            plugin's configuration is not one, the same limit lombok.version documents below - so
+            they are repeated, and scripts/check_protos.sh fails the gate when either pair differs.
+            Move all four together.
+
+            This plugin resolves protoc and the gRPC generator as Maven artifacts, so the build
+            needs no system protoc and no os-maven-plugin classifier.
+        -->
+    <protobuf-maven-plugin.version>5.1.11</protobuf-maven-plugin.version>
+    <protoc.version>3.25.9</protoc.version>
+    <protoc-gen-grpc-java.version>1.84.2</protoc-gen-grpc-java.version>
+    <!--
             SonarCloud. The third tool of the enforcement triad: architecture-rules owns structure,
             checkstyle-rules owns source text, Sonar owns bugs and security.
 
@@ -173,6 +199,13 @@
             missing file and reports 0% coverage on a green build.
         -->
     <sonar.coverage.jacoco.xmlReportPaths>${maven.multiModuleProjectDirectory}/build/jacoco-aggregate/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+    <!--
+            Code protoc writes is not analysed: a finding in a generated builder is a finding
+            nobody can act on, and it would be re-raised on every regeneration. Narrow on purpose -
+            this names the protobuf plugin's output directory and nothing else under
+            generated-sources.
+        -->
+    <sonar.exclusions>**/generated-sources/protobuf/**</sonar.exclusions>
     <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
     <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
     <!--
@@ -722,6 +755,16 @@
                                       "justification": "A TYPE THAT IS ABSENT FROM BOTH ARCHIVES, NOT A DIFFERENCE BETWEEN THEM, and the narrower half of this problem was fixed at its cause rather than listed here. Two kinds of missing class showed up on the first gated build. The first was jakarta.servlet.HttpServletRequest and friends in odata-filter: resolvable, just not resolved, because they arrive transitively at `provided` scope - that is fixed above with resolveTransitiveProvidedDependencies, and it is fixed there and not here on purpose, because ignoring a class revapi COULD have loaded turns an incorrect analysis into a quiet one. The second kind cannot be fixed that way: spring-security-config's HttpSecurity declares saml2Login(), ldapAuthentication() and oauth2Client(), whose types live in spring-security-saml2-service-provider, spring-security-ldap and spring-security-oauth2-client - jars this platform does not depend on and should not start depending on to satisfy a checker. Twenty-three of them, reachable only through Spring's own types, which the design-advisory exemption below already covers. They are absent from the old archive and the new one alike, so they can never constitute a difference between two releases; what they would do armed is fail every build forever. If a type of OURS ever goes missing that is java.class.removed, which stays armed."
                                     },
                                     {
+                                      "code": "java.class.removed",
+                                      "old": "class ru.ludwigandreas.restclient.auth.CachedToken",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change consolidate-grpc-contracts-and-tokens. The api-evolution capability asks for a deprecating release before a removal; this release was declared breaking with no deprecation cycle, and the exception is recorded here rather than passing unremarked. The type moved, unchanged in behaviour, to outbound-token-core as ru.ludwigandreas.outboundtoken.CachedToken, the one token implementation shared with grpc-client-spring-boot-starter. Migration: change the import."
+                                    },
+                                    {
+                                      "code": "java.class.removed",
+                                      "old": "class ru.ludwigandreas.restclient.auth.CachingTokenSource",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change consolidate-grpc-contracts-and-tokens. The api-evolution capability asks for a deprecating release before a removal; this release was declared breaking with no deprecation cycle, and the exception is recorded here rather than passing unremarked. The type moved, unchanged in behaviour, to outbound-token-core as ru.ludwigandreas.outboundtoken.CachingTokenSource, the one token implementation shared with grpc-client-spring-boot-starter. Migration: change the import."
+                                    },
+                                    {
                                       "regex": true,
                                       "code": "java\\.class\\.(externalClassExposedInAPI|nonPublicPartOfAPI)",
                                       "justification": "THE ONLY BLANKET EXEMPTION IN THIS FILE, AND IT IS NOT A COMPATIBILITY DIFFERENCE. These two codes are the whole of revapi's API-DESIGN advisory family, and both are computed from the NEW archive ALONE: they fire identically on a build with no source change at all, and they would fire on the very first release, when there is nothing to be compatible with. Nothing they report is a statement about how this release differs from the last one, which is the only question this gate exists to ask. Concretely, externalClassExposedInAPI named several hundred Spring types - ApplicationContext, ResolvableType, TypeDescriptor, Environment - all reached transitively from one @Bean method returning a LocalValidatorFactoryBean, and nonPublicPartOfAPI named package-private WireMock and Testcontainers internals reached from test-support's fixture accessors. Twenty-five Spring Boot starters whose purpose is to hand Spring types to a Spring application, and a test-support jar whose purpose is to hand out configured containers, cannot answer either; the only 'fix' would be to stop exposing the libraries they exist to expose. Left armed, they failed the fourth and the twenty-second module of the first gated build for reasons unrelated to compatibility, which is exactly how a gate gets switched off and never switched back on. Every code that IS a compatibility statement - java.method.removed, java.method.parameterTypeChanged, java.method.addedToInterface, java.class.kindChanged, java.field.removed, java.class.removed and the rest - stays fully armed and is governed by the semver rule above."
@@ -912,6 +955,44 @@
                     resolution finds. Configuration is the sonar.* properties above.
                 -->
         <plugin>
+          <groupId>io.github.ascopes</groupId>
+          <artifactId>protobuf-maven-plugin</artifactId>
+          <version>${protobuf-maven-plugin.version}</version>
+          <configuration>
+            <protoc>${protoc.version}</protoc>
+            <plugins>
+              <plugin kind="binary-maven">
+                <groupId>io.grpc</groupId>
+                <artifactId>protoc-gen-grpc-java</artifactId>
+                <version>${protoc-gen-grpc-java.version}</version>
+              </plugin>
+            </plugins>
+            <!-- A module that declares this plugin and has no .proto is a mistake, not a no-op. -->
+            <failOnMissingSources>true</failOnMissingSources>
+          </configuration>
+          <executions>
+            <execution>
+              <id>generate-protobuf</id>
+              <goals>
+                <goal>generate</goal>
+              </goals>
+            </execution>
+            <!--
+                            Test protos are optional: a contract module has none. Without this the
+                            generate-test goal would fail every module that has only src/main/proto.
+                        -->
+            <execution>
+              <id>generate-test-protobuf</id>
+              <goals>
+                <goal>generate-test</goal>
+              </goals>
+              <configuration>
+                <failOnMissingSources>false</failOnMissingSources>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
           <groupId>org.sonarsource.scanner.maven</groupId>
           <artifactId>sonar-maven-plugin</artifactId>
           <version>${sonar-maven-plugin.version}</version>
@@ -920,6 +1001,21 @@
           <groupId>org.jacoco</groupId>
           <artifactId>jacoco-maven-plugin</artifactId>
           <version>${jacoco-maven-plugin.version}</version>
+          <!--
+                        Messages and stubs generated from .proto files are neither instrumented
+                        nor reported. A generated builder's coverage measures protoc, not this
+                        platform, and a contract module would otherwise drag the aggregate number
+                        down by thousands of unexecuted instructions. The pattern is the package
+                        convention scripts/check_protos.sh enforces
+                        (ru.ludwigandreas.<service>.grpc.v<N>), which is why one pattern is enough.
+                        build/jacoco-aggregate repeats it, because report-aggregate filters by its
+                        own configuration and not by the modules'.
+                    -->
+          <configuration>
+            <excludes>
+              <exclude>**/grpc/v*/**</exclude>
+            </excludes>
+          </configuration>
           <executions>
             <execution>
               <id>default-prepare-agent</id>

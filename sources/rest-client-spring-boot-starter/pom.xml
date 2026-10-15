@@ -41,6 +41,12 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- The machine-token cache, the client-credentials mint and the relay token reader, shared
+             with grpc-client-spring-boot-starter. It depends on nothing in this reactor. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbound-token-core</artifactId>
+        </dependency>
         <!--
             The platform's audit envelope, sink SPI and redaction. This module's HeaderRedactor - the
             structural JSON walk, the form-encoded rule, the truncation marker - moved into audit-core's

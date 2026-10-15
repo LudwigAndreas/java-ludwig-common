@@ -4,14 +4,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import org.springframework.security.oauth2.client.endpoint.DefaultClientCredentialsTokenResponseClient;
-import org.springframework.security.oauth2.client.endpoint.OAuth2ClientCredentialsGrantRequest;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AccessTokenResponse;
-import ru.ludwigandreas.restclient.auth.CachedToken;
-import ru.ludwigandreas.restclient.auth.CachingTokenSource;
+import ru.ludwigandreas.outboundtoken.CachedToken;
+import ru.ludwigandreas.outboundtoken.CachingTokenSource;
+import ru.ludwigandreas.outboundtoken.ClientCredentialsTokenMinter;
+import ru.ludwigandreas.outboundtoken.TokenMintingException;
 import ru.ludwigandreas.restclient.config.AuthProperties;
 import ru.ludwigandreas.restclient.config.AuthTypes;
 import ru.ludwigandreas.restclient.spi.AuthRequest;
@@ -66,12 +64,12 @@ public class ClientCredentialsAuthenticationProvider implements ClientAuthentica
     public ClientAuthenticator create(String clientName, ClientAuthProperties properties) {
         AuthProperties auth = (AuthProperties) properties;
         ClientRegistration registration = resolveRegistration(clientName, auth);
-        DefaultClientCredentialsTokenResponseClient tokenClient =
-                new DefaultClientCredentialsTokenResponseClient();
+        // Scopes were already narrowed in resolveRegistration, with this module's own messages.
+        ClientCredentialsTokenMinter minter = new ClientCredentialsTokenMinter(registration, null);
         Duration skew = auth.getRefreshSkew();
         CachingTokenSource tokens = new CachingTokenSource(
                 clientName,
-                () -> mint(clientName, registration, tokenClient),
+                () -> mint(clientName, minter),
                 skew,
                 refreshExecutor,
                 clock,
@@ -100,17 +98,13 @@ public class ClientCredentialsAuthenticationProvider implements ClientAuthentica
         return registration;
     }
 
-    private CachedToken mint(String clientName, ClientRegistration registration,
-                             DefaultClientCredentialsTokenResponseClient tokenClient) {
+    private static CachedToken mint(String clientName, ClientCredentialsTokenMinter minter) {
         try {
-            OAuth2AccessTokenResponse response = tokenClient.getTokenResponse(
-                    new OAuth2ClientCredentialsGrantRequest(registration));
-            return new CachedToken(response.getAccessToken().getTokenValue(),
-                    response.getAccessToken().getExpiresAt());
-        } catch (OAuth2AuthorizationException ex) {
+            return minter.get();
+        } catch (TokenMintingException refused) {
             throw new IllegalStateException("Client '" + clientName + "': the token endpoint of "
-                    + "registration '" + registration.getRegistrationId() + "' refused: "
-                    + ex.getError().getErrorCode(), ex);
+                    + "registration '" + refused.registrationId() + "' refused: "
+                    + refused.errorCode(), refused);
         }
     }
 

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>ludwig-grpc-api-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../build/ludwig-grpc-api-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>catalog-grpc-api</artifactId>
+
+    <name>Catalog gRPC API</name>
+    <description>
+        The gRPC contract of the product catalog served by crud-service-example: product lookup by id,
+        singly and in a batch.
+    </description>
+</project>

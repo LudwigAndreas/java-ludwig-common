@@ -10,7 +10,9 @@
 #
 #   scripts/manifest.sh build          regenerate project-index.json + PROJECT_INDEX.md; idempotent
 #   scripts/manifest.sh stale          non-zero if the manifest predates the current POMs
-#   scripts/manifest.sh layout         non-zero if any module is in the wrong directory for its role
+#   scripts/manifest.sh layout         non-zero if any module is in the wrong directory for its role,
+#                                      or a gRPC contract module is incompletely declared
+#   scripts/manifest.sh self-test      check the contract checks against built-in scenarios
 #   scripts/manifest.sh module <path>  which module owns a path, its dependencies both ways,
 #                                      and the verification gate for changing it
 #
@@ -109,12 +111,13 @@ else:
 PY
 }
 
-usage() { sed -n '3,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-}" in
   build)  shift; cmd_build "$@" ;;
   stale)  shift; cmd_stale "$@" ;;
   layout) shift; cmd_layout "$@" ;;
+  self-test) shift; python3 "$GENERATOR" --self-test-contracts ;;
   module) shift; cmd_module "$@" ;;
   ""|-h|--help|help) usage ;;
   *)      printf 'manifest.sh: unknown subcommand %s\n\n' "$1" >&2; usage >&2; exit 2 ;;

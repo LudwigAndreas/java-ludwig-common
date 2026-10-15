@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>grpc-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>gRPC core</name>
+    <description>
+        What two platform services share when they talk over gRPC, with no transport attached: the
+        metadata key names, the codec between an RFC 9457 problem and a google.rpc.Status, the one
+        operation message that mirrors web-core's OperationResponse, and the bridge that restores
+        thread-bound state on whichever thread gRPC delivers a callback.
+    </description>
+
+    <!--
+        NO TRANSPORT, and that is a load-bearing property rather than an accident.
+
+        grpc-server-spring-boot-starter and grpc-client-spring-boot-starter both depend on this
+        module, and a service may carry only one of them. If this module pulled grpc-netty-shaded, a
+        client-only service would ship a server transport it never binds and the codec could not be
+        used from a test or a tool without one. ModuleIndependenceTest fails the build if a Netty
+        type, a servlet type or any platform module other than web-core is ever reached from here.
+
+        The one in-repo dependency is web-core-spring-boot-starter, which owns the three things this
+        module maps: the problem vocabulary (ProblemStatus), the operation envelope
+        (OperationResponse) and the caller-preference contract. web-core has no in-repo dependency
+        of its own, so the edge cannot close a cycle.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- The API, the protobuf marshaller and the stub base types. No transport: see above. -->
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+        </dependency>
+        <!-- Declared rather than left transitive: the generated messages are this module's own
+             published API and they extend protobuf-java types directly. -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <!-- For ProtobufMapperConfig's annotations only. Optional: a service that maps messages has
+             MapStruct already, and one that does not never loads the class. -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Opt-in: version and configuration come from the root POM's pluginManagement. -->
+            <plugin>
+                <groupId>io.github.ascopes</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

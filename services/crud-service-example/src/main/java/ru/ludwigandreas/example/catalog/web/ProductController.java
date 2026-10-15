@@ -29,12 +29,13 @@ import ru.ludwigandreas.example.catalog.web.mapper.ProductDtoMapper;
  * HTTP surface of the catalog. It validates the request, maps it into the service model, and maps
  * the result back - no business rule, no transaction and no query lives here.
  *
- * <p>Authorization comes in two layers and both are visible here only as the first one. The
- * {@code @PreAuthorize} annotations are the resource-level gate - may this caller use this endpoint at
- * all - and they are the whole of what the web layer decides. Which products come back, and whether this
- * caller may touch <em>this</em> product, is data-level and lives where the rows are: the scoped query in
- * {@code ProductQueryRepositoryImpl} and the guard in {@code ProductServiceImpl}. Putting row rules in a
- * controller annotation is the usual way they end up enforced on one endpoint and forgotten on the next.
+ * <p>Authorization comes in two layers, and neither lives here any more. The resource-level gate - may
+ * this caller read, change or delete products at all - is the {@code @PreAuthorize} on
+ * {@code ProductServiceImpl}, because this controller is no longer the only way in: the same products
+ * are served over gRPC by {@code CatalogGrpcService}, where an annotation on the adapter would never be
+ * applied. The data-level gate - which products, and whether <em>this</em> one - lives where the rows
+ * are: the scoped query in {@code ProductQueryRepositoryImpl} and the guard in {@code ProductServiceImpl}.
+ * The single exception is {@code create}, whose reason is at its annotation.
  *
  * <p>The search endpoint takes the OData options as plain request parameters and hands them to the
  * service unparsed. The starter's deprecated {@code ODataQuery<T>} argument resolver would bind
@@ -50,6 +51,10 @@ public class ProductController {
     private final ProductDtoMapper mapper;
 
     @PostMapping
+    // The one role check still on the controller. Every other method of this API is checked on
+    // ProductServiceImpl, so REST and gRPC pass the same check. create is not: its other way in is
+    // the product-import file action, which checks the submitter's authority at submission and
+    // applies rows later on a worker with no caller, where a role check would reject every row.
     @PreAuthorize("hasAnyRole('CATALOG_EDITOR', 'CATALOG_ADMIN', 'CATALOG_PARTNER')")
     public ResponseEntity<ProductResponse> create(@Valid @RequestBody CreateProductRequest request,
                                                   UriComponentsBuilder uriBuilder) {
@@ -59,8 +64,6 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('CATALOG_READER', 'CATALOG_EDITOR', 'CATALOG_ADMIN', "
-            + "'CATALOG_PARTNER', 'CATALOG_WATCHER')")
     public ProductResponse get(@PathVariable UUID id) {
         return mapper.toResponse(productService.get(id));
     }
@@ -76,21 +79,17 @@ public class ProductController {
      * neither this signature nor the service's names a JPA entity or a QueryDSL type.
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('CATALOG_READER', 'CATALOG_EDITOR', 'CATALOG_ADMIN', "
-            + "'CATALOG_PARTNER', 'CATALOG_WATCHER')")
     public PageResponse<ProductResponse> search(ODataQueryOptions options) {
         ODataPage<ProductResponse> page = productService.search(options).map(mapper::toResponse);
         return PageResponse.of(page.content(), page.offset(), page.size(), page.totalElements());
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('CATALOG_EDITOR', 'CATALOG_ADMIN', 'CATALOG_PARTNER')")
     public ProductResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateProductRequest request) {
         return mapper.toResponse(productService.update(id, mapper.toCommand(request)));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('CATALOG_ADMIN')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         productService.delete(id);
         return ResponseEntity.noContent().build();

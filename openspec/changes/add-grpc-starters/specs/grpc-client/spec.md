@@ -134,6 +134,11 @@ caller's token as a per-client opt-in that fails closed.
 - **WHEN** a relay client is called outside an authenticated request
 - **THEN** the call fails with an authentication failure and no request is sent anonymously
 
+#### Scenario: Token relay is used while serving a gRPC call
+- **WHEN** a relay client is called from a gRPC handler serving an authenticated caller
+- **THEN** the outbound call carries that caller's bearer token, also when the server's principal
+  type keeps no token of its own
+
 #### Scenario: Token relay is enabled in defaults
 - **WHEN** `defaults` sets the relay switch and a client does not
 - **THEN** that client does not relay, and startup fails if its type is token relay

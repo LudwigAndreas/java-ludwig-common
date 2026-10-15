@@ -1,0 +1,11 @@
+# Loaded on top of src/main/resources/application.yml for every test in this module: Spring Boot reads
+# classpath:/config/application.yml after classpath:/application.yml, with higher precedence.
+#
+# The gRPC server runs on the in-process transport in tests - no port to collide on, no TLS bundle to
+# supply - under a name unique to each test context, so contexts held in Spring's cache at once cannot
+# collide. Set here rather than in each test so that no existing test had to change to accommodate it;
+# CatalogGrpcIT reaches the server through GrpcServerProperties.getInProcessName().
+ludwig:
+  grpc:
+    server:
+      in-process-name: crud-service-example-${random.uuid}

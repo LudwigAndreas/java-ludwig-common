@@ -21,7 +21,8 @@ top of them looks like.
 | Localization | One message bundle drives validation messages *and* RFC 9457 error bodies, resolved per request from `Accept-Language` - all of it from the web-core starter, which this service configures rather than implements |
 | Safe query API | OData `$filter`/`$orderby`/`$top`/`$skip`, restricted by per-field, per-role policy on the entity |
 | Reliable events | Every write records its event in the transactional outbox in the same transaction |
-| Resource-level access | `@PreAuthorize` per endpoint; roles come from the local projection of the OIDC user stream, never from token claims |
+| Resource-level access | `@PreAuthorize` on the application service, so REST and gRPC pass the same check; roles come from the local projection of the OIDC user stream, never from token claims |
+| gRPC beside REST | `GetProduct` and `GetProducts` from [`catalog-grpc-api`](../../sources/catalog-grpc-api/src/main/proto/ludwig/catalog/v1/catalog.proto) on port 9090, through the [gRPC server starter](../../sources/grpc-server-spring-boot-starter/README.md), mapped by a MapStruct interface |
 | Data-level access | A caller's scope is ANDed into the search query and re-checked on every load by id - one `DataScopeMapping` bean is the only security code this service writes |
 | Telling a UI which service answered | `GET /server/info` from the [observability starter](../../sources/observability-spring-boot-starter/README.md) - service, version, environment, short commit and build date, nothing else - published by one line in `ludwig.security.public-paths` |
 | A user-submitted file performing an action | One `RowBinding`, one `RowHandler` and a block of YAML; the file-action starter owns the upload edge, the bounded spreadsheet reader, the confirm step, the reject report and the operation envelope |
@@ -287,6 +288,31 @@ a `char(64)` column Hibernate's schema validation rejected, an unqualified `Cloc
 with `rest-client`'s, an ambiguous `TaskScheduler`, and a `required-authority` that was configured,
 documented and never actually checked.
 
+## gRPC
+
+The catalog is served over gRPC beside its REST API: `GetProduct` and `GetProducts` from
+[`catalog-grpc-api`](../../sources/catalog-grpc-api/src/main/proto/ludwig/catalog/v1/catalog.proto), whose
+whole POM is `ludwig-grpc-api-parent` and an `artifactId`.
+
+- `web.grpc.CatalogGrpcService` is the adapter: it maps the request, calls `ProductService`, and maps the
+  answer. Authorization, transactions and the data guard are on the service (see the security section).
+- `web.mapper.ProductMessageMapper` is the mapping - `@Mapper(config = ProtobufMapperConfig.class)` and
+  nothing written by hand. The supplier cost is in the model and not in the message, as on REST.
+- A missing product is `NOT_FOUND` with `error.product.not-found` in its details, an id that is not a UUID
+  is `INVALID_ARGUMENT`, a caller without a catalog role is `PERMISSION_DENIED` - the same problems the
+  REST API answers, from the same mappers.
+
+Configuration:
+
+| Where | What |
+|---|---|
+| `application.yml` | port `${GRPC_PORT:9090}`; TLS from the SSL bundle named by `GRPC_TLS_BUNDLE`, which a deployment supplies under `spring.ssl.bundle.pem.<name>` from its secret store. With none, the server refuses to listen in plaintext on every interface and the service does not start. |
+| `application-local.yml` | `127.0.0.1`, plaintext - accepted on loopback. Authentication stays on: the `X-Local-*` backdoor is HTTP-only, so a gRPC call needs a token from the configured issuer. |
+| tests | in-process, under a name unique to each test context (`src/test/resources/config/application.yml`) - no port, no certificates, and no existing test had to change |
+
+The image exposes 9090 beside 8080 and 8081. A caller inside the cluster reaches the service through a
+headless `Service`, so the gRPC client starter balances per call (see its README).
+
 ## Security: two layers, two places
 
 Authorization here is split the way the [security module](../../sources/security-spring-boot-starter/README.md)
@@ -294,8 +320,15 @@ argues it has to be, and the split is visible in the file layout:
 
 | Layer | Question | Where in this service |
 |---|---|---|
-| Resource | may this caller use this endpoint? | `@PreAuthorize` on `ProductController` |
+| Resource | may this caller read, change or delete products at all? | `@PreAuthorize` on `ProductServiceImpl` - except `create`, on `ProductController` (below) |
 | Data | which products, and may they touch *this* one? | the scoped query in `ProductQueryRepositoryImpl`, the guard in `ProductServiceImpl` |
+
+The resource check moved from the controller to the service when the catalog gained a second way in:
+gRPC calls `CatalogGrpcService` directly, not through a Spring proxy, so an annotation on that adapter
+would never run, and a check left on the controller would not cover it. On the service, every way in
+passes the same check. `create` is the exception: its other way in is the spreadsheet import, which
+checks the submitter's authority at submission and applies rows later on a worker with no caller - a
+role check on the service would refuse every row of a deferred import.
 
 Row rules deliberately do **not** live in controller annotations. Put them there and they end up
 enforced on one endpoint and forgotten on the next; put them where the rows are reached and every path

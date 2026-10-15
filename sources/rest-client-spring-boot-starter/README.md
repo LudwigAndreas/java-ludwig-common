@@ -857,7 +857,8 @@ ru.ludwigandreas.restclient
 ├── spi             every extension point - depends on nothing else in this module
 ├── config          @ConfigurationProperties, the deep merge, the validator, auto-configuration
 ├── core            the registry, the runtime, and both execution pipelines
-├── auth            the authenticator factory, the token cache, the shipped providers
+├── auth            the authenticator factory and the shipped providers (the token cache, mint and
+│                   relay reader are outbound-token-core, shared with the gRPC client)
 ├── resilience      the policies, the retry decision, the failure classifier
 ├── transport       JDK / Apache / Reactor Netty, TLS, proxy, pool gauges
 ├── observability   metrics, listeners, redaction, exchange logging, audit

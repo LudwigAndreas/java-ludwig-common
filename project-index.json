@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-11T18:26:57.714326Z",
+    "generatedAt": "2026-10-15T11:45:38.188332Z",
     "revision": "1.1.0-SNAPSHOT",
-    "moduleCount": 34,
-    "commit": "d53624600c27698ae2fb232a912b8d74cd3878ff",
-    "commitShort": "d536246",
+    "moduleCount": 40,
+    "commit": "0a68e84ed9e36d72ee8c1ef5241aed2b4ddcbf52",
+    "commitShort": "0a68e84",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "a8531a62c7a98384c49b283b2ed4dc5d2e45e0f8866fa800b89972cf5c97d6d8",
-      "newestPom": "pom.xml",
-      "newestPomModified": "2026-10-11T18:26:47.743706Z"
+      "pomSetSha": "93bae9b64a35a71d0d9eabe61bd61f0bfa48f59afa0e36b2c3bcd5001a84fb51",
+      "newestPom": "build/ludwig-service-parent/pom.xml",
+      "newestPomModified": "2026-10-15T09:17:59.259867Z"
     }
   },
   "modules": [
@@ -63,6 +63,37 @@
       "pom": "build/ludwig-service-parent/pom.xml",
       "readme": "build/ludwig-service-parent/README.md",
       "readmeRu": "build/ludwig-service-parent/README.ru.md"
+    },
+    {
+      "name": "ludwig-grpc-api-parent",
+      "dir": "build",
+      "path": "build/ludwig-grpc-api-parent",
+      "artifactId": "ludwig-grpc-api-parent",
+      "packaging": "pom",
+      "role": "contract-parent",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": null,
+      "inRepoDependencies": [
+        {
+          "artifactId": "grpc-core",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 0
+      },
+      "pom": "build/ludwig-grpc-api-parent/pom.xml",
+      "readme": null,
+      "readmeRu": null
     },
     {
       "name": "odata-filter-spring-boot-starter",
@@ -161,6 +192,10 @@
         },
         {
           "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-client-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -499,6 +534,10 @@
       "inRepoDependents": [
         {
           "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1280,6 +1319,14 @@
           "scope": "compile"
         },
         {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "identity-projection-spring-boot-starter",
           "scope": "compile"
         },
@@ -1550,6 +1597,18 @@
           "scope": "compile"
         },
         {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-core",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "idempotency-spring-boot-starter",
           "scope": "compile"
         },
@@ -1652,6 +1711,14 @@
           "scope": "compile"
         },
         {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "notification-service",
           "scope": "compile"
         },
@@ -1687,6 +1754,45 @@
       "readmeRu": "sources/observability-spring-boot-starter/README.ru.md"
     },
     {
+      "name": "outbound-token-core",
+      "dir": "sources",
+      "path": "sources/outbound-token-core",
+      "artifactId": "outbound-token-core",
+      "packaging": "jar",
+      "role": "library",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.outboundtoken",
+      "inRepoDependencies": [],
+      "inRepoDependents": [
+        {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/outbound-token-core/src/test/java/ru/ludwigandreas/outboundtoken/unit",
+        "architecture": "sources/outbound-token-core/src/test/java/ru/ludwigandreas/outboundtoken/architecture"
+      },
+      "testClasses": {
+        "surefire": 4,
+        "failsafe": 0
+      },
+      "pom": "sources/outbound-token-core/pom.xml",
+      "readme": "sources/outbound-token-core/README.md",
+      "readmeRu": "sources/outbound-token-core/README.ru.md"
+    },
+    {
       "name": "rest-client-spring-boot-starter",
       "dir": "sources",
       "path": "sources/rest-client-spring-boot-starter",
@@ -1706,6 +1812,11 @@
           "artifactId": "observability-spring-boot-starter",
           "scope": "compile",
           "optional": true
+        },
+        {
+          "artifactId": "outbound-token-core",
+          "scope": "compile",
+          "optional": false
         },
         {
           "artifactId": "web-core-spring-boot-starter",
@@ -1748,6 +1859,254 @@
       "pom": "sources/rest-client-spring-boot-starter/pom.xml",
       "readme": "sources/rest-client-spring-boot-starter/README.md",
       "readmeRu": "sources/rest-client-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "grpc-core",
+      "dir": "sources",
+      "path": "sources/grpc-core",
+      "artifactId": "grpc-core",
+      "packaging": "jar",
+      "role": "library",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.grpc.core",
+      "inRepoDependencies": [
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "ludwig-grpc-api-parent",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/grpc-core/src/test/java/ru/ludwigandreas/grpc/core/unit",
+        "architecture": "sources/grpc-core/src/test/java/ru/ludwigandreas/grpc/core/architecture"
+      },
+      "testClasses": {
+        "surefire": 6,
+        "failsafe": 0
+      },
+      "pom": "sources/grpc-core/pom.xml",
+      "readme": "sources/grpc-core/README.md",
+      "readmeRu": "sources/grpc-core/README.ru.md"
+    },
+    {
+      "name": "catalog-grpc-api",
+      "dir": "sources",
+      "path": "sources/catalog-grpc-api",
+      "artifactId": "catalog-grpc-api",
+      "packaging": "jar",
+      "role": "contract",
+      "parentPom": "ludwig-grpc-api-parent",
+      "importsLudwigBom": false,
+      "packageRoot": null,
+      "inRepoDependencies": [],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": null,
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [],
+      "testDirs": {},
+      "testClasses": {
+        "surefire": 0,
+        "failsafe": 0
+      },
+      "pom": "sources/catalog-grpc-api/pom.xml",
+      "readme": null,
+      "readmeRu": null
+    },
+    {
+      "name": "grpc-server-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/grpc-server-spring-boot-starter",
+      "artifactId": "grpc-server-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.grpc.server",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "grpc-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "test"
+        }
+      ],
+      "autoConfigImports": "sources/grpc-server-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/grpc-server-spring-boot-starter/src/main/resources/i18n/ludwig-grpc-server-messages.properties",
+        "sources/grpc-server-spring-boot-starter/src/main/resources/i18n/ludwig-grpc-server-messages_ru.properties"
+      ],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/grpc-server-spring-boot-starter/src/test/java/ru/ludwigandreas/grpc/server/unit",
+        "integration": "sources/grpc-server-spring-boot-starter/src/test/java/ru/ludwigandreas/grpc/server/integration",
+        "architecture": "sources/grpc-server-spring-boot-starter/src/test/java/ru/ludwigandreas/grpc/server/architecture"
+      },
+      "testClasses": {
+        "surefire": 3,
+        "failsafe": 9
+      },
+      "pom": "sources/grpc-server-spring-boot-starter/pom.xml",
+      "readme": "sources/grpc-server-spring-boot-starter/README.md",
+      "readmeRu": "sources/grpc-server-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "grpc-client-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/grpc-client-spring-boot-starter",
+      "artifactId": "grpc-client-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.grpc.client",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "audit-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "grpc-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "observability-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "outbound-token-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": "sources/grpc-client-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [
+        "sources/grpc-client-spring-boot-starter/src/main/resources/i18n/ludwig-grpc-client-messages.properties",
+        "sources/grpc-client-spring-boot-starter/src/main/resources/i18n/ludwig-grpc-client-messages_ru.properties"
+      ],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/grpc-client-spring-boot-starter/src/test/java/ru/ludwigandreas/grpc/client/unit",
+        "integration": "sources/grpc-client-spring-boot-starter/src/test/java/ru/ludwigandreas/grpc/client/integration",
+        "architecture": "sources/grpc-client-spring-boot-starter/src/test/java/ru/ludwigandreas/grpc/client/architecture"
+      },
+      "testClasses": {
+        "surefire": 5,
+        "failsafe": 11
+      },
+      "pom": "sources/grpc-client-spring-boot-starter/pom.xml",
+      "readme": "sources/grpc-client-spring-boot-starter/README.md",
+      "readmeRu": "sources/grpc-client-spring-boot-starter/README.ru.md"
     },
     {
       "name": "user-settings-spring-boot-starter",
@@ -1881,6 +2240,14 @@
           "scope": "test"
         },
         {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "messaging-spring-boot-starter",
           "scope": "test"
         },
@@ -1913,7 +2280,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 11,
+        "surefire": 12,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",
@@ -1954,6 +2321,14 @@
         },
         {
           "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2048,6 +2423,14 @@
         },
         {
           "artifactId": "file-action-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2190,6 +2573,11 @@
           "optional": false
         },
         {
+          "artifactId": "catalog-grpc-api",
+          "scope": "compile",
+          "optional": false
+        },
+        {
           "artifactId": "db-core",
           "scope": "compile",
           "optional": false
@@ -2201,6 +2589,11 @@
         },
         {
           "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
           "scope": "compile",
           "optional": false
         },
@@ -2271,8 +2664,8 @@
         "architecture": "services/crud-service-example/src/test/java/ru/ludwigandreas/example/catalog/architecture"
       },
       "testClasses": {
-        "surefire": 4,
-        "failsafe": 6
+        "surefire": 5,
+        "failsafe": 7
       },
       "pom": "services/crud-service-example/pom.xml",
       "readme": "services/crud-service-example/README.md",
@@ -2446,6 +2839,11 @@
           "optional": false
         },
         {
+          "artifactId": "catalog-grpc-api",
+          "scope": "compile",
+          "optional": false
+        },
+        {
           "artifactId": "checkstyle-rules",
           "scope": "compile",
           "optional": false
@@ -2472,6 +2870,21 @@
         },
         {
           "artifactId": "file-ingest-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "grpc-client-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "grpc-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "grpc-server-spring-boot-starter",
           "scope": "compile",
           "optional": false
         },
@@ -2522,6 +2935,11 @@
         },
         {
           "artifactId": "odata-filter-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "outbound-token-core",
           "scope": "compile",
           "optional": false
         },

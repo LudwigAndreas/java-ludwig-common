@@ -131,17 +131,19 @@ gate runs it. The check lives there rather than in ArchUnit or Checkstyle becaus
 position is a filesystem fact, which bytecode and source-text analysis both cannot see. The spec is
 the `repository-layout` capability in `openspec/specs/`.
 
-## The three-POM split (the thing to get right)
+## The POM split (the thing to get right)
 
 | POM | Role |
 |---|---|
 | `pom.xml` (root, artifact `common`) | Reactor + **parent of the library modules only**. Imports `spring-boot-dependencies` so libraries don't bake in a Boot line. Never imports `ludwig-bom` (it is the BOM's parent — circular). |
 | `ludwig-bom` | Versions and nothing else. Published parentless. Every module in the repo imports it (`type=pom`, `scope=import`); consumers do the same. |
-| `ludwig-service-parent` | All build decisions services inherit: compiler + annotation processors in Lombok→MapStruct→QueryDSL order, surefire/failsafe split, enforced JaCoCo gate (70% instruction / 60% branch), enforcer, Checkstyle, jib. Its own parent is `spring-boot-starter-parent`. |
+| `ludwig-service-parent` | All build decisions services inherit: compiler + annotation processors in Lombok→MapStruct (with the protobuf SPI)→QueryDSL order, surefire/failsafe split, enforced JaCoCo gate (70% instruction / 60% branch), enforcer, Checkstyle, jib. Its own parent is `spring-boot-starter-parent`. |
+| `ludwig-grpc-api-parent` | What every gRPC contract module (`<service>-grpc-api`) needs and nothing else: the gRPC and protobuf dependencies, `grpc-core`, and protobuf generation. Parented by `common`, imports `ludwig-bom`. A contract module's POM is this parent and an `artifactId`. |
 
 Consequences when editing POMs:
 - A **library** module is parented by the reactor root and imports `ludwig-bom`. A **service**
-  (`crud-service-example`, `notification-service`) is parented by `ludwig-service-parent`.
+  (`crud-service-example`, `notification-service`) is parented by `ludwig-service-parent`. A
+  **gRPC contract** module is parented by `ludwig-grpc-api-parent` and declares nothing else.
 - Third-party versions belong in `build/ludwig-bom/pom.xml`, not the root POM. Plugin versions and build
   configuration belong in the root POM (libraries) or `ludwig-service-parent` (services).
 - The version is expressed in exactly one way — `${revision}` in every POM, resolved by
@@ -223,6 +225,26 @@ Consequences when editing POMs:
   preferences are different things and must stay so: notification's `RecipientPreferences` is resolved
   per recipient on a worker with no caller, the restatement rule is written not to fire on that shape,
   and its javadoc states the distinction because the distinction is the rule.
+- **gRPC between platform services goes through the two starters.** A contract is a `.proto` in a
+  `<service>-grpc-api` contract module in `sources/` (package `ludwig.<service>.v<N>`, `java_package`
+  `ru.ludwigandreas.<service>.grpc.v<N>`, `java_multiple_files = true`, every `rpc` declaring its
+  `idempotency_level`, operations through `grpc-core`'s `ludwig.operation.v1.Operation`); generation
+  comes from its parent, `build/ludwig-grpc-api-parent`, so the module's POM is that parent (with
+  its `relativePath`) and an `artifactId`; `scripts/manifest.sh layout` fails a contract module that
+  has another parent, has Java, has no `.proto`, or is missing from the reactor, `ludwig-bom` or
+  `build/jacoco-aggregate`. `scripts/check_protos.sh` enforces the `.proto` rules and the gate runs
+  it, because a `.proto` is a resource ArchUnit and Checkstyle cannot see.
+  A server is `grpc-server-spring-boot-starter` and a client `grpc-client-spring-boot-starter`; a
+  module never builds a `ManagedChannelBuilder`, `ServerBuilder` or their Netty variants itself.
+  **A `@LudwigGrpcService` is a thin adapter**: gRPC dispatches to the object `bindService()`
+  captured, not through the Spring proxy, so `@PreAuthorize`, `@Secured`, `@Transactional` and the
+  other proxy annotations on it compile, start and do nothing - authorization and transactions
+  belong on the application service it delegates to. `RuleGroup.GRPC` fails the build on the
+  builders, on an unstereotyped `BindableService`, on those annotations and on a repository
+  dependency from a gRPC service. Retry is decided by the contract's `idempotency_level`, never at a
+  call site. Outbound tokens - the cache, the client-credentials mint, the relay reader - are
+  `outbound-token-core`, shared by both client starters; a `TokenOwnershipTest` in each fails the
+  build on a second copy.
 - Services follow the reference shape in `crud-service-example`: three model layers
   `web.dto` → `service.model` → `repository.entity`, wired by MapStruct; Lombok instead of
   boilerplate; **QueryDSL-JPA against generated Q-types only** — no JPQL/SQL strings, no derived

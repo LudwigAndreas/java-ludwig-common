@@ -113,6 +113,28 @@ class RuleEvaluationTest {
                 .noneMatch(description -> description.contains("ClaimState"));
     }
 
+    /**
+     * The same rule against protoc-generated enums, which hide a restatement behind a name prefix, a
+     * mandatory zero value and {@code UNRECOGNIZED}. Three things have to hold together: the
+     * prefixed restatement is caught, a generated richer lifecycle is not, and the one exempted type
+     * - grpc-core's operation status, under its real name - passes while a second enum of exactly
+     * the same shape beside it still fails. An exemption that also let the second one through would
+     * be a hole, not an exemption.
+     */
+    @Test
+    @DisplayName("a restatement generated from a .proto is reported; the shared operation message's enum is not")
+    void protobufRestatementIsReportedAndTheSharedMessageIsExempt() {
+        ArchitectureRulesConfiguration configuration = Fixtures.configurationFor("bad.operations")
+                .basePackages(Fixtures.ROOT + ".bad.operations", "ru.ludwigandreas.operation.grpc.v1")
+                .build();
+
+        assertThat(Fixtures.violationDescriptions(configuration,
+                OperationVocabularyRules.NO_SECOND_OPERATION_VOCABULARY))
+                .anyMatch(description -> description.contains("JobStatusProto"))
+                .noneMatch(description -> description.contains("PartnerStateProto"))
+                .noneMatch(description -> description.contains("ru.ludwigandreas.operation.grpc.v1.OperationStatus"));
+    }
+
     @Test
     @DisplayName("exception architecture violations are reported")
     void exceptionViolationsAreReported() {

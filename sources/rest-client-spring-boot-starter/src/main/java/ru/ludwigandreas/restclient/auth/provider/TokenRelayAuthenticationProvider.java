@@ -3,9 +3,8 @@ package ru.ludwigandreas.restclient.auth.provider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.core.AbstractOAuth2Token;
-import org.springframework.security.oauth2.server.resource.authentication.AbstractOAuth2TokenAuthenticationToken;
 import reactor.core.publisher.Mono;
+import ru.ludwigandreas.outboundtoken.InboundBearerToken;
 import ru.ludwigandreas.restclient.config.AuthProperties;
 import ru.ludwigandreas.restclient.config.AuthTypes;
 import ru.ludwigandreas.restclient.spi.AuthRequest;
@@ -109,18 +108,7 @@ public class TokenRelayAuthenticationProvider implements ClientAuthenticationPro
         }
 
         private String extractToken(Authentication authentication) {
-            if (authentication == null || !authentication.isAuthenticated()) {
-                return null;
-            }
-            // Covers JwtAuthenticationToken and BearerTokenAuthentication, which is every shape a
-            // resource server in this platform produces.
-            if (authentication instanceof AbstractOAuth2TokenAuthenticationToken<?> tokenAuthentication) {
-                return tokenAuthentication.getToken().getTokenValue();
-            }
-            if (authentication.getCredentials() instanceof AbstractOAuth2Token token) {
-                return token.getTokenValue();
-            }
-            return null;
+            return InboundBearerToken.of(authentication);
         }
 
         @Override

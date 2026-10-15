@@ -19,6 +19,17 @@
 
 ### Added
 
+- **gRPC между сервисами платформы.** `grpc-core`, `grpc-server-spring-boot-starter` и
+  `grpc-client-spring-boot-starter`: сервисы обслуживают и вызывают друг друга по gRPC, а принципал,
+  correlation id, предпочтения вызывающего, отображение ошибок, дедлайны, отказоустойчивость,
+  идемпотентный повтор и аудит переносятся через транспорт. Контракты - модули `<service>-grpc-api` с
+  родителем - новым **`ludwig-grpc-api-parent`**, поэтому POM контракта - это родитель и `artifactId`;
+  `scripts/manifest.sh layout` отклоняет модуль, объявленный не полностью. MapStruct отображает
+  protobuf-сообщения в сервисах (`@Mapper(config = ProtobufMapperConfig.class)`), а `crud-service-example`
+  обслуживает `GetProduct`/`GetProducts` из нового `catalog-grpc-api` как рабочий пример.
+- **`outbound-token-core`**: единственные кэш машинного токена, его выпуск по client credentials и
+  чтение токена для передачи, общие для `rest-client-spring-boot-starter` и `grpc-client-spring-boot-starter`.
+
 - **`test-support-local`: локальный запуск сервиса с его инфраструктурой, заглушками партнёров и
   начальными данными.** Новый модуль в области test. `Local<Name>Application` сервиса, в `src/test`,
   запускает собственный `main` сервиса через `LocalRun` с названными PostgreSQL, Kafka, LocalStack и
@@ -45,6 +56,13 @@
 
 ### Changed
 
+- **`crud-service-example` проверяет роли на прикладном сервисе.** `@PreAuthorize` методов `get`,
+  `search`, `update` и `delete` переехали с `ProductController` на `ProductServiceImpl`, поэтому REST и
+  gRPC проходят одну и ту же проверку; ответы REST не изменились. `create` сохраняет проверку на
+  контроллере, потому что импорт таблицы применяет строки на рабочем потоке без вызывающего.
+- `ludwig-bom` фиксирует `guava` 33.6.0-jre, `error_prone_annotations` 2.50.0 и `j2objc-annotations` 3.1,
+  которые gRPC иначе приносит в сервис в конфликтующих версиях.
+
 - **`ludwig-service-parent` валит сборку сервиса с артефактом `test-support` вне области test.**
   Новое правило enforcer запрещает `ru.ludwigandreas:test-support*` в областях compile и runtime.
   Сервис, объявивший `test-support`, `test-support-security` или `test-support-local` без
@@ -52,6 +70,14 @@
 - **`test-support-local`: `PartnerStub.clientName()` теперь `name()`.** Имя заглушки больше не
   обязательно имя rest-клиента. Запуск также отказывает заглушке, адресное свойство которой не задаёт
   ни один другой источник, какого бы вида адрес ни был.
+
+### Removed
+
+- **Несовместимо - причина, по которой следующий выпуск - 3.0.0.** Из `rest-client-spring-boot-starter`
+  удалены `ru.ludwigandreas.restclient.auth.CachedToken` и `CachingTokenSource` **без предварительного
+  выпуска с пометкой устаревания** - это решение. Они без изменений переехали в `outbound-token-core`:
+  импортируйте `ru.ludwigandreas.outboundtoken.CachedToken` и `ru.ludwigandreas.outboundtoken.CachingTokenSource`.
+  Проверка совместимости API фиксирует оба удаления как обоснованные исключения.
 
 ### Fixed
 

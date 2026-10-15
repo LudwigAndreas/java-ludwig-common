@@ -434,6 +434,19 @@ ludwig:
       "[spiffe://mesh/ns/orders/sa/orders]":
         - ROLE_CATALOG_READER
 
+  # --- ludwig gRPC server ----------------------------------------------------------------------
+  # GetProduct and GetProducts (catalog-grpc-api) beside the REST API, on their own port, through the
+  # same authentication, problem mapping and role checks (on ProductServiceImpl).
+  grpc:
+    server:
+      port: ${GRPC_PORT:9090}
+      # TLS is not optional. A deployment names its SSL bundle here and supplies it under
+      # spring.ssl.bundle.pem.<name> from its secret store, never from this file. With no bundle the
+      # server would listen in plaintext on every interface, which it refuses at startup - so a
+      # deployment that forgot TLS fails to start instead of carrying bearer tokens in the clear.
+      tls:
+        bundle: ${GRPC_TLS_BUNDLE:}
+
 # --- ludwig odata-filter -------------------------------------------------------------------------
 odata:
   filter:

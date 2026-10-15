@@ -345,6 +345,18 @@ carries `Retry-After` is behaviour, not structure, and ArchUnit sees neither. It
 can be enforced exactly: `web-core`'s `OperationResponses` refuses to build the malformed response at
 all. Same division of labour as everywhere else.
 
+**Protobuf enums are read as their author wrote them, and one is exempt by name.** A status enum
+declared in a `.proto` hides a restatement completely: every value carries the enum's name as a
+prefix, there is a mandatory zero value and protoc adds `UNRECOGNIZED`, so not one constant of
+`JOB_STATUS_PENDING, JOB_STATUS_SUCCEEDED, ...` is literally a shared word. For an enum that
+implements protobuf's `ProtocolMessageEnum` the rule therefore drops the two artefacts and the common
+prefix before it looks. The single exemption is `ru.ludwigandreas.operation.grpc.v1.OperationStatus`,
+the enum generated from `grpc-core`'s `operation.proto`: a wire format cannot import a Java enum, that
+message is the one mapping of the envelope, and it is what every contract module imports *instead of*
+declaring a status enum of its own. It is named in `OperationVocabularyRules.EXEMPT_TYPES`, and a test
+runs the rule over that type and a second generated enum of the same shape together - the first
+passes, the second fails.
+
 ### `caching` - there is one caching primitive, and nobody builds a second one
 
 | Rule id | What it enforces |
@@ -544,6 +556,63 @@ to read it. That one remains a review question, recorded as a requirement of the
 capability. What the build *can* check beside these rules is the other end: `scripts/check_build_metadata.sh`
 fails the gate when `ludwig-service-parent` stops packaging the two provenance resources, which is the
 reason nobody should need to ask the repository at runtime in the first place.
+
+### `grpc` - gRPC goes through the two starters, and a service is a thin adapter
+
+| Rule | What it requires |
+|------|------------------|
+| `grpc.no-hand-built-channel-or-server` | No class outside `ru.ludwigandreas.grpc.server..` and `ru.ludwigandreas.grpc.client..` depends on a gRPC channel or server builder - `ManagedChannelBuilder`, `ServerBuilder`, `Grpc`, the Netty, OkHttp and in-process builders, and the Netty builders as `grpc-netty-shaded` relocates them |
+| `grpc.service-carries-the-stereotype` | Every concrete class assignable to `io.grpc.BindableService` is annotated `@LudwigGrpcService` |
+| `grpc.no-proxy-annotations-on-service` | A gRPC service carries none of `@PreAuthorize`, `@PostAuthorize`, `@PreFilter`, `@PostFilter`, `@Secured`, `@RolesAllowed`, `@PermitAll`, `@DenyAll`, `@Transactional`, `@Cacheable`, `@Async` - on the class or on a method |
+| `grpc.service-is-a-thin-adapter` | A gRPC service depends on no repository |
+
+On by default, and vacuous for a module that speaks no gRPC: it then references no builder and declares
+no service implementation to find.
+
+**A service is an adapter and a channel is configuration, and neither is something a module builds.**
+What a module writes is the adapter's body - convert the message, call the application service, convert
+the answer - and a `ludwig.grpc.client.clients.<name>` block. A hand-built channel is a client with no
+deadline ceiling, no circuit breaker, no audit record and its own idea of when a call may be repeated; a
+hand-built server is unauthenticated unless its author remembered. Those decisions are taken once, in
+`grpc-client-spring-boot-starter` and `grpc-server-spring-boot-starter`.
+
+**The proxy rule is the one that matters most, because the mistake is silent.** `@PreAuthorize` and
+`@Transactional` work by wrapping the bean in a proxy and intercepting calls made *through* it. gRPC
+does not call through it: at startup the server asks the bean for its `ServerServiceDefinition`, the
+proxy forwards `bindService()` to the target, and the definition that comes back holds handlers bound to
+the *target object*. So the annotation compiles, the application starts, the bean is proxied, and the
+annotation is never evaluated. For `@Transactional` that is a missing transaction, which usually fails
+loudly. For `@PreAuthorize` it is an authorization rule that is written down, reviewed, approved and
+not enforced, and nothing fails. Authorization and transactions belong to the application service the
+adapter delegates to, where the call does arrive through the proxy - and the fixture for this rule
+carries the same two annotations on that service to show the rule stays silent there.
+
+Annotations and types are matched by name, as everywhere in this jar, so a service enabling the rules
+inherits neither gRPC nor Spring Security from them.
+
+#### The five rules in this area that no build can check
+
+They are listed so that the group's own documentation says what it cannot see. The list is the backlog,
+not an apology.
+
+1. **A `.proto` change is wire-compatible.** The API-compatibility gate compares generated Java, where
+   renumbering a field is invisible and renaming one is a false alarm. A real check needs a baseline
+   descriptor set per release; it is deferred to its own change rather than approximated here.
+2. **A declared `idempotency_level` is true.** `scripts/check_protos.sh` fails the gate when an `rpc`
+   declares none, because the gRPC client reads the option to decide whether a failed call may be
+   repeated. Whether a repeat really is safe is known only to the method's author.
+3. **A client's target resolves to every server.** Per-call balancing needs a target that resolves to
+   every pod - a headless `Service`. That is a fact about a cluster; the client can warn about
+   `pick_first` and cannot see what a DNS name will answer.
+4. **A client's keepalive is no shorter than its server's permitted interval.** A fact about two
+   deployments' configuration. The two starters' defaults are aligned, and each README says to move them
+   together.
+5. **A call between two platform services uses gRPC rather than REST.** Whether a host is internal is
+   not something a class file says. A rule keyed on it could only match nothing, stay green and read as
+   coverage - the most expensive kind of absent rule - so it is not written.
+
+The content and placement of `.proto` files are deliberately not in this group: a `.proto` is a
+resource, which bytecode analysis cannot see, and `scripts/check_protos.sh` owns it.
 
 ## Configuring the conventions
 

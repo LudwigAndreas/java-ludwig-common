@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+// A test-only service. It exists so this starter's own tests have something to serve; it is not a
+// contract, is never packaged, and is exempt from the placement and naming rules of
+// scripts/check_protos.sh for that reason. It is NOT exempt from declaring an idempotency_level on
+// every rpc, and deliberately has one method of each level.
+package ludwig.echo.v1;
+
+option java_package = "ru.ludwigandreas.echo.grpc.v1";
+option java_multiple_files = true;
+
+service EchoService {
+  // A read.
+  rpc Echo(EchoRequest) returns (EchoReply) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // A write that is safe to repeat.
+  rpc Store(EchoRequest) returns (EchoReply) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  // A write that is not.
+  rpc Append(EchoRequest) returns (EchoReply) {
+    option idempotency_level = IDEMPOTENCY_UNKNOWN;
+  }
+  rpc Stream(EchoRequest) returns (stream EchoReply) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message EchoRequest {
+  string text = 1;
+  // How many replies Stream sends.
+  int32 repeat = 2;
+  // Padding, for the message-size tests.
+  bytes payload = 3;
+}
+
+message EchoReply {
+  string text = 1;
+  // What the handler observed on its own thread.
+  string caller = 2;
+  string correlation_id = 3;
+  string locale = 4;
+  string zone = 5;
+  string thread = 6;
+  // How many times the handler has run for this text.
+  int32 invocation = 7;
+}

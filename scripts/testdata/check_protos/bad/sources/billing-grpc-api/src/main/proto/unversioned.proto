@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+// E_PACKAGE: no version segment. E_MULTIPLE_FILES: the option is absent.
+package ludwig.billing;
+
+option java_package = "ru.ludwigandreas.billing.grpc";
+
+message Unversioned {}

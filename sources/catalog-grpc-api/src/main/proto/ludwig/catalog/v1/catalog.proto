@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+// The product catalog's gRPC contract, version 1: what crud-service-example serves beside its REST
+// API. A breaking change is a v2 package served beside this one, never an edit here.
+package ludwig.catalog.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option java_package = "ru.ludwigandreas.catalog.grpc.v1";
+option java_multiple_files = true;
+
+service CatalogService {
+  // One product. NOT_FOUND, with the product-not-found problem code, when there is none.
+  rpc GetProduct(GetProductRequest) returns (Product) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Several products, in the order asked for. NOT_FOUND when any one of them does not exist.
+  rpc GetProducts(GetProductsRequest) returns (GetProductsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message GetProductRequest {
+  // The product's UUID.
+  string id = 1;
+}
+
+message GetProductsRequest {
+  repeated string ids = 1;
+}
+
+message GetProductsResponse {
+  repeated Product products = 1;
+}
+
+enum ProductState {
+  PRODUCT_STATE_UNSPECIFIED = 0;
+  PRODUCT_STATE_DRAFT = 1;
+  PRODUCT_STATE_ACTIVE = 2;
+  PRODUCT_STATE_DISCONTINUED = 3;
+}
+
+message Category {
+  string id = 1;
+  string code = 2;
+  string name = 3;
+}
+
+// The values the REST endpoint returns for a product, and no more: the supplier cost is not part of
+// either API.
+message Product {
+  string id = 1;
+  string sku = 2;
+  string name = 3;
+  // Absent when the product has no description, which is not the same as an empty one.
+  optional string description = 4;
+  // A decimal string: money never travels as a binary floating-point number.
+  string price = 5;
+  ProductState state = 6;
+  int32 stock_quantity = 7;
+  Category category = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  // The optimistic-lock version, as the REST endpoint returns it.
+  int64 version = 11;
+}

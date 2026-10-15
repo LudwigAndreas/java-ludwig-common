@@ -172,6 +172,26 @@
         </dependency>
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
+            <artifactId>grpc-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbound-token-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>catalog-grpc-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>grpc-server-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>grpc-client-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
             <artifactId>security-spring-boot-starter</artifactId>
         </dependency>
         <!--
@@ -251,6 +271,12 @@
                         </goals>
                         <configuration>
                             <title>Ludwig platform - aggregate coverage</title>
+                            <!-- Generated protobuf code; the same pattern and the same reason as the
+                                 jacoco block in the root POM, repeated because report-aggregate
+                                 filters by this configuration and not by the modules'. -->
+                            <excludes>
+                                <exclude>**/grpc/v*/**</exclude>
+                            </excludes>
                             <outputDirectory>${project.build.directory}/site/jacoco-aggregate</outputDirectory>
                             <!--
                                 dataFileIncludes is deliberately NOT set, so the default applies:

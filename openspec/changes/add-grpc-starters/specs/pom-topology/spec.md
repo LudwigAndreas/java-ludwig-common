@@ -1,14 +1,19 @@
 ## ADDED Requirements
 
 ### Requirement: gRPC and protobuf versions live in the BOM and move together
-The gRPC and protobuf runtime versions SHALL be declared in `ludwig-bom` and nowhere else, and the
-protobuf compiler used for code generation SHALL be the version of the protobuf runtime the BOM
-declares.
+The gRPC and protobuf runtime versions SHALL be declared in `ludwig-bom`. The versions of the
+protobuf compiler and the gRPC code generator, which are plugin configuration and cannot be read
+from a BOM, SHALL be declared in the root POM and SHALL equal the runtime versions; the
+verification gate SHALL fail when either pair differs.
 
-#### Scenario: The protobuf runtime version is raised
-- **WHEN** the protobuf version in `ludwig-bom` is changed
-- **THEN** generated code in every module that generates is produced by the compiler of that same
-  version with no second edit
+#### Scenario: The protobuf runtime version is raised without the compiler
+- **WHEN** `protobuf.version` in `ludwig-bom` is changed and `protoc.version` in the root POM is not
+- **THEN** `scripts/check_protos.sh` exits non-zero and names both properties and both values
+
+#### Scenario: The gRPC runtime version is raised without the generator
+- **WHEN** `grpc.version` in `ludwig-bom` is changed and `protoc-gen-grpc-java.version` in the root
+  POM is not
+- **THEN** `scripts/check_protos.sh` exits non-zero
 
 #### Scenario: A module pins its own gRPC version
 - **WHEN** a module POM declares a version on a gRPC or protobuf dependency

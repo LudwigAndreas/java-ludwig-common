@@ -352,6 +352,19 @@
                                 <groupId>org.mapstruct</groupId>
                                 <artifactId>mapstruct-processor</artifactId>
                             </path>
+                            <!--
+                                Teaches MapStruct protobuf messages: builders instead of setters,
+                                getXList/addAllX for repeated fields, hasX for presence, and the
+                                UNSPECIFIED/UNRECOGNIZED enum constants - so a mapper between a generated
+                                message and a service.model type is an interface like any other. It is
+                                an accessor-naming SPI and applies to every mapper a service compiles;
+                                change consolidate-grpc-contracts-and-tokens proved it leaves the code
+                                generated for a mapper with no protobuf type unchanged.
+                            -->
+                            <path>
+                                <groupId>no.entur.mapstruct.spi</groupId>
+                                <artifactId>protobuf-spi-impl</artifactId>
+                            </path>
                             <path>
                                 <groupId>com.querydsl</groupId>
                                 <artifactId>querydsl-apt</artifactId>
@@ -369,6 +382,9 @@
                         <annotationProcessors>
                             <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
                             <annotationProcessor>com.querydsl.apt.jpa.JPAAnnotationProcessor</annotationProcessor>
+                            <!-- The protobuf SPI's options holder. Its strategies read it, and with
+                                 this list explicit nothing runs that is not named here. -->
+                            <annotationProcessor>no.entur.mapstruct.spi.protobuf.ProcessingEnvOptionsHolder</annotationProcessor>
                             <annotationProcessor>org.mapstruct.ap.MappingProcessor</annotationProcessor>
                             <annotationProcessor>org.springframework.boot.configurationprocessor.ConfigurationMetadataAnnotationProcessor</annotationProcessor>
                         </annotationProcessors>

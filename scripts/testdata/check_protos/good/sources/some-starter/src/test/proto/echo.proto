@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+// A test proto: free to choose its package and placement, still has to declare idempotency.
+package anything.goes;
+
+service Echo {
+  rpc Say(Msg) returns (Msg) { option idempotency_level = IDEMPOTENT; }
+}
+
+message Msg { string text = 1; }

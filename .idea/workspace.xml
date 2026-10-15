@@ -5,14 +5,47 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/Jenkinsfile" beforeDir="false" afterPath="$PROJECT_DIR$/Jenkinsfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CHANGELOG.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PROJECT_INDEX.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_INDEX.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/RuleGroup.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/RuleGroup.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/BuiltInRuleSets.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/BuiltInRuleSets.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/OperationVocabularyRules.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/OperationVocabularyRules.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/test/java/ru/ludwigandreas/archrules/RuleEvaluationTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/test/java/ru/ludwigandreas/archrules/RuleEvaluationTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/grpc-client/spec.md" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/grpc-client/spec.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/pom-topology/spec.md" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/pom-topology/spec.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/tasks.md" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/tasks.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/openspec/config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/config.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/project-index.json" beforeDir="false" afterPath="$PROJECT_DIR$/project-index.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/check_aggregate_report.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/check_aggregate_report.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/check_api_baseline.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/check_api_baseline.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/gate.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/gate.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/manifest.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/manifest.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/project_index.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/project_index.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/service/ProductServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/service/ProductServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/web/ProductController.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/web/ProductController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application-local.yml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application-local.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages_ru.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages_ru.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/CachedToken.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/CachingTokenSource.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/ClientCredentialsAuthenticationProvider.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/ClientCredentialsAuthenticationProvider.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/TokenRelayAuthenticationProvider.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/TokenRelayAuthenticationProvider.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/unit/CachingTokenSourceTest.java" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -91,6 +124,9 @@
       <entry key="D1" value="3.9998071620162605" />
       <entry key="W1" value="3.999972450766881" />
     </decayedShown>
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="DEPENDENCY_CHECKER_PROBLEMS_TAB" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;customColor&quot;: &quot;&quot;,
@@ -224,7 +260,7 @@
       <option name="presentableId" value="Default" />
       <updated>1786817614729</updated>
       <workItem from="1786817616340" duration="102896000" />
-      <workItem from="1791636263581" duration="25002000" />
+      <workItem from="1791636263581" duration="40616000" />
     </task>
     <servers />
   </component>

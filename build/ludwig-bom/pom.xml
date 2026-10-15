@@ -60,6 +60,9 @@
         <lombok.version>1.18.38</lombok.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <mapstruct.version>1.6.3</mapstruct.version>
+        <!-- MapStruct SPI for protobuf messages (builders, repeated fields, has-presence, the
+             UNSPECIFIED/UNRECOGNIZED enum constants), on ludwig-service-parent's processor path. -->
+        <protobuf-spi.version>1.47</protobuf-spi.version>
         <querydsl.version>5.1.0</querydsl.version>
         <!-- Matches the QueryDSL APT processor's expectation; also the version Boot manages, pinned
              here because it is named explicitly in annotationProcessorPaths. -->
@@ -105,6 +108,33 @@
              reached end of support in December 2025; the async/Netty client is deliberately not
              used, so `netty-nio-client` never enters the graph. -->
         <awssdk.version>2.55.5</awssdk.version>
+        <!--
+            gRPC and protobuf, for grpc-core and the two gRPC starters. Spring Boot 3.3 manages
+            neither, so the platform picks both, and each is pinned as a BOM import below for the
+            reason the AWS SDK is: grpc-java ships a dozen artifacts that must be the same release,
+            and a mismatched grpc-api and grpc-netty-shaded fails at class-load time, not at build
+            time.
+
+            THE TWO MOVE TOGETHER, AND WITH TWO PROPERTIES IN THE ROOT POM. protobuf.version is the
+            protobuf-java that this grpc-protobuf release declares as its own dependency - not the
+            newest protobuf - because generated message code and the gRPC marshaller have to agree
+            on the runtime. The code generators are PLUGIN inputs, so the root POM repeats both
+            numbers as protoc.version and protoc-gen-grpc-java.version (a BOM import cannot reach a
+            plugin's configuration); scripts/check_protos.sh fails the gate when the pairs differ.
+        -->
+        <grpc.version>1.84.2</grpc.version>
+        <protobuf.version>3.25.9</protobuf.version>
+        <!--
+            Guava and the two annotation jars it drags along, pinned because gRPC brings them to a
+            service by several paths at different versions: grpc-api asks for guava 33.6.0-android,
+            other libraries for 33.6.0-jre and 32.0.1-jre, and error_prone_annotations and
+            j2objc-annotations differ the same way. ludwig-service-parent's DependencyConvergence
+            rule refuses that, correctly. The highest of each, and the -jre flavour of Guava, which is
+            the superset the -android one is a subset of; grpc-java runs on either.
+        -->
+        <guava.version>33.6.0-jre</guava.version>
+        <error-prone-annotations.version>2.50.0</error-prone-annotations.version>
+        <j2objc-annotations.version>3.1</j2objc-annotations.version>
         <!-- WireMock, for the partner half of an enrichment or client integration test. The
              *-standalone* artifact is deliberate: the ordinary one brings its own Jetty, Jackson,
              Guava and Handlebars, none of which agree with the versions Spring Boot manages, so it
@@ -281,6 +311,31 @@
             </dependency>
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
+                <artifactId>grpc-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>outbound-token-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>catalog-grpc-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>grpc-server-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>grpc-client-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
                 <artifactId>jira-client</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -336,6 +391,11 @@
                 <groupId>org.mapstruct</groupId>
                 <artifactId>mapstruct-processor</artifactId>
                 <version>${mapstruct.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>no.entur.mapstruct.spi</groupId>
+                <artifactId>protobuf-spi-impl</artifactId>
+                <version>${protobuf-spi.version}</version>
             </dependency>
 
             <!-- ==== QueryDSL ==== -->
@@ -597,6 +657,37 @@
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
                 <version>${awssdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- gRPC and protobuf; see the properties above for why both are BOM imports and why the
+                 two versions are a pair. -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.errorprone</groupId>
+                <artifactId>error_prone_annotations</artifactId>
+                <version>${error-prone-annotations.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.j2objc</groupId>
+                <artifactId>j2objc-annotations</artifactId>
+                <version>${j2objc-annotations.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-bom</artifactId>
+                <version>${grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-bom</artifactId>
+                <version>${protobuf.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

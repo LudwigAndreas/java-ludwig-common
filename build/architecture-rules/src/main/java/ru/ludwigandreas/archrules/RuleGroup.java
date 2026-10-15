@@ -179,6 +179,31 @@ public enum RuleGroup {
      */
     LOGGING("logging", true),
 
+    /**
+     * There is one way a service exposes or calls a gRPC service, and nobody assembles a second by hand.
+     *
+     * <p>On by default, and vacuous for a module that speaks no gRPC - it then references no channel or server
+     * builder and declares no service implementation to find. See
+     * {@link ru.ludwigandreas.archrules.rules.GrpcRules} for the four rules and for the five things in this
+     * area that a build cannot check.
+     *
+     * <h2>The distinction this group turns on</h2>
+     *
+     * <p>A gRPC <b>service</b> is an adapter and a gRPC <b>channel</b> is configuration; neither is something a
+     * module builds. What a module legitimately writes is the adapter's body - convert the message, call the
+     * application service, convert the answer - and a {@code ludwig.grpc.client.clients.<name>} block. What it
+     * must not write is the thing around either: a {@code ManagedChannelBuilder} with its own deadline,
+     * credentials and retry, or a {@code ServerBuilder} with its own interceptors, because those are the
+     * decisions {@code grpc-client-spring-boot-starter} and {@code grpc-server-spring-boot-starter} exist to
+     * take once.
+     *
+     * <p>The group also forbids something that looks harmless and is not: a proxy-based annotation on a gRPC
+     * service method. gRPC dispatches to the object {@code bindService()} captured, not through the Spring
+     * proxy around the bean, so {@code @PreAuthorize} or {@code @Transactional} there compiles, starts and
+     * does nothing. A rule is the only place that failure can be made loud.
+     */
+    GRPC("grpc", true),
+
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);
 

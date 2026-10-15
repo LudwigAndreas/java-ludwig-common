@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+// A conforming contract. The comment below mentions `option idempotency_level` on purpose: prose
+// must not satisfy the rule, and it must not break the parser either.
+package ludwig.billing.v1;
+
+option java_package = "ru.ludwigandreas.billing.grpc.v1";
+option java_multiple_files = true;
+option go_package = "https://example.invalid/not//a/comment";
+
+service BillingService {
+  /* a read: safe to repeat */
+  rpc GetInvoice(GetInvoiceRequest) returns (Invoice) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateInvoice(CreateInvoiceRequest) returns (Invoice) {
+    option idempotency_level = IDEMPOTENCY_UNKNOWN;
+  }
+  rpc WatchInvoices(WatchRequest) returns (stream Invoice) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message GetInvoiceRequest { string id = 1; }
+message CreateInvoiceRequest { string customer = 1; }
+message WatchRequest {}
+message Invoice { string id = 1; }

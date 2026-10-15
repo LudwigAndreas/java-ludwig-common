@@ -69,15 +69,18 @@ command -v git >/dev/null 2>&1 || die "git is not on PATH"
 command -v python3 >/dev/null 2>&1 || die "python3 is not on PATH"
 [ -f project-index.json ] || die "project-index.json is missing; run scripts/manifest.sh build"
 
-# A jar module parented by the reactor root is exactly the gated set: the revapi binding is
+# A jar module that inherits the reactor root is exactly the gated set: the revapi binding is
 # declared in that root, and the two services are parented by ludwig-service-parent, so they
-# never inherit it. Printed before anything else so that --list works with no tags present.
+# never inherit it. "Inherits" is the root directly, or ludwig-grpc-api-parent - which is itself
+# parented by the root, so every gRPC contract module inherits the binding one level further down
+# and is published API like any library. Printed before anything else so that --list works with no
+# tags present.
 MODULES="$(python3 -c '
 import json
 with open("project-index.json", encoding="utf-8") as handle:
     data = json.load(handle)
 for module in data["modules"]:
-    if module.get("packaging") == "jar" and module.get("parentPom") == "common":
+    if module.get("packaging") == "jar" and module.get("parentPom") in ("common", "ludwig-grpc-api-parent"):
         print("%s\t%s" % (module["artifactId"], module["path"]))
 ')" || die "could not read project-index.json"
 

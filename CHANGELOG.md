@@ -21,6 +21,17 @@ either.
 
 ### Added
 
+- **gRPC between platform services.** `grpc-core`, `grpc-server-spring-boot-starter` and
+  `grpc-client-spring-boot-starter`: services serve and call each other over gRPC with the platform's
+  principal, correlation id, caller preferences, problem mapping, deadlines, resilience, idempotent
+  replay and audit carried across the transport. Contracts are `<service>-grpc-api` modules parented
+  by the new **`ludwig-grpc-api-parent`**, so a contract's POM is that parent and an `artifactId`;
+  `scripts/manifest.sh layout` fails one that is incompletely declared. MapStruct maps protobuf
+  messages in services (`@Mapper(config = ProtobufMapperConfig.class)`), and `crud-service-example`
+  serves `GetProduct`/`GetProducts` from the new `catalog-grpc-api` as the worked example.
+- **`outbound-token-core`**: the one machine-token cache, client-credentials mint and relay-token
+  reader, shared by `rest-client-spring-boot-starter` and `grpc-client-spring-boot-starter`.
+
 - **`test-support-local`: run a service locally with its backing services, partner stubs and seed
   data.** A new test-scoped module. A service's `Local<Name>Application`, in `src/test`, starts the
   service's own `main` through `LocalRun` with the PostgreSQL, Kafka, LocalStack and Redis it names, one
@@ -46,6 +57,13 @@ either.
 
 ### Changed
 
+- **`crud-service-example` checks roles on the application service.** The `@PreAuthorize` of
+  `get`, `search`, `update` and `delete` moved from `ProductController` to `ProductServiceImpl`, so REST
+  and gRPC pass the same check; REST answers are unchanged. `create` keeps its check on the controller,
+  because the spreadsheet import applies rows on a worker with no caller.
+- `ludwig-bom` pins `guava` 33.6.0-jre, `error_prone_annotations` 2.50.0 and `j2objc-annotations` 3.1,
+  which gRPC otherwise brings to a service at conflicting versions.
+
 - **`ludwig-service-parent` fails a service that has a `test-support` artifact outside test scope.**
   A new enforcer rule bans `ru.ludwigandreas:test-support*` at compile and runtime scope. A service
   that declares `test-support`, `test-support-security` or `test-support-local` without
@@ -53,6 +71,14 @@ either.
 - **`test-support-local`: `PartnerStub.clientName()` is now `name()`.** The stub's name is no longer
   necessarily a rest-client name. The launcher also refuses a stub whose address property no other
   source configures, whatever kind of address it has.
+
+### Removed
+
+- **BREAKING - the reason the next release is 3.0.0.** `rest-client-spring-boot-starter`'s
+  `ru.ludwigandreas.restclient.auth.CachedToken` and `CachingTokenSource` are removed **without a prior
+  deprecation release**, by decision. They moved unchanged to `outbound-token-core`: import
+  `ru.ludwigandreas.outboundtoken.CachedToken` and `ru.ludwigandreas.outboundtoken.CachingTokenSource`.
+  The API-compatibility check records both removals as justified exceptions.
 
 ### Fixed
 

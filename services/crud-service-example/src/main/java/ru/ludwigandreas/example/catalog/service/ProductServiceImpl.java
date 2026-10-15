@@ -3,6 +3,7 @@ package ru.ludwigandreas.example.catalog.service;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.example.catalog.repository.CategoryRepository;
@@ -74,12 +75,16 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('CATALOG_READER', 'CATALOG_EDITOR', 'CATALOG_ADMIN', "
+            + "'CATALOG_PARTNER', 'CATALOG_WATCHER')")
     public Product get(UUID id) {
         return mapper.toDomain(require(id, DataAction.READ));
     }
 
     @Override
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('CATALOG_READER', 'CATALOG_EDITOR', 'CATALOG_ADMIN', "
+            + "'CATALOG_PARTNER', 'CATALOG_WATCHER')")
     public ODataPage<Product> search(ODataQueryOptions options) {
         // The options travel down unparsed. This layer knows nothing about the OData vocabulary and
         // nothing about ProductEntity's filterable properties, which is why no translation happens here.
@@ -87,6 +92,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @PreAuthorize("hasAnyRole('CATALOG_EDITOR', 'CATALOG_ADMIN', 'CATALOG_PARTNER')")
     public Product update(UUID id, ProductUpdate command) {
         ProductEntity entity = require(id, DataAction.WRITE);
         if (entity.getVersion() != command.expectedVersion()) {
@@ -104,6 +110,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @PreAuthorize("hasRole('CATALOG_ADMIN')")
     public void delete(UUID id) {
         ProductEntity entity = require(id, DataAction.DELETE);
         Product deleted = mapper.toDomain(entity);
