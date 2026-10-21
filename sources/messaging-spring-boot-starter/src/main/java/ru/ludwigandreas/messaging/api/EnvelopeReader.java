@@ -66,13 +66,13 @@ public class EnvelopeReader {
         Headers headers = record.headers();
         return new InboundEnvelope<>(
                 record.value(),
-                first(headers, MessageHeaders.EVENT_TYPE, MessageHeaders.LEGACY_EVENT_TYPE),
+                text(headers, MessageHeaders.EVENT_TYPE),
                 version(headers),
-                first(headers, MessageHeaders.AGGREGATE_TYPE, null),
-                first(headers, MessageHeaders.AGGREGATE_ID, null),
-                first(headers, MessageHeaders.IDEMPOTENCY_KEY, MessageHeaders.LEGACY_IDEMPOTENCY_KEY),
-                first(headers, correlationHeaderName, null),
-                first(headers, MessageHeaders.TRACE_ID, MessageHeaders.LEGACY_TRACE_ID),
+                text(headers, MessageHeaders.AGGREGATE_TYPE),
+                text(headers, MessageHeaders.AGGREGATE_ID),
+                text(headers, MessageHeaders.IDEMPOTENCY_KEY),
+                text(headers, correlationHeaderName),
+                text(headers, MessageHeaders.TRACE_ID),
                 producedAt(headers),
                 record.topic(),
                 record.partition(),
@@ -90,7 +90,7 @@ public class EnvelopeReader {
      * header existed look like an unknown version.
      */
     private int version(Headers headers) {
-        String value = first(headers, MessageHeaders.EVENT_VERSION, MessageHeaders.LEGACY_EVENT_VERSION);
+        String value = text(headers, MessageHeaders.EVENT_VERSION);
         if (value == null) {
             return InboundEnvelope.DEFAULT_EVENT_VERSION;
         }
@@ -102,7 +102,7 @@ public class EnvelopeReader {
     }
 
     private Instant producedAt(Headers headers) {
-        String value = first(headers, MessageHeaders.PRODUCED_AT, null);
+        String value = text(headers, MessageHeaders.PRODUCED_AT);
         if (value == null) {
             return null;
         }
@@ -114,17 +114,13 @@ public class EnvelopeReader {
     }
 
     /**
-     * The canonical header's value, falling back to the legacy spelling.
+     * The named header's value.
      *
      * <p>{@code lastHeader} rather than the first, matching what Kafka itself does when a key appears
      * twice: the last write wins, and an interceptor that re-stamps a header expects to be the one read.
      */
-    private String first(Headers headers, String canonical, String legacy) {
-        String value = text(headers.lastHeader(canonical));
-        if (value != null || legacy == null) {
-            return value;
-        }
-        return text(headers.lastHeader(legacy));
+    private static String text(Headers headers, String name) {
+        return text(headers.lastHeader(name));
     }
 
     private static String text(Header header) {

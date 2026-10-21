@@ -169,7 +169,9 @@ class AuditStoreIntegrationTest {
                 .containsEntry("oldValue", Redaction.MASK)
                 .containsEntry("newValue", Redaction.MASK);
         assertThat(migrated.get(0).getAttributes().values())
-                .doesNotContain(Redaction.LEGACY_SETTINGS_MASK);
+                // The marker user-settings persisted before the consolidation, spelled out because the
+                // platform no longer names it anywhere.
+                .doesNotContain("[redacted]");
     }
 
     @Test

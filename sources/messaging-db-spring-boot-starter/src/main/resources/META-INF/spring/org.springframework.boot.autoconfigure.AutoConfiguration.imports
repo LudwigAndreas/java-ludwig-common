@@ -1,0 +1,3 @@
+ru.ludwigandreas.messaging.db.config.MessagingDbLiquibaseAutoConfiguration
+ru.ludwigandreas.messaging.db.config.MessagingDbAutoConfiguration
+ru.ludwigandreas.messaging.db.config.MessagingDbMetricsAutoConfiguration

@@ -1,0 +1,40 @@
+{
+  "change": "remove-compatibility-shims",
+  "contract": {
+    "goal": "3.0.0 ships no member whose only stated reason to exist is compatibility with an earlier release",
+    "output": "legacy Kafka header names removed (constants, write, read); ODataFilterExceptionHandler and its property removed with web-core required; LogFieldNames/JsonLogEncoderConfig non-canonical constructors removed; Redaction legacy markers removed and isMask narrowed; stale grpc-client POM comment fixed; one justified revapi.differences entry per removed element; CHANGELOG 3.0.0 in both locales",
+    "constraints": [
+      "no .mvn/maven.config edit - 3.0.0 is a tag",
+      "every revapi.differences entry added names this change and its replacement",
+      "no rule is weakened, no test disabled, to make progress",
+      "nothing outside the five surveyed items is removed or renamed (proposal non-goals)"
+    ],
+    "done_when": [
+      "scripts/manifest.sh build && scripts/manifest.sh stale && scripts/manifest.sh layout",
+      "scripts/check_migrations.sh && scripts/check_image_pins.sh && scripts/check_build_metadata.sh",
+      "mvn -q validate",
+      "mvn clean install",
+      "python3 scripts/check_aggregate_report.py",
+      "openspec validate remove-compatibility-shims --strict"
+    ]
+  },
+  "current_task": "done",
+  "rollback_point": "fe88c0a",
+  "decisions": [
+    "1.1: rollback_point is the last commit; add-grpc-starters and consolidate-grpc-contracts-and-tokens are both uncommitted beneath this change, so revert this change's files rather than resetting",
+    "survey: legacy headers have been dual-written since v1.1.0 (git log -S LEGACY_EVENT_TYPE: f1fdc5f, contained in v1.1.0 and v2.0.0), so both halves of the transition are removed in 3.0.0 with an upgrade precondition in the changelog rather than kept (design D1)",
+    "correction to the 1.1 decision: git status was clean at the start of this session - add-grpc-starters and consolidate-grpc-contracts-and-tokens are committed in fe88c0a, so fe88c0a is a clean rollback point for this change",
+    "2.1/2.2: EnvelopeReader's first(canonical, legacy) became text(headers, name); VersionGatingDeserializer reads ludwig-event-version only. The legacy-fallback tests were rewritten to assert the opposite (a legacy-only record reads as absent), and KafkaOutboxDispatcherTest is new - the dispatcher had no unit test - asserting none of the four pre-prefix names is written",
+    "3.1: web-core-spring-boot-starter loses <optional> in odata-filter's POM; the mapper and bundle lose their @ConditionalOnClass. NoLocalAdviceTest (module-local ArchUnit, file-action's shape) is the check. Of the two rules ArchitectureTest disabled with the reason 'the only controller is the legacy advice', web.controllers-do-not-call-controllers is re-enabled and passes; rest-paths fired on FilterMetadataController (its path is odata.filter.metadata.base-path, from configuration) and stays disabled with that reason written in place of the false one. web-core's and crud-service-example's READMEs mention the property only as history and were left as written",
+    "5.1: AuditStoreIntegrationTest spells \"[redacted]\" inline in an assertion rather than as a constant, so the SecondRedactionMask rule (which matches a static final String *MASK* declaration) has nothing to fire on; RedactionTest is new and asserts isMask rejects both retired markers",
+    "6.1: ten revapi.differences entries; the JSON inside the CDATA parses. To verify them rather than only syntax-check them, v2.0.0 was built from a temporary git worktree with -Drevision=2.0.0 -DskipTests -Drevapi.skip=true and installed into ~/.m2, after backing up the 41 ru/ludwigandreas maven-metadata-local.xml files; those 2.0.0 artifacts and the worktree are removed after the gate",
+    "6.1 verification: with the 2.0.0 baseline installed locally, an online build still compared [] - revapi's RELEASE resolution ignores locally installed versions - so the check was run offline (-o), which reads local metadata. At -Drevision=3.0.0-SNAPSHOT the semver rule accepts every breaking difference, so it proves nothing about the entries; at -Drevision=2.0.1-SNAPSHOT with --fail-never every touched module was compared against 2.0.0 and none of this change's twelve differences was reported. Two java.annotation.removed entries were added for the @ConditionalOnClass guards dropped from odata's bean methods. The spec's 'removal without an entry fails the gate' scenario was false at a major increment and was rewritten to what is actually checked",
+    "finding, outside this change's scope and not fixed: the first real baseline comparison reports 212 java.method.varargOverloadsOnlyDifferInVarargParameter problems on Spring and Jackson types in every module. A major increment hides them, but the first non-major release after 3.0.0 (3.0.1 or 3.1.0) will fail its revapi check on them. Also reported against non-major: architecture-rules' RuleGroup.CUSTOM ordinal shift (RuleGroup.GRPC inserted before it, from add-grpc-starters)",
+    "cleanup: the 34 locally built 2.0.0 / 2.0.1-SNAPSHOT / 3.0.0-SNAPSHOT version directories under ~/.m2/repository/ru/ludwigandreas were deleted, the 41 backed-up maven-metadata-local.xml files restored, and the v2.0.0 git worktree removed",
+    "7.2 attempt 2: mvn -q validate and mvn clean install BUILD SUCCESS, 3989 tests, 0 failures, 0 errors (PatDirectAuthenticationIT passed this time); check_aggregate_report.py OK. 7.1: manifest build/stale/layout, check_migrations, check_protos and check_build_metadata pass; check_image_pins fails on the pre-existing archived-proposal line the previous change already recorded"
+  ],
+  "failures": [
+    "7.2 attempt 1: mvn clean install failed in pat-spring-boot-starter on PatDirectAuthenticationIT$FilterEnabled.revokedTokenStopsWorking (ObjectOptimisticLockingFailure) - the flaky test already recorded during add-grpc-starters, in a module this change does not touch; every module before it passed",
+    "6.1: the six field entries were written with code java.field.removed; a removed static final String is java.field.removedWithConstant, so they matched nothing. Found by the first comparison against a real baseline, fixed"
+  ]
+}

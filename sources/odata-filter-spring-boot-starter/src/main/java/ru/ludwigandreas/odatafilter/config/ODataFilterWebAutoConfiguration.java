@@ -4,8 +4,6 @@ import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,11 +12,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import ru.ludwigandreas.odatafilter.core.ODataFilterService;
 import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
 import ru.ludwigandreas.odatafilter.properties.ODataFilterProperties;
-import ru.ludwigandreas.odatafilter.web.ODataFilterExceptionHandler;
 import ru.ludwigandreas.odatafilter.web.ODataFilterProblemMapper;
 import ru.ludwigandreas.odatafilter.web.ODataQueryOptionsArgumentResolver;
 import ru.ludwigandreas.odatafilter.web.ODataQueryOptionsOpenApiCustomizer;
-import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
@@ -29,21 +25,15 @@ import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
  *
  * <h2>How query errors are rendered</h2>
  *
- * <p>Two mutually exclusive paths, chosen by what is on the classpath:
+ * <p>This module contributes an {@link ODataFilterProblemMapper} and a message bundle to
+ * {@code web-core-spring-boot-starter}'s shared problem pipeline, which is a required dependency. Query
+ * errors come back in the caller's language, in the same shape as every other error the service
+ * emits, and the application can reword any of them by defining the same key in its own bundle.
  *
- * <ul>
- *   <li>With {@code web-core-spring-boot-starter} present - the intended arrangement - this module
- *       contributes an {@link ODataFilterProblemMapper} and a message bundle to that starter's
- *       shared problem pipeline. Query errors then come back in the caller's language, in exactly
- *       the same shape as every other error the service emits, and the application can reword any
- *       of them by defining the same key in its own bundle.
- *   <li>Without it, the legacy {@link ODataFilterExceptionHandler} advice is registered instead, so
- *       a service that does not use the web-core starter still gets RFC 7807 responses - in English,
- *       from the exceptions' own developer-facing messages.
- * </ul>
- *
- * <p>The two never coexist: a second advice for the same exception types is how an API ends up
- * answering the same failure differently depending on which bean won the ordering.
+ * <p>There is no advice of this module's own. Until 3.0.0 there was one, for services without
+ * web-core; a second advice for the same exception types is how an API ends up answering one failure
+ * differently depending on which bean won the ordering, and {@code ArchitectureTest} now fails the
+ * build if one comes back.
  */
 @AutoConfiguration(after = ODataFilterAutoConfiguration.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -64,15 +54,9 @@ public class ODataFilterWebAutoConfiguration {
         return new ODataQueryOptionsArgumentResolver(properties);
     }
 
-    /**
-     * This module's failures, declared as meanings for the shared problem pipeline to render.
-     *
-     * <p>Conditional on the class rather than on a property: if web-core is on the classpath, its
-     * pipeline is what renders errors, and contributing to it is never the wrong thing to do.
-     */
+    /** This module's failures, declared as meanings for the shared problem pipeline to render. */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnClass(ExceptionProblemMapper.class)
     public ODataFilterProblemMapper odataFilterProblemMapper() {
         return new ODataFilterProblemMapper();
     }
@@ -80,25 +64,8 @@ public class ODataFilterWebAutoConfiguration {
     /** The localized text for the codes {@link ODataFilterProblemMapper} produces. */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnClass(ProblemMessageBundle.class)
     public ProblemMessageBundle odataFilterProblemMessageBundle() {
         return ProblemMessageBundle.of("i18n/ludwig-odata-filter-messages");
-    }
-
-    /**
-     * The pre-web-core advice, kept for services that do not use that starter.
-     *
-     * <p>Stands down when web-core is present, because its pipeline renders these exceptions
-     * through the mapper above - localized, and in the same shape as the rest of the API.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnMissingClass("ru.ludwigandreas.webcore.problem.ExceptionProblemMapper")
-    @ConditionalOnProperty(
-            prefix = "odata.filter.web", name = "problem-detail-advice-enabled",
-            havingValue = "true", matchIfMissing = true)
-    public ODataFilterExceptionHandler odataFilterExceptionHandler() {
-        return new ODataFilterExceptionHandler();
     }
 
     /** Installs the options resolver into Spring MVC. */

@@ -142,6 +142,7 @@ class ArchitectureTest extends ArchitectureRulesTest {
 | `kafka.messaging-does-not-depend-on-controllers` | Две точки входа не вызывают друг друга |
 | `kafka.container-factories-set-an-error-handler` | Каждый метод, возвращающий `ConcurrentKafkaListenerContainerFactory`, либо вызывает `setCommonErrorHandler`, либо получает фабрику из построителя `messaging-spring-boot-starter`. Без обработчика фабрика наследует штатный обработчик Boot: десять попыток, без задержек, затем запись в лог и потеря записи. У двух модулей платформы было именно так, причём один вообще не объявлял фабрику |
 | `kafka.no-private-dead-letter-recoverer` | Никто вне `ru.ludwigandreas.messaging..` не создаёт `DeadLetterPublishingRecoverer`. Его строковая половина — вторая константа суффикса `.dlt` — это правило Checkstyle `SecondDeadLetterSuffix`, по той же причине, что и маска редактирования: значения `static final String` нет в байт-коде, который читает ArchUnit |
+| `kafka.nothing-depends-on-the-db-log-transport` | Никто вне `ru.ludwigandreas.messaging.db..` не ссылается на `messaging-db-spring-boot-starter`. Этот стартер — временная замена кластера Kafka, он подключается к слушателям и outbox снаружи, поэтому удаление его зависимости не должно ломать компиляцию нигде |
 
 ### `storage` — S3 и другие объектные хранилища
 

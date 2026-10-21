@@ -44,16 +44,4 @@ class LogFieldNamesTest {
                             names.correlationId());
         }
     }
-
-    @Test
-    void keepsTheNineteenNameConstructorWorkingWithNoCommitField() {
-        // The signature the record had before the commit field joined it. A custom field set built
-        // this way must keep compiling, and simply does not get the new field.
-        LogFieldNames custom = new LogFieldNames(
-                "ts", "lvl", null, "logger", "thread", "msg", "template", "trace", "span", "corr",
-                "svc", "ns", "ver", "env", "inst", "err_type", "err_msg", "stack", "markers");
-
-        assertThat(custom.commitId()).isNull();
-        assertThat(custom.markers()).isEqualTo("markers");
-    }
 }

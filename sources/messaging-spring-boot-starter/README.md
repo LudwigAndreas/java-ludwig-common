@@ -119,21 +119,13 @@ be two ids as far as every log query is concerned — which is the two-homes pro
 remove, not to add. It is listed here so a consumer has one place to look, and `EnvelopeReader` accepts
 the configured override.
 
-### The legacy names, and when they can go
+### Only the canonical names
 
-`KafkaOutboxDispatcher` wrote `event-type`, `event-version`, `idempotency-key` and `trace-id` before this
-module existed, and there are records on real topics carrying them — a topic's retention outlives a
-release. So **the dispatcher writes both spellings** and `EnvelopeReader` reads the canonical one first,
-falling back to the legacy one.
-
-- The legacy **write** can be dropped once every topic's retention window has passed with the new
-  producer deployed.
-- The legacy **read** can be dropped once no consumer group can still be asked to replay from before
-  that point — which is the later of the two.
-
-Dropping either earlier means a consumer reading `null` where a value exists. For `ludwig-event-type`
-that means a record silently ignored as an unknown type: not an error anywhere, and the replica simply
-never learns about that change.
+Until 3.0.0, `KafkaOutboxDispatcher` also wrote the pre-prefix names `event-type`, `event-version`,
+`idempotency-key` and `trace-id`, and `EnvelopeReader` fell back to them. Every producer since 1.1.0 wrote
+both, so 3.0.0 dropped them on both sides. A record from an older producer reads as carrying no such
+header: for `ludwig-event-type` that is an unknown type. Before upgrading, make sure no topic a consumer
+may replay still holds records produced before 1.1.0.
 
 ## Adopting it
 

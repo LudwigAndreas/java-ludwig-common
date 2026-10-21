@@ -1,0 +1,40 @@
+{
+  "change": "remove-compatibility-shims",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "messaging-spring-boot-starter",
+    "outbox-spring-boot-starter",
+    "user-settings-spring-boot-starter",
+    "odata-filter-spring-boot-starter",
+    "observability-spring-boot-starter",
+    "audit-core",
+    "audit-spring-boot-starter",
+    "grpc-client-spring-boot-starter",
+    "common"
+  ],
+  "gate": {
+    "manifest_build_stale_layout": "pass",
+    "check_migrations": "pass",
+    "check_protos": "pass",
+    "check_build_metadata": "pass",
+    "check_image_pins": "fail (pre-existing, archived proposal line, unchanged since the previous change)",
+    "revapi_entries": "verified offline against a locally built 2.0.0 at -Drevision=2.0.1-SNAPSHOT: none of the 12 differences reported; baseline removed afterwards",
+    "validate": "pass",
+    "clean_install": "pass (attempt 2; attempt 1 hit the known flaky PatDirectAuthenticationIT)",
+    "aggregate_report": "pass",
+    "openspec_validate_strict": "pass"
+  },
+  "tests": {
+    "added": 5,
+    "passed": 3989,
+    "failed": 0
+  },
+  "retries": 3,
+  "human_corrections": 0,
+  "rollback_point": "fe88c0a",
+  "unresolved": [
+    "revapi reports 212 java.method.varargOverloadsOnlyDifferInVarargParameter problems on third-party types in every module against a real baseline; hidden at a major increment, fails the first non-major release after 3.0.0",
+    "at a major increment revapi does not enforce that a removal has an entry; the requirement holds by review",
+    "check_image_pins pre-existing failure"
+  ]
+}

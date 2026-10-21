@@ -40,32 +40,17 @@ public final class Redaction {
     // rule exists to stop a second one appearing anywhere else.
     public static final String MASK = "***REDACTED***";
 
-    /**
-     * The marker {@code user-settings-spring-boot-starter} persisted before the consolidation.
-     *
-     * <p>Kept as a constant, and not only in the changelog, because the migration is verified by a
-     * test that has to name the string it is migrating away from. Nothing writes it.
-     */
-    // SUPPRESS CHECKSTYLE ID SecondRedactionMask - the marker being migrated away from, named here
-    // because the migration test has to spell out the string it is migrating. Nothing writes it.
-    public static final String LEGACY_SETTINGS_MASK = "[redacted]";
-
-    /**
-     * The marker {@code rest-client-spring-boot-starter} used in log lines and exception messages.
-     *
-     * <p>Never persisted anywhere, so it needs no migration - but a deployment grepping its REST
-     * client logs for it will stop finding it, which that module's README says.
-     */
-    // SUPPRESS CHECKSTYLE ID SecondRedactionMask - a retired marker, kept only so a reader can find out
-    // what a deployment's old REST client logs contain. Nothing writes it.
-    public static final String LEGACY_HEADER_MASK = "****";
-
     private Redaction() {
     }
 
-    /** Whether {@code value} is a redaction marker, this platform's or one of the two it replaced. */
+    /**
+     * Whether {@code value} is the redaction marker.
+     *
+     * <p>Only {@link #MASK}. The two markers it replaced - {@code [redacted]}, rewritten in the stored
+     * trail by {@code audit-0004}, and {@code ****}, which was only ever logged - stopped being recognised
+     * in 3.0.0.
+     */
     public static boolean isMask(String value) {
-        return MASK.equals(value) || LEGACY_SETTINGS_MASK.equals(value)
-                || LEGACY_HEADER_MASK.equals(value);
+        return MASK.equals(value);
     }
 }

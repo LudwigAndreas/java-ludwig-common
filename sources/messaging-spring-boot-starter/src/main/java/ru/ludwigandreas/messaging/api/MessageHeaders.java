@@ -35,21 +35,12 @@ package ru.ludwigandreas.messaging.api;
  * one place to look, and {@link EnvelopeReader} accepts a configured override for the deployment that
  * changed it.
  *
- * <h2>The legacy names, and when they can go</h2>
+ * <h2>Only these names</h2>
  *
- * <p>{@code KafkaOutboxDispatcher} wrote {@code event-type}, {@code event-version},
- * {@code idempotency-key} and {@code trace-id} before this class existed, and there are records on
- * real topics carrying them - a topic's retention outlives a release. So the dispatcher writes both
- * spellings and {@link EnvelopeReader} reads the canonical one first and falls back to the legacy one.
- *
- * <p>The legacy write can be dropped once every topic's retention window has passed with the new
- * producer deployed, and the legacy read once no consumer group can still be asked to replay from
- * before that point. Dropping either earlier means a consumer that reads {@code null} where a value
- * exists, which for {@link #EVENT_TYPE} means a record silently ignored as "unknown type".
- *
- * <p>The pairing of a canonical name with its legacy fallback is stated once, in
- * {@link EnvelopeReader}, rather than as a table here. A table would be a second place to keep in step
- * with the reader, which is the class of problem this file exists to remove.
+ * <p>Until 3.0.0 the dispatcher also wrote, and the reader fell back to, the pre-prefix spellings
+ * {@code event-type}, {@code event-version}, {@code idempotency-key} and {@code trace-id}. Every
+ * producer since 1.1.0 wrote both, so 3.0.0 dropped the old ones on both sides; a record from an older
+ * producer reads as carrying no such header.
  */
 public final class MessageHeaders {
 
@@ -100,18 +91,6 @@ public final class MessageHeaders {
      * behind".
      */
     public static final String PRODUCED_AT = PREFIX + "produced-at";
-
-    /** Pre-{@link #PREFIX} spelling of {@link #EVENT_TYPE}. See the class comment. */
-    public static final String LEGACY_EVENT_TYPE = "event-type";
-
-    /** Pre-{@link #PREFIX} spelling of {@link #EVENT_VERSION}. */
-    public static final String LEGACY_EVENT_VERSION = "event-version";
-
-    /** Pre-{@link #PREFIX} spelling of {@link #IDEMPOTENCY_KEY}. */
-    public static final String LEGACY_IDEMPOTENCY_KEY = "idempotency-key";
-
-    /** Pre-{@link #PREFIX} spelling of {@link #TRACE_ID}. */
-    public static final String LEGACY_TRACE_ID = "trace-id";
 
     private MessageHeaders() {
     }

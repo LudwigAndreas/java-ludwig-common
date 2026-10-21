@@ -44,35 +44,24 @@ class EnvelopeReaderTest {
     }
 
     /**
-     * The transition case. A topic's retention outlives a release, so a consumer will be asked to read
-     * records produced before the canonical names existed - and reading null for the event type means a
-     * record silently ignored as an unknown type, which is not an error anywhere.
+     * The pre-prefix names were dropped in 3.0.0 on both sides. A record carrying only them - which
+     * only a producer older than 1.1.0 could write - reads exactly like a record with no header.
      */
     @Test
-    @DisplayName("falls back to the pre-prefix header names")
-    void fallsBackToTheLegacyNames() {
+    @DisplayName("ignores the pre-prefix header names")
+    void ignoresThePrePrefixNames() {
         RecordHeaders headers = new RecordHeaders();
-        put(headers, MessageHeaders.LEGACY_EVENT_TYPE, "OrderCreated");
-        put(headers, MessageHeaders.LEGACY_EVENT_VERSION, "2");
-        put(headers, MessageHeaders.LEGACY_IDEMPOTENCY_KEY, "created-4711");
-        put(headers, MessageHeaders.LEGACY_TRACE_ID, "trace-1");
+        put(headers, "event-type", "OrderCreated");
+        put(headers, "event-version", "2");
+        put(headers, "idempotency-key", "created-4711");
+        put(headers, "trace-id", "trace-1");
 
         InboundEnvelope<String> envelope = reader.read(record("orders", headers, "{}"));
 
-        assertThat(envelope.eventType()).isEqualTo("OrderCreated");
-        assertThat(envelope.eventVersion()).isEqualTo(2);
-        assertThat(envelope.idempotencyKey()).isEqualTo("created-4711");
-        assertThat(envelope.traceId()).isEqualTo("trace-1");
-    }
-
-    @Test
-    @DisplayName("prefers the canonical name when both are present, as during a rollout")
-    void prefersTheCanonicalName() {
-        RecordHeaders headers = new RecordHeaders();
-        put(headers, MessageHeaders.LEGACY_EVENT_TYPE, "old");
-        put(headers, MessageHeaders.EVENT_TYPE, "new");
-
-        assertThat(reader.read(record("orders", headers, "{}")).eventType()).isEqualTo("new");
+        assertThat(envelope.eventType()).isNull();
+        assertThat(envelope.eventVersion()).isEqualTo(InboundEnvelope.DEFAULT_EVENT_VERSION);
+        assertThat(envelope.idempotencyKey()).isNull();
+        assertThat(envelope.traceId()).isNull();
     }
 
     /**

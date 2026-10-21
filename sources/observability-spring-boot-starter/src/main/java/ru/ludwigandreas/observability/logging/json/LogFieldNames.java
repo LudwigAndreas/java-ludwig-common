@@ -50,41 +50,6 @@ public record LogFieldNames(
         String markers,
         String commitId) {
 
-    /**
-     * The field set as it was before the commit id joined it, with no name for that field - so the
-     * encoder does not write it.
-     *
-     * <p>Kept because a record's canonical constructor is part of its published API: adding a
-     * component replaces that constructor, and code that built a custom field set with the nineteen
-     * names would stop compiling. Prefer the canonical constructor in new code.
-     */
-    // SUPPRESS CHECKSTYLE ParameterNumber - the record's previous canonical signature, kept for API compatibility.
-    @SuppressWarnings("checkstyle:ParameterNumber")
-    public LogFieldNames(
-            String timestamp,
-            String level,
-            String severityNumber,
-            String logger,
-            String thread,
-            String message,
-            String messageTemplate,
-            String traceId,
-            String spanId,
-            String correlationId,
-            String serviceName,
-            String serviceNamespace,
-            String serviceVersion,
-            String serviceEnvironment,
-            String serviceInstance,
-            String errorType,
-            String errorMessage,
-            String stackTrace,
-            String markers) {
-        this(timestamp, level, severityNumber, logger, thread, message, messageTemplate, traceId, spanId,
-                correlationId, serviceName, serviceNamespace, serviceVersion, serviceEnvironment,
-                serviceInstance, errorType, errorMessage, stackTrace, markers, null);
-    }
-
     /** Elastic Common Schema, for an Elasticsearch or OpenSearch backend. */
     public static LogFieldNames ecs() {
         return new LogFieldNames(

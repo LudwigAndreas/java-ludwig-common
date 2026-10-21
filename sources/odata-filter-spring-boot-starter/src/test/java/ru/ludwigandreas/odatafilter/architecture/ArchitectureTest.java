@@ -22,8 +22,9 @@ import ru.ludwigandreas.archrules.junit.ArchitectureRulesTest;
  * <ul>
  *   <li>{@code layering} and the two rules about where a repository may be called from - there is no
  *       service layer and no repository here.
- *   <li>{@code rest-paths} and {@code web.controllers-do-not-call-controllers} - the only controller is
- *       the legacy {@code @RestControllerAdvice}, which is an error renderer rather than a resource.
+ *   <li>{@code rest-paths} - the one controller, {@code FilterMetadataController}, is mounted at a path
+ *       the deployment configures ({@code odata.filter.metadata.base-path}), not at a versioned path this
+ *       module could declare. {@code web.controllers-do-not-call-controllers} applies and is enabled.
  *   <li>{@code mappers.mappers-are-mapstruct-interfaces} - the translation here is AST to QueryDSL, which
  *       MapStruct cannot express.
  *   <li>{@code persistence.persistence-context-is-confined} - this module builds predicates and never
@@ -31,8 +32,9 @@ import ru.ludwigandreas.archrules.junit.ArchitectureRulesTest;
  *       rather than living in a repository package.
  *   <li>{@code exceptions.custom-exceptions-extend-the-base-exception} - {@code ODataFilterException}
  *       deliberately extends {@code RuntimeException} and not {@code web-core}'s
- *       {@code LocalizedException}, so that it can be thrown from a batch job with no web-core on the
- *       classpath. Its javadoc says so.
+ *       {@code LocalizedException}, so that it carries no HTTP status and can be thrown from a batch job
+ *       re-using a saved filter; {@code ODataFilterProblemMapper} gives it its web meaning. Its javadoc
+ *       says so.
  *   <li>{@code persistence.dynamic-paths-are-not-hand-built} - this is the module that legitimately owns
  *       the dynamic path walk, which is exactly what that rule's javadoc names it as.
  * </ul>
@@ -55,7 +57,6 @@ import ru.ludwigandreas.archrules.junit.ArchitectureRulesTest;
                 "persistence.persistence-context-is-confined",
                 "persistence.dynamic-paths-are-not-hand-built",
                 "spring.transactional-methods-are-in-the-service-layer",
-                "web.controllers-do-not-call-controllers",
                 "rest-paths",
                 "mappers.mappers-are-mapstruct-interfaces",
                 "exceptions.custom-exceptions-extend-the-base-exception"

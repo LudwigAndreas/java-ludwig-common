@@ -82,16 +82,14 @@ class VersionGatingDeserializerTest {
     }
 
     @Test
-    @DisplayName("reads the pre-prefix version header when the canonical one is absent")
-    void readsTheLegacyVersionHeader() {
+    @DisplayName("ignores the pre-prefix version header, which was dropped in 3.0.0")
+    void ignoresThePrePrefixVersionHeader() {
         VersionGatingDeserializer<String> gate = new VersionGatingDeserializer<>(delegate, 1, 1);
         RecordHeaders headers = new RecordHeaders();
-        headers.add(ru.ludwigandreas.messaging.api.MessageHeaders.LEGACY_EVENT_VERSION,
-                "4".getBytes(StandardCharsets.UTF_8));
+        headers.add("event-version", "4".getBytes(StandardCharsets.UTF_8));
 
-        assertThatThrownBy(() -> gate.deserialize("orders", headers, payload()))
-                .isInstanceOf(UnsupportedEventVersionException.class);
-        assertThat(delegateCalls).hasValue(0);
+        assertThat(gate.deserialize("orders", headers, payload())).isEqualTo("{}");
+        assertThat(delegateCalls).hasValue(1);
     }
 
     /**

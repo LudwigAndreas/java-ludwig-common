@@ -113,9 +113,6 @@ public class VersionGatingDeserializer<T> implements Deserializer<T> {
      */
     private static int versionOf(Headers headers) {
         Header header = headers == null ? null : headers.lastHeader(MessageHeaders.EVENT_VERSION);
-        if (header == null && headers != null) {
-            header = headers.lastHeader(MessageHeaders.LEGACY_EVENT_VERSION);
-        }
         if (header == null || header.value() == null) {
             return InboundEnvelope.DEFAULT_EVENT_VERSION;
         }

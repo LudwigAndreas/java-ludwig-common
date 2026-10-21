@@ -16,13 +16,13 @@ import ru.ludwigandreas.webcore.problem.ProblemStatus;
 /**
  * States what this library's failures mean, and lets the application's problem pipeline say it.
  *
- * <p>This replaces {@link ODataFilterExceptionHandler}, the advice this module used to ship, and it
- * is worth recording why that advice was a mistake. Its messages were the exceptions' own
+ * <p>This replaced {@code ODataFilterExceptionHandler}, the advice this module shipped until 3.0.0, and
+ * it is worth recording why that advice was a mistake. Its messages were the exceptions' own
  * developer-facing English - "Property 'supplierCost' cannot be used in $filter/$orderby: not
  * annotated @Filterable" - and a library cannot translate those, because the bundle would have to
  * live in the application. So a service that answered every other error in the caller's language had
  * one subsystem answering in English, and the only way out was
- * {@code odata.filter.web.problem-detail-advice-enabled=false} plus a hand-written advice that
+ * switching that advice off by a property plus a hand-written advice that
  * re-handled all seven exception types. Every service using this module wrote that same advice.
  *
  * <p>A mapper plus a message bundle removes both halves of the problem: the meaning is declared here

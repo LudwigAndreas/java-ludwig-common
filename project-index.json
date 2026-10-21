@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-15T11:45:38.188332Z",
+    "generatedAt": "2026-10-21T12:15:13.488504Z",
     "revision": "1.1.0-SNAPSHOT",
-    "moduleCount": 40,
-    "commit": "0a68e84ed9e36d72ee8c1ef5241aed2b4ddcbf52",
-    "commitShort": "0a68e84",
+    "moduleCount": 41,
+    "commit": "fe88c0a8a62b8ed9234c52b69033c4fda51a05f3",
+    "commitShort": "fe88c0a",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "93bae9b64a35a71d0d9eabe61bd61f0bfa48f59afa0e36b2c3bcd5001a84fb51",
-      "newestPom": "build/ludwig-service-parent/pom.xml",
-      "newestPomModified": "2026-10-15T09:17:59.259867Z"
+      "pomSetSha": "6004fc53fcd651fab4abf3529598f77c60bfa0cc7f8feb1f464ef3df2da54f8b",
+      "newestPom": "sources/messaging-db-spring-boot-starter/pom.xml",
+      "newestPomModified": "2026-10-21T12:10:00.956416Z"
     }
   },
   "modules": [
@@ -124,7 +124,7 @@
         {
           "artifactId": "web-core-spring-boot-starter",
           "scope": "compile",
-          "optional": true
+          "optional": false
         }
       ],
       "inRepoDependents": [
@@ -159,7 +159,7 @@
         "architecture": "sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/architecture"
       },
       "testClasses": {
-        "surefire": 23,
+        "surefire": 24,
         "failsafe": 1
       },
       "pom": "sources/odata-filter-spring-boot-starter/pom.xml",
@@ -249,7 +249,7 @@
         "unit": "sources/audit-core/src/test/java/ru/ludwigandreas/audit/unit"
       },
       "testClasses": {
-        "surefire": 5,
+        "surefire": 6,
         "failsafe": 0
       },
       "pom": "sources/audit-core/pom.xml",
@@ -461,6 +461,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "messaging-db-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "notification-service",
           "scope": "compile"
         },
@@ -665,6 +669,10 @@
       "inRepoDependents": [
         {
           "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "messaging-db-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1125,6 +1133,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "messaging-db-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "notification-service",
           "scope": "compile"
         },
@@ -1151,12 +1163,75 @@
         "integration": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration"
       },
       "testClasses": {
-        "surefire": 5,
+        "surefire": 6,
         "failsafe": 1
       },
       "pom": "sources/outbox-spring-boot-starter/pom.xml",
       "readme": "sources/outbox-spring-boot-starter/README.md",
       "readmeRu": "sources/outbox-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "messaging-db-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/messaging-db-spring-boot-starter",
+      "artifactId": "messaging-db-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.messaging.db",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": "sources/messaging-db-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/messaging-db-spring-boot-starter/src/main/resources/db/changelog/messaging-db/0001-create-schema.sql",
+        "sources/messaging-db-spring-boot-starter/src/main/resources/db/changelog/messaging-db/0002-create-message-log.sql",
+        "sources/messaging-db-spring-boot-starter/src/main/resources/db/changelog/messaging-db/0003-create-partition-head.sql",
+        "sources/messaging-db-spring-boot-starter/src/main/resources/db/changelog/messaging-db/0004-create-consumer-offset.sql",
+        "sources/messaging-db-spring-boot-starter/src/main/resources/db/changelog/messaging-db/messaging-db-changelog.xml"
+      ],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/messaging-db-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/db/unit",
+        "integration": "sources/messaging-db-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/db/integration",
+        "architecture": "sources/messaging-db-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/db/architecture"
+      },
+      "testClasses": {
+        "surefire": 3,
+        "failsafe": 5
+      },
+      "pom": "sources/messaging-db-spring-boot-starter/pom.xml",
+      "readme": "sources/messaging-db-spring-boot-starter/README.md",
+      "readmeRu": "sources/messaging-db-spring-boot-starter/README.ru.md"
     },
     {
       "name": "reconciliation-spring-boot-starter",
@@ -2248,6 +2323,10 @@
           "scope": "test"
         },
         {
+          "artifactId": "messaging-db-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "messaging-spring-boot-starter",
           "scope": "test"
         },
@@ -2280,7 +2359,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 12,
+        "surefire": 13,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",
@@ -2337,6 +2416,10 @@
         },
         {
           "artifactId": "job-core",
+          "scope": "test"
+        },
+        {
+          "artifactId": "messaging-db-spring-boot-starter",
           "scope": "test"
         },
         {

@@ -47,6 +47,7 @@
     <module>sources/file-ingest-spring-boot-starter</module>
     <module>sources/file-action-spring-boot-starter</module>
     <module>sources/outbox-spring-boot-starter</module>
+    <module>sources/messaging-db-spring-boot-starter</module>
     <module>sources/reconciliation-spring-boot-starter</module>
     <!--
         pat-core before security-spring-boot-starter, and pat-spring-boot-starter after it. Maven
@@ -763,6 +764,66 @@
                                       "code": "java.class.removed",
                                       "old": "class ru.ludwigandreas.restclient.auth.CachingTokenSource",
                                       "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change consolidate-grpc-contracts-and-tokens. The api-evolution capability asks for a deprecating release before a removal; this release was declared breaking with no deprecation cycle, and the exception is recorded here rather than passing unremarked. The type moved, unchanged in behaviour, to outbound-token-core as ru.ludwigandreas.outboundtoken.CachingTokenSource, the one token implementation shared with grpc-client-spring-boot-starter. Migration: change the import."
+                                    },
+                                    {
+                                      "code": "java.field.removedWithConstant",
+                                      "old": "field ru.ludwigandreas.messaging.api.MessageHeaders.LEGACY_EVENT_TYPE",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. The pre-prefix Kafka header names were written beside the canonical ones since 1.1.0 and are neither written nor read in 3.0.0. Replacement: the MessageHeaders constant of the same suffix without LEGACY_."
+                                    },
+                                    {
+                                      "code": "java.field.removedWithConstant",
+                                      "old": "field ru.ludwigandreas.messaging.api.MessageHeaders.LEGACY_EVENT_VERSION",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. The pre-prefix Kafka header names were written beside the canonical ones since 1.1.0 and are neither written nor read in 3.0.0. Replacement: the MessageHeaders constant of the same suffix without LEGACY_."
+                                    },
+                                    {
+                                      "code": "java.field.removedWithConstant",
+                                      "old": "field ru.ludwigandreas.messaging.api.MessageHeaders.LEGACY_IDEMPOTENCY_KEY",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. The pre-prefix Kafka header names were written beside the canonical ones since 1.1.0 and are neither written nor read in 3.0.0. Replacement: the MessageHeaders constant of the same suffix without LEGACY_."
+                                    },
+                                    {
+                                      "code": "java.field.removedWithConstant",
+                                      "old": "field ru.ludwigandreas.messaging.api.MessageHeaders.LEGACY_TRACE_ID",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. The pre-prefix Kafka header names were written beside the canonical ones since 1.1.0 and are neither written nor read in 3.0.0. Replacement: the MessageHeaders constant of the same suffix without LEGACY_."
+                                    },
+                                    {
+                                      "code": "java.field.removedWithConstant",
+                                      "old": "field ru.ludwigandreas.audit.redaction.Redaction.LEGACY_SETTINGS_MASK",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. It was the marker user-settings persisted before 2.0.0, rewritten in the stored trail by audit-0004 in 2.0.0; nothing wrote it. Replacement: Redaction.MASK, the one marker, which Redaction.isMask now recognises alone."
+                                    },
+                                    {
+                                      "code": "java.field.removedWithConstant",
+                                      "old": "field ru.ludwigandreas.audit.redaction.Redaction.LEGACY_HEADER_MASK",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. It was the marker rest-client only ever logged; nothing wrote it. Replacement: Redaction.MASK, the one marker, which Redaction.isMask now recognises alone."
+                                    },
+                                    {
+                                      "code": "java.method.removed",
+                                      "old": "method void ru.ludwigandreas.observability.logging.json.LogFieldNames::<init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. The record's pre-commitId canonical signature. Replacement: the canonical constructor with null for commitId, which is what this one did."
+                                    },
+                                    {
+                                      "code": "java.method.removed",
+                                      "old": "method void ru.ludwigandreas.observability.logging.json.JsonLogEncoderConfig::<init>(ru.ludwigandreas.observability.logging.json.LogFieldNames, ru.ludwigandreas.observability.core.ServiceIdentity, java.util.Map<java.lang.String, java.lang.String>, boolean, java.util.List<java.lang.String>, java.util.List<java.lang.String>, boolean, java.lang.String, java.util.List<java.lang.String>, java.lang.String, java.lang.String, java.lang.String, int, int, boolean, boolean, boolean)",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. The record's pre-BuildIdentity canonical signature. Replacement: the canonical constructor with BuildIdentity.absent() for build, which is what this one did."
+                                    },
+                                    {
+                                      "code": "java.class.removed",
+                                      "old": "class ru.ludwigandreas.odatafilter.web.ODataFilterExceptionHandler",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. odata-filter shipped a @RestControllerAdvice for services without web-core-spring-boot-starter, a second advice beside the one ProblemDetail pipeline. web-core is now a required dependency and ODataFilterProblemMapper renders these errors. Replacement: none needed; an application advice still takes precedence."
+                                    },
+                                    {
+                                      "code": "java.method.removed",
+                                      "old": "method ru.ludwigandreas.odatafilter.web.ODataFilterExceptionHandler ru.ludwigandreas.odatafilter.config.ODataFilterWebAutoConfiguration::odataFilterExceptionHandler()",
+                                      "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. The api-evolution capability asks for a deprecating release before a removal; 3.0.0 was declared the release that ships no member kept only for compatibility, and the exception is recorded here rather than passing unremarked. odata-filter shipped a @RestControllerAdvice for services without web-core-spring-boot-starter, a second advice beside the one ProblemDetail pipeline. web-core is now a required dependency and ODataFilterProblemMapper renders these errors. Replacement: none needed; an application advice still takes precedence."
+                                    },
+                                    {
+                                      "code": "java.annotation.removed",
+                                      "old": "method ru.ludwigandreas.odatafilter.web.ODataFilterProblemMapper ru.ludwigandreas.odatafilter.config.ODataFilterWebAutoConfiguration::odataFilterProblemMapper()",
+                                      "justification": "CHANGED IN 3.0.0 BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. web-core-spring-boot-starter became a required dependency of odata-filter-spring-boot-starter, so the @ConditionalOnClass guard on this bean method can never be false and was removed; the bean is now always contributed to the one ProblemDetail pipeline. No caller-visible signature changed."
+                                    },
+                                    {
+                                      "code": "java.annotation.removed",
+                                      "old": "method ru.ludwigandreas.webcore.problem.ProblemMessageBundle ru.ludwigandreas.odatafilter.config.ODataFilterWebAutoConfiguration::odataFilterProblemMessageBundle()",
+                                      "justification": "CHANGED IN 3.0.0 BY THE OWNER'S EXPLICIT DECISION - change remove-compatibility-shims. web-core-spring-boot-starter became a required dependency of odata-filter-spring-boot-starter, so the @ConditionalOnClass guard on this bean method can never be false and was removed; the bean is now always contributed to the one ProblemDetail pipeline. No caller-visible signature changed."
                                     },
                                     {
                                       "regex": true,

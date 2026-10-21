@@ -5,47 +5,42 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CHANGELOG.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.ru.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PROJECT_INDEX.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_INDEX.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/RuleGroup.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/RuleGroup.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/BuiltInRuleSets.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/BuiltInRuleSets.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/OperationVocabularyRules.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/OperationVocabularyRules.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/test/java/ru/ludwigandreas/archrules/RuleEvaluationTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/test/java/ru/ludwigandreas/archrules/RuleEvaluationTest.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/KafkaRules.java" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/src/main/java/ru/ludwigandreas/archrules/rules/KafkaRules.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-bom/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-service-parent/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/grpc-client/spec.md" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/grpc-client/spec.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/pom-topology/spec.md" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/specs/pom-topology/spec.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/tasks.md" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/changes/add-grpc-starters/tasks.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/openspec/config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/openspec/config.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/project-index.json" beforeDir="false" afterPath="$PROJECT_DIR$/project-index.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/check_api_baseline.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/check_api_baseline.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/gate.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/gate.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/manifest.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/manifest.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/project_index.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/project_index.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/service/ProductServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/service/ProductServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/web/ProductController.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/java/ru/ludwigandreas/example/catalog/web/ProductController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application-local.yml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application-local.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/application.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages_ru.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/src/main/resources/i18n/messages_ru.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/CachedToken.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/CachingTokenSource.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/ClientCredentialsAuthenticationProvider.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/ClientCredentialsAuthenticationProvider.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/TokenRelayAuthenticationProvider.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/main/java/ru/ludwigandreas/restclient/auth/provider/TokenRelayAuthenticationProvider.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/unit/CachingTokenSourceTest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/audit-core/src/main/java/ru/ludwigandreas/audit/redaction/Redaction.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/audit-core/src/main/java/ru/ludwigandreas/audit/redaction/Redaction.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration/AuditStoreIntegrationTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration/AuditStoreIntegrationTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/grpc-client-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/sources/grpc-client-spring-boot-starter/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/main/java/ru/ludwigandreas/messaging/api/EnvelopeReader.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/main/java/ru/ludwigandreas/messaging/api/EnvelopeReader.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/main/java/ru/ludwigandreas/messaging/api/MessageHeaders.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/main/java/ru/ludwigandreas/messaging/api/MessageHeaders.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/main/java/ru/ludwigandreas/messaging/serialization/VersionGatingDeserializer.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/main/java/ru/ludwigandreas/messaging/serialization/VersionGatingDeserializer.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/unit/EnvelopeReaderTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/unit/EnvelopeReaderTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/unit/VersionGatingDeserializerTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/unit/VersionGatingDeserializerTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/observability-spring-boot-starter/src/main/java/ru/ludwigandreas/observability/logging/json/JsonLogEncoderConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/observability-spring-boot-starter/src/main/java/ru/ludwigandreas/observability/logging/json/JsonLogEncoderConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/observability-spring-boot-starter/src/main/java/ru/ludwigandreas/observability/logging/json/LogFieldNames.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/observability-spring-boot-starter/src/main/java/ru/ludwigandreas/observability/logging/json/LogFieldNames.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit/LogFieldNamesTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/unit/LogFieldNamesTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/web/ODataFilterExceptionHandler.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/web/ODataFilterProblemMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/main/java/ru/ludwigandreas/odatafilter/web/ODataFilterProblemMapper.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/architecture/ArchitectureTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/architecture/ArchitectureTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfigurationTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/src/test/java/ru/ludwigandreas/odatafilter/config/ODataFilterWebAutoConfigurationTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/dispatch/kafka/KafkaOutboxDispatcher.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/outbox-spring-boot-starter/src/main/java/ru/ludwigandreas/outbox/dispatch/kafka/KafkaOutboxDispatcher.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/audit/AuthorizationDeniedAuditListener.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/src/main/java/ru/ludwigandreas/security/audit/AuthorizationDeniedAuditListener.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/src/main/java/ru/ludwigandreas/usersettings/kafka/SettingsEventListener.java" beforeDir="false" afterPath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/src/main/java/ru/ludwigandreas/usersettings/kafka/SettingsEventListener.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -53,7 +48,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="3043" />
+    <option name="cachedIndexableFilesCount" value="3583" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -68,61 +63,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.0000000002247103" />
-      <entry key="MS500" value="1.0202496779233818" />
-      <entry key="S2" value="1.6495825445392192" />
-      <entry key="S5" value="2.4519979043669995" />
-      <entry key="S10" value="3.0239824694992263" />
-      <entry key="S30" value="3.6099735689356174" />
-      <entry key="S60" value="3.7951649087261594" />
-      <entry key="M2" value="3.8949716925099036" />
-      <entry key="M5" value="3.9573409912470163" />
-      <entry key="M10" value="3.978560735651749" />
-      <entry key="M15" value="3.9856826297811687" />
-      <entry key="M30" value="3.9928290169851888" />
-      <entry key="H1" value="3.9964114275771796" />
-      <entry key="H2" value="3.998204942753269" />
-      <entry key="H4" value="3.999102278516897" />
-      <entry key="D1" value="3.999850352958172" />
-      <entry key="W1" value="3.9999786211948605" />
+      <entry key="MS100" value="5.645969807562134E-10" />
+      <entry key="MS500" value="0.02150881533457732" />
+      <entry key="S2" value="1.0073291503314312" />
+      <entry key="S5" value="2.7463126217469096" />
+      <entry key="S10" value="4.390653406631266" />
+      <entry key="S30" value="7.886490107983424" />
+      <entry key="S60" value="9.904588863705296" />
+      <entry key="M2" value="11.282585325981545" />
+      <entry key="M5" value="12.266707360124393" />
+      <entry key="M10" value="12.62511007586157" />
+      <entry key="M15" value="12.748200566329569" />
+      <entry key="M30" value="12.873153425476447" />
+      <entry key="H1" value="12.936338017877931" />
+      <entry key="H2" value="12.968109085789836" />
+      <entry key="H4" value="12.984039530810136" />
+      <entry key="D1" value="12.997337834127977" />
+      <entry key="W1" value="12.999619639428257" />
     </decayedCancelled>
     <decayedSelected>
-      <entry key="MS100" value="0.0" />
-      <entry key="MS500" value="0.0" />
-      <entry key="S2" value="0.0" />
-      <entry key="S5" value="0.0" />
-      <entry key="S10" value="0.0" />
-      <entry key="S30" value="0.0" />
-      <entry key="S60" value="0.0" />
-      <entry key="M2" value="0.0" />
-      <entry key="M5" value="0.0" />
-      <entry key="M10" value="0.0" />
-      <entry key="M15" value="0.0" />
-      <entry key="M30" value="0.0" />
-      <entry key="H1" value="0.0" />
-      <entry key="H2" value="0.0" />
-      <entry key="H4" value="0.0" />
-      <entry key="D1" value="0.0" />
-      <entry key="W1" value="0.0" />
+      <entry key="MS100" value="1.0" />
+      <entry key="MS500" value="1.0" />
+      <entry key="S2" value="1.0000067813314908" />
+      <entry key="S5" value="1.0085610294253726" />
+      <entry key="S10" value="1.092525831125003" />
+      <entry key="S30" value="1.4522941788538646" />
+      <entry key="S60" value="1.672528199300122" />
+      <entry key="M2" value="1.8200781665793335" />
+      <entry key="M5" value="1.9237237284170345" />
+      <entry key="M10" value="1.9611054720565453" />
+      <entry key="M15" value="1.9738992542450786" />
+      <entry key="M30" value="1.9868633412205958" />
+      <entry key="H1" value="1.9934099562721306" />
+      <entry key="H2" value="1.996699531590203" />
+      <entry key="H4" value="1.998348401906971" />
+      <entry key="D1" value="1.9997245440308382" />
+      <entry key="W1" value="1.9999606445010014" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="0.0551689373403264" />
-      <entry key="MS500" value="0.5696649748242225" />
-      <entry key="S2" value="1.285669653247378" />
-      <entry key="S5" value="2.120793364575249" />
-      <entry key="S10" value="2.7837789682979155" />
-      <entry key="S30" value="3.5034732991340864" />
-      <entry key="S60" value="3.737677848785044" />
-      <entry key="M2" value="3.8650818715553292" />
-      <entry key="M5" value="3.945097942576789" />
-      <entry key="M10" value="3.972390318526203" />
-      <entry key="M15" value="3.9815580748870487" />
-      <entry key="M30" value="3.9907612480577606" />
-      <entry key="H1" value="3.9953761665286973" />
-      <entry key="H2" value="3.997686967617353" />
-      <entry key="H4" value="3.9988432047377622" />
-      <entry key="D1" value="3.9998071620162605" />
-      <entry key="W1" value="3.999972450766881" />
+      <entry key="MS100" value="1.9557411670718467E-4" />
+      <entry key="MS500" value="0.19991808121396168" />
+      <entry key="S2" value="1.5121825354193903" />
+      <entry key="S5" value="3.341924381212822" />
+      <entry key="S10" value="5.155605012316837" />
+      <entry key="S30" value="9.131998020375029" />
+      <entry key="S60" value="11.443753164342882" />
+      <entry key="M2" value="13.025532402406053" />
+      <entry key="M5" value="14.156560021829899" />
+      <entry key="M10" value="14.568727286893594" />
+      <entry key="M15" value="14.710314191241542" />
+      <entry key="M30" value="14.854059538515841" />
+      <entry key="H1" value="14.9267530627844" />
+      <entry key="H2" value="14.963307062893481" />
+      <entry key="H4" value="14.981636127696657" />
+      <entry key="D1" value="14.996936934313416" />
+      <entry key="W1" value="14.999562359874242" />
     </decayedShown>
   </component>
   <component name="ProblemsViewState">
@@ -137,40 +132,46 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Application.LocalNotificationApplication.executor": "Debug",
-    "JUnit.CatalogIntegrationTest.executor": "Debug",
-    "Maven.common [clean,install].executor": "Run",
-    "Maven.common [clean,verify,-pl...].executor": "Run",
-    "Maven.common [clean,verify].executor": "Run",
-    "Maven.common [verify,-DskipITs].executor": "Run",
-    "Maven.common [verify].executor": "Run",
-    "RequestMappingsPanelOrder0": "0",
-    "RequestMappingsPanelOrder1": "1",
-    "RequestMappingsPanelWidth0": "75",
-    "RequestMappingsPanelWidth1": "75",
-    "RunOnceActivity.MCP Project settings loaded": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "Spring Boot.CatalogApplication.executor": "Debug",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "master",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "/Users/ludwig/vault/projects/ludwig-platform/src/java-ludwig-common",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.0",
-    "project.structure.side.proportion": "0.0",
-    "settings.editor.selected.configurable": "reference.settings.project.maven.ignored.files",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.LocalNotificationApplication.executor&quot;: &quot;Debug&quot;,
+    &quot;JUnit.CatalogIntegrationTest.executor&quot;: &quot;Debug&quot;,
+    &quot;Maven.common [clean,install].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [clean,verify,-pl...].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [clean,verify].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [verify,-DskipITs].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [verify].executor&quot;: &quot;Run&quot;,
+    &quot;RequestMappingsPanelOrder0&quot;: &quot;0&quot;,
+    &quot;RequestMappingsPanelOrder1&quot;: &quot;1&quot;,
+    &quot;RequestMappingsPanelWidth0&quot;: &quot;75&quot;,
+    &quot;RequestMappingsPanelWidth1&quot;: &quot;75&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;Spring Boot.CatalogApplication.executor&quot;: &quot;Debug&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/ludwig/vault/projects/ludwig-platform/src/java-ludwig-common&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.0&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  },
+  &quot;keyToStringList&quot;: {
+    &quot;com.intellij.ide.scratch.ScratchImplUtil$2/New Scratch File&quot;: [
+      &quot;Markdown&quot;,
+      &quot;TEXT&quot;
+    ]
   }
-}]]></component>
+}</component>
   <component name="RunAnythingCache">
     <option name="myCommands">
       <command value="mvn verify " />
@@ -260,7 +261,8 @@
       <option name="presentableId" value="Default" />
       <updated>1786817614729</updated>
       <workItem from="1786817616340" duration="102896000" />
-      <workItem from="1791636263581" duration="40616000" />
+      <workItem from="1791636263581" duration="45697000" />
+      <workItem from="1792176148669" duration="6841000" />
     </task>
     <servers />
   </component>

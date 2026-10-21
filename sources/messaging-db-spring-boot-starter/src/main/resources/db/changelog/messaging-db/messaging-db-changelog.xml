@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      Includes only. Every changeset is formatted SQL in its own NNNN-<slug>.sql file beside this
+      one - see the database-migration capability.
+
+      Schema for messaging-db-spring-boot-starter: the log every service on the shared database
+      writes to and reads from. ${messaging_db_schema} is a changelog parameter set by
+      MessagingDbLiquibaseAutoConfiguration from ludwig.messaging.db.schema. Every service runs these
+      changesets with its own changelog table, so every statement is IF NOT EXISTS and every
+      changeset takes the same advisory lock first.
+    -->
+    <include file="classpath:db/changelog/messaging-db/0001-create-schema.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/messaging-db/0002-create-message-log.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/messaging-db/0003-create-partition-head.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/messaging-db/0004-create-consumer-offset.sql" relativeToChangelogFile="false"/>
+
+</databaseChangeLog>

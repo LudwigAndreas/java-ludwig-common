@@ -25,17 +25,11 @@ import java.util.concurrent.TimeUnit;
  * two others gave up and parsed the payload instead - which is why {@code eventVersion} reached production
  * with nothing reading it. A shared constant makes a rename a compile error in the other half.
  *
- * <h2>Both spellings, for now</h2>
+ * <h2>Canonical names only</h2>
  *
- * <p>Each envelope header is written twice: under its canonical {@code ludwig-} name and under the
- * pre-prefix name this dispatcher used before. That is deliberate and temporary. A topic's retention
- * outlives a release, so at any moment during a rollout there are records on real topics carrying the old
- * spelling and consumers that have not been restarted yet - and a consumer reading {@code null} where a
- * value exists means, for {@code event-type}, a record silently ignored as an unknown type.
- *
- * <p>The legacy write can be dropped once every topic's retention window has passed with this version
- * deployed; {@link MessageHeaders} states the condition for dropping the legacy <em>read</em>, which is the
- * later of the two.
+ * <p>Until 3.0.0 each envelope header was also written under the pre-prefix name this dispatcher used
+ * before {@link MessageHeaders} existed. Every consumer since 1.1.0 reads the canonical name, so 3.0.0
+ * writes that one alone.
  */
 public class KafkaOutboxDispatcher implements OutboxDispatcher {
 
@@ -58,22 +52,19 @@ public class KafkaOutboxDispatcher implements OutboxDispatcher {
     public DispatchResult dispatch(OutboxMessage message) {
         ProducerRecord<String, String> record = new ProducerRecord<>(
                 message.getDestination(), partitionKey(message), message.getPayload());
-        envelope(record, MessageHeaders.EVENT_TYPE, MessageHeaders.LEGACY_EVENT_TYPE,
-                message.getEventType());
-        envelope(record, MessageHeaders.EVENT_VERSION, MessageHeaders.LEGACY_EVENT_VERSION,
-                String.valueOf(message.getEventVersion()));
+        addHeader(record, MessageHeaders.EVENT_TYPE, message.getEventType());
+        addHeader(record, MessageHeaders.EVENT_VERSION, String.valueOf(message.getEventVersion()));
         // Both new with this module. They were on OutboxEvent from the start and never reached the wire,
         // so a consumer could not tell which aggregate an event was about without parsing the payload.
-        envelope(record, MessageHeaders.AGGREGATE_TYPE, null, message.getAggregateType());
-        envelope(record, MessageHeaders.AGGREGATE_ID, null, message.getAggregateId());
-        envelope(record, MessageHeaders.IDEMPOTENCY_KEY, MessageHeaders.LEGACY_IDEMPOTENCY_KEY,
-                message.getIdempotencyKey());
-        envelope(record, MessageHeaders.TRACE_ID, MessageHeaders.LEGACY_TRACE_ID, message.getTraceId());
+        addHeader(record, MessageHeaders.AGGREGATE_TYPE, message.getAggregateType());
+        addHeader(record, MessageHeaders.AGGREGATE_ID, message.getAggregateId());
+        addHeader(record, MessageHeaders.IDEMPOTENCY_KEY, message.getIdempotencyKey());
+        addHeader(record, MessageHeaders.TRACE_ID, message.getTraceId());
         // The producer's own clock, not the broker's. The two differ by however long the event sat in the
         // outbox table waiting for the poller, and that difference is the only way a consumer can tell
         // "this event is old because the producer was backed up" from "this event is old because I am
         // behind" - see MessageHeaders.PRODUCED_AT.
-        envelope(record, MessageHeaders.PRODUCED_AT, null, Instant.now().toString());
+        addHeader(record, MessageHeaders.PRODUCED_AT, Instant.now().toString());
 
         // The correlation id is deliberately absent: observability-spring-boot-starter's producer
         // post-processor stamps X-Correlation-Id on every record produced through the Spring-managed
@@ -88,15 +79,6 @@ public class KafkaOutboxDispatcher implements OutboxDispatcher {
             return DispatchResult.success();
         } catch (Exception e) {
             return DispatchResult.failure(e.getMessage(), true);
-        }
-    }
-
-    /** One envelope header under its canonical name and, while the transition lasts, its legacy one. */
-    private static void envelope(ProducerRecord<String, String> record, String canonical, String legacy,
-                                 String value) {
-        addHeader(record, canonical, value);
-        if (legacy != null) {
-            addHeader(record, legacy, value);
         }
     }
 

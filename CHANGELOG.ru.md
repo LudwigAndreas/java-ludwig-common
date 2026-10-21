@@ -19,6 +19,16 @@
 
 ### Added
 
+- **`messaging-db-spring-boot-starter`: удаляемая замена кластера Kafka, в который можно писать.** Пока
+  зависимость подключена, транспорт `kafka` в outbox дописывает записи в журнал в общей базе PostgreSQL,
+  устроенный как Kafka. Туда же попадает каждая запись dead-letter. Потребители `@KafkaListener` читают
+  оттуда топики из `ludwig.messaging.db.consume`. Журнал сохраняет партиции, порядок по ключу, отдельную
+  позицию на каждую группу потребителей, а также повторы, dead-letter, проверку версии события,
+  дедупликацию и перехватчики из messaging. Все остальные топики по-прежнему читаются из Kafka. Ни
+  слушатели, ни бины фабрик, ни маршруты outbox не меняются. `ludwig.messaging.db.mode=draining`
+  переводит запись в Kafka, пока журнал дочитывается, а `ludwig.messaging.db.lag` показывает, когда
+  зависимость можно убрать. Новое правило архитектуры `kafka.nothing-depends-on-the-db-log-transport`
+  не даёт сделать стартер неудаляемым.
 - **gRPC между сервисами платформы.** `grpc-core`, `grpc-server-spring-boot-starter` и
   `grpc-client-spring-boot-starter`: сервисы обслуживают и вызывают друг друга по gRPC, а принципал,
   correlation id, предпочтения вызывающего, отображение ошибок, дедлайны, отказоустойчивость,
@@ -78,6 +88,29 @@
   выпуска с пометкой устаревания** - это решение. Они без изменений переехали в `outbound-token-core`:
   импортируйте `ru.ludwigandreas.outboundtoken.CachedToken` и `ru.ludwigandreas.outboundtoken.CachingTokenSource`.
   Проверка совместимости API фиксирует оба удаления как обоснованные исключения.
+
+- **Несовместимо (протокол) - у заголовков конверта Kafka одно написание.** `outbox-spring-boot-starter`
+  пишет только заголовки `ludwig-*`. `EnvelopeReader` и `VersionGatingDeserializer` из
+  `messaging-spring-boot-starter` читают только их. Имена без префикса - `event-type`, `event-version`,
+  `idempotency-key` и `trace-id` - больше не пишутся и не читаются, а `MessageHeaders.LEGACY_*` удалены:
+  используйте константу с тем же окончанием (`MessageHeaders.EVENT_TYPE`, ...). **Перед обновлением:** не
+  должно оставаться развёрнутых потребителей старше 1.1.0, а в топиках, которые потребитель может
+  перечитать, - записей, произведённых до 1.1.0. Такая запись читается без типа, то есть
+  игнорируется как неизвестный тип. Все выпуски начиная с 1.1.0 пишут оба написания.
+- **Несовместимо - у `odata-filter-spring-boot-starter` нет собственной advice.** Удалены
+  `ODataFilterExceptionHandler` и свойство `odata.filter.web.problem-detail-advice-enabled`.
+  `web-core-spring-boot-starter` теперь обязательная зависимость, поэтому ошибки запросов всегда
+  отображает локализованно общий конвейер `ProblemDetail`. Новая зависимость приносит `spring-web`,
+  но не `spring-webmvc`. Собственная advice приложения по-прежнему имеет приоритет.
+- **Несовместимо - `observability-spring-boot-starter`: у каждой записи один конструктор.** Удалены
+  19-аргументный конструктор `LogFieldNames` и конструктор `JsonLogEncoderConfig` без `BuildIdentity`.
+  Используйте канонические конструкторы и передавайте `null` в `commitId` или `BuildIdentity.absent()` в
+  `build` - ровно это и делали удалённые конструкторы.
+- **Несовместимо - `audit-core`: один маркер редактирования.** Удалены `Redaction.LEGACY_SETTINGS_MASK` и
+  `Redaction.LEGACY_HEADER_MASK`. `Redaction.isMask` теперь возвращает `true` только для
+  `Redaction.MASK`. Сохранённый `[redacted]` переписан changeset'ом `audit-0004` в 2.0.0.
+- Проверка совместимости API фиксирует каждое из этих удалений как обоснованное исключение
+  (`remove-compatibility-shims`).
 
 ### Fixed
 

@@ -25,7 +25,8 @@
         DEPENDENCY DIRECTION. This module is new and nothing in the reactor depends on it, so no edge
         below can close a cycle. rest-client-spring-boot-starter is deliberately NOT a dependency
         (design D13): it would put three HTTP engines on the classpath of a service that makes no
-        HTTP call, which is why the token cache is written again here and recorded as owed work.
+        HTTP call. The token cache, minter and relay reader both client starters need come from
+        outbound-token-core instead, which has no in-repo dependencies.
     -->
     <dependencyManagement>
         <dependencies>

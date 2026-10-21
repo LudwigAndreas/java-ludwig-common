@@ -66,6 +66,13 @@ public final class KafkaRules implements ArchitectureRuleSet {
     public static final RuleId NO_PRIVATE_DEAD_LETTER_RECOVERER =
             RuleId.of(RuleGroup.KAFKA, "no-private-dead-letter-recoverer");
 
+    /** The temporary DB-log transport stays removable: nothing outside it refers to it. */
+    public static final RuleId NOTHING_DEPENDS_ON_THE_DB_LOG =
+            RuleId.of(RuleGroup.KAFKA, "nothing-depends-on-the-db-log-transport");
+
+    /** The package of messaging-db-spring-boot-starter, which attaches itself and must be removable. */
+    private static final String DB_LOG_PACKAGE = "ru.ludwigandreas.messaging.db..";
+
     /** The type that publishes a record to a dead-letter topic. */
     private static final String DEAD_LETTER_RECOVERER =
             "org.springframework.kafka.listener.DeadLetterPublishingRecoverer";
@@ -117,6 +124,11 @@ public final class KafkaRules implements ArchitectureRuleSet {
                         + " instead of constructing a DeadLetterPublishingRecoverer here. A second one means"
                         + " a second destination naming convention, a second partition decision and a send"
                         + " that is counted and audited in one place and not the other."));
+        rules.add(ArchitectureRule.of(NOTHING_DEPENDS_ON_THE_DB_LOG, nothingDependsOnTheDbLog(),
+                "Remove the reference. messaging-db-spring-boot-starter attaches to listeners and the outbox"
+                        + " from outside, so that removing its dependency returns everything to Kafka; code that"
+                        + " names one of its classes stops compiling the day the cluster arrives. Read lag from"
+                        + " the ludwig.messaging.db.lag metric instead of calling the starter."));
         rules.add(ArchitectureRule.of(CONSUMERS_DO_NOT_USE_REPOSITORIES, consumersDoNotUseRepositories(context),
                 "Call a service method from the listener instead of the repository, so the message is handled"
                         + " inside the same transaction and validation as any other entry point."));
@@ -262,6 +274,17 @@ public final class KafkaRules implements ArchitectureRuleSet {
                         "a dead-letter publisher of their own")
                         .as("not depend on a dead-letter publisher of their own"))
                 .as("Only the messaging module declares a dead-letter publisher");
+    }
+
+    private static ArchRule nothingDependsOnTheDbLog() {
+        // classes(), not noClasses() - see noPrivateDeadLetterRecoverer.
+        return ArchRuleDefinition.classes()
+                .that(ArchitecturePredicates.residingOutsideOf(List.of(DB_LOG_PACKAGE)))
+                .should(ArchitectureConditions.notDependOnClassesThat(
+                        JavaClass.Predicates.resideInAPackage(DB_LOG_PACKAGE),
+                        "the DB-log transport, which must stay removable")
+                        .as("not depend on the DB-log transport"))
+                .as("Nothing outside messaging-db-spring-boot-starter depends on it");
     }
 
     private static ArchRule payloadsAreFreeOfJpa(RuleContext context) {

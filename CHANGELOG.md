@@ -21,6 +21,15 @@ either.
 
 ### Added
 
+- **`messaging-db-spring-boot-starter`: a removable stand-in for a Kafka cluster you can write to.** With
+  the dependency present, the outbox's `kafka` transport appends to a Kafka-shaped log in the shared
+  PostgreSQL database, every dead letter lands there too, and `@KafkaListener` consumers read the topics
+  listed under `ludwig.messaging.db.consume` from it. The log keeps partitions, per-key ordering, one
+  position per consumer group, and messaging's retry, dead-letter, version-gate, dedup and interceptor
+  behaviour. Every other topic is still read from Kafka. No listener, factory bean or outbox route
+  changes. `ludwig.messaging.db.mode=draining` moves writes to Kafka while the log drains, and
+  `ludwig.messaging.db.lag` reports when the dependency can be removed. A new
+  `kafka.nothing-depends-on-the-db-log-transport` architecture rule keeps it removable.
 - **gRPC between platform services.** `grpc-core`, `grpc-server-spring-boot-starter` and
   `grpc-client-spring-boot-starter`: services serve and call each other over gRPC with the platform's
   principal, correlation id, caller preferences, problem mapping, deadlines, resilience, idempotent
@@ -79,6 +88,29 @@ either.
   deprecation release**, by decision. They moved unchanged to `outbound-token-core`: import
   `ru.ludwigandreas.outboundtoken.CachedToken` and `ru.ludwigandreas.outboundtoken.CachingTokenSource`.
   The API-compatibility check records both removals as justified exceptions.
+
+- **BREAKING (wire) - Kafka envelope headers have one spelling.** `outbox-spring-boot-starter` writes
+  only the `ludwig-*` envelope headers. `messaging-spring-boot-starter`'s `EnvelopeReader` and
+  `VersionGatingDeserializer` read only those. The pre-prefix `event-type`, `event-version`,
+  `idempotency-key` and `trace-id` are no longer written or read, and `MessageHeaders.LEGACY_*` is
+  removed: use the constant of the same suffix (`MessageHeaders.EVENT_TYPE`, ...). **Before upgrading:**
+  no consumer older than 1.1.0 may still be deployed, and no topic a consumer may replay may still hold
+  records produced before 1.1.0. Such a record reads as having no type, which means it is ignored as
+  an unknown type. Every release since 1.1.0 has written both spellings.
+- **BREAKING - `odata-filter-spring-boot-starter` has no advice of its own.** `ODataFilterExceptionHandler`
+  and the `odata.filter.web.problem-detail-advice-enabled` property are removed.
+  `web-core-spring-boot-starter` is now a required dependency, so query errors are always rendered,
+  localized, by the shared `ProblemDetail` pipeline. The new dependency brings `spring-web`, never
+  `spring-webmvc`. An application advice of your own still takes precedence.
+- **BREAKING - `observability-spring-boot-starter`: each record has one constructor.** The 19-argument
+  `LogFieldNames` constructor and the `JsonLogEncoderConfig` constructor without a `BuildIdentity` are
+  removed. Use the canonical constructors and pass `null` for `commitId` or `BuildIdentity.absent()` for
+  `build`, which is exactly what the removed constructors did.
+- **BREAKING - `audit-core`: one redaction marker.** `Redaction.LEGACY_SETTINGS_MASK` and
+  `Redaction.LEGACY_HEADER_MASK` are removed. `Redaction.isMask` is now `true` for `Redaction.MASK`
+  alone. The persisted `[redacted]` was rewritten by `audit-0004` in 2.0.0.
+- The API-compatibility check records each of these removals as a justified exception
+  (`remove-compatibility-shims`).
 
 ### Fixed
 

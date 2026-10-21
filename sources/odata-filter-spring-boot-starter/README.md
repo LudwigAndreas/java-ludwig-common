@@ -280,11 +280,11 @@ is null drop out of the result - including under `ne` and `not` - and three-valu
 
 ## Error responses
 
-Every exception this module raises extends `ODataFilterException`, and how it reaches the client
-depends on one thing: whether
-[`web-core-spring-boot-starter`](../../sources/web-core-spring-boot-starter/README.md) is on the classpath.
+Every exception this module raises extends `ODataFilterException`, and it reaches the client through
+[`web-core-spring-boot-starter`](../../sources/web-core-spring-boot-starter/README.md)'s shared problem
+pipeline - a required dependency of this module.
 
-**With it** - the intended arrangement - this module contributes an `ODataFilterProblemMapper` and the
+This module contributes an `ODataFilterProblemMapper` and the
 `i18n/ludwig-odata-filter-messages` bundle to that starter's shared problem pipeline. Query errors
 then come back **in the caller's language**, under `ludwig.odata.error.*` codes, in exactly the same
 RFC 9457 shape as every other error the service emits, with the offending field in a `property`
@@ -304,17 +304,14 @@ member a client can read without parsing a sentence:
 Reword any of it by defining the same key in your own bundle - the pipeline resolves the
 application's bundle first.
 
-**Without it**, the legacy `ODataFilterExceptionHandler` advice is registered instead, so a service
-that does not use that starter still gets RFC 7807 responses - in English, from the exceptions' own
-developer-facing messages. Disable it with `odata.filter.web.problem-detail-advice-enabled=false` to
-handle these exceptions yourself.
-
-The two never coexist. That advice was the module's original answer and it had a structural flaw: a
-library can only emit the text it was compiled with, so its English messages were the one part of an
-otherwise localized API that could not be translated - and the only escape was to switch it off and
-re-handle all seven exception types by hand, which every consumer then did identically. The mapper
-plus the bundle removes both halves of that: the meaning is declared here once, the text ships here
-in every locale this module supports, and the application can still override any of it.
+There is no advice of this module's own. Until 3.0.0 there was one, `ODataFilterExceptionHandler`, for
+services without web-core, switched by `odata.filter.web.problem-detail-advice-enabled`; both are
+removed. That advice had a structural flaw: a library can only emit the text it was compiled with, so
+its English messages were the one part of an otherwise localized API that could not be translated -
+and the only escape was to switch it off and re-handle all seven exception types by hand, which every
+consumer then did identically. The mapper plus the bundle removes both halves of that: the meaning is
+declared here once, the text ships here in every locale this module supports, and the application can
+still override any of it. `NoLocalAdviceTest` fails the build if an advice comes back.
 
 ## Discovering what is filterable
 

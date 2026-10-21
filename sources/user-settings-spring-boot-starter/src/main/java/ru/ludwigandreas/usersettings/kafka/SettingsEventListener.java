@@ -81,12 +81,7 @@ public class SettingsEventListener {
      * manual acknowledgement was for, and what per-record acknowledgement preserves.
      *
      * <p>The event type comes off {@link InboundEnvelope} rather than from an {@code @Header} parameter,
-     * because reading it is a fallback rather than a lookup: a topic's retention outlives a release, so the
-     * producer writes both the canonical {@code ludwig-event-type} and the pre-prefix {@code event-type}
-     * during the transition, and this consumer may be asked to replay from before the producer was upgraded,
-     * when only the legacy name is there. Reading only one of them would make a record silently ignored as an
-     * unknown type - not an error anywhere, and the replica simply never learns about that change.
-     * {@link MessageHeaders} states when each half can be dropped.
+     * so the header's name is {@link MessageHeaders}' decision in one place rather than a literal here.
      *
      * <p>The log line names the record's coordinates rather than its key. The key is a tenant and a subject,
      * so it identifies a person; the coordinates identify the record, which is what an operator needs to find

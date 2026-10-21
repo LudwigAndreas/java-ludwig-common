@@ -97,15 +97,14 @@
         </dependency>
 
         <!--
-            Optional: the shared localized problem pipeline. When present, this module contributes a
-            mapper and a message bundle to it instead of registering its own exception advice - see
-            ODataFilterWebAutoConfiguration. Optional so that a service which does not use the
-            web-core starter keeps working, on the legacy advice, with no change.
+            Required: the shared localized problem pipeline. This module contributes a mapper and a
+            message bundle to it and has no advice of its own - see ODataFilterWebAutoConfiguration.
+            Brings spring-web only; spring-webmvc stays optional there, so a non-web consumer is not
+            given Spring MVC.
         -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>web-core-spring-boot-starter</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Optional: applied/rejected-filter counts and parse-duration metrics -->

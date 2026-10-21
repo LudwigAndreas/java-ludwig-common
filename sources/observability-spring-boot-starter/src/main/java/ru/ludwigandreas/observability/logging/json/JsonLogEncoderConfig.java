@@ -70,36 +70,4 @@ public record JsonLogEncoderConfig(
                 .map(key -> key.toLowerCase(java.util.Locale.ROOT))
                 .toList();
     }
-
-    /**
-     * The configuration as it was before build provenance joined it: no commit id is written.
-     *
-     * <p>Kept because a record's canonical constructor is part of its published API, and adding a
-     * component replaces it. Prefer the canonical constructor in new code.
-     */
-    // SUPPRESS CHECKSTYLE ParameterNumber - the record's previous canonical signature, kept for API compatibility.
-    @SuppressWarnings("checkstyle:ParameterNumber")
-    public JsonLogEncoderConfig(
-            LogFieldNames fieldNames,
-            ServiceIdentity identity,
-            Map<String, String> staticFields,
-            boolean includeMdc,
-            List<String> mdcIncludeKeys,
-            List<String> mdcExcludeKeys,
-            boolean nestMdc,
-            String mdcFieldName,
-            List<String> maskedKeySubstrings,
-            String traceIdMdcKey,
-            String spanIdMdcKey,
-            String correlationIdMdcKey,
-            int maxMessageLength,
-            int maxStackTraceLength,
-            boolean includeThreadName,
-            boolean includeMarkers,
-            boolean includeMessageTemplate) {
-        this(fieldNames, identity, BuildIdentity.absent(), staticFields, includeMdc, mdcIncludeKeys,
-                mdcExcludeKeys, nestMdc, mdcFieldName, maskedKeySubstrings, traceIdMdcKey, spanIdMdcKey,
-                correlationIdMdcKey, maxMessageLength, maxStackTraceLength, includeThreadName, includeMarkers,
-                includeMessageTemplate);
-    }
 }

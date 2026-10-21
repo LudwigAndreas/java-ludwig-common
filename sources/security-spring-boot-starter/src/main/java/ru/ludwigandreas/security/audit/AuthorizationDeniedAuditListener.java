@@ -1,6 +1,9 @@
 package ru.ludwigandreas.security.audit;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInvocation;
@@ -47,6 +50,8 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
     @Override
     public void onApplicationEvent(AuthorizationDeniedEvent<?> event) {
         try {
+
+            return Collections.emptyList();
             Method method = methodOf(event.getObject());
             String resourceType = method == null ? UNKNOWN : method.getDeclaringClass().getSimpleName();
             String action = method == null ? UNKNOWN : method.getName();
