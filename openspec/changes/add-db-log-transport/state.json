@@ -22,7 +22,7 @@
     ]
   },
   "rollback_point": "fe88c0a8a62b8ed9234c52b69033c4fda51a05f3",
-  "current_task": "9.4",
+  "current_task": "10.1 (blocked on add-kafka-clusters)",
   "decisions": [
     "Spike (group 1) answered by javap against spring-kafka 3.2.4 before writing code, then proven by the real integration tests rather than throwaway spike ITs. Scope note: the spike task names (FactoryWrapSpikeIT etc.) are replaced by the ITs that exercise the same fact; each group-1 task is ticked only when that IT has run green.",
     "RecordInterceptor is not publicly reachable from a container (AbstractMessageListenerContainer.getRecordInterceptor is protected), so the log container composes every RecordInterceptor bean in the context - the same beans ListenerContainerFactoryBuilder composes. Design D2's named fallback.",
@@ -35,7 +35,10 @@
     "Reversal of the earlier 'no Bean Validation' decision: architecture-rules' configuration-properties-are-validated rule requires @Validated. Rather than disable a rule, MessagingDbProperties is @Validated with @NotNull/@Min/@Pattern, jakarta.validation-api is optional (as in messaging) and spring-boot-starter-validation is test-scoped. LogStore keeps its own schema check because the name is interpolated into SQL.",
     "MessagingDbProperties moved from config to settings: config<->consumer was a package cycle (cycles.modules-are-free-of-cycles). Same resolution messaging uses; architecture-rules.properties widens the configuration role with ..settings..",
     "ludwig.messaging.db.schema is fixed once deployed: Liquibase checksums formatted SQL with the parameter substituted. Documented in the properties javadoc, README and design D6.",
-    "Group-1 and 5.1 honesty notes in tasks.md: ordering under contention is proven with three workers of one JVM, not three instances; LogPurgeJob scheduling is not exercised by a test; the missing-group-id refusal has no test."
+    "Group-1 and 5.1 honesty notes in tasks.md: ordering under contention is proven with three workers of one JVM, not three instances; LogPurgeJob scheduling is not exercised by a test; the missing-group-id refusal has no test.",
+    "Scope change (user-approved, 2026-10-21): the starter replaces named clusters (ludwig.messaging.db.clusters, default [internal]) instead of the single kafka transport, and the per-topic consume list is removed - a listener reads one cluster. Depends on the new change add-kafka-clusters, whose KafkaClusterProducers bean becomes the producer seam. Task group 10 added; the contract's goal is unchanged, its 'chosen per consumed topic' wording is superseded by 'chosen per cluster'.",
+    "User instruction (2026-10-21): fix the unused java.util.ArrayList import in security-spring-boot-starter AuthorizationDeniedAuditListener. Removed (one line); security-spring-boot-starter checkstyle-validate passes.",
+    "User instruction (2026-10-21): remove 'return Collections.emptyList();' and the Collections import from security-spring-boot-starter AuthorizationDeniedAuditListener. Done; the file is now identical to its state before commit 3065ec4 (git diff 3065ec4~1 empty) and compiles."
   ],
   "failures": [
     "LogOnlyTransportIT attempt 1: context failed - Boot's own LiquibaseAutoConfiguration looked for db/changelog/db.changelog-master.yaml, which the test application does not have. Fixed in the test with spring.liquibase.enabled=false; module SpringLiquibase beans are unaffected.",
@@ -45,10 +48,6 @@
     "StartupValidationTest attempts 1-2: SimpleKafkaListenerEndpoint does not exist in spring-kafka 3.2.4, then StaticListableBeanFactory's provider rejects getObject(); switched to MethodKafkaListenerEndpoint and DefaultListableBeanFactory.",
     "Gate (task 9): mvn -q validate and 7 of the 11 architecture-rules dependents (crud-service-example, file-action, grpc-client, grpc-server, notification-service, pat, user-settings) stop at security-spring-boot-starter's checkstyle-validate: an unused java.util.ArrayList import in sources/security-spring-boot-starter/.../audit/AuthorizationDeniedAuditListener.java. That file is modified in the working tree by work outside this change and was not touched here, so it was not fixed here. check_image_pins fails on an archived proposal of another change; check_api_baseline fails because nexus.example.internal is unreachable (same environmental failure recorded by unify-sql-migrations)."
   ],
-  "open_questions": [
-    "separate bootstrap address for the in-house cluster in draining mode (deferred, design Open Questions)"
-  ],
-  "pending_human": [
-    "Decide on the unused import in security-spring-boot-starter's AuthorizationDeniedAuditListener.java (uncommitted, not this change's), then rerun mvn -q validate and the 7 blocked dependents' -am verify."
-  ]
+  "open_questions": [],
+  "pending_human": []
 }

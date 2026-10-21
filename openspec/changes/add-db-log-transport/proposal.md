@@ -10,23 +10,28 @@ completely once a cluster exists. Removing it must not require editing any produ
 ## What Changes
 
 - New starter `messaging-db-spring-boot-starter` (library, parented by the reactor root `common`):
-  - **Writes:** every record the outbox would have sent to Kafka is appended to a log table in the
-    shared PostgreSQL database instead. This includes every dead-letter record, including the
-    dead letters of topics read from external Kafka.
-  - **Reads:** a listener's topics that are listed under `ludwig.messaging.db.consume` are read from
-    the log. Every other topic is still read from Kafka. The consumer semantics are Kafka's:
+  - **Which cluster it stands in for:** `ludwig.messaging.db.clusters`, default `[internal]`, naming
+    clusters as `add-kafka-clusters` defines them. *Revised: the first version replaced the single
+    `kafka` transport and chose per topic through `ludwig.messaging.db.consume`. With named clusters, a
+    topic lives on a cluster, so the choice is per cluster and `consume` is removed.*
+  - **Writes:** every record the platform would have produced to a replaced cluster - outbox writes
+    over `kafka:<cluster>`, and dead letters addressed to it - is appended to a log table in the
+    shared PostgreSQL database instead.
+  - **Reads:** consumers whose cluster is replaced read from the log. Every other consumer reads from
+    its own cluster. The consumer semantics are Kafka's:
     partitions, per-key ordering, an independent position per consumer group (fan-out), and
     at-least-once delivery.
   - **Consumer behaviour:** the same as the messaging starter's. Deserialization and the
     event-version gate, the correlation interceptor, dedup, blocking retry with backoff, then the
     dead-letter topic, with the same metrics and audit events.
-  - **Cutover:** `ludwig.messaging.db.mode=draining` sends writes to Kafka while the listed topics
-    are read from both the log and Kafka. The starter reports the remaining log lag per consumer
+  - **Cutover:** once the cluster has an address, `ludwig.messaging.db.mode=draining` sends its writes
+    there while its consumers read from both the log and the cluster. The starter reports the remaining log lag per consumer
     group, so it is clear when it can be removed.
   - **Retention:** a purge job.
-- No change to `messaging-spring-boot-starter`, `outbox-spring-boot-starter`, any listener, any
-  listener container factory bean, or any outbox route. The starter attaches through bean names and
-  extension points those modules already expose.
+- No change to any listener, listener container factory bean or outbox route. **Depends on
+  `add-kafka-clusters`**, whose `KafkaClusterProducers` bean is the producer seam the starter replaces
+  for its clusters. The first version attached through the `kafkaOutboxDispatcher` bean name and a
+  dead-letter handler swap, and those are retired.
 - A new ArchUnit rule in `architecture-rules`: no class outside the new starter's package may depend
   on it. That rule is what keeps the starter removable.
 

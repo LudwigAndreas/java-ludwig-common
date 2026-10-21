@@ -2,6 +2,7 @@ package ru.ludwigandreas.outbox.publisher;
 
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.ludwigandreas.audit.CorrelationProvider;
 import ru.ludwigandreas.outbox.api.OutboxEvent;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
@@ -17,7 +18,9 @@ import ru.ludwigandreas.outbox.serialization.OutboxPayloadSerializer;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -31,14 +34,33 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
     private final OutboxProperties properties;
     private final OutboxAuditLogger auditLogger;
     private final OutboxMetrics metrics;
+    private final CorrelationProvider correlation;
+    private final String correlationHeader;
 
+    /**
+     * Creates the publisher.
+     *
+     * @param repository        the outbox table
+     * @param payloadSerializer turns the payload into the stored JSON
+     * @param publishFilter     decides whether an event is published at all
+     * @param routeResolver     picks the transport and destination
+     * @param properties        the outbox configuration
+     * @param auditLogger       records the state transition
+     * @param metrics           counts publications
+     * @param correlation       the current request's correlation id, captured into the message's headers
+     * @param correlationHeader the header name it is stored under, the name consumers read
+     */
+    // SUPPRESS CHECKSTYLE ParameterNumber - a collaborator list, assembled once by the autoconfiguration.
+    @SuppressWarnings("checkstyle:ParameterNumber")
     public DefaultOutboxEventPublisher(OutboxMessageRepository repository,
                                         OutboxPayloadSerializer payloadSerializer,
                                         OutboxPublishFilter publishFilter,
                                         OutboxRouteResolver routeResolver,
                                         OutboxProperties properties,
                                         OutboxAuditLogger auditLogger,
-                                        OutboxMetrics metrics) {
+                                        OutboxMetrics metrics,
+                                        CorrelationProvider correlation,
+                                        String correlationHeader) {
         this.repository = repository;
         this.payloadSerializer = payloadSerializer;
         this.publishFilter = publishFilter;
@@ -46,6 +68,8 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
         this.properties = properties;
         this.auditLogger = auditLogger;
         this.metrics = metrics;
+        this.correlation = correlation;
+        this.correlationHeader = correlationHeader;
     }
 
     @Override
@@ -77,7 +101,7 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
         message.setEventType(event.getEventType());
         message.setEventVersion(event.getEventVersion());
         message.setPayload(payload);
-        message.setHeaders(event.getHeaders());
+        message.setHeaders(headersOf(event));
         message.setOrderingKey(properties.getOrdering().isEnabled() ? event.getOrderingKey() : null);
         message.setTransport(route.transport());
         message.setDestination(route.destination());
@@ -94,6 +118,22 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
         auditLogger.onTransition(saved, null, OutboxStatus.PENDING, "published");
         metrics.recordPublished(event.getEventType(), route.transport());
         return Optional.of(saved);
+    }
+
+    /**
+     * The event's headers, plus the publishing request's correlation id unless the event set one.
+     *
+     * <p>Captured here because this is the last moment the request's context exists: the message is
+     * dispatched later, on the poller's thread, which has none. A header the caller set wins, because the
+     * caller may be relaying an id from further upstream.
+     */
+    private Map<String, String> headersOf(OutboxEvent event) {
+        Map<String, String> headers = event.getHeaders() == null ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(event.getHeaders());
+        if (!headers.containsKey(correlationHeader)) {
+            correlation.currentCorrelationId().ifPresent(id -> headers.put(correlationHeader, id));
+        }
+        return headers.isEmpty() ? event.getHeaders() : headers;
     }
 
     @Override

@@ -66,6 +66,13 @@ public final class KafkaRules implements ArchitectureRuleSet {
     public static final RuleId NO_PRIVATE_DEAD_LETTER_RECOVERER =
             RuleId.of(RuleGroup.KAFKA, "no-private-dead-letter-recoverer");
 
+    /** Every platform producer comes from messaging's cluster seam, so a stand-in can replace them all. */
+    public static final RuleId PRODUCERS_COME_FROM_THE_CLUSTER_SEAM =
+            RuleId.of(RuleGroup.KAFKA, "producers-come-from-the-cluster-seam");
+
+    /** The producer factory type the seam constructs. */
+    private static final String PRODUCER_FACTORY = "org.springframework.kafka.core.DefaultKafkaProducerFactory";
+
     /** The temporary DB-log transport stays removable: nothing outside it refers to it. */
     public static final RuleId NOTHING_DEPENDS_ON_THE_DB_LOG =
             RuleId.of(RuleGroup.KAFKA, "nothing-depends-on-the-db-log-transport");
@@ -124,6 +131,11 @@ public final class KafkaRules implements ArchitectureRuleSet {
                         + " instead of constructing a DeadLetterPublishingRecoverer here. A second one means"
                         + " a second destination naming convention, a second partition decision and a send"
                         + " that is counted and audited in one place and not the other."));
+        rules.add(ArchitectureRule.of(PRODUCERS_COME_FROM_THE_CLUSTER_SEAM, producersComeFromTheClusterSeam(),
+                "Ask messaging-spring-boot-starter's KafkaClusterProducers for the producer factory instead of"
+                        + " constructing a DefaultKafkaProducerFactory here. A producer built anywhere else"
+                        + " ignores the named clusters and bypasses whatever stands in for one - the DB log"
+                        + " until a cluster exists - so its records go to a broker nobody meant."));
         rules.add(ArchitectureRule.of(NOTHING_DEPENDS_ON_THE_DB_LOG, nothingDependsOnTheDbLog(),
                 "Remove the reference. messaging-db-spring-boot-starter attaches to listeners and the outbox"
                         + " from outside, so that removing its dependency returns everything to Kafka; code that"
@@ -274,6 +286,23 @@ public final class KafkaRules implements ArchitectureRuleSet {
                         "a dead-letter publisher of their own")
                         .as("not depend on a dead-letter publisher of their own"))
                 .as("Only the messaging module declares a dead-letter publisher");
+    }
+
+    private static ArchRule producersComeFromTheClusterSeam() {
+        ArchCondition<JavaClass> constructsNoProducerFactory =
+                new ArchCondition<>("not construct a " + PRODUCER_FACTORY) {
+                    @Override
+                    public void check(JavaClass item, ConditionEvents events) {
+                        item.getConstructorCallsFromSelf().stream()
+                                .filter(call -> PRODUCER_FACTORY.equals(call.getTargetOwner().getName()))
+                                .forEach(call -> events.add(SimpleConditionEvent.violated(call,
+                                        call.getDescription())));
+                    }
+                };
+        return ArchRuleDefinition.classes()
+                .that(ArchitecturePredicates.residingOutsideOf(List.of(MESSAGING_MODULE_PACKAGE)))
+                .should(constructsNoProducerFactory)
+                .as("Platform producers come from KafkaClusterProducers");
     }
 
     private static ArchRule nothingDependsOnTheDbLog() {

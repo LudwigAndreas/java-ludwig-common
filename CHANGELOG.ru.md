@@ -19,6 +19,14 @@
 
 ### Added
 
+- **Именованные кластеры Kafka.** `ludwig.kafka.clusters.<name>.*` объявляет кластер в форме
+  `spring.kafka.*`, связанный поверх него; `spring.kafka.*` остаётся кластером `default`. Потребитель
+  читает из `ludwig.messaging.consumers.<name>.cluster` и отправляет dead letter в `dead-letter.cluster`
+  (по умолчанию `source`). Маршрут outbox пишет в кластер, который называет его транспорт,
+  `kafka:<cluster>`. Захваты дедупликации на именованном кластере получают область
+  `kafka:<cluster>/<topic>`, так что один топик в двух кластерах никогда не делит захват; у `default`
+  область прежняя. Каждый producer платформы теперь берётся из `KafkaClusterProducers` в messaging, и новое
+  правило архитектуры `kafka.producers-come-from-the-cluster-seam` следит за этим.
 - **`messaging-db-spring-boot-starter`: удаляемая замена кластера Kafka, в который можно писать.** Пока
   зависимость подключена, транспорт `kafka` в outbox дописывает записи в журнал в общей базе PostgreSQL,
   устроенный как Kafka. Туда же попадает каждая запись dead-letter. Потребители `@KafkaListener` читают
@@ -66,6 +74,19 @@
 
 ### Changed
 
+- **BREAKING — именованные кластеры Kafka** (`add-kafka-clusters`, выпускается как мажорная версия):
+  - Методы `MessagingMetrics` принимают кластер первым аргументом, и каждый метр `ludwig.messaging.*`
+    получает тег `cluster`.
+  - `ConsumerActivityMonitor` больше не `RecordInterceptor`. Его возвращает `forCluster(cluster)`, а
+    `watch`/`silent` принимают кластер.
+  - `AuditingDeadLetterRecoverer` принимает кластер, из которого читает.
+  - `DeadLetterTemplates.create(KafkaClusterProducers, String cluster, ObjectMapper)` заменяет
+    `create(KafkaProperties, ObjectMapper)`.
+  - `ListenerContainerFactoryBuilder` и `MessagingConfigurationValidator` принимают `KafkaClusters` (а
+    билдер ещё и `KafkaClusterProducers`) вместо `KafkaProperties`.
+  - В `ResolvedConsumerSettings` появились `cluster` и `deadLetterCluster`.
+  - `OutboxDispatcherRegistry` принимает `OutboxDispatcherGroup` наравне с диспетчерами.
+  - `DefaultOutboxEventPublisher` принимает `CorrelationProvider` и имя заголовка correlation id.
 - **`crud-service-example` проверяет роли на прикладном сервисе.** `@PreAuthorize` методов `get`,
   `search`, `update` и `delete` переехали с `ProductController` на `ProductServiceImpl`, поэтому REST и
   gRPC проходят одну и ту же проверку; ответы REST не изменились. `create` сохраняет проверку на
@@ -114,6 +135,11 @@
 
 ### Fixed
 
+- **Записи outbox несут `X-Correlation-Id` публикующего запроса.** Раньше ни одна запись outbox его не
+  несла, ни на одном транспорте: у потока поллера нет контекста запроса, а у `CorrelationProvider` из
+  audit-core была только пустая реализация по умолчанию. Теперь провайдер предоставляет
+  observability-spring-boot-starter, а outbox записывает id в момент публикации события. События аудита
+  получают correlation id от того же провайдера.
 - **`security-spring-boot-starter`: настроенная аудитория теперь проверяется, когда декодер построен
   из `issuer-uri`. ЭТО МЕНЯЕТ ТО, ЧТО ПРИНИМАЕТ РАЗВЁРТЫВАНИЕ.** `ludwig.security.jwt.audiences`
   применялась только к бину `NimbusJwtDecoder`. При

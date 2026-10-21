@@ -54,34 +54,34 @@ public class MicrometerMessagingMetrics implements MessagingMetrics {
     }
 
     @Override
-    public void recordConsumed(String topic) {
-        registry.counter(CONSUMED, "topic", topic).increment();
+    public void recordConsumed(String cluster, String topic) {
+        registry.counter(CONSUMED, "cluster", cluster, "topic", topic).increment();
     }
 
     @Override
-    public void recordRetry(String topic) {
-        registry.counter(RETRIES, "topic", topic).increment();
+    public void recordRetry(String cluster, String topic) {
+        registry.counter(RETRIES, "cluster", cluster, "topic", topic).increment();
     }
 
     @Override
-    public void recordDeadLettered(String topic, String deadLetterTopic, String exception) {
+    public void recordDeadLettered(String cluster, String topic, String deadLetterTopic, String exception) {
         // The exception's type is a tag; its message deliberately is not. A tag is a cardinality
         // commitment, and an exception message routinely contains an id, a row count or a quoted
         // fragment of the payload - which would make one series per record and put payload text in the
         // metrics backend.
-        registry.counter(DEAD_LETTERED, "topic", topic, "dlt", deadLetterTopic, "exception", exception)
-                .increment();
+        registry.counter(DEAD_LETTERED, "cluster", cluster, "topic", topic, "dlt", deadLetterTopic,
+                "exception", exception).increment();
     }
 
     @Override
-    public void recordDropped(String topic) {
-        registry.counter(DROPPED, "topic", topic).increment();
+    public void recordDropped(String cluster, String topic) {
+        registry.counter(DROPPED, "cluster", cluster, "topic", topic).increment();
     }
 
     @Override
-    public void registerSilence(String topic, IntSupplier silent) {
-        if (silenceSuppliers.putIfAbsent(topic, silent) == null) {
-            registry.gauge(SILENT, Tags.of("topic", topic), silent, IntSupplier::getAsInt);
+    public void registerSilence(String cluster, String topic, IntSupplier silent) {
+        if (silenceSuppliers.putIfAbsent(cluster + "/" + topic, silent) == null) {
+            registry.gauge(SILENT, Tags.of("cluster", cluster, "topic", topic), silent, IntSupplier::getAsInt);
         }
     }
 }

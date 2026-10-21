@@ -6,6 +6,7 @@ import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.messaging.api.EnvelopeReader;
 import ru.ludwigandreas.messaging.db.settings.MessagingDbProperties;
 import ru.ludwigandreas.messaging.db.log.LogStore;
+import ru.ludwigandreas.messaging.metrics.ConsumerActivityMonitor;
 import ru.ludwigandreas.messaging.metrics.MessagingMetrics;
 import ru.ludwigandreas.messaging.settings.MessagingProperties;
 
@@ -23,9 +24,11 @@ import ru.ludwigandreas.messaging.settings.MessagingProperties;
  * @param clock          the audit timestamp's clock
  * @param deadLetters    the dead-letter writer for the current mode
  * @param interceptor    every record interceptor in the context, composed; {@code null} when there is none
+ * @param activityMonitor messaging's activity monitor; its per-cluster interceptor is added per container
  */
 public record ConsumerSupport(MessagingDbProperties properties, MessagingProperties messaging, LogStore store,
                               MessagingMetrics metrics, EnvelopeReader envelopeReader, AuditSink auditSink,
                               Clock clock, DeadLetterWriter deadLetters,
-                              RecordInterceptor<Object, Object> interceptor) {
+                              RecordInterceptor<Object, Object> interceptor,
+                              ConsumerActivityMonitor activityMonitor) {
 }

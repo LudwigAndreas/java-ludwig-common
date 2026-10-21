@@ -6,6 +6,7 @@ import org.springframework.beans.factory.InitializingBean;
 import ru.ludwigandreas.messaging.error.OrderingConflictsWithRetryTopicsException;
 import ru.ludwigandreas.messaging.settings.ConsumerSettings;
 import ru.ludwigandreas.messaging.settings.DedupTransactionPolicy;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.messaging.settings.MessagingProperties;
 import ru.ludwigandreas.messaging.settings.ResolvedConsumerSettings;
 
@@ -30,27 +31,51 @@ public class MessagingConfigurationValidator implements InitializingBean {
 
     private final MessagingProperties properties;
     private final DedupTransactionPolicy dedupTransaction;
+    private final KafkaClusters clusters;
 
     /**
      * Creates the validator.
      *
      * @param properties       this module's configuration
      * @param dedupTransaction the resolved dedup transaction policy
+     * @param clusters         the declared Kafka clusters
      */
     public MessagingConfigurationValidator(MessagingProperties properties,
-                                           DedupTransactionPolicy dedupTransaction) {
+                                           DedupTransactionPolicy dedupTransaction, KafkaClusters clusters) {
         this.properties = properties;
         this.dedupTransaction = dedupTransaction;
+        this.clusters = clusters;
     }
 
     @Override
     public void afterPropertiesSet() {
         checkOrdering(DEFAULTS, properties.resolve(DEFAULTS), properties.getDefaults());
+        checkClusters(DEFAULTS, properties.resolve(DEFAULTS));
         for (Map.Entry<String, ConsumerSettings> entry : properties.getConsumers().entrySet()) {
             checkOrdering(entry.getKey(), properties.resolve(entry.getKey()), entry.getValue());
+            checkClusters(entry.getKey(), properties.resolve(entry.getKey()));
         }
         log.debug("Messaging configuration validated: dedup container transaction {} ({})",
                 dedupTransaction.containerTransaction() ? "on" : "off", dedupTransaction.reason());
+    }
+
+    /**
+     * Both clusters a consumer names must be declared, and retry topics stay on the default cluster: a
+     * retry-topic configuration is context-wide, over one template, and cannot follow a consumer elsewhere.
+     */
+    private void checkClusters(String name, ResolvedConsumerSettings resolved) {
+        for (String cluster : new String[] {resolved.cluster(), resolved.deadLetterCluster()}) {
+            if (!clusters.contains(cluster)) {
+                throw new IllegalStateException("Consumer '" + name + "' names Kafka cluster '" + cluster
+                        + "', which is not declared. Declare it under " + KafkaClusters.PREFIX + "." + cluster
+                        + ". Declared: " + clusters.names());
+            }
+        }
+        if (resolved.nonBlocking() && !KafkaClusters.DEFAULT.equals(resolved.cluster())) {
+            throw new IllegalStateException("Consumer '" + name + "' enables non-blocking retry topics and reads"
+                    + " from cluster '" + resolved.cluster() + "'. Retry topics are supported on the '"
+                    + KafkaClusters.DEFAULT + "' cluster only.");
+        }
     }
 
     /**

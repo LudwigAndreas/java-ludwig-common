@@ -4,12 +4,17 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import ru.ludwigandreas.messaging.config.MessagingConfigurationValidator;
 import ru.ludwigandreas.messaging.error.OrderingConflictsWithRetryTopicsException;
 import ru.ludwigandreas.messaging.settings.ConsumerSettings;
 import ru.ludwigandreas.messaging.settings.DedupTransactionPolicy;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.messaging.settings.MessagingProperties;
 
 /**
@@ -88,7 +93,63 @@ class MessagingConfigurationValidatorTest {
                 .hasMessageContaining("per-topic");
     }
 
+    @Test
+    @DisplayName("a consumer naming an undeclared cluster is refused, naming both")
+    void refusesAnUndeclaredCluster() {
+        MessagingProperties properties = new MessagingProperties();
+        ConsumerSettings orders = new ConsumerSettings();
+        orders.setCluster("partner-c");
+        properties.getConsumers().put("orders-ingress", orders);
+
+        assertThatThrownBy(() -> validate(properties))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("orders-ingress").hasMessageContaining("partner-c");
+    }
+
+    @Test
+    @DisplayName("a dead-letter cluster that is not declared is refused")
+    void refusesAnUndeclaredDeadLetterCluster() {
+        MessagingProperties properties = new MessagingProperties();
+        ConsumerSettings orders = new ConsumerSettings();
+        orders.getDeadLetter().setCluster("nowhere");
+        properties.getConsumers().put("orders-ingress", orders);
+
+        assertThatThrownBy(() -> validate(properties))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("nowhere");
+    }
+
+    @Test
+    @DisplayName("retry topics are refused on a cluster other than default")
+    void refusesRetryTopicsOffTheDefaultCluster() {
+        MessagingProperties properties = new MessagingProperties();
+        ConsumerSettings orders = new ConsumerSettings();
+        orders.setCluster("partner-a");
+        orders.setOrdered(false);
+        orders.setTopics(List.of("orders"));
+        orders.getRetry().setNonBlocking(true);
+        properties.getConsumers().put("orders-ingress", orders);
+
+        assertThatThrownBy(() -> validate(properties))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("orders-ingress").hasMessageContaining("default");
+    }
+
+    @Test
+    @DisplayName("a consumer on a declared cluster, dead-lettering to another, is accepted")
+    void acceptsDeclaredClusters() {
+        MessagingProperties properties = new MessagingProperties();
+        ConsumerSettings orders = new ConsumerSettings();
+        orders.setCluster("partner-a");
+        orders.getDeadLetter().setCluster("internal");
+        properties.getConsumers().put("orders-ingress", orders);
+
+        assertThatCode(() -> validate(properties)).doesNotThrowAnyException();
+    }
+
     private static void validate(MessagingProperties properties) {
-        new MessagingConfigurationValidator(properties, OFF).afterPropertiesSet();
+        KafkaClusters clusters = KafkaClusters.bind(new Binder(new MapConfigurationPropertySource(Map.of(
+                "ludwig.kafka.clusters.partner-a.bootstrap-servers", "a:9093",
+                "ludwig.kafka.clusters.internal.bootstrap-servers", "i:9092"))), new KafkaProperties());
+        new MessagingConfigurationValidator(properties, OFF, clusters).afterPropertiesSet();
     }
 }

@@ -31,6 +31,7 @@ import ru.ludwigandreas.messaging.api.DeadLetterTopics;
 import ru.ludwigandreas.messaging.api.MessageHeaders;
 import ru.ludwigandreas.messaging.integration.MessagingTestApplication.Recorder;
 import ru.ludwigandreas.messaging.metrics.ConsumerActivityMonitor;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.testsupport.container.Containers;
 
 /**
@@ -308,17 +309,17 @@ class SharedConsumerIT {
     @DisplayName("a topic that has stopped delivering reports silence, and a record clears it")
     void reportsSilence() {
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                assertThat(activityMonitor.silent(MessagingTopics.QUIET)).isTrue());
+                assertThat(activityMonitor.silent(KafkaClusters.DEFAULT, MessagingTopics.QUIET)).isTrue());
 
         String marker = "quiet-" + UUID.randomUUID();
         send(MessagingTopics.QUIET, marker, marker, 1);
 
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
             assertThat(recorder.on(MessagingTopics.QUIET)).contains(marker);
-            assertThat(activityMonitor.silent(MessagingTopics.QUIET)).isFalse();
+            assertThat(activityMonitor.silent(KafkaClusters.DEFAULT, MessagingTopics.QUIET)).isFalse();
         });
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                assertThat(activityMonitor.silent(MessagingTopics.QUIET))
+                assertThat(activityMonitor.silent(KafkaClusters.DEFAULT, MessagingTopics.QUIET))
                         .as("silent again once the window passes").isTrue());
     }
 

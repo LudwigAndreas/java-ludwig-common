@@ -10,27 +10,27 @@ package ru.ludwigandreas.messaging.metrics;
 public class NoopMessagingMetrics implements MessagingMetrics {
 
     @Override
-    public void recordConsumed(String topic) {
+    public void recordConsumed(String cluster, String topic) {
         // Intentionally empty - see the class comment.
     }
 
     @Override
-    public void recordRetry(String topic) {
+    public void recordRetry(String cluster, String topic) {
         // Intentionally empty.
     }
 
     @Override
-    public void recordDeadLettered(String topic, String deadLetterTopic, String exception) {
+    public void recordDeadLettered(String cluster, String topic, String deadLetterTopic, String exception) {
         // Intentionally empty.
     }
 
     @Override
-    public void recordDropped(String topic) {
+    public void recordDropped(String cluster, String topic) {
         // Intentionally empty.
     }
 
     @Override
-    public void registerSilence(String topic, java.util.function.IntSupplier silent) {
+    public void registerSilence(String cluster, String topic, java.util.function.IntSupplier silent) {
         // Intentionally empty.
     }
 }

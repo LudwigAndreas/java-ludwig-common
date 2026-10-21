@@ -283,9 +283,28 @@ follow from D1, and the integration test in group 5 proves them by running an un
    4. Drop the schema with the SQL in the README. Liquibase cannot do this, because the changesets
       leave with the jar.
 
+## Revision: named clusters (after add-kafka-clusters)
+
+The first implementation (groups 1-9 of tasks.md) replaced the single `kafka` transport and chose per
+topic. `add-kafka-clusters` makes clusters first-class. This starter then replaces **named clusters**,
+and these decisions change:
+
+- **R1, writes (supersedes D1's producer side and D5's Kafka-read dead-letter redirect).** The starter
+  replaces `KafkaClusterProducers` with a decorator. For a replaced cluster it returns a producer
+  factory whose producers serialize with the given serializers and append the bytes to the log.
+  Outbox writes and dead letters to that cluster both reach the log through this one seam. The
+  `kafkaOutboxDispatcher` bean override and the `CommonErrorHandler` swap are deleted.
+- **R2, reads (supersedes D2's topic split).** The routing factory reads the consumer's
+  `ResolvedConsumerSettings.cluster()`. A consumer on a replaced cluster gets a `DbLogListenerContainer`
+  for all its topics, and anything else gets the original Kafka container. `NarrowedEndpoint` and the
+  per-topic `CompositeListenerContainer` split are deleted. The composite stays only for `draining`
+  (log + cluster).
+- **R3, configuration.** `ludwig.messaging.db.consume` is removed. `ludwig.messaging.db.clusters`
+  (default `[internal]`) names the replaced clusters. A replaced cluster needs no address until
+  `draining`.
+- **R4, the open question below is answered.** Draining writes go to the replaced cluster's own
+  address from `ludwig.kafka.clusters.<name>`, not to `spring.kafka.bootstrap-servers`.
+
 ## Open Questions
 
-- **The in-house cluster's address.** If the future in-house cluster is separate from the external
-  teams' clusters, `draining` needs the outbox's `KafkaTemplate` to point somewhere other than
-  `spring.kafka.bootstrap-servers`. This is deferred until the cluster exists. It affects only
-  `draining` and does not change the specs.
+None. The in-house cluster's address is answered by R4.

@@ -14,9 +14,11 @@ import org.springframework.kafka.config.KafkaListenerEndpoint;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.listener.AbstractMessageListenerContainer;
+import org.springframework.kafka.listener.CompositeRecordInterceptor;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.kafka.listener.RecordInterceptor;
 import org.springframework.kafka.support.TopicPartitionOffset;
 import org.springframework.kafka.support.serializer.DeserializationException;
 import org.springframework.messaging.converter.MessageConversionException;
@@ -162,8 +164,20 @@ public class RoutingListenerContainerFactory implements KafkaListenerContainerFa
                 template.getContainerProperties().getMessageListener(),
                 (Deserializer<Object>) defaults.getKeyDeserializer(),
                 (Deserializer<Object>) defaults.getValueDeserializer(),
-                shared.interceptor(), template.getContainerProperties(), template.isAutoStartup(),
+                interceptorFor(shared, consumerName), template.getContainerProperties(), template.isAutoStartup(),
                 shared.properties().getPollInterval());
+    }
+
+    /**
+     * Messaging's per-cluster activity interceptor, then every interceptor in the context, as the builder
+     * composes them.
+     */
+    @SuppressWarnings("unchecked")
+    private static RecordInterceptor<Object, Object> interceptorFor(ConsumerSupport shared, String consumerName) {
+        RecordInterceptor<Object, Object> activity = shared.activityMonitor()
+                .forCluster(shared.messaging().resolve(consumerName).cluster());
+        return shared.interceptor() == null ? activity
+                : new CompositeRecordInterceptor<>(activity, shared.interceptor());
     }
 
     /** {@code auto.offset.reset}, from the endpoint's own properties first, as the Kafka consumer resolves it. */
@@ -201,9 +215,10 @@ public class RoutingListenerContainerFactory implements KafkaListenerContainerFa
                 (record, exception) -> shared.deadLetters().write(record.topic(), record.partition(), record.offset(),
                         record.key(), record.value(), record.headers(), exception, settings.deadLetterSuffix()),
                 shared.envelopeReader(), shared.metrics(), shared.auditSink(), shared.clock(),
-                settings.deadLetterSuffix(), settings.maxAttempts()), backOff);
+                settings.cluster(), settings.deadLetterSuffix(), settings.maxAttempts()), backOff);
         handler.addNotRetryableExceptions(DeserializationException.class, MessageConversionException.class);
-        handler.setRetryListeners((record, exception, attempt) -> shared.metrics().recordRetry(record.topic()));
+        handler.setRetryListeners((record, exception, attempt) ->
+                shared.metrics().recordRetry(settings.cluster(), record.topic()));
         kafka.setCommonErrorHandler(handler);
         return container;
     }

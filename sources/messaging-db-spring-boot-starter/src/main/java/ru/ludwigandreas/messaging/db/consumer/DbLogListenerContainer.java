@@ -177,7 +177,7 @@ public class DbLogListenerContainer implements MessageListenerContainer {
         ResolvedConsumerSettings settings = spec.settings();
         int failures = position.attempts() + 1;
         if (!isNonRetryable(failure) && failures < settings.maxAttempts()) {
-            spec.support().metrics().recordRetry(stored.topic());
+            spec.support().metrics().recordRetry(settings.cluster(), stored.topic());
             return new Outcome.Retry(failures, backoff(settings, failures), failure.getClass().getName());
         }
         if (!settings.deadLetterEnabled()) {
@@ -191,7 +191,7 @@ public class DbLogListenerContainer implements MessageListenerContainer {
                     (consumed, exception) -> spec.support().deadLetters()
                             .write(stored, exception, settings.deadLetterSuffix()),
                     spec.support().envelopeReader(), spec.support().metrics(), spec.support().auditSink(),
-                    spec.support().clock(), settings.deadLetterSuffix(), settings.maxAttempts())
+                    spec.support().clock(), settings.cluster(), settings.deadLetterSuffix(), settings.maxAttempts())
                     .accept(record, failure);
         // CHECKSTYLE.OFF: IllegalCatch - the recoverer has already counted and audited the failed send; the
         // record stays where it is and is tried again after the longest backoff.

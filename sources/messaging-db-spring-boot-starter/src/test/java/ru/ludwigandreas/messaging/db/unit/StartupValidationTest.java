@@ -105,7 +105,7 @@ class StartupValidationTest {
         properties.setConsume(Set.of(LISTED));
         properties.setPollInterval(Duration.ofSeconds(1));
         ConsumerSupport support = new ConsumerSupport(properties, messaging, null, null, null, new NoopAuditSink(),
-                Clock.systemUTC(), null, null);
+                Clock.systemUTC(), null, null, null);
         DefaultListableBeanFactory beans = new DefaultListableBeanFactory();
         beans.registerSingleton("support", support);
 

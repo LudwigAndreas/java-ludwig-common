@@ -89,6 +89,13 @@ public class ConsumerSettings {
      */
     private List<String> topics = new ArrayList<>();
 
+    /**
+     * The Kafka cluster this consumer reads from: a name declared under {@code ludwig.kafka.clusters}, or
+     * {@code default} for {@code spring.kafka.*}. A listener reads from one cluster, because a container
+     * has one consumer factory.
+     */
+    private String cluster;
+
     /** Retry behaviour. Never null as a block; its own fields are. */
     private Retry retry = new Retry();
 
@@ -165,6 +172,13 @@ public class ConsumerSettings {
          * why {@code VersionGatingDeserializer} rejects rather than routing.
          */
         private String suffix;
+
+        /**
+         * Where dead letters go: {@code source}, the cluster the record was read from, or a declared
+         * cluster name. Setting it to the in-house cluster is how a consumer of a partner's cluster that
+         * this side may not write to keeps its dead letters.
+         */
+        private String cluster;
     }
 
     /**

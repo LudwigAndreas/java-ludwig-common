@@ -8,7 +8,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -18,11 +17,13 @@ import org.springframework.transaction.PlatformTransactionManager;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.audit.NoopAuditSink;
 import ru.ludwigandreas.messaging.api.EnvelopeReader;
+import ru.ludwigandreas.messaging.cluster.KafkaClusterProducers;
 import ru.ludwigandreas.messaging.consumer.ListenerContainerFactoryBuilder;
 import ru.ludwigandreas.messaging.metrics.ConsumerActivityMonitor;
 import ru.ludwigandreas.messaging.metrics.MessagingMetrics;
 import ru.ludwigandreas.messaging.metrics.NoopMessagingMetrics;
 import ru.ludwigandreas.messaging.settings.DedupTransactionPolicy;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.messaging.settings.MessagingProperties;
 
 /**
@@ -35,7 +36,7 @@ import ru.ludwigandreas.messaging.settings.MessagingProperties;
  * own bean name, which is what removes the wildcard-and-cast that
  * {@code UserSettingsKafkaAutoConfiguration} needed.
  */
-@AutoConfiguration(after = KafkaAutoConfiguration.class)
+@AutoConfiguration(after = {KafkaAutoConfiguration.class, KafkaClustersAutoConfiguration.class})
 @ConditionalOnClass(KafkaListener.class)
 @ConditionalOnProperty(prefix = MessagingProperties.PREFIX, name = "enabled", matchIfMissing = true)
 @EnableConfigurationProperties(MessagingProperties.class)
@@ -102,7 +103,8 @@ public class MessagingAutoConfiguration {
     /**
      * The one place the platform's consumer decisions are taken.
      *
-     * @param kafkaProperties      Boot's Kafka configuration
+     * @param clusters             the declared Kafka clusters
+     * @param producers            the producer seam, for the dead-letter templates
      * @param objectMapper         the application's mapper, or a plain one when it has none - a module must
      *                             not fail to start a service that never configured Jackson
      * @param properties           this module's configuration
@@ -124,7 +126,7 @@ public class MessagingAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(ListenerContainerFactoryBuilder.class)
     public ListenerContainerFactoryBuilder ludwigListenerContainerFactoryBuilder(
-            KafkaProperties kafkaProperties, ObjectProvider<ObjectMapper> objectMapper,
+            KafkaClusters clusters, KafkaClusterProducers producers, ObjectProvider<ObjectMapper> objectMapper,
             MessagingProperties properties, MessagingMetrics metrics,
             ConsumerActivityMonitor activityMonitor, EnvelopeReader envelopeReader,
             ObjectProvider<AuditSink> auditSink, ObjectProvider<Clock> clock,
@@ -133,7 +135,7 @@ public class MessagingAutoConfiguration {
             ObjectProvider<PlatformTransactionManager> transactionManager,
             ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistry,
             DedupTransactionPolicy dedupTransaction) {
-        return new ListenerContainerFactoryBuilder(kafkaProperties,
+        return new ListenerContainerFactoryBuilder(clusters, producers,
                 objectMapper.getIfAvailable(ObjectMapper::new), properties, metrics, activityMonitor,
                 envelopeReader, auditSink.getIfAvailable(NoopAuditSink::new), clockOf(clock),
                 recordFilterStrategy, recordInterceptors, transactionManager, meterRegistry,
@@ -163,12 +165,13 @@ public class MessagingAutoConfiguration {
      *
      * @param properties       this module's configuration
      * @param dedupTransaction the resolved dedup transaction policy
+     * @param clusters         the declared Kafka clusters, which every consumer's cluster must name
      * @return the validator, which runs at startup
      */
     @Bean
     @ConditionalOnMissingBean(MessagingConfigurationValidator.class)
     public MessagingConfigurationValidator ludwigMessagingConfigurationValidator(
-            MessagingProperties properties, DedupTransactionPolicy dedupTransaction) {
-        return new MessagingConfigurationValidator(properties, dedupTransaction);
+            MessagingProperties properties, DedupTransactionPolicy dedupTransaction, KafkaClusters clusters) {
+        return new MessagingConfigurationValidator(properties, dedupTransaction, clusters);
     }
 }

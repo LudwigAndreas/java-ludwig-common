@@ -67,9 +67,10 @@ public class IdempotentRecordFilterStrategy implements RecordFilterStrategy<Obje
     private final RequestFingerprint fingerprints;
     private final IdempotencyProperties properties;
     private final IdempotencyMetrics metrics;
+    private final String cluster;
 
     /**
-     * Creates the strategy.
+     * Creates the strategy, for records of the default cluster.
      *
      * @param store        the claim store
      * @param fingerprints hashes the record's value, so a reused key with a changed payload is caught
@@ -78,10 +79,27 @@ public class IdempotentRecordFilterStrategy implements RecordFilterStrategy<Obje
      */
     public IdempotentRecordFilterStrategy(IdempotencyStore store, RequestFingerprint fingerprints,
                                           IdempotencyProperties properties, IdempotencyMetrics metrics) {
+        this(store, fingerprints, properties, metrics, IdempotencyScopes.DEFAULT_CLUSTER);
+    }
+
+    private IdempotentRecordFilterStrategy(IdempotencyStore store, RequestFingerprint fingerprints,
+                                           IdempotencyProperties properties, IdempotencyMetrics metrics,
+                                           String cluster) {
         this.store = store;
         this.fingerprints = fingerprints;
         this.properties = properties;
         this.metrics = metrics;
+        this.cluster = cluster;
+    }
+
+    /**
+     * The same strategy, claiming for records read from another cluster.
+     *
+     * @param cluster the cluster the container reads from
+     * @return a strategy whose claims are scoped by that cluster as well as by topic
+     */
+    public IdempotentRecordFilterStrategy forCluster(String cluster) {
+        return new IdempotentRecordFilterStrategy(store, fingerprints, properties, metrics, cluster);
     }
 
     /**
@@ -92,7 +110,7 @@ public class IdempotentRecordFilterStrategy implements RecordFilterStrategy<Obje
      */
     @Override
     public boolean filter(ConsumerRecord<Object, Object> record) {
-        String scope = IdempotencyScopes.forTopic(record.topic());
+        String scope = IdempotencyScopes.forTopic(cluster, record.topic());
         String key = keyOf(record);
         if (key == null) {
             // Nothing to claim. A record with neither a key nor the configured header is let through

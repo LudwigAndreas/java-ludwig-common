@@ -50,6 +50,7 @@ public class AuditingDeadLetterRecoverer implements ConsumerRecordRecoverer {
     /** How far the logged cause chain goes; deep enough for a framework wrapper, short enough to read. */
     private static final int MAX_CHAIN_DEPTH = 6;
 
+    private final String cluster;
     private final String deadLetterSuffix;
     private final int maxAttempts;
 
@@ -62,6 +63,7 @@ public class AuditingDeadLetterRecoverer implements ConsumerRecordRecoverer {
      * @param metrics         where the counters go
      * @param auditSink       where the trail goes
      * @param clock           injected so a test can assert the recorded instant
+     * @param cluster         the cluster the records are read from, for the metrics
      * @param deadLetterSuffix the suffix the destination is derived from, so this class names the same
      *                        topic the delegate sends to - both call
      *                        {@link ru.ludwigandreas.messaging.api.DeadLetterTopics#forTopic} on the
@@ -76,12 +78,13 @@ public class AuditingDeadLetterRecoverer implements ConsumerRecordRecoverer {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public AuditingDeadLetterRecoverer(ConsumerRecordRecoverer delegate, EnvelopeReader envelopeReader,
                                        MessagingMetrics metrics, AuditSink auditSink, Clock clock,
-                                       String deadLetterSuffix, int maxAttempts) {
+                                       String cluster, String deadLetterSuffix, int maxAttempts) {
         this.delegate = delegate;
         this.envelopeReader = envelopeReader;
         this.metrics = metrics;
         this.auditSink = auditSink;
         this.clock = clock;
+        this.cluster = cluster;
         this.deadLetterSuffix = deadLetterSuffix;
         this.maxAttempts = maxAttempts;
     }
@@ -102,7 +105,7 @@ public class AuditingDeadLetterRecoverer implements ConsumerRecordRecoverer {
         // remove.
         } catch (RuntimeException e) {
         // CHECKSTYLE.ON: IllegalCatch
-            metrics.recordDropped(envelope.topic());
+            metrics.recordDropped(cluster, envelope.topic());
             // Neither the payload nor the failure's message is logged - both quote payload text. The
             // coordinates are what an operator needs to find the record, and it is still on the source
             // topic.
@@ -112,7 +115,7 @@ public class AuditingDeadLetterRecoverer implements ConsumerRecordRecoverer {
             auditSink.record(audit.toAuditEvent(false));
             throw e;
         }
-        metrics.recordDeadLettered(envelope.topic(), deadLetterTopic, exceptionType);
+        metrics.recordDeadLettered(cluster, envelope.topic(), deadLetterTopic, exceptionType);
         // The chain of exception TYPES, and never their messages. One type is rarely enough to diagnose a
         // dead-letter - "IllegalStateException" is true of most things - and an exception message routinely
         // quotes the payload that caused it, which on this platform's topics is a person's settings or

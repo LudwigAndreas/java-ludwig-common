@@ -19,6 +19,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.listener.adapter.RecordFilterStrategy;
 import ru.ludwigandreas.messaging.api.MessageHeaders;
+import ru.ludwigandreas.messaging.config.KafkaClustersAutoConfiguration;
 import ru.ludwigandreas.messaging.config.MessagingAutoConfiguration;
 import ru.ludwigandreas.messaging.config.MessagingMetricsAutoConfiguration;
 import ru.ludwigandreas.messaging.consumer.ListenerContainerFactoryBuilder;
@@ -40,7 +41,8 @@ import ru.ludwigandreas.messaging.consumer.ListenerContainerFactoryBuilder;
  */
 @SpringBootConfiguration
 @EnableKafka
-@ImportAutoConfiguration({KafkaAutoConfiguration.class, MessagingMetricsAutoConfiguration.class,
+@ImportAutoConfiguration({KafkaAutoConfiguration.class, KafkaClustersAutoConfiguration.class,
+        MessagingMetricsAutoConfiguration.class,
         MessagingAutoConfiguration.class})
 public class MessagingTestApplication {
 

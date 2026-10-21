@@ -120,3 +120,18 @@ with `-Dtest=none -Dsurefire.failIfNoSpecifiedTests=false`.*
       `user-settings` never reached their own modules: each `-am` build stops at the same
       `security-spring-boot-starter` Checkstyle error.
 - [x] 9.5 `openspec validate add-db-log-transport --strict`
+
+## 10. Revision: replace named clusters (after add-kafka-clusters; design R1-R4)
+
+- [ ] 10.1 Replace `KafkaClusterProducers` for the clusters in `ludwig.messaging.db.clusters` with a
+      log-appending producer factory; delete the `kafkaOutboxDispatcher` override and the dead-letter
+      handler swap. Proof: `mvn -pl :messaging-db-spring-boot-starter -am verify -Dit.test=LogOnlyTransportIT,DrainingIT`
+- [ ] 10.2 Route containers by the consumer's cluster; delete `NarrowedEndpoint` and the per-topic split.
+      Proof: `mvn -pl :messaging-db-spring-boot-starter -am verify -Dit.test=MixedTransportIT` (rewritten
+      as two listeners on two clusters, with the dead letter of the partner consumer in the log)
+- [ ] 10.3 Remove `ludwig.messaging.db.consume`, add `ludwig.messaging.db.clusters`, and refuse a
+      pattern subscription on a replaced cluster. Proof:
+      `mvn -pl :messaging-db-spring-boot-starter -am verify -Dtest=MessagingDbPropertiesTest,StartupValidationTest`
+- [ ] 10.4 README (en/ru): per-cluster adoption; remove the "separate cluster" paragraph; draining per
+      cluster. Proof: the heading-count parity check
+- [ ] 10.5 The full gate again (group 9), with `add-kafka-clusters` merged

@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.ludwigandreas.idempotency.api.IdempotencyScopes;
 import ru.ludwigandreas.idempotency.api.IdempotencyStore;
 import ru.ludwigandreas.idempotency.api.RequestFingerprint;
 import ru.ludwigandreas.idempotency.config.IdempotencyProperties;
@@ -155,6 +156,36 @@ class ConsumerDedupIT extends PostgresBackedTest {
         assertThat(deliverWithHeaderKey(first)).isTrue();
         assertThat(deliverWithHeaderKey(second)).isFalse();
         assertThat(effects.get()).isEqualTo(1);
+    }
+
+    /**
+     * Two clusters can both have a topic of this name, and a record with no key header is claimed under
+     * its coordinates - which are only unique within one cluster. A claim made on one cluster must not
+     * discard the other cluster's record at the same partition and offset.
+     */
+    @Test
+    @DisplayName("the same coordinates on two clusters are two records; a replay on either is still one")
+    void clustersDoNotShareClaims() {
+        IdempotentRecordFilterStrategy partner = strategy.forCluster("partner-a");
+        ConsumerRecord<Object, Object> record = record(77L, "{\"order\":77}");
+
+        deliver(record);
+        deliverWith(partner, record);
+        assertThat(effects.get()).describedAs("one effect per cluster").isEqualTo(2);
+
+        deliverWith(partner, record);
+        deliver(record);
+        assertThat(effects.get()).describedAs("replays are still discarded on both").isEqualTo(2);
+        assertThat(jdbc.queryForList("SELECT scope FROM idempotency_claim WHERE scope LIKE 'kafka:%'", String.class))
+                .contains(IdempotencyScopes.forTopic(TOPIC), IdempotencyScopes.forTopic("partner-a", TOPIC));
+    }
+
+    private void deliverWith(IdempotentRecordFilterStrategy filter, ConsumerRecord<Object, Object> record) {
+        transactions.executeWithoutResult(status -> {
+            if (!filter.filter(record)) {
+                effects.incrementAndGet();
+            }
+        });
     }
 
     /** Runs the filter inside a transaction, incrementing the effect counter when the record is kept. */

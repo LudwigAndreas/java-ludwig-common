@@ -7,6 +7,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import ru.ludwigandreas.audit.CorrelationProvider;
+import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import ru.ludwigandreas.observability.correlation.CorrelationContext;
 import ru.ludwigandreas.observability.correlation.CorrelationIdResolver;
 import ru.ludwigandreas.observability.core.BuildIdentity;
@@ -24,7 +26,7 @@ import ru.ludwigandreas.observability.tracing.TraceContextAccessor;
  * configuration is what lets the rest be guarded on classpath conditions without any of them having
  * to re-declare shared beans and risk defining them twice.
  */
-@AutoConfiguration
+@AutoConfiguration(before = AuditCoreAutoConfiguration.class)
 @ConditionalOnProperty(name = "ludwig.observability.enabled", matchIfMissing = true)
 @EnableConfigurationProperties(ObservabilityProperties.class)
 public class ObservabilityCoreAutoConfiguration {
@@ -75,6 +77,23 @@ public class ObservabilityCoreAutoConfiguration {
     @ConditionalOnMissingBean
     public CorrelationContext ludwigCorrelationContext(ObservabilityProperties properties) {
         return new CorrelationContext(properties.getCorrelation().getMdcKey());
+    }
+
+    /**
+     * audit-core's correlation seam, over this module's correlation context.
+     *
+     * <p>audit-core can depend on nothing and falls back to an empty provider; until this bean existed every
+     * service ran on that fallback, so neither audit events nor outbox messages - which capture the id at
+     * publish time - ever carried a correlation id. Ordered before {@link AuditCoreAutoConfiguration} so
+     * its fallback backs off, and guarded so a service's own provider still wins.
+     *
+     * @param correlationContext the correlation context
+     * @return the provider
+     */
+    @Bean
+    @ConditionalOnMissingBean(CorrelationProvider.class)
+    public CorrelationProvider ludwigCorrelationProvider(CorrelationContext correlationContext) {
+        return correlationContext::currentId;
     }
 
     @Bean

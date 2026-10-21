@@ -6,40 +6,50 @@ listeners stay exactly as they are, so the stand-in can be dropped by removing o
 
 ## ADDED Requirements
 
-### Requirement: Every outbound record is written to the log while the transport is active
+### Requirement: Records for a replaced cluster are written to the log while the transport is active
 
-While the starter is on the classpath and `ludwig.messaging.db.mode` is `active` (the default), every
-record that the outbox would have sent over its `kafka` transport SHALL be appended to the log. It
-SHALL be appended under the same topic, key, headers and payload. No connection to a Kafka broker
-SHALL be attempted for that write. Outbox routes SHALL NOT need to change, and SHALL keep naming the
-`kafka` transport.
+`ludwig.messaging.db.clusters` names the clusters the log stands in for, by the names
+`add-kafka-clusters` defines. Its default is `[internal]`. While the starter is on the classpath and
+`ludwig.messaging.db.mode` is `active` (the default), every record that the platform would have
+produced to a replaced cluster SHALL be appended to the log, under the same topic, key, headers and
+payload. That covers outbox writes over `kafka:<cluster>` and dead letters addressed to the cluster. No
+connection to that cluster SHALL be attempted. Records for every other cluster SHALL go to that
+cluster as before. Outbox routes SHALL NOT need to change.
 
 #### Scenario: An outbox event lands in the log
 
-- **WHEN** a service with the starter, in `active` mode, publishes an outbox event routed to topic
-  `catalog.products` with key `p-1`
+- **WHEN** a service with the starter, in `active` mode, publishes an outbox event routed over
+  `kafka:internal` to topic `catalog.products` with key `p-1`
 - **THEN** after the outbox poll the log holds one row for topic `catalog.products` with key `p-1`,
   the event's payload, and the envelope headers (`ludwig-event-type`, `ludwig-event-version`,
-  `ludwig-idempotency-key`, `X-Correlation-Id`, and the rest)
+  `ludwig-idempotency-key`, and the rest)
 - **AND** the outbox row is recorded as published
 
 #### Scenario: No broker is contacted to write
 
-- **WHEN** the configured Kafka bootstrap address is unreachable and the outbox publishes an event
+- **WHEN** cluster `internal` has no reachable address and the outbox publishes an event over
+  `kafka:internal`
 - **THEN** the event is in the log and the outbox row is published, not failed
 
-### Requirement: Dead-letter records are written to the log, whatever the source topic
+#### Scenario: Other clusters are untouched
 
-While the transport is `active`, a record that is dead-lettered SHALL be appended to the log under
-`<source-topic>.dlt`, and this SHALL also apply when the source record was read from Kafka. A record
-that failed deserialization SHALL be dead-lettered with its original bytes unchanged.
+- **WHEN** a route uses `kafka:partner-a`
+- **THEN** its event is published to `partner-a` and nothing is appended to the log
 
-#### Scenario: A failing record from external Kafka is dead-lettered into the log
+### Requirement: Dead letters addressed to a replaced cluster are written to the log
 
-- **WHEN** a listener reading `partner.orders` from Kafka exhausts its delivery attempts on a record
+A record dead-lettered to a replaced cluster SHALL be appended to the log under `<source-topic>.dlt`.
+That covers records read from the log, and records read from another cluster whose consumer sets
+`dead-letter.cluster` to a replaced cluster. A record that failed deserialization SHALL be
+dead-lettered with its original bytes unchanged.
+
+#### Scenario: A failing record from a partner cluster is dead-lettered into the log
+
+- **WHEN** a consumer on `partner-a` with `dead-letter.cluster=internal` exhausts its delivery attempts
+  on a record from `partner.orders`
 - **THEN** the log holds a row for topic `partner.orders.dlt` carrying that record's key, headers and
   payload
-- **AND** nothing is written to the Kafka cluster
+- **AND** nothing is written to `partner-a`
 - **AND** `ludwig.messaging.dead.lettered` is incremented and a dead-letter audit event is recorded
 
 #### Scenario: A poison payload keeps its bytes
@@ -47,18 +57,17 @@ that failed deserialization SHALL be dead-lettered with its original bytes uncha
 - **WHEN** a record in the log whose payload is not valid JSON reaches a listener with a typed payload
 - **THEN** the `.dlt` row's payload is byte-for-byte the original payload
 
-### Requirement: Listed topics are read from the log and all others from Kafka
+### Requirement: Consumers of a replaced cluster read from the log
 
-A topic listed in `ludwig.messaging.db.consume` SHALL be read from the log, and every other topic
-SHALL be read from Kafka. This SHALL hold per topic, including for a single listener that subscribes
-to topics of both kinds. An existing listener, its container factory bean and its configuration SHALL
-work unchanged.
+A consumer whose cluster (`ludwig.messaging.consumers.<name>.cluster`) is replaced SHALL read all of
+its topics from the log. Every other consumer SHALL read from its own cluster. An existing listener,
+its container factory bean and its configuration SHALL work unchanged.
 
-#### Scenario: One listener, two transports
+#### Scenario: Two listeners, two transports
 
-- **WHEN** a listener subscribes to `catalog.products` (listed) and `partner.orders` (not listed)
-- **THEN** records appended to the log under `catalog.products` and records published to Kafka on
-  `partner.orders` are both delivered to that listener
+- **WHEN** consumer `catalog` is on `internal` and consumer `orders-ingress` is on `partner-a`
+- **THEN** records appended to the log under `catalog`'s topics reach `catalog`, and records published to
+  `partner-a` reach `orders-ingress`
 
 #### Scenario: The listener receives the same record shape
 
@@ -159,31 +168,31 @@ read from the log exactly as they apply to records read from Kafka.
 
 ### Requirement: Unsupported consumer shapes are refused at startup
 
-The application SHALL fail to start with a message naming the consumer and the topic when either
-of these is configured:
+The application SHALL fail to start with a message naming the consumer when either of these is
+configured for a consumer on a replaced cluster:
 
-- non-blocking retry topics on a consumer that reads a listed topic
-- a pattern subscription on a consumer when the pattern could match a listed topic
+- non-blocking retry topics
+- a pattern subscription
 
-#### Scenario: Retry topics on a log topic
+#### Scenario: A pattern on a replaced cluster
 
-- **WHEN** consumer `orders-ingress` enables non-blocking retry and listens on a listed topic
-- **THEN** startup fails and names `orders-ingress` and the topic
+- **WHEN** a listener on cluster `internal` subscribes by `topicPattern`
+- **THEN** startup fails and names the listener and the pattern
 
-### Requirement: Draining mode moves writes to Kafka without losing log records
+### Requirement: Draining mode moves a replaced cluster's writes to the real cluster without losing log records
 
 When `ludwig.messaging.db.mode` is `draining`:
 
-- writes SHALL go to Kafka, as if the starter were absent
-- listed topics SHALL be read from both the log and Kafka
+- the replaced clusters' writes SHALL go to their configured addresses, as if the starter were absent
+- consumers of a replaced cluster SHALL read from both the log and the cluster
 - the starter SHALL expose the number of unconsumed log records per (group, topic) as a metric
 
 #### Scenario: Records written before the switch are still delivered
 
-- **WHEN** a log topic holds 10 records that group `billing` has not consumed, and every service is
-  switched to `draining`
+- **WHEN** a log topic holds 10 records that group `billing` has not consumed, cluster `internal` is
+  given an address, and every service is switched to `draining`
 - **THEN** group `billing` receives those 10 records from the log and receives new records from
-  Kafka, and its log-lag metric reaches 0
+  `internal`, and its log-lag metric reaches 0
 
 ### Requirement: The starter can be removed without touching any other code
 

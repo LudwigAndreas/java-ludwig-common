@@ -29,22 +29,27 @@ package ru.ludwigandreas.messaging.metrics;
  * because its group id was mistyped. Silence is the only one of the three that distinguishes "nothing to
  * do" from "nothing being done", because it is the only one that knows how long the absence is supposed
  * to be tolerable.
+ *
+ * <p>Every meter is tagged with the {@code cluster} the record was read from, because the same topic name
+ * on two clusters is two different streams.
  */
 public interface MessagingMetrics {
 
     /**
      * Records that a record was consumed, which is what arms the silence signal.
      *
-     * @param topic the topic
+     * @param cluster the cluster the record was read from
+     * @param topic   the topic
      */
-    void recordConsumed(String topic);
+    void recordConsumed(String cluster, String topic);
 
     /**
      * Records one retry attempt of a record.
      *
-     * @param topic the topic
+     * @param cluster the cluster the record was read from
+     * @param topic   the topic
      */
-    void recordRetry(String topic);
+    void recordRetry(String cluster, String topic);
 
     /**
      * Records a record published to a dead-letter topic.
@@ -52,12 +57,13 @@ public interface MessagingMetrics {
      * <p>Alert on any non-zero value. A dead-lettered record is, by construction, work this platform
      * accepted and will not do.
      *
+     * @param cluster        the cluster the record was read from
      * @param topic          the source topic
      * @param deadLetterTopic where it went
      * @param exception      the simple name of the failure's type - the type, never the message, which
      *                       routinely quotes the payload that caused it
      */
-    void recordDeadLettered(String topic, String deadLetterTopic, String exception);
+    void recordDeadLettered(String cluster, String topic, String deadLetterTopic, String exception);
 
     /**
      * Records a record that exhausted its attempts and was <em>not</em> dead-lettered.
@@ -67,9 +73,10 @@ public interface MessagingMetrics {
      * platform believes it has a safety net and does not. The most likely cause is the one
      * {@code DeadLetterTopics} warns about: a dead-letter topic that was never provisioned.
      *
-     * @param topic the source topic
+     * @param cluster the cluster the record was read from
+     * @param topic   the source topic
      */
-    void recordDropped(String topic);
+    void recordDropped(String cluster, String topic);
 
     /**
      * Publishes the silence signal for one topic.
@@ -81,9 +88,10 @@ public interface MessagingMetrics {
      * report. A supplier is evaluated by the metrics backend when it scrapes: if scraping stops, the
      * series stops, which is a visible absence rather than a stale zero.
      *
-     * @param topic  the topic
+     * @param cluster the cluster the topic is read from
+     * @param topic   the topic
      * @param silent evaluated on scrape, returning {@code 1} when nothing has been consumed within the
      *               configured window and {@code 0} otherwise
      */
-    void registerSilence(String topic, java.util.function.IntSupplier silent);
+    void registerSilence(String cluster, String topic, java.util.function.IntSupplier silent);
 }

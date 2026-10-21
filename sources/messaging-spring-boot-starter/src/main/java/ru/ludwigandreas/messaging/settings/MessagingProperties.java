@@ -110,7 +110,9 @@ public class MessagingProperties {
                 pick(own, settings -> settings.getAcceptedVersions().getMin(),
                         ResolvedConsumerSettings.DEFAULT_MIN_EVENT_VERSION),
                 pick(own, settings -> settings.getAcceptedVersions().getMax(),
-                        ResolvedConsumerSettings.DEFAULT_MAX_EVENT_VERSION));
+                        ResolvedConsumerSettings.DEFAULT_MAX_EVENT_VERSION),
+                pick(own, ConsumerSettings::getCluster, null),
+                pick(own, settings -> settings.getDeadLetter().getCluster(), null));
     }
 
     /**

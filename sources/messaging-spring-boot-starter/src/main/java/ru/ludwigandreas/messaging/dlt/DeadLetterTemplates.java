@@ -1,17 +1,15 @@
 package ru.ludwigandreas.messaging.dlt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
-import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.serializer.DelegatingByTypeSerializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import ru.ludwigandreas.messaging.cluster.KafkaClusterProducers;
 
 /**
  * The producer a dead-letter send goes through, which is deliberately not the application's.
@@ -47,36 +45,25 @@ public final class DeadLetterTemplates {
     }
 
     /**
-     * Builds the dead-letter template from the application's own producer configuration.
+     * Builds the dead-letter template for a cluster.
      *
-     * <p>The bootstrap servers, the security settings and the client id all come from
-     * {@code spring.kafka.producer.*}, so a dead-letter send authenticates exactly as every other send from
-     * this application does. Only the serializers are this module's, and only because the payload it carries
-     * is not the payload the application produces.
+     * <p>The bootstrap servers, the security settings and the client id all come from that cluster's
+     * producer configuration, so a dead-letter send authenticates exactly as every other send to that
+     * cluster does. Only the serializers are this module's, and only because the payload it carries is not
+     * the payload the application produces.
      *
-     * @param kafkaProperties Boot's Kafka configuration
-     * @param objectMapper    the application's mapper, so a dead-lettered object is shaped like the record
-     *                        it came from
+     * @param producers    the platform's producer seam
+     * @param cluster      the cluster the dead letters go to
+     * @param objectMapper the application's mapper, so a dead-lettered object is shaped like the record
+     *                     it came from
      * @return the template
      */
-    public static KafkaTemplate<Object, Object> create(KafkaProperties kafkaProperties,
+    public static KafkaTemplate<Object, Object> create(KafkaClusterProducers producers, String cluster,
                                                       ObjectMapper objectMapper) {
-        Map<String, Object> config = new HashMap<>(kafkaProperties.buildProducerProperties(null));
-        // Removed rather than overridden: the serializer instances below are passed to the factory, and a
-        // leftover class-name property is what a future reader would believe.
-        config.remove(org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG);
-        config.remove(org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG);
         Serializer<Object> serializer = delegating(objectMapper);
-        return new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(config, serializer, serializer));
+        return new KafkaTemplate<>(producers.create(cluster, serializer, serializer));
     }
 
-    /**
-     * A serializer that handles every shape a dead-lettered value can have.
-     *
-     * <p>{@code byte[]} first, because it is the case that was broken. {@code Object} last, as the
-     * catch-all: {@link DelegatingByTypeSerializer} matches on assignability, so the entry order is the
-     * resolution order and a catch-all placed earlier would swallow the specific ones.
-     */
     private static Serializer<Object> delegating(ObjectMapper objectMapper) {
         Map<Class<?>, Serializer<?>> delegates = new LinkedHashMap<>();
         delegates.put(byte[].class, new ByteArraySerializer());

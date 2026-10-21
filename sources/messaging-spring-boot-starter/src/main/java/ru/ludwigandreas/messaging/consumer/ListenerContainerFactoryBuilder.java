@@ -6,13 +6,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -25,16 +25,19 @@ import org.springframework.kafka.listener.RecordInterceptor;
 import org.springframework.kafka.listener.adapter.RecordFilterStrategy;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.util.ClassUtils;
 import org.springframework.util.backoff.ExponentialBackOff;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.messaging.api.DeadLetterTopics;
 import ru.ludwigandreas.messaging.api.EnvelopeReader;
+import ru.ludwigandreas.messaging.cluster.KafkaClusterProducers;
 import ru.ludwigandreas.messaging.dlt.AuditingDeadLetterRecoverer;
 import ru.ludwigandreas.messaging.dlt.DeadLetterTemplates;
 import ru.ludwigandreas.messaging.metrics.ConsumerActivityMonitor;
 import ru.ludwigandreas.messaging.metrics.MessagingMetrics;
 import ru.ludwigandreas.messaging.serialization.PayloadDeserializers;
 import ru.ludwigandreas.messaging.serialization.VersionGatingDeserializer;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.messaging.settings.MessagingProperties;
 import ru.ludwigandreas.messaging.settings.ResolvedConsumerSettings;
 
@@ -77,7 +80,16 @@ import ru.ludwigandreas.messaging.settings.ResolvedConsumerSettings;
 @Slf4j
 public class ListenerContainerFactoryBuilder {
 
-    private final KafkaProperties kafkaProperties;
+    /**
+     * Whether the idempotency starter's filter type is on the classpath. Checked by name, once, because it
+     * is an optional dependency and the type must not be loaded when it is absent.
+     */
+    private static final boolean IDEMPOTENCY_PRESENT = ClassUtils.isPresent(
+            "ru.ludwigandreas.idempotency.kafka.IdempotentRecordFilterStrategy",
+            ListenerContainerFactoryBuilder.class.getClassLoader());
+
+    private final KafkaClusters clusters;
+    private final KafkaClusterProducers producers;
     private final ObjectMapper objectMapper;
     private final MessagingProperties properties;
     private final MessagingMetrics metrics;
@@ -85,7 +97,8 @@ public class ListenerContainerFactoryBuilder {
     private final EnvelopeReader envelopeReader;
     private final AuditSink auditSink;
     private final Clock clock;
-    private final KafkaTemplate<Object, Object> deadLetterTemplate;
+    /** One dead-letter template per destination cluster, built on first use. */
+    private final Map<String, KafkaTemplate<Object, Object>> deadLetterTemplates = new ConcurrentHashMap<>();
     private final ObjectProvider<RecordFilterStrategy<Object, Object>> recordFilterStrategy;
     private final ObjectProvider<RecordInterceptor<Object, Object>> recordInterceptors;
     private final ObjectProvider<PlatformTransactionManager> transactionManager;
@@ -95,8 +108,9 @@ public class ListenerContainerFactoryBuilder {
     /**
      * Creates the builder. Assembled once, by {@code MessagingAutoConfiguration}.
      *
-     * @param kafkaProperties                Boot's Kafka configuration, so bootstrap servers, security and
-     *                                       group settings come from where every other consumer's do
+     * @param clusters                       the declared Kafka clusters; a consumer's settings name the one
+     *                                       it reads from and the one its dead letters go to
+     * @param producers                      the platform's producer seam, for the dead-letter templates
      * @param objectMapper                   the application's mapper
      * @param properties                     this module's configuration
      * @param metrics                        where the counters and the silence gauge go
@@ -118,7 +132,8 @@ public class ListenerContainerFactoryBuilder {
     // Grouping these into a holder object would only move the same list one file away.
     @SuppressWarnings("checkstyle:ParameterNumber")
     public ListenerContainerFactoryBuilder(
-            KafkaProperties kafkaProperties, ObjectMapper objectMapper, MessagingProperties properties,
+            KafkaClusters clusters, KafkaClusterProducers producers, ObjectMapper objectMapper,
+            MessagingProperties properties,
             MessagingMetrics metrics, ConsumerActivityMonitor activityMonitor, EnvelopeReader envelopeReader,
             AuditSink auditSink, Clock clock,
             ObjectProvider<RecordFilterStrategy<Object, Object>> recordFilterStrategy,
@@ -126,7 +141,8 @@ public class ListenerContainerFactoryBuilder {
             ObjectProvider<PlatformTransactionManager> transactionManager,
             ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistry,
             boolean dedupWantsContainerTransaction) {
-        this.kafkaProperties = kafkaProperties;
+        this.clusters = clusters;
+        this.producers = producers;
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.metrics = metrics;
@@ -134,12 +150,6 @@ public class ListenerContainerFactoryBuilder {
         this.envelopeReader = envelopeReader;
         this.auditSink = auditSink;
         this.clock = clock;
-        // Built here rather than published as a bean, and that is the same lesson the Clock taught: a module
-        // that adds a KafkaTemplate to the context makes every raw or Object-typed KafkaTemplate injection in
-        // the application ambiguous. Nobody outside this class needs it, so nobody outside this class sees
-        // it. A deployment that needs a different dead-letter producer replaces this whole builder, which is
-        // @ConditionalOnMissingBean.
-        this.deadLetterTemplate = DeadLetterTemplates.create(kafkaProperties, objectMapper);
         this.recordFilterStrategy = recordFilterStrategy;
         this.recordInterceptors = recordInterceptors;
         this.transactionManager = transactionManager;
@@ -202,19 +212,20 @@ public class ListenerContainerFactoryBuilder {
         ResolvedConsumerSettings settings = properties.resolve(name);
         ConcurrentKafkaListenerContainerFactory<String, V> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(consumerFactory(payload));
+        factory.setConsumerFactory(consumerFactory(settings.cluster(), payload));
         factory.getContainerProperties().setAckMode(settings.ackMode());
         if (settings.concurrency() != null) {
             factory.setConcurrency(settings.concurrency());
         }
         factory.setCommonErrorHandler(errorHandler(name, settings));
-        factory.setRecordInterceptor(this.<V>interceptor());
+        factory.setRecordInterceptor(this.<V>interceptor(settings.cluster()));
         applyDedup(name, settings, factory);
         for (String topic : topics) {
-            activityMonitor.watch(topic, settings.silenceThreshold());
+            activityMonitor.watch(settings.cluster(), topic, settings.silenceThreshold());
         }
-        log.debug("Built listener container factory '{}': ackMode={}, attempts={}, dlt={}, versions={}..{}",
-                name, settings.ackMode(), settings.maxAttempts(),
+        log.debug("Built listener container factory '{}' on cluster '{}': ackMode={}, attempts={}, dlt={},"
+                        + " versions={}..{}",
+                name, settings.cluster(), settings.ackMode(), settings.maxAttempts(),
                 settings.deadLetterEnabled() ? settings.deadLetterSuffix() : "off",
                 settings.minEventVersion(), settings.maxEventVersion());
         return factory;
@@ -235,8 +246,8 @@ public class ListenerContainerFactoryBuilder {
      * past every record that arrived during it, and those records are gone. That is the failure that looks
      * like "the notifications from Tuesday afternoon never arrived" and has no trace anywhere.
      */
-    private <V> DefaultKafkaConsumerFactory<String, V> consumerFactory(Deserializer<V> payload) {
-        Map<String, Object> config = new HashMap<>(kafkaProperties.buildConsumerProperties(null));
+    private <V> DefaultKafkaConsumerFactory<String, V> consumerFactory(String cluster, Deserializer<V> payload) {
+        Map<String, Object> config = new HashMap<>(clusters.properties(cluster).buildConsumerProperties(null));
         config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
         config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
@@ -291,7 +302,7 @@ public class ListenerContainerFactoryBuilder {
                 org.springframework.kafka.support.serializer.DeserializationException.class,
                 org.springframework.messaging.converter.MessageConversionException.class);
         handler.setRetryListeners((record, exception, deliveryAttempt) ->
-                metrics.recordRetry(record.topic()));
+                metrics.recordRetry(settings.cluster(), record.topic()));
         return handler;
     }
 
@@ -303,7 +314,8 @@ public class ListenerContainerFactoryBuilder {
      * See {@link ru.ludwigandreas.messaging.dlt.DeadLetterTemplates}.
      */
     private ConsumerRecordRecoverer recoverer(String name, ResolvedConsumerSettings settings) {
-        DeadLetterPublishingRecoverer publishing = new DeadLetterPublishingRecoverer(deadLetterTemplate,
+        DeadLetterPublishingRecoverer publishing = new DeadLetterPublishingRecoverer(
+                deadLetterTemplate(settings.deadLetterCluster()),
                 (record, exception) -> new TopicPartition(
                         DeadLetterTopics.forTopic(record.topic(), settings.deadLetterSuffix()),
                         // -1 lets the broker choose the partition. Preserving the source partition would
@@ -311,7 +323,20 @@ public class ListenerContainerFactoryBuilder {
                         // and a send to a partition that does not exist fails silently.
                         DeadLetterTopics.BROKER_CHOOSES_PARTITION));
         return new AuditingDeadLetterRecoverer(publishing, envelopeReader, metrics, auditSink, clock,
-                settings.deadLetterSuffix(), settings.maxAttempts());
+                settings.cluster(), settings.deadLetterSuffix(), settings.maxAttempts());
+    }
+
+    /**
+     * The dead-letter template for a cluster, built the first time a consumer dead-letters there.
+     *
+     * <p>Built here rather than published as a bean, and that is the same lesson the Clock taught: a module
+     * that adds a KafkaTemplate to the context makes every raw or Object-typed KafkaTemplate injection in the
+     * application ambiguous. Nobody outside this class needs it, so nobody outside this class sees it. A
+     * deployment that needs a different dead-letter producer replaces {@link KafkaClusterProducers}.
+     */
+    private KafkaTemplate<Object, Object> deadLetterTemplate(String cluster) {
+        return deadLetterTemplates.computeIfAbsent(cluster,
+                name -> DeadLetterTemplates.create(producers, name, objectMapper));
     }
 
     /**
@@ -340,14 +365,12 @@ public class ListenerContainerFactoryBuilder {
      * caller, which is what {@code UserSettingsKafkaAutoConfiguration}'s cast was doing.
      */
     @SuppressWarnings("unchecked")
-    private <V> RecordInterceptor<String, V> interceptor() {
+    private <V> RecordInterceptor<String, V> interceptor(String cluster) {
         List<RecordInterceptor<Object, Object>> all = new ArrayList<>();
-        all.add(activityMonitor);
-        recordInterceptors.orderedStream()
-                .filter(candidate -> candidate != activityMonitor)
-                .forEach(all::add);
+        all.add(activityMonitor.forCluster(cluster));
+        recordInterceptors.orderedStream().forEach(all::add);
         RecordInterceptor<Object, Object> composed = all.size() == 1
-                ? activityMonitor
+                ? all.get(0)
                 : new CompositeRecordInterceptor<>(all.toArray(new RecordInterceptor[0]));
         return (RecordInterceptor<String, V>) (RecordInterceptor<?, ?>) composed;
     }
@@ -377,6 +400,7 @@ public class ListenerContainerFactoryBuilder {
         if (filter == null) {
             return;
         }
+        filter = ClusterScopedDedup.bind(filter, settings.cluster());
         // The cast is to the factory's own declared key/value types and is safe for the reason the
         // filter's own signature says: IdempotentRecordFilterStrategy is declared over Object, Object
         // because it inspects a record's coordinates and headers and never its deserialized value.
@@ -393,5 +417,24 @@ public class ListenerContainerFactoryBuilder {
             return;
         }
         factory.getContainerProperties().setTransactionManager(manager);
+    }
+
+    /**
+     * Binds the idempotency starter's filter to a consumer's cluster, so the same topic, partition and offset
+     * on two clusters are two claims. Nested so that the optional type is only loaded when it is present.
+     */
+    private static final class ClusterScopedDedup {
+
+        private ClusterScopedDedup() {
+        }
+
+        static RecordFilterStrategy<Object, Object> bind(RecordFilterStrategy<Object, Object> filter, String cluster) {
+            if (!IDEMPOTENCY_PRESENT || KafkaClusters.DEFAULT.equals(cluster)) {
+                return filter;
+            }
+            return filter instanceof ru.ludwigandreas.idempotency.kafka.IdempotentRecordFilterStrategy idempotent
+                    ? idempotent.forCluster(cluster)
+                    : filter;
+        }
     }
 }

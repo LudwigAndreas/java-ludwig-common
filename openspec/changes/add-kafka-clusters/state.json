@@ -1,0 +1,47 @@
+{
+  "change": "add-kafka-clusters",
+  "contract": {
+    "goal": "named Kafka clusters for consumers, dead letters and outbox routes, with cluster-scoped dedup and metrics, one replaceable producer seam, and the publisher's X-Correlation-Id on outbox records",
+    "output": "messaging, outbox, idempotency, observability and architecture-rules changes per design D1-D8; READMEs en/ru; CHANGELOG en/ru",
+    "constraints": [
+      "breaking changes allowed (new major release, user decision) - no shims, no API-baseline exceptions; every breaking change listed under BREAKING in the CHANGELOG",
+      "a service declaring no cluster behaves as before at runtime",
+      "no new in-repo dependency edge",
+      "do not touch the unrelated security-spring-boot-starter import"
+    ],
+    "done_when": [
+      "mvn -q validate",
+      "scripts/check_migrations.sh",
+      "scripts/manifest.sh stale",
+      "mvn -pl :messaging-spring-boot-starter -am verify",
+      "mvn -pl :outbox-spring-boot-starter -am verify",
+      "mvn -pl :idempotency-spring-boot-starter -am verify",
+      "mvn -pl :observability-spring-boot-starter -am verify",
+      "mvn -pl :architecture-rules -am verify",
+      "mvn -pl :<every in-repo dependent of the five, per scripts/manifest.sh module> -am verify",
+      "openspec validate add-kafka-clusters --strict"
+    ]
+  },
+  "rollback_point": "3065ec49f91f2b2a29fd1476b7a4fb2734b1b23f",
+  "current_task": "done",
+  "decisions": [
+    "User instruction at apply: breaking changes are allowed (major release), and X-Correlation-Id on outbox records is in scope. Proposal, spec, design (D8) and tasks (group 5) updated before the first code edit.",
+    "ConsumerActivityMonitor is no longer a RecordInterceptor bean: forCluster(cluster) returns a per-cluster interceptor the builder composes in, because a record does not carry its cluster. Side effect, intended: observability's correlation interceptor becomes the only RecordInterceptor bean, which is what Boot's own container factory needs to pick it up.",
+    "KafkaClusters and KafkaClusterProducers live in a separate KafkaClustersAutoConfiguration, not gated by ludwig.messaging.enabled, so the outbox keeps its clusters when messaging's consumer wiring is off.",
+    "The outbox reads messaging's correlation header name with Binder in its autoconfiguration, not via MessagingProperties: MessagingProperties' types reach into spring-kafka, which a REST-only outbox does not carry.",
+    "Observability publishes CorrelationProvider (before AuditCoreAutoConfiguration). This also gives audit events their correlation id, which they never had.",
+    "messaging-db-spring-boot-starter adapted to the new signatures only (cluster argument to metrics and the recoverer; DeadLetterTemplates via the producer seam; per-cluster activity interceptor composed in) so the reactor builds. Its rework onto named clusters remains add-db-log-transport task group 10.",
+    "Test names differ from the planned ones (ClaimContractTest/ConsumerDedupIT, MultiClusterOutboxTest under surefire since outbox has no failsafe); tasks.md updated to the real proofs.",
+    "User instruction (2026-10-21): fix the unused java.util.ArrayList import in security-spring-boot-starter AuthorizationDeniedAuditListener. Removed (one line); security-spring-boot-starter checkstyle-validate passes.",
+    "User instruction (2026-10-21): remove 'return Collections.emptyList();' and the Collections import from security-spring-boot-starter AuthorizationDeniedAuditListener. Done; the file is now identical to its state before commit 3065ec4 (git diff 3065ec4~1 empty) and compiles."
+  ],
+  "failures": [
+    "Mutation check (disable cluster binding, expect MultiClusterConsumerIT's dedup case to fail) was refused by the permission system; the test's sensitivity to that bug is reasoned, not measured.",
+    "architecture-rules fixture first used the real DefaultKafkaProducerFactory, which is not on that module's classpath; replaced by a test stub of the type, as the module's other Kafka fixtures do.",
+    "Gate run 1: 'verify messaging-spring-boot-starter' recorded as failed only because its upstream IdempotencyHttpIT.noKeyMeansNoClaim hung 30 min on a client socket read with every Tomcat worker idle; the JVM was killed. The same test passed in the very next -am build (outbox, which also re-verifies messaging and idempotency upstream) and in idempotency's own verify. Treated as an environmental flake, not attributed to this change; messaging's own suite passed inside the outbox -am build.",
+    "Gate run 1: mvn -q validate and 9 dependents (identity-projection, user-settings, export, file-action, grpc-client, grpc-server, pat, crud-service-example, notification-service) stop compiling security-spring-boot-starter: AuthorizationDeniedAuditListener.onApplicationEvent has 'return Collections.emptyList();' in a void method, added in commit 3065ec4 together with the unused import. Not fixed: the user asked for the import only; asked about the return line.",
+    "Gate run 2: grpc-client-spring-boot-starter failed in upstream test-support - Testcontainers could not connect to Ryuk (localhost:57468). test-support passed in the next -am build (grpc-server) and grpc-client passed on an immediate retry. Environmental."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

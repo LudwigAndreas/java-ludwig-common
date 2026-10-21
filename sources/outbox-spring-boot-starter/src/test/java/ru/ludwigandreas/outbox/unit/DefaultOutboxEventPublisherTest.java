@@ -49,9 +49,44 @@ class DefaultOutboxEventPublisherTest {
         when(routeResolver.resolve(any())).thenReturn(new OutboxRoute("KAFKA", "orders-topic"));
     }
 
+    private String currentCorrelationId;
+
     private DefaultOutboxEventPublisher publisher(OutboxPublishFilter filter) {
         return new DefaultOutboxEventPublisher(repository, serializer, filter, routeResolver,
-                properties, auditLogger, new NoopOutboxMetrics());
+                properties, auditLogger, new NoopOutboxMetrics(), () -> Optional.ofNullable(currentCorrelationId),
+                "X-Correlation-Id");
+    }
+
+    @Test
+    void theRequestsCorrelationIdIsCapturedIntoTheHeaders() {
+        currentCorrelationId = "c-7";
+
+        publisher(event -> true).publish(eventBuilder().headers(Map.of("tenant", "t-1")).build());
+
+        ArgumentCaptor<OutboxMessage> captor = ArgumentCaptor.forClass(OutboxMessage.class);
+        verify(repository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getHeaders())
+                .containsEntry("X-Correlation-Id", "c-7").containsEntry("tenant", "t-1");
+    }
+
+    @Test
+    void anExplicitCorrelationHeaderWins() {
+        currentCorrelationId = "c-7";
+
+        publisher(event -> true).publish(eventBuilder().headers(Map.of("X-Correlation-Id", "upstream-1")).build());
+
+        ArgumentCaptor<OutboxMessage> captor = ArgumentCaptor.forClass(OutboxMessage.class);
+        verify(repository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getHeaders()).containsEntry("X-Correlation-Id", "upstream-1");
+    }
+
+    @Test
+    void noCorrelationInContextAddsNothing() {
+        publisher(event -> true).publish(eventBuilder().build());
+
+        ArgumentCaptor<OutboxMessage> captor = ArgumentCaptor.forClass(OutboxMessage.class);
+        verify(repository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getHeaders()).isNullOrEmpty();
     }
 
     private static OutboxEvent.OutboxEventBuilder eventBuilder() {

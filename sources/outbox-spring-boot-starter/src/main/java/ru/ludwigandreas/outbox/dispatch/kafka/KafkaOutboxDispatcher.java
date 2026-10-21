@@ -35,17 +35,31 @@ public class KafkaOutboxDispatcher implements OutboxDispatcher {
 
     public static final String TRANSPORT = "KAFKA";
 
+    private final String transport;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final Duration sendTimeout;
 
     public KafkaOutboxDispatcher(KafkaTemplate<String, String> kafkaTemplate, Duration sendTimeout) {
+        this(TRANSPORT, kafkaTemplate, sendTimeout);
+    }
+
+    /**
+     * A dispatcher for one named cluster.
+     *
+     * @param transport     the transport name, {@code KAFKA:<cluster>}
+     * @param kafkaTemplate a template producing to that cluster
+     * @param sendTimeout   how long a send may take before it counts as failed
+     */
+    public KafkaOutboxDispatcher(String transport, KafkaTemplate<String, String> kafkaTemplate,
+                                 Duration sendTimeout) {
+        this.transport = transport;
         this.kafkaTemplate = kafkaTemplate;
         this.sendTimeout = sendTimeout;
     }
 
     @Override
     public String transport() {
-        return TRANSPORT;
+        return transport;
     }
 
     @Override
@@ -66,9 +80,8 @@ public class KafkaOutboxDispatcher implements OutboxDispatcher {
         // behind" - see MessageHeaders.PRODUCED_AT.
         addHeader(record, MessageHeaders.PRODUCED_AT, Instant.now().toString());
 
-        // The correlation id is deliberately absent: observability-spring-boot-starter's producer
-        // post-processor stamps X-Correlation-Id on every record produced through the Spring-managed
-        // factory, and a second copy written here would be the one a consumer reads.
+        // The correlation id is among the message's own headers: DefaultOutboxEventPublisher captured it when
+        // the event was published, in the request's thread. Here, on the poller thread, there is none to read.
         Map<String, String> headers = message.getHeaders();
         if (headers != null) {
             headers.forEach((key, value) -> addHeader(record, key, value));

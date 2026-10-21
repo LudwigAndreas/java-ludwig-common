@@ -19,6 +19,7 @@ import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.adapter.RecordFilterStrategy;
 import org.springframework.test.util.ReflectionTestUtils;
+import ru.ludwigandreas.messaging.config.KafkaClustersAutoConfiguration;
 import ru.ludwigandreas.messaging.config.MessagingAutoConfiguration;
 import ru.ludwigandreas.messaging.config.MessagingMetricsAutoConfiguration;
 import ru.ludwigandreas.messaging.config.MessagingWebAutoConfiguration;
@@ -32,7 +33,7 @@ import ru.ludwigandreas.messaging.settings.DedupTransactionPolicy;
 class MessagingAutoConfigurationTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(KafkaAutoConfiguration.class,
+            .withConfiguration(AutoConfigurations.of(KafkaAutoConfiguration.class, KafkaClustersAutoConfiguration.class,
                     MessagingMetricsAutoConfiguration.class, MessagingAutoConfiguration.class,
                     MessagingWebAutoConfiguration.class));
 

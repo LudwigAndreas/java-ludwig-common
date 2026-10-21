@@ -113,6 +113,24 @@ ludwig.outbox.default-route.destination=default-topic
 
 Resolution order: `OutboxEvent.route()` (explicit override, by route name) -> the first
 `ludwig.outbox.routes.*` entry whose `event-types` contains the event's type -> `ludwig.outbox.default-route`.
+**One Kafka transport per cluster.** `KAFKA` writes to `spring.kafka.*`. Every cluster declared under
+`ludwig.kafka.clusters` (see messaging-spring-boot-starter, "Kafka clusters") adds `KAFKA:<name>`, so a
+route picks its cluster by transport:
+
+```properties
+ludwig.outbox.routes.partner-invoices.transport=kafka:partner-a
+ludwig.outbox.routes.partner-invoices.destination=invoices
+```
+
+A route naming an undeclared cluster fails startup. Every Kafka template the outbox uses comes from
+messaging's `KafkaClusterProducers`.
+
+**Correlation id.** When an event is published, the request's correlation id is captured into the
+message's headers under `ludwig.messaging.correlation-header` (default `X-Correlation-Id`), unless the
+event already sets that header. The poller dispatches on its own thread, where no request context exists,
+so this is the only moment the id can be read. The id comes from audit-core's `CorrelationProvider`,
+which observability-spring-boot-starter provides.
+
 Register your own `OutboxRouteResolver`/`OutboxDispatcher` bean to add a transport beyond the built-in
 Kafka/REST ones.
 

@@ -123,4 +123,14 @@ class ClaimContractTest {
                 .startsWith(IdempotencyScopes.KAFKA)
                 .isNotEqualTo(IdempotencyScopes.HTTP);
     }
+
+    @Test
+    @DisplayName("a topic on a named cluster has its own scope; the default cluster keeps the old one")
+    void clusterScopes() {
+        assertThat(IdempotencyScopes.forTopic(IdempotencyScopes.DEFAULT_CLUSTER, "platform.orders"))
+                .isEqualTo(IdempotencyScopes.forTopic("platform.orders"));
+        assertThat(IdempotencyScopes.forTopic("partner-a", "platform.orders"))
+                .isEqualTo("kafka:partner-a/platform.orders")
+                .isNotEqualTo(IdempotencyScopes.forTopic("partner-b", "platform.orders"));
+    }
 }

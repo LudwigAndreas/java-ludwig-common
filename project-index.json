@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-21T12:15:13.488504Z",
+    "generatedAt": "2026-10-21T19:45:28.949412Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 41,
-    "commit": "fe88c0a8a62b8ed9234c52b69033c4fda51a05f3",
-    "commitShort": "fe88c0a",
+    "commit": "3065ec49f91f2b2a29fd1476b7a4fb2734b1b23f",
+    "commitShort": "3065ec4",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "6004fc53fcd651fab4abf3529598f77c60bfa0cc7f8feb1f464ef3df2da54f8b",
-      "newestPom": "sources/messaging-db-spring-boot-starter/pom.xml",
-      "newestPomModified": "2026-10-21T12:10:00.956416Z"
+      "pomSetSha": "85a85ad9db0d1c8360cc63de121bfedc57f06eb1c407dbc73d0e1ec4f786872a",
+      "newestPom": "sources/outbox-spring-boot-starter/pom.xml",
+      "newestPomModified": "2026-10-21T19:37:51.808217Z"
     }
   },
   "modules": [
@@ -703,8 +703,8 @@
         "architecture": "sources/messaging-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/architecture"
       },
       "testClasses": {
-        "surefire": 12,
-        "failsafe": 1
+        "surefire": 13,
+        "failsafe": 2
       },
       "pom": "sources/messaging-spring-boot-starter/pom.xml",
       "readme": "sources/messaging-spring-boot-starter/README.md",
@@ -1163,7 +1163,7 @@
         "integration": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration"
       },
       "testClasses": {
-        "surefire": 6,
+        "surefire": 8,
         "failsafe": 1
       },
       "pom": "sources/outbox-spring-boot-starter/pom.xml",
@@ -1821,7 +1821,7 @@
         "integration": "sources/observability-spring-boot-starter/src/test/java/ru/ludwigandreas/observability/integration"
       },
       "testClasses": {
-        "surefire": 18,
+        "surefire": 19,
         "failsafe": 2
       },
       "pom": "sources/observability-spring-boot-starter/pom.xml",
@@ -2359,7 +2359,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 13,
+        "surefire": 14,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",

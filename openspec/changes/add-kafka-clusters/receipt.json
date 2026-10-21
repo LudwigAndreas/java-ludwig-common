@@ -1,0 +1,58 @@
+{
+  "change": "add-kafka-clusters",
+  "model": "claude-opus-5-5",
+  "index_version": "85a85ad9db0d1c8360cc63de121bfedc57f06eb1c407dbc73d0e1ec4f786872a",
+  "modules_touched": [
+    "messaging-spring-boot-starter",
+    "outbox-spring-boot-starter",
+    "idempotency-spring-boot-starter",
+    "observability-spring-boot-starter",
+    "architecture-rules",
+    "messaging-db-spring-boot-starter",
+    "security-spring-boot-starter"
+  ],
+  "gate": {
+    "check_migrations": "pass",
+    "manifest stale": "pass",
+    "manifest layout": "pass",
+    "mvn validate": "pass (rerun after the security fix)",
+    "verify messaging": "pass (rerun; first run killed on an upstream IdempotencyHttpIT hang)",
+    "verify outbox": "pass",
+    "verify idempotency": "pass",
+    "verify observability": "pass",
+    "verify architecture-rules": "pass",
+    "verify messaging-db": "pass",
+    "verify security": "pass",
+    "verify identity-projection": "pass",
+    "verify user-settings": "pass",
+    "verify audit": "pass",
+    "verify export": "pass",
+    "verify file-ingest": "pass",
+    "verify object-storage": "pass",
+    "verify odata-filter": "pass",
+    "verify reconciliation": "pass",
+    "verify rest-client": "pass",
+    "verify file-action": "pass",
+    "verify grpc-client": "pass (retry after a Testcontainers Ryuk connection failure)",
+    "verify grpc-server": "pass",
+    "verify pat": "pass",
+    "verify crud-service-example": "pass",
+    "verify notification-service": "pass",
+    "openspec validate --strict": "pass",
+    "check_api_baseline": "not run: breaking changes allowed for this major release (user decision); releases repository unreachable in this environment anyway"
+  },
+  "tests": {
+    "added": 25,
+    "passed": "all in touched and dependent modules",
+    "failed": 0
+  },
+  "retries": 9,
+  "human_corrections": 3,
+  "rollback_point": "3065ec49f91f2b2a29fd1476b7a4fb2734b1b23f",
+  "unresolved": [
+    "the dedup-across-clusters test's sensitivity to the bug it guards was not measured (mutation run refused)",
+    "IdempotencyHttpIT hung once on a client read with idle server threads, and test-support once failed to reach Ryuk: both environmental flakes, neither reproduced",
+    "add-db-log-transport still replaces the single kafka transport; its group 10 moves it onto KafkaClusterProducers and named clusters",
+    "a service-supplied RecordFilterStrategy is not cluster-scoped automatically (documented)"
+  ]
+}

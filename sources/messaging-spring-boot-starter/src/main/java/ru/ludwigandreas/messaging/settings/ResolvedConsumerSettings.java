@@ -31,6 +31,8 @@ import ru.ludwigandreas.messaging.api.DeadLetterTopics;
  * @param deadLetterSuffix  appended to the source topic
  * @param minEventVersion   the lowest payload schema version accepted
  * @param maxEventVersion   the highest payload schema version accepted
+ * @param cluster           the cluster records are read from
+ * @param deadLetterCluster the cluster dead letters are written to, {@value #SOURCE} already resolved
  */
 public record ResolvedConsumerSettings(
         ContainerProperties.AckMode ackMode,
@@ -46,7 +48,12 @@ public record ResolvedConsumerSettings(
         boolean deadLetterEnabled,
         String deadLetterSuffix,
         int minEventVersion,
-        int maxEventVersion) {
+        int maxEventVersion,
+        String cluster,
+        String deadLetterCluster) {
+
+    /** {@code dead-letter.cluster}'s value for "the cluster the record was read from", and its default. */
+    public static final String SOURCE = "source";
 
     /** Per-record acknowledgement - see {@code ConsumerSettings.getAckMode()}. */
     public static final ContainerProperties.AckMode DEFAULT_ACK_MODE = ContainerProperties.AckMode.RECORD;
@@ -103,6 +110,11 @@ public record ResolvedConsumerSettings(
         deadLetterSuffix = deadLetterSuffix == null || deadLetterSuffix.isBlank()
                 ? DeadLetterTopics.DEFAULT_SUFFIX
                 : deadLetterSuffix;
+        cluster = cluster == null || cluster.isBlank() ? KafkaClusters.DEFAULT : cluster;
+        boolean toSource = deadLetterCluster == null || deadLetterCluster.isBlank() || SOURCE.equals(deadLetterCluster);
+        deadLetterCluster = toSource
+                ? cluster
+                : deadLetterCluster;
     }
 
     /**

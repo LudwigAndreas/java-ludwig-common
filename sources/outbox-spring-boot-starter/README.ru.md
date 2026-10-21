@@ -115,6 +115,24 @@ ludwig.outbox.default-route.destination=default-topic
 
 Порядок разрешения: `OutboxEvent.route()` (явное переопределение по имени маршрута) → первая запись
 `ludwig.outbox.routes.*`, чей `event-types` содержит тип события → `ludwig.outbox.default-route`.
+**Один транспорт Kafka на кластер.** `KAFKA` пишет в `spring.kafka.*`. Каждый кластер, объявленный в
+`ludwig.kafka.clusters` (см. messaging-spring-boot-starter, «Кластеры Kafka»), добавляет `KAFKA:<name>`,
+так что маршрут выбирает кластер через транспорт:
+
+```properties
+ludwig.outbox.routes.partner-invoices.transport=kafka:partner-a
+ludwig.outbox.routes.partner-invoices.destination=invoices
+```
+
+Маршрут, который называет необъявленный кластер, не даёт сервису стартовать. Каждый Kafka-шаблон outbox
+берётся из `KafkaClusterProducers` в messaging.
+
+**Correlation id.** При публикации события correlation id запроса записывается в заголовки сообщения под
+именем `ludwig.messaging.correlation-header` (по умолчанию `X-Correlation-Id`), если событие ещё не задало
+этот заголовок. Поллер отправляет сообщения в своём потоке, где контекста запроса нет, поэтому это
+единственный момент, когда id можно прочитать. Id берётся из `CorrelationProvider` из audit-core, который
+предоставляет observability-spring-boot-starter.
+
 Зарегистрируйте собственный бин `OutboxRouteResolver`/`OutboxDispatcher`, чтобы добавить транспорт
 помимо встроенных Kafka и REST.
 

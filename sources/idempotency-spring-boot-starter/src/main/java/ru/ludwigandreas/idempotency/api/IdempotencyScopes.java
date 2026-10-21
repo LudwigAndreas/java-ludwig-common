@@ -22,6 +22,9 @@ public final class IdempotencyScopes {
     /** Keys derived from a Kafka record's coordinates or one of its headers. */
     public static final String KAFKA = "kafka";
 
+    /** messaging-spring-boot-starter's name for the cluster {@code spring.kafka.*} describes. */
+    public static final String DEFAULT_CLUSTER = "default";
+
     /**
      * The scope an HTTP claim uses when the filter is configured to scope per endpoint.
      *
@@ -49,6 +52,26 @@ public final class IdempotencyScopes {
      */
     public static String forTopic(String topic) {
         return KAFKA + ":" + topic;
+    }
+
+    /**
+     * The scope of a topic on a named Kafka cluster.
+     *
+     * <p>The same topic name on two clusters is two streams, and the record-coordinate fallback key
+     * ({@code topic:partition:offset}) is only unique within one of them, so a claim on a non-default
+     * cluster carries the cluster too. {@value #DEFAULT_CLUSTER} - messaging's name for
+     * {@code spring.kafka.*} - keeps {@link #forTopic(String)}, so claims stored before clusters existed
+     * keep their meaning.
+     *
+     * @param cluster the cluster the record was read from
+     * @param topic   the topic
+     * @return {@code kafka:<topic>} on the default cluster, {@code kafka:<cluster>/<topic>} otherwise
+     */
+    public static String forTopic(String cluster, String topic) {
+        if (cluster == null || DEFAULT_CLUSTER.equals(cluster)) {
+            return forTopic(topic);
+        }
+        return KAFKA + ":" + cluster + "/" + topic;
     }
 
     private IdempotencyScopes() {

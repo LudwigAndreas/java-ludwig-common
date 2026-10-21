@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.kafka.retrytopic.RetryTopicConfiguration;
+import ru.ludwigandreas.messaging.config.KafkaClustersAutoConfiguration;
 import ru.ludwigandreas.messaging.config.MessagingAutoConfiguration;
 import ru.ludwigandreas.messaging.config.MessagingRetryTopicAutoConfiguration;
 import ru.ludwigandreas.messaging.error.OrderingConflictsWithRetryTopicsException;
@@ -22,7 +23,7 @@ import ru.ludwigandreas.messaging.error.OrderingConflictsWithRetryTopicsExceptio
 class MessagingRetryTopicAutoConfigurationTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(KafkaAutoConfiguration.class,
+            .withConfiguration(AutoConfigurations.of(KafkaAutoConfiguration.class, KafkaClustersAutoConfiguration.class,
                     MessagingAutoConfiguration.class, MessagingRetryTopicAutoConfiguration.class));
 
     @Test

@@ -9,8 +9,11 @@ import org.apache.kafka.common.serialization.Serializer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.kafka.core.KafkaTemplate;
+import ru.ludwigandreas.messaging.cluster.DefaultKafkaClusterProducers;
 import ru.ludwigandreas.messaging.dlt.DeadLetterTemplates;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 
 /**
  * The regression test for a defect that was live in the reference implementation.
@@ -65,6 +68,8 @@ class DeadLetterTemplatesTest {
     }
 
     private static KafkaTemplate<Object, Object> template() {
-        return DeadLetterTemplates.create(new KafkaProperties(), new ObjectMapper());
+        KafkaClusters clusters = KafkaClusters.bind(new Binder(), new KafkaProperties());
+        return DeadLetterTemplates.create(new DefaultKafkaClusterProducers(clusters), KafkaClusters.DEFAULT,
+                new ObjectMapper());
     }
 }

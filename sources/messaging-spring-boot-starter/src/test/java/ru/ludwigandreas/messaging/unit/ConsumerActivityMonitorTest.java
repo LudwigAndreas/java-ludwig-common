@@ -44,6 +44,8 @@ class ConsumerActivityMonitorTest {
         }
     };
 
+    private static final String C = "default";
+
     private final RecordingMetrics metrics = new RecordingMetrics();
     private final ConsumerActivityMonitor monitor = new ConsumerActivityMonitor(metrics, clock);
 
@@ -54,32 +56,32 @@ class ConsumerActivityMonitorTest {
     @Test
     @DisplayName("a watched topic that never delivers goes silent")
     void reportsSilenceForATopicThatNeverDelivers() {
-        monitor.watch("orders", Duration.ofMinutes(10));
+        monitor.watch(C, "orders", Duration.ofMinutes(10));
 
-        assertThat(monitor.silent("orders")).isFalse();
+        assertThat(monitor.silent(C, "orders")).isFalse();
         now = now.plus(Duration.ofMinutes(11));
-        assertThat(monitor.silent("orders")).isTrue();
+        assertThat(monitor.silent(C, "orders")).isTrue();
     }
 
     @Test
     @DisplayName("a consumed record rearms the window")
     void rearmsOnARecord() {
-        monitor.watch("orders", Duration.ofMinutes(10));
+        monitor.watch(C, "orders", Duration.ofMinutes(10));
         now = now.plus(Duration.ofMinutes(9));
-        monitor.intercept(record("orders"), null);
+        monitor.forCluster(C).intercept(record("orders"), null);
         now = now.plus(Duration.ofMinutes(9));
 
-        assertThat(monitor.silent("orders")).isFalse();
-        assertThat(metrics.consumed).containsEntry("orders", 1);
+        assertThat(monitor.silent(C, "orders")).isFalse();
+        assertThat(metrics.consumed).containsEntry(C + "/orders", 1);
     }
 
     @Test
     @DisplayName("a topic with no configured threshold has no silence signal and no gauge")
     void doesNotReportSilenceWithoutAThreshold() {
-        monitor.watch("orders", null);
+        monitor.watch(C, "orders", null);
         now = now.plus(Duration.ofDays(30));
 
-        assertThat(monitor.silent("orders")).isFalse();
+        assertThat(monitor.silent(C, "orders")).isFalse();
         assertThat(metrics.gauges).isEmpty();
     }
 
@@ -91,17 +93,17 @@ class ConsumerActivityMonitorTest {
     @Test
     @DisplayName("watching a topic twice registers one gauge")
     void registersOneGaugePerTopic() {
-        monitor.watch("orders", Duration.ofMinutes(10));
-        monitor.watch("orders", Duration.ofMinutes(20));
+        monitor.watch(C, "orders", Duration.ofMinutes(10));
+        monitor.watch(C, "orders", Duration.ofMinutes(20));
 
-        assertThat(metrics.registrations).containsExactly("orders");
+        assertThat(metrics.registrations).containsExactly(C + "/orders");
     }
 
     @Test
     @DisplayName("the gauge reads 1 exactly while the topic is silent")
     void publishesTheGauge() {
-        monitor.watch("orders", Duration.ofMinutes(10));
-        IntSupplier gauge = metrics.gauges.get("orders");
+        monitor.watch(C, "orders", Duration.ofMinutes(10));
+        IntSupplier gauge = metrics.gauges.get(C + "/orders");
 
         assertThat(gauge.getAsInt()).isZero();
         now = now.plus(Duration.ofMinutes(11));
@@ -115,10 +117,24 @@ class ConsumerActivityMonitorTest {
     @Test
     @DisplayName("an unwatched topic's activity is still recorded")
     void recordsActivityForAnUnwatchedTopic() {
-        monitor.intercept(record("surprise"), null);
+        monitor.forCluster(C).intercept(record("surprise"), null);
 
-        assertThat(metrics.consumed).containsEntry("surprise", 1);
-        assertThat(monitor.silent("surprise")).isFalse();
+        assertThat(metrics.consumed).containsEntry(C + "/surprise", 1);
+        assertThat(monitor.silent(C, "surprise")).isFalse();
+    }
+
+    @Test
+    @DisplayName("the same topic on two clusters is watched separately")
+    void keepsClustersApart() {
+        monitor.watch("partner-a", "orders", Duration.ofMinutes(10));
+        monitor.watch("partner-b", "orders", Duration.ofMinutes(10));
+        now = now.plus(Duration.ofMinutes(9));
+        monitor.forCluster("partner-a").intercept(record("orders"), null);
+        now = now.plus(Duration.ofMinutes(2));
+
+        assertThat(monitor.silent("partner-a", "orders")).isFalse();
+        assertThat(monitor.silent("partner-b", "orders")).isTrue();
+        assertThat(metrics.consumed).containsOnlyKeys("partner-a/orders");
     }
 
     private static ConsumerRecord<Object, Object> record(String topic) {
@@ -133,14 +149,14 @@ class ConsumerActivityMonitorTest {
         private final java.util.List<String> registrations = new java.util.ArrayList<>();
 
         @Override
-        public void recordConsumed(String topic) {
-            consumed.merge(topic, 1, Integer::sum);
+        public void recordConsumed(String cluster, String topic) {
+            consumed.merge(cluster + "/" + topic, 1, Integer::sum);
         }
 
         @Override
-        public void registerSilence(String topic, IntSupplier silent) {
-            gauges.put(topic, silent);
-            registrations.add(topic);
+        public void registerSilence(String cluster, String topic, IntSupplier silent) {
+            gauges.put(cluster + "/" + topic, silent);
+            registrations.add(cluster + "/" + topic);
         }
     }
 }

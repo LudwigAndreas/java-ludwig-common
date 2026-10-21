@@ -1,3 +1,4 @@
+ru.ludwigandreas.messaging.config.KafkaClustersAutoConfiguration
 ru.ludwigandreas.messaging.config.MessagingDedupAutoConfiguration
 ru.ludwigandreas.messaging.config.MessagingMetricsAutoConfiguration
 ru.ludwigandreas.messaging.config.MessagingAutoConfiguration

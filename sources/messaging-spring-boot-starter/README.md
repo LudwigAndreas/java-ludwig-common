@@ -19,6 +19,7 @@ records. This module is one set of consumer decisions, taken once, that a servic
 - [Security defaults that must not regress](#security-defaults-that-must-not-regress)
 - [Observability](#observability)
 - [Non-blocking retry topics](#non-blocking-retry-topics)
+- [Kafka clusters](#kafka-clusters)
 - [Configuration reference](#configuration-reference)
 - [**Deployment prerequisite: the dead-letter topics**](#deployment-prerequisite-the-dead-letter-topics)
 - [The rules that stop this recurring](#the-rules-that-stop-this-recurring)
@@ -371,6 +372,47 @@ a second `TaskScheduler` in the context, and Spring's `@Scheduled` infrastructur
 so a module publishing one would silently move every scheduled method in the application onto a thread pool
 this module sized.
 
+## Kafka clusters
+
+A service can read from, and dead-letter to, several Kafka clusters. `spring.kafka.*` is the cluster
+named `default`, so a service that declares nothing behaves exactly as before. A named cluster has
+`spring.kafka.*`'s shape and is bound on top of it, so an entry states only what differs:
+
+```yaml
+ludwig:
+  kafka:
+    clusters:
+      partner-a: { bootstrap-servers: a.partner:9093, security: { protocol: SSL } }
+      internal:  { bootstrap-servers: our-kafka:9092 }
+  messaging:
+    consumers:
+      orders-ingress:
+        cluster: partner-a                 # where it reads from
+        dead-letter: { cluster: internal } # where its dead letters go; default `source`
+```
+
+- **One cluster per consumer.** A container has one consumer factory, so a listener reads from one
+  cluster. Reading two clusters takes two listeners. Listener code and factory `@Bean` methods do not
+  change: the cluster is configuration, keyed by the consumer name the factory was built for.
+- **Dead letters** go to `source`, the cluster the record was read from, unless
+  `dead-letter.cluster` names another. A partner cluster this side may not write to is the reason the
+  setting exists. `ludwig.messaging.defaults.dead-letter.cluster` sets it for every consumer.
+- **Dedup is per cluster.** The same topic name on two clusters is two streams, and the record-coordinate
+  fallback key is only unique within one. The idempotency starter's filter is bound to the consumer's
+  cluster automatically, with the claim scope `kafka:<cluster>/<topic>`. `default` keeps
+  `kafka:<topic>`, so stored claims keep their meaning. **A filter of your own must scope by cluster
+  itself.**
+- **Metrics** carry a `cluster` tag.
+- **Retry topics** stay on `default`: a consumer with `retry.non-blocking=true` on another cluster is
+  refused at startup.
+- **Producers.** Every producer the platform builds - dead-letter templates here, the outbox's
+  templates - comes from one `KafkaClusterProducers` bean, which is what something standing in for a
+  cluster replaces. The `kafka.producers-come-from-the-cluster-seam` architecture rule keeps it the
+  only place.
+- Cluster names are lower-case letters, digits and dashes, at most 44 characters, so that the outbox
+  transport `kafka:<name>` fits its column. `default` is reserved. A consumer naming an undeclared
+  cluster fails startup.
+
 ## Configuration reference
 
 Every key under `ludwig.messaging.consumers.<name>` also exists under `ludwig.messaging.defaults`, which
@@ -380,6 +422,7 @@ precisely so that it can.
 | Key | Default | Notes |
 |---|---|---|
 | `enabled` | `true` | also gated on `KafkaListener` being on the classpath |
+| `ludwig.kafka.clusters.<name>.*` | none | `spring.kafka.*`'s shape, bound on top of it |
 | `correlation-header` | `X-Correlation-Id` | must match `ludwig.observability.correlation.kafka.header-name` |
 | `metrics.enabled` | `true` | includes the Kafka client metrics, lag among them |
 | `dedup.enabled` | `true` | attaches a `RecordFilterStrategy` from the context, if there is one |
@@ -397,6 +440,8 @@ precisely so that it can.
 | `…<name>.retry.non-blocking` | `false` | see above |
 | `…<name>.dead-letter.enabled` | `true` | `false` means logged and dropped |
 | `…<name>.dead-letter.suffix` | `.dlt` | |
+| `…<name>.dead-letter.cluster` | `source` | `source`, or a declared cluster name |
+| `…<name>.cluster` | `default` | a name declared under `ludwig.kafka.clusters` |
 | `…<name>.accepted-versions.min` / `.max` | `1` / unbounded | a bound installs the version gate |
 | `…<name>.topics` | empty | only needed for a non-blocking retry opt-in |
 

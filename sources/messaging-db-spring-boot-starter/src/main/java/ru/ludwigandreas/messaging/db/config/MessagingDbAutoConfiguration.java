@@ -8,7 +8,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -20,6 +19,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.audit.NoopAuditSink;
 import ru.ludwigandreas.messaging.api.EnvelopeReader;
+import ru.ludwigandreas.messaging.cluster.KafkaClusterProducers;
 import ru.ludwigandreas.messaging.db.consumer.ConsumerSupport;
 import ru.ludwigandreas.messaging.db.consumer.DeadLetterWriter;
 import ru.ludwigandreas.messaging.db.consumer.ListenerFactoryPostProcessor;
@@ -28,7 +28,9 @@ import ru.ludwigandreas.messaging.db.ops.LogPurgeJob;
 import ru.ludwigandreas.messaging.db.outbox.LogProducerFactory;
 import ru.ludwigandreas.messaging.db.settings.MessagingDbProperties;
 import ru.ludwigandreas.messaging.dlt.DeadLetterTemplates;
+import ru.ludwigandreas.messaging.metrics.ConsumerActivityMonitor;
 import ru.ludwigandreas.messaging.metrics.MessagingMetrics;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.messaging.settings.MessagingProperties;
 import ru.ludwigandreas.outbox.config.OutboxKafkaAutoConfiguration;
 import ru.ludwigandreas.outbox.config.OutboxProperties;
@@ -110,7 +112,8 @@ public class MessagingDbAutoConfiguration {
      * @param auditSink       the audit sink, when there is one
      * @param clock           the application's clock, when there is exactly one
      * @param interceptors    every record interceptor in the context
-     * @param kafkaProperties for the dead-letter producer while draining
+     * @param producers       the producer seam, for the dead-letter producer while draining
+     * @param activityMonitor messaging's activity monitor, so log records count as consumed
      * @param objectMapper    the application's mapper
      * @return the shared collaborators
      */
@@ -121,10 +124,11 @@ public class MessagingDbAutoConfiguration {
             MessagingDbProperties properties, MessagingProperties messaging, LogStore store,
             MessagingMetrics metrics, EnvelopeReader envelopeReader, ObjectProvider<AuditSink> auditSink,
             ObjectProvider<Clock> clock, ObjectProvider<RecordInterceptor<Object, Object>> interceptors,
-            KafkaProperties kafkaProperties, ObjectProvider<ObjectMapper> objectMapper) {
+            KafkaClusterProducers producers, ConsumerActivityMonitor activityMonitor,
+            ObjectProvider<ObjectMapper> objectMapper) {
         ObjectMapper mapper = objectMapper.getIfAvailable(ObjectMapper::new);
         KafkaTemplate<Object, Object> deadLetterKafka = properties.getMode() == MessagingDbProperties.Mode.DRAINING
-                ? DeadLetterTemplates.create(kafkaProperties, mapper) : null;
+                ? DeadLetterTemplates.create(producers, KafkaClusters.DEFAULT, mapper) : null;
         // Every interceptor in the context, as ListenerContainerFactoryBuilder composes them: messaging's
         // activity monitor and observability's correlation interceptor among them. A container's own
         // interceptor is not reachable through spring-kafka's public API, so it is rebuilt from the same beans.
@@ -133,7 +137,7 @@ public class MessagingDbAutoConfiguration {
                 : new CompositeRecordInterceptor<>(all.toArray(new RecordInterceptor[0]));
         return new ConsumerSupport(properties, messaging, store, metrics, envelopeReader,
                 auditSink.getIfAvailable(NoopAuditSink::new), clock.getIfUnique(Clock::systemUTC),
-                new DeadLetterWriter(store, deadLetterKafka, mapper), interceptor);
+                new DeadLetterWriter(store, deadLetterKafka, mapper), interceptor, activityMonitor);
     }
 
     /**

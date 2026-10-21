@@ -12,8 +12,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -22,9 +24,12 @@ import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
 import ru.ludwigandreas.outbox.audit.PersistingOutboxAuditLogger;
 import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.audit.CorrelationProvider;
 import ru.ludwigandreas.outbox.audit.AuditSinkOutboxAuditLogger;
 import ru.ludwigandreas.job.core.backoff.BackoffCalculator;
 import ru.ludwigandreas.outbox.dispatch.OutboxDispatcher;
+import ru.ludwigandreas.messaging.api.MessageHeaders;
+import ru.ludwigandreas.outbox.dispatch.OutboxDispatcherGroup;
 import ru.ludwigandreas.outbox.dispatch.OutboxDispatcherRegistry;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
 import ru.ludwigandreas.outbox.metrics.OutboxMetrics;
@@ -102,6 +107,8 @@ public class OutboxAutoConfiguration {
         return new AuditSinkOutboxAuditLogger(auditSink);
     }
 
+    // SUPPRESS CHECKSTYLE ParameterNumber - a bean method assembling one collaborator from the context.
+    @SuppressWarnings("checkstyle:ParameterNumber")
     @Bean
     @ConditionalOnMissingBean(OutboxEventPublisher.class)
     public OutboxEventPublisher outboxEventPublisher(OutboxMessageRepository repository,
@@ -110,9 +117,16 @@ public class OutboxAutoConfiguration {
                                                        OutboxRouteResolver routeResolver,
                                                        OutboxProperties properties,
                                                        OutboxAuditLogger auditLogger,
-                                                       OutboxMetrics metrics) {
+                                                       OutboxMetrics metrics,
+                                                       ObjectProvider<CorrelationProvider> correlation,
+                                                       Environment environment) {
+        // The name consumers' EnvelopeReader reads the correlation id from. Bound here rather than taken as
+        // MessagingProperties, whose types reach into spring-kafka, which a REST-only outbox does not carry.
+        String correlationHeader = Binder.get(environment).bind("ludwig.messaging.correlation-header", String.class)
+                .orElse(MessageHeaders.CORRELATION_ID);
         return new DefaultOutboxEventPublisher(repository, serializer, new CompositeOutboxPublishFilter(filters),
-                routeResolver, properties, auditLogger, metrics);
+                routeResolver, properties, auditLogger, metrics, correlation.getIfAvailable(CorrelationProvider::none),
+                correlationHeader);
     }
 
     @Bean
@@ -123,8 +137,9 @@ public class OutboxAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(OutboxDispatcherRegistry.class)
-    public OutboxDispatcherRegistry outboxDispatcherRegistry(List<OutboxDispatcher> dispatchers) {
-        return new OutboxDispatcherRegistry(dispatchers);
+    public OutboxDispatcherRegistry outboxDispatcherRegistry(ObjectProvider<OutboxDispatcher> dispatchers,
+                                                             ObjectProvider<OutboxDispatcherGroup> groups) {
+        return new OutboxDispatcherRegistry(dispatchers.orderedStream().toList(), groups.orderedStream().toList());
     }
 
     @Bean

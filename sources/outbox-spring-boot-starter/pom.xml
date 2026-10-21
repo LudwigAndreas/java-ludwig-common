@@ -200,6 +200,12 @@
             <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Two real brokers, for the per-cluster transports. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!--
             The platform's container images, singleton containers and fixtures. One test-scoped
             dependency; the digests live in its images.properties, not here.

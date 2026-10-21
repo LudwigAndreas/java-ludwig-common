@@ -46,7 +46,7 @@ class AuditingDeadLetterRecovererTest {
 
         recoverer.accept(record(), new ListenerExecutionFailedException("wrapper", new IllegalStateException()));
 
-        assertThat(metrics.deadLettered).containsExactly("orders -> orders.dlt (IllegalStateException)");
+        assertThat(metrics.deadLettered).containsExactly("partner-a:orders -> orders.dlt (IllegalStateException)");
         assertThat(metrics.dropped).isEmpty();
         AuditEvent event = audited.get(0);
         assertThat(event.action()).isEqualTo(DeadLetterAudit.ACTION_DEAD_LETTERED);
@@ -97,7 +97,7 @@ class AuditingDeadLetterRecovererTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("does not exist");
 
-        assertThat(metrics.dropped).containsExactly("orders");
+        assertThat(metrics.dropped).containsExactly("partner-a:orders");
         assertThat(metrics.deadLettered).isEmpty();
         AuditEvent event = audited.get(0);
         assertThat(event.action()).isEqualTo(DeadLetterAudit.ACTION_DROPPED);
@@ -113,7 +113,7 @@ class AuditingDeadLetterRecovererTest {
     void honoursAConfiguredSuffix() {
         recoverer((record, exception) -> { }, 4, "-failed").accept(record(), new IllegalStateException());
 
-        assertThat(metrics.deadLettered).containsExactly("orders -> orders-failed (IllegalStateException)");
+        assertThat(metrics.deadLettered).containsExactly("partner-a:orders -> orders-failed (IllegalStateException)");
     }
 
     private AuditingDeadLetterRecoverer recoverer(ConsumerRecordRecoverer delegate, int attempts) {
@@ -123,7 +123,7 @@ class AuditingDeadLetterRecovererTest {
     private AuditingDeadLetterRecoverer recoverer(ConsumerRecordRecoverer delegate, int attempts,
                                                   String suffix) {
         return new AuditingDeadLetterRecoverer(delegate, new EnvelopeReader(), metrics, sink, CLOCK,
-                suffix, attempts);
+                "partner-a", suffix, attempts);
     }
 
     private static ConsumerRecord<String, String> record() {
@@ -137,13 +137,13 @@ class AuditingDeadLetterRecovererTest {
         private final List<String> dropped = new ArrayList<>();
 
         @Override
-        public void recordDeadLettered(String topic, String deadLetterTopic, String exception) {
-            deadLettered.add(topic + " -> " + deadLetterTopic + " (" + exception + ")");
+        public void recordDeadLettered(String cluster, String topic, String deadLetterTopic, String exception) {
+            deadLettered.add(cluster + ":" + topic + " -> " + deadLetterTopic + " (" + exception + ")");
         }
 
         @Override
-        public void recordDropped(String topic) {
-            dropped.add(topic);
+        public void recordDropped(String cluster, String topic) {
+            dropped.add(cluster + ":" + topic);
         }
     }
 }
