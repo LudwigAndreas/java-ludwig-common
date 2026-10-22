@@ -1,29 +1,17 @@
 package ru.ludwigandreas.notification.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
-import org.yaml.snakeyaml.DumperOptions;
-import org.yaml.snakeyaml.Yaml;
+import ru.ludwigandreas.testsupport.docs.PublishedDocument;
 
 /**
  * Publishes this service's HTTP surface to {@code docs/api/} and fails the build when the committed
@@ -51,15 +39,11 @@ import org.yaml.snakeyaml.Yaml;
  *       here and are wrong for the same reason.</li>
  * </ul>
  *
- * <p>Deliberately not shared with {@code crud-service-example}, which has the same test: extracting
- * sixty lines into a test-support module would add a reactor edge and a POM to own less code than it
- * costs. A third caller is the point to extract it.
+ * <p>The fetch-independent part - canonicalizing, writing and comparing - is {@link PublishedDocument}'s,
+ * shared with {@code crud-service-example} and with each service's {@code AsyncApiDocumentIT}.
  */
 @AutoConfigureMockMvc
 class ApiDocumentIT extends NotificationTestBase {
-
-    /** Set to refresh the committed document. Deliberately not the default; see the class comment. */
-    private static final String WRITE_PROPERTY = "ludwig.apidocs.write";
 
     private static final String ARTIFACT_ID = "notification-service";
 
@@ -74,32 +58,7 @@ class ApiDocumentIT extends NotificationTestBase {
     @Test
     @DisplayName("the committed OpenAPI document matches what this service serves")
     void committedDocumentIsCurrent() throws Exception {
-        String generated = canonicalDocument();
-
-        Path target = Paths.get("target", "openapi", ARTIFACT_ID + ".openapi.yaml");
-        Files.createDirectories(target.getParent());
-        Files.writeString(target, generated, StandardCharsets.UTF_8);
-
-        Path committed = repositoryRoot().resolve("docs").resolve("api")
-                .resolve(ARTIFACT_ID + ".openapi.yaml");
-
-        if (Boolean.parseBoolean(System.getProperty(WRITE_PROPERTY))) {
-            Files.createDirectories(committed.getParent());
-            Files.writeString(committed, generated, StandardCharsets.UTF_8);
-            return;
-        }
-
-        if (!Files.exists(committed)) {
-            fail("the committed copy is missing: %s%nGenerate it with:%n  %s"
-                    .formatted(committed, refreshCommand()));
-        }
-
-        String current = Files.readString(committed, StandardCharsets.UTF_8);
-        assertThat(current)
-                .as("this service's HTTP surface has changed but %s was not refreshed.%n"
-                        + "Refresh it with:%n  %s%nthen read the diff before committing it.",
-                        committed, refreshCommand())
-                .isEqualTo(generated);
+        PublishedDocument.check(ARTIFACT_ID, PublishedDocument.Kind.OPENAPI, document(), ApiDocumentIT.class);
     }
 
     /**
@@ -130,11 +89,6 @@ class ApiDocumentIT extends NotificationTestBase {
                 .containsIgnoringCase("localized");
     }
 
-    private String refreshCommand() {
-        return "mvn -pl :%s verify -Dit.test=ApiDocumentIT -DfailIfNoTests=false -D%s=true"
-                .formatted(ARTIFACT_ID, WRITE_PROPERTY);
-    }
-
     private JsonNode document() throws Exception {
         String body = mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
@@ -142,81 +96,4 @@ class ApiDocumentIT extends NotificationTestBase {
         return objectMapper.readTree(body);
     }
 
-    /** The generated document, canonicalized exactly as the committed copy is written. */
-    private String canonicalDocument() throws Exception {
-        JsonNode root = document();
-        Object sorted = sortedTree(root);
-        if (sorted instanceof Map<?, ?> map) {
-            // Derived from the request the document was fetched with, so it describes this test
-            // harness rather than any deployment. Committing "http://localhost" would be a statement
-            // about where the service runs, which this document is in no position to make.
-            map.remove("servers");
-        }
-        return yaml().dump(sorted);
-    }
-
-    private Yaml yaml() {
-        DumperOptions options = new DumperOptions();
-        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-        options.setIndent(2);
-        // Long descriptions are emitted on one line rather than folded. Folding is width-dependent,
-        // and a width is one more thing that has to agree across machines for the comparison to hold.
-        options.setSplitLines(false);
-        return new Yaml(options);
-    }
-
-    /**
-     * The document as plain collections, with every object's members in key order.
-     *
-     * <p>{@link TreeMap} is what produces the canonical form. Arrays keep their order because in
-     * OpenAPI an array's order is meaningful - {@code required}, {@code enum} and {@code parameters}
-     * all mean something different reordered - while an object's is not.
-     */
-    private Object sortedTree(JsonNode node) {
-        if (node.isObject()) {
-            Map<String, Object> sorted = new TreeMap<>();
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
-                sorted.put(field.getKey(), sortedTree(field.getValue()));
-            }
-            return sorted;
-        }
-        if (node.isArray()) {
-            List<Object> values = new ArrayList<>(node.size());
-            node.forEach(child -> values.add(sortedTree(child)));
-            return values;
-        }
-        if (node.isNumber()) {
-            return node.numberValue();
-        }
-        if (node.isBoolean()) {
-            return node.booleanValue();
-        }
-        if (node.isNull()) {
-            return null;
-        }
-        return node.asText();
-    }
-
-    /**
-     * The repository root, found by walking up for the two directories that only the root has.
-     *
-     * <p>Surefire and failsafe run with the module directory as the working directory, so the path to
-     * {@code docs/} is relative to a location this class should not hard-code: a module that moves one
-     * level would silently write its document somewhere else. Both {@code docs/} and {@code openspec/}
-     * exist only at the root, so requiring both is unambiguous.
-     */
-    private Path repositoryRoot() throws IOException {
-        Path candidate = Paths.get("").toAbsolutePath();
-        while (candidate != null) {
-            if (Files.isDirectory(candidate.resolve("docs"))
-                    && Files.isDirectory(candidate.resolve("openspec"))) {
-                return candidate;
-            }
-            candidate = candidate.getParent();
-        }
-        throw new IOException("no repository root above " + Paths.get("").toAbsolutePath()
-                + " holds both docs/ and openspec/");
-    }
 }

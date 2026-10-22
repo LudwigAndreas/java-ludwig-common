@@ -780,6 +780,8 @@ wrong, which is a stronger guarantee than checking one.
 
 ---
 
+In owner mode with publication on, the module declares `UserSettingChanged` → `UserSettingChangedEvent` and `ConsentGranted`/`ConsentRevoked` → `ConsentChangedEvent` as an `OutboxEventTypes` bean, so they appear in the service's AsyncAPI document and pass `ludwig.outbox.events.require-declared`.
+
 ## Configuration
 
 | Property | Default | What it does |

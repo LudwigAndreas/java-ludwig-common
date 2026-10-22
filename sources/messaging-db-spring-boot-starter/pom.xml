@@ -15,12 +15,12 @@
 
     <name>Messaging DB-log Spring Boot starter</name>
     <description>
-        A temporary, removable stand-in for an owned Kafka cluster. The outbox's kafka transport appends
-        to a Kafka-shaped log in the shared PostgreSQL database instead of a broker, and @KafkaListener
-        consumers read the topics listed under ludwig.messaging.db.consume from that log with Kafka's
-        consumer semantics - partitions, per-key ordering, one position per consumer group, retry then
-        dead letter. Every other topic is still read from Kafka. Removing the dependency returns every
-        producer and listener to Kafka with no code change.
+        A temporary, removable stand-in for owned Kafka clusters. Every platform write to a cluster named
+        in ludwig.messaging.db.clusters - outbox events and dead letters - is appended to a Kafka-shaped
+        log in the shared PostgreSQL database instead of a broker, and @KafkaListener consumers on those
+        clusters read that log with Kafka's consumer semantics - partitions, per-key ordering, one
+        position per consumer group, retry then dead letter. Every other cluster is untouched. Removing
+        the dependency returns every producer and listener to Kafka with no code change.
     </description>
 
     <dependencyManagement>
@@ -45,9 +45,12 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>messaging-spring-boot-starter</artifactId>
         </dependency>
+        <!-- Test only: outbox writes reach the log through messaging's producer seam, which the outbox builds
+             its templates from, so nothing here refers to the outbox. The ITs publish through it. -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>outbox-spring-boot-starter</artifactId>
+            <scope>test</scope>
         </dependency>
         <!-- SelfSchedulingLifecycle, for the purge and the lag gauge refresh. -->
         <dependency>

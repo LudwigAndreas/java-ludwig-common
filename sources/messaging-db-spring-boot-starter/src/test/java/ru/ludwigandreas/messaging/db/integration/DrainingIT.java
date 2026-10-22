@@ -33,13 +33,16 @@ import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
         "spring.liquibase.enabled=false",
         "spring.kafka.consumer.auto-offset-reset=earliest",
         "ludwig.messaging.db.mode=draining",
-        "ludwig.messaging.db.consume=" + LOG_TOPIC,
+        // internal inherits the broker's address from spring.kafka.*: draining gives it somewhere to go.
+        "ludwig.kafka.clusters.internal.client-id=it-internal",
         "ludwig.messaging.db.poll-interval=50ms",
         // Its own group: the active-mode context may still be running against the same database.
         "it.group=it-draining",
-        "ludwig.messaging.consumers.mixed.dedup=false",
+        "ludwig.messaging.consumers.catalog.cluster=internal",
+        "ludwig.messaging.consumers.catalog.dedup=false",
+        "ludwig.messaging.consumers.partner.dedup=false",
         "ludwig.outbox.polling.enabled=false",
-        "ludwig.outbox.routes.mixed.transport=kafka",
+        "ludwig.outbox.routes.mixed.transport=kafka:internal",
         "ludwig.outbox.routes.mixed.destination=" + LOG_TOPIC,
         "ludwig.outbox.routes.mixed.event-types=Mixed"
 })

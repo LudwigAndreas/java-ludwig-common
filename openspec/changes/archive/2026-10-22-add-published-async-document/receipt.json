@@ -1,0 +1,69 @@
+{
+  "change": "add-published-async-document",
+  "model": "claude-opus-5-5",
+  "index_version": "project-index.json generated 2026-10-22T10:06:03Z, POM-set SHA 020f83f4635b0b66, 42 modules",
+  "modules_touched": [
+    "ludwig-bom",
+    "common",
+    "asyncapi-spring-boot-starter",
+    "messaging-spring-boot-starter",
+    "messaging-db-spring-boot-starter",
+    "outbox-spring-boot-starter",
+    "test-support",
+    "audit-spring-boot-starter",
+    "export-spring-boot-starter",
+    "file-ingest-spring-boot-starter",
+    "user-settings-spring-boot-starter",
+    "crud-service-example",
+    "notification-service"
+  ],
+  "gate": {
+    "manifest_stale": "pass - project-index.json is current (POM-set SHA 020f83f4635b0b66)",
+    "manifest_layout": "pass",
+    "validate": "pass - mvn -q validate",
+    "api_docs_missing": "pass",
+    "api_docs_check": "pass - scripts/api-docs.sh check: all four documents present and current",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "check_image_pins": "FAIL, pre-existing - flags the prose 'no new image: the mail server' at openspec/changes/archive/2026-10-11-adopt-local-run-in-notification-service/proposal.md:78; neither that file nor the checker changed since 7abdcd4, so HEAD fails identically",
+    "check_api_baseline": "FAIL, environmental - 28 baselines UNRESOLVED because nexus.example.internal (root POM placeholder) is unreachable",
+    "module_verify": "pass - mvn -pl :<m> -am verify for asyncapi, messaging, outbox, test-support, audit, export, file-ingest, user-settings, crud-service-example, notification-service (notification re-run after the @DirtiesContext fix: exit 0)",
+    "dependent_verify": "pass for identity-projection, messaging-db, file-action, cache, db-core, grpc-client, grpc-server, idempotency, job-core, object-storage, odata-filter, pat, reconciliation, test-support-security; FAIL for test-support-local: StubFaultIT.slow (ConditionTimeout, 1 of 2 expected requests), which fails identically on a clean HEAD worktree",
+    "openspec_validate": "pass - --strict",
+    "asyncapi_validity": "pass - @asyncapi/cli validate on both documents: 0 errors, 0 warnings, 1 info (3.1.0 exists; Springwolf 1.9.0 emits 3.0.0). Run by hand; not part of the build."
+  },
+  "tests": {
+    "added": [
+      "AsyncApiDocumentShapeIT (7)",
+      "asyncapi ArchitectureTest (47 rules)",
+      "PublishedDocumentTest (3)",
+      "OutboxEventTypesTest (3)",
+      "DefaultOutboxEventPublisherTest require-declared cases",
+      "MessagingAutoConfigurationTest.remembersConsumerNames",
+      "crud AsyncApiDocumentIT",
+      "notification AsyncApiDocumentIT"
+    ],
+    "failed": "0 caused by this change; 1 pre-existing (StubFaultIT.slow)"
+  },
+  "human_corrections": 3,
+  "human_corrections_detail": [
+    "1b: accept Springwolf's title: additions as a reviewed OpenAPI refresh (departs from the 'byte-identical' contract item with approval)",
+    "2a: audit, export, file-ingest and user-settings declare their own OutboxEventTypes",
+    "the user found that both AsyncAPI documents failed validation in IntelliJ and AsyncAPI Studio (server host is required); host is now the server name"
+  ],
+  "rollback_point": "818564501abab0ad47269179e6391e9f1298112a",
+  "caveats": [
+    "Adopting the starter changes each service's OpenAPI document once: Springwolf registers a schema-title converter in swagger's JVM-wide ModelConverters. crud: 22 title: lines; notification: 31. Nothing else changed.",
+    "springwolf.use-fqn=false is a starter default because Springwolf toggles swagger's JVM-wide TypeNameResolver during its scan; with true, a concurrent springdoc generation renamed every schema to its FQN. A service overriding it reintroduces the race.",
+    "springdoc.packages-to-exclude=io.github.springwolf is a lowest-precedence default; a service setting that property itself must add the package or InitialConfig reappears in its OpenAPI document.",
+    "gate.sh runs `api-docs.sh missing`, not the full `check` (D4 revision): drift is each service's own IT, run when the gate reaches a service.",
+    "publish has only been dry-run. No real upload: nexus.example.internal is a placeholder and there is no settings.xml server entry.",
+    "notification's AsyncAPI document describes the Kafka ingress although it is off by default in application.yml (it is the topic other teams publish to); the user-settings projection is excluded because its module is not packaged."
+  ],
+  "unresolved": [
+    "check_image_pins false positive in an archived proposal (pre-existing; fix the prose or the checker's pattern)",
+    "StubFaultIT.slow fails on HEAD (pre-existing, outside this change)",
+    "AsyncAPI validity is not checked by the build; only by hand with @asyncapi/cli"
+  ]
+}

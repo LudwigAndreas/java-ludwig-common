@@ -413,6 +413,8 @@ ludwig:
   transport `kafka:<name>` fits its column. `default` is reserved. A consumer naming an undeclared
   cluster fails startup.
 
+`ListenerContainerFactoryBuilder.consumerNameOf(factory)` returns the consumer name a factory was built for, unwrapping a factory that implements `DelegatingListenerContainerFactory`. `asyncapi-spring-boot-starter` uses it to document each listener with its consumer's cluster and dead-letter channel.
+
 ## Configuration reference
 
 Every key under `ludwig.messaging.consumers.<name>` also exists under `ludwig.messaging.defaults`, which

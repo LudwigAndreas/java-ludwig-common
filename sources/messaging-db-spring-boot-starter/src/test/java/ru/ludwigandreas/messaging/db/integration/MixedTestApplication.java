@@ -12,7 +12,10 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import ru.ludwigandreas.messaging.consumer.ListenerContainerFactoryBuilder;
 
-/** One listener subscribed to a log topic and a Kafka topic, written as a service writes it against Kafka. */
+/**
+ * Two listeners on two clusters, written as a service writes them against Kafka: {@code catalog} on
+ * {@code internal}, which the log replaces, and {@code partner} on {@code default}, a real broker.
+ */
 @SpringBootConfiguration
 @EnableAutoConfiguration
 @EnableKafka
@@ -27,13 +30,18 @@ public class MixedTestApplication {
     }
 
     @Bean
-    ConcurrentKafkaListenerContainerFactory<String, String> mixedFactory(ListenerContainerFactoryBuilder builder) {
-        return builder.forTextPayload("mixed", LOG_TOPIC, KAFKA_TOPIC);
+    ConcurrentKafkaListenerContainerFactory<String, String> catalogFactory(ListenerContainerFactoryBuilder builder) {
+        return builder.forTextPayload("catalog", LOG_TOPIC);
     }
 
     @Bean
-    MixedListener mixedListener(Received received) {
-        return new MixedListener(received);
+    ConcurrentKafkaListenerContainerFactory<String, String> partnerFactory(ListenerContainerFactoryBuilder builder) {
+        return builder.forTextPayload("partner", KAFKA_TOPIC);
+    }
+
+    @Bean
+    Listeners listeners(Received received) {
+        return new Listeners(received);
     }
 
     public static class Received {
@@ -41,17 +49,22 @@ public class MixedTestApplication {
         public final List<String> values = Collections.synchronizedList(new ArrayList<>());
     }
 
-    public static class MixedListener {
+    public static class Listeners {
 
         private final Received received;
 
-        MixedListener(Received received) {
+        Listeners(Received received) {
             this.received = received;
         }
 
-        @KafkaListener(topics = {LOG_TOPIC, KAFKA_TOPIC}, groupId = "${it.group:it-mixed}",
-                containerFactory = "mixedFactory")
-        public void on(ConsumerRecord<String, String> record) {
+        @KafkaListener(topics = LOG_TOPIC, groupId = "${it.group:it-mixed}", containerFactory = "catalogFactory")
+        public void onCatalog(ConsumerRecord<String, String> record) {
+            received.values.add(record.topic() + ":" + record.value());
+        }
+
+        @KafkaListener(topics = KAFKA_TOPIC, groupId = "${it.group:it-mixed}-partner",
+                containerFactory = "partnerFactory")
+        public void onPartner(ConsumerRecord<String, String> record) {
             received.values.add(record.topic() + ":" + record.value());
             if ("fail".equals(record.value())) {
                 throw new IllegalStateException("always fails");

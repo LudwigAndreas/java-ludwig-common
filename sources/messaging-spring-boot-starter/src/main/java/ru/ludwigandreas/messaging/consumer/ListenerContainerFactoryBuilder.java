@@ -3,9 +3,12 @@ package ru.ludwigandreas.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -14,6 +17,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.config.KafkaListenerContainerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.MicrometerConsumerListener;
@@ -97,6 +101,13 @@ public class ListenerContainerFactoryBuilder {
     private final EnvelopeReader envelopeReader;
     private final AuditSink auditSink;
     private final Clock clock;
+    /**
+     * The consumer name each factory was built for. A factory does not carry it, and the name is what its
+     * settings - cluster, dead-letter destination - are resolved by, for anything that documents or wraps
+     * a factory after the fact. Identity-keyed: a factory is not a value.
+     */
+    private final Map<Object, String> consumerNames = Collections.synchronizedMap(new IdentityHashMap<>());
+
     /** One dead-letter template per destination cluster, built on first use. */
     private final Map<String, KafkaTemplate<Object, Object>> deadLetterTemplates = new ConcurrentHashMap<>();
     private final ObjectProvider<RecordFilterStrategy<Object, Object>> recordFilterStrategy;
@@ -193,6 +204,21 @@ public class ListenerContainerFactoryBuilder {
     }
 
     /**
+     * The consumer name a factory was built for.
+     *
+     * @param factory a listener container factory, or one {@linkplain DelegatingListenerContainerFactory
+     *                standing in} for it
+     * @return the name passed to {@code forJsonPayload} or {@code forTextPayload}, or empty for a factory
+     *         this builder did not build
+     */
+    public Optional<String> consumerNameOf(KafkaListenerContainerFactory<?> factory) {
+        if (factory instanceof DelegatingListenerContainerFactory delegating) {
+            return consumerNameOf(delegating.delegate());
+        }
+        return Optional.ofNullable(consumerNames.get(factory));
+    }
+
+    /**
      * Wraps a payload deserializer in the version gate, when the consumer declared a version bound.
      *
      * <p>No gate at all when it did not, rather than a gate with an unbounded range: an unbounded gate
@@ -223,6 +249,7 @@ public class ListenerContainerFactoryBuilder {
         for (String topic : topics) {
             activityMonitor.watch(settings.cluster(), topic, settings.silenceThreshold());
         }
+        consumerNames.put(factory, name);
         log.debug("Built listener container factory '{}' on cluster '{}': ackMode={}, attempts={}, dlt={},"
                         + " versions={}..{}",
                 name, settings.cluster(), settings.ackMode(), settings.maxAttempts(),

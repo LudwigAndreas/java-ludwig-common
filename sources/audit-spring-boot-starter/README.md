@@ -115,6 +115,8 @@ authorization denial, an outbound call record - would turn every one of those ev
 category added to the platform later does not start being shipped to somebody's SIEM because nobody
 thought to exclude it.
 
+With the outbox sink on, the module declares `audit.event` → `AuditEvent` as an `OutboxEventTypes` bean, so the event appears in the service's AsyncAPI document and passes `ludwig.outbox.events.require-declared`.
+
 ## Retention
 
 Modelled on `ExportRetentionPurge`: a `job-core` `SelfSchedulingLifecycle` under a leased `RunLock`, so

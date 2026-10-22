@@ -146,6 +146,8 @@ advice из `web-core`, а не возвращается из контролле
 springdoc есть в classpath этого сервиса; тот стартер объявляет springdoc как `optional`, а
 optional-зависимость не транзитивна - поэтому сервис обязан объявить её сам.
 
+Kafka-поверхность публикуется так же — как `docs/api/crud-service-example.asyncapi.yaml`, тестом `AsyncApiDocumentIT` через `asyncapi-spring-boot-starter`. `CatalogEventTypesConfig` объявляет, что несёт каждое outbox-событие, а тестовые свойства задают `ludwig.outbox.events.require-declared=true`, так что необъявленное событие роняет тесты сервиса. `scripts/api-docs.sh` обновляет, проверяет и публикует оба документа; см. `docs/api/README.md`.
+
 ## Три модели и зачем
 
 ```

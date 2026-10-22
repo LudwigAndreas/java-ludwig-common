@@ -1,0 +1,42 @@
+{
+  "change": "add-db-log-transport",
+  "model": "claude-opus-5-5",
+  "index_version": "project-index.json POM-set SHA a5597e95e11d5770",
+  "modules_touched": [
+    "messaging-db-spring-boot-starter",
+    "architecture-rules",
+    "common",
+    "ludwig-bom"
+  ],
+  "gate": {
+    "validate": "pass",
+    "manifest_stale": "pass",
+    "manifest_layout": "pass",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api_docs_missing": "pass",
+    "module_verify": "pass - messaging-db: 83 tests (unit 8, ArchitectureTest 51, LogStoreIT 10, LogOnlyTransportIT 9, MixedTransportIT 2, DrainingIT 1, SchemaInstallIT 2)",
+    "dependent_verify": "pass - architecture-rules and all 11 dependents: asyncapi, crud-service-example, file-action, file-ingest, grpc-client, grpc-server, messaging, notification-service, object-storage, odata-filter, pat, user-settings",
+    "openspec_validate": "pass - --strict",
+    "check_image_pins": "FAIL, pre-existing - false positive on prose in archive/2026-10-11-adopt-local-run-in-notification-service/proposal.md:78; HEAD fails identically",
+    "check_api_baseline": "FAIL, environmental - nexus.example.internal unreachable"
+  },
+  "rollback_point": "fe88c0a8a62b8ed9234c52b69033c4fda51a05f3",
+  "human_corrections": 3,
+  "caveats": [
+    "mode is one switch for every replaced cluster; per-cluster draining is not supported (documented)",
+    "The write-side 'other clusters are untouched' scenario (an outbox route over kafka:partner-a reaches partner-a, not the log) has no test; the read side is covered by MixedTransportIT",
+    "LogPurgeJob scheduling and the missing-group-id refusal still have no test (recorded since group 4/6)",
+    "Ordering under contention is proven with three workers in one JVM, not three instances",
+    "The ListenerContainerFactoryBuilder proxy is kept although consumerNameOf now exists"
+  ],
+  "unresolved": [],
+  "tests": {
+    "added_first_pass": 33,
+    "now": "messaging-db 83 test methods incl. ArchitectureTest's 51 rules (was 24 IT + 7 unit + 49 rules); StartupValidationTest rewritten (5) and MixedTransportIT rewritten for two clusters (2)",
+    "failed": 0
+  },
+  "retries": 7,
+  "supersedes": "the receipt of the first gate (commit 3065ec4), whose 7 blocked dependents now pass"
+}

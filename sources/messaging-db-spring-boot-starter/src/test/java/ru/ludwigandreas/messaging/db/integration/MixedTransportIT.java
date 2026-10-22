@@ -30,7 +30,11 @@ import ru.ludwigandreas.testsupport.container.Containers;
 import ru.ludwigandreas.testsupport.container.KafkaPropertiesInitializer;
 import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
 
-/** Active mode with a reachable broker: one listener, one topic per transport, and Kafka-read dead letters. */
+/**
+ * Active mode with a reachable broker: a consumer on the replaced cluster reads the log, a consumer on another
+ * cluster reads that cluster, and the partner consumer's dead letters, addressed to the replaced cluster, land
+ * in the log.
+ */
 @SpringBootTest(classes = MixedTestApplication.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Import(PostgresContainerConfiguration.class)
 @ContextConfiguration(initializers = KafkaPropertiesInitializer.class)
@@ -38,11 +42,14 @@ import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
         "spring.jpa.hibernate.ddl-auto=none",
         "spring.liquibase.enabled=false",
         "spring.kafka.consumer.auto-offset-reset=earliest",
-        "ludwig.messaging.db.consume=" + LOG_TOPIC,
+        "ludwig.kafka.clusters.internal.client-id=it-internal",
         "ludwig.messaging.db.poll-interval=50ms",
-        "ludwig.messaging.consumers.mixed.dedup=false",
-        "ludwig.messaging.consumers.mixed.retry.initial-backoff=100ms",
-        "ludwig.messaging.consumers.mixed.retry.max-attempts=2",
+        "ludwig.messaging.consumers.catalog.cluster=internal",
+        "ludwig.messaging.consumers.catalog.dedup=false",
+        "ludwig.messaging.consumers.partner.dedup=false",
+        "ludwig.messaging.consumers.partner.retry.initial-backoff=100ms",
+        "ludwig.messaging.consumers.partner.retry.max-attempts=2",
+        "ludwig.messaging.consumers.partner.dead-letter.cluster=internal",
         "ludwig.outbox.polling.enabled=false"
 })
 class MixedTransportIT {
@@ -57,7 +64,7 @@ class MixedTransportIT {
     private Received received;
 
     @Test
-    void oneListenerReceivesFromTheLogAndFromKafka() throws Exception {
+    void eachConsumerReadsItsOwnCluster() throws Exception {
         store.append(LOG_TOPIC, bytes("k"), new RecordHeaders(), bytes("from-log"));
         kafka().send(KAFKA_TOPIC, "k", "from-kafka").get();
 
@@ -66,7 +73,7 @@ class MixedTransportIT {
     }
 
     @Test
-    void aRecordReadFromKafkaIsDeadLetteredIntoTheLogAndNotToKafka() throws Exception {
+    void aPartnerRecordDeadLetteredToTheReplacedClusterLandsInTheLogAndNotOnKafka() throws Exception {
         kafka().send(KAFKA_TOPIC, "k", "fail").get();
 
         await().atMost(WAIT).untilAsserted(() -> assertThat(jdbc.queryForList(

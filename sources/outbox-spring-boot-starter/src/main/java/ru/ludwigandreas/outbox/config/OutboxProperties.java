@@ -25,6 +25,7 @@ public class OutboxProperties {
     private final Liquibase liquibase = new Liquibase();
     private final Rest rest = new Rest();
     private final Kafka kafka = new Kafka();
+    private final Events events = new Events();
 
     /** Used when an event doesn't match any entry in {@link #routes} and sets no explicit route. */
     private Route defaultRoute;
@@ -82,6 +83,10 @@ public class OutboxProperties {
 
     public Kafka getKafka() {
         return kafka;
+    }
+
+    public Events getEvents() {
+        return events;
     }
 
     public Route getDefaultRoute() {
@@ -422,6 +427,25 @@ public class OutboxProperties {
 
         public void setEventTypes(List<String> eventTypes) {
             this.eventTypes = eventTypes;
+        }
+    }
+
+    /** What the publisher checks about declared event types; see {@code OutboxEventTypes}. */
+    public static class Events {
+
+        /**
+         * Refuse to publish an event type that no {@code OutboxEventTypes} bean declares, or a payload that
+         * is not an instance of the declared class. Off by default so production publishing is unchanged; a
+         * service turns it on in its tests, which is what catches a producer that would go undocumented.
+         */
+        private boolean requireDeclared;
+
+        public boolean isRequireDeclared() {
+            return requireDeclared;
+        }
+
+        public void setRequireDeclared(boolean requireDeclared) {
+            this.requireDeclared = requireDeclared;
         }
     }
 }

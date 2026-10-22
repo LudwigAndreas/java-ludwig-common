@@ -1,5 +1,6 @@
 package ru.ludwigandreas.audit.store.config;
 
+import java.util.Map;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -9,11 +10,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.Order;
+import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.audit.config.AuditProperties;
 import ru.ludwigandreas.audit.store.sink.CategoryFilteringAuditSink;
 import ru.ludwigandreas.audit.store.sink.OutboxAuditSink;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
+import ru.ludwigandreas.outbox.api.OutboxEventTypes;
 
 /**
  * Ships the trail off-platform, when a deployment asks for it.
@@ -52,5 +55,16 @@ public class AuditOutboxAutoConfiguration {
     public AuditSink outboxAuditSink(OutboxEventPublisher outbox, AuditProperties properties) {
         return new CategoryFilteringAuditSink(new OutboxAuditSink(outbox),
                 properties.getOutbox().getCategories());
+    }
+
+    /**
+     * Declares the trail's event type, so that a service's AsyncAPI document lists it and
+     * {@code ludwig.outbox.events.require-declared} accepts it.
+     *
+     * @return the declaration
+     */
+    @Bean
+    public OutboxEventTypes auditOutboxEventTypes() {
+        return OutboxEventTypes.of(Map.of(OutboxAuditSink.EVENT_TYPE, AuditEvent.class));
     }
 }

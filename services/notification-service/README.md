@@ -1468,6 +1468,8 @@ was removed. It is now attached to every operation as its `default` response, wh
 accurate status to use: `web-core`'s single advice can answer on any operation, so listing 400, 404
 and 409 per endpoint would be a list that drifts from the mappers.
 
+Its Kafka surface is published the same way, as `docs/api/notification-service.asyncapi.yaml`, by `AsyncApiDocumentIT` through `asyncapi-spring-boot-starter`. The document includes the Kafka ingress although it is off by default, because it is the topic other teams publish to; the user-settings projection is left out because its module is not packaged. `NotificationEventTypesConfig` declares the three lifecycle events on `ludwig.notification.events.route`, and `NotificationTestBase` sets `ludwig.outbox.events.require-declared=true`.
+
 ## Configuration
 
 Everything under `ludwig.notification.*`, one `@Validated @ConfigurationProperties` tree, with

@@ -6,6 +6,11 @@
 # collide. Set here rather than in each test so that no existing test had to change to accommodate it;
 # CatalogGrpcIT reaches the server through GrpcServerProperties.getInProcessName().
 ludwig:
+  # Every event this service publishes must be declared in CatalogEventTypesConfig, or the test that
+  # publishes it fails: that is what keeps the AsyncAPI document complete. Off in production.
+  outbox:
+    events:
+      require-declared: true
   grpc:
     server:
       in-process-name: crud-service-example-${random.uuid}

@@ -1,6 +1,7 @@
 package ru.ludwigandreas.usersettings.config;
 
 import java.time.Clock;
+import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -8,7 +9,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
+import ru.ludwigandreas.outbox.api.OutboxEventTypes;
 import ru.ludwigandreas.usersettings.api.SettingsWriter;
 import ru.ludwigandreas.usersettings.audit.SettingsAuditRecorder;
 import ru.ludwigandreas.usersettings.audit.SettingsCorrelationIdProvider;
@@ -19,9 +22,12 @@ import ru.ludwigandreas.usersettings.api.ResolvedSettings;
 import ru.ludwigandreas.usersettings.api.SettingsSubject;
 import ru.ludwigandreas.usersettings.consent.ConsentService;
 import ru.ludwigandreas.usersettings.consent.DefaultConsentService;
+import ru.ludwigandreas.usersettings.event.ConsentChangedEvent;
 import ru.ludwigandreas.usersettings.event.NoopSettingsEventPublisher;
 import ru.ludwigandreas.usersettings.event.OutboxSettingsEventPublisher;
 import ru.ludwigandreas.usersettings.event.SettingsEventPublisher;
+import ru.ludwigandreas.usersettings.event.SettingsEventTypes;
+import ru.ludwigandreas.usersettings.event.UserSettingChangedEvent;
 import ru.ludwigandreas.usersettings.consent.ConsentEntityMapper;
 import ru.ludwigandreas.usersettings.consent.ConsentEntityMapperImpl;
 import ru.ludwigandreas.usersettings.metrics.SettingsMetrics;
@@ -146,5 +152,27 @@ public class UserSettingsOwnerAutoConfiguration {
     @ConditionalOnMissingBean
     public RawSettingWriter rawSettingWriter(SettingsWriter writer, SettingDefinitionRegistry registry) {
         return new RawSettingWriter(writer, registry);
+    }
+
+    /**
+     * Declares the events {@link OutboxSettingsEventPublisher} publishes, so that a service's AsyncAPI
+     * document lists them and {@code ludwig.outbox.events.require-declared} accepts them.
+     *
+     * <p>A nested class guarded on the outbox, because a {@code @Bean} method returning an outbox type in
+     * this class would fail to load on a context without the optional outbox starter.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(OutboxEventPublisher.class)
+    @ConditionalOnProperty(prefix = "ludwig.user-settings.owner", name = "publish-events",
+            matchIfMissing = true)
+    static class SettingsOutboxEventTypesConfiguration {
+
+        @Bean
+        OutboxEventTypes userSettingsOutboxEventTypes() {
+            return OutboxEventTypes.of(Map.of(
+                    SettingsEventTypes.USER_SETTING_CHANGED, UserSettingChangedEvent.class,
+                    SettingsEventTypes.CONSENT_GRANTED, ConsentChangedEvent.class,
+                    SettingsEventTypes.CONSENT_REVOKED, ConsentChangedEvent.class));
+        }
     }
 }

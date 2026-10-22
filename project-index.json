@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-21T19:45:28.949412Z",
+    "generatedAt": "2026-10-22T12:24:19.941185Z",
     "revision": "1.1.0-SNAPSHOT",
-    "moduleCount": 41,
-    "commit": "3065ec49f91f2b2a29fd1476b7a4fb2734b1b23f",
-    "commitShort": "3065ec4",
+    "moduleCount": 42,
+    "commit": "818564501abab0ad47269179e6391e9f1298112a",
+    "commitShort": "8185645",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "85a85ad9db0d1c8360cc63de121bfedc57f06eb1c407dbc73d0e1ec4f786872a",
-      "newestPom": "sources/outbox-spring-boot-starter/pom.xml",
-      "newestPomModified": "2026-10-21T19:37:51.808217Z"
+      "pomSetSha": "a5597e95e11d5770d93c71fc031fab37dee719d5168e4f76f4572df5b739b196",
+      "newestPom": "sources/messaging-db-spring-boot-starter/pom.xml",
+      "newestPomModified": "2026-10-22T12:11:47.124650Z"
     }
   },
   "modules": [
@@ -668,6 +668,10 @@
       ],
       "inRepoDependents": [
         {
+          "artifactId": "asyncapi-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "identity-projection-spring-boot-starter",
           "scope": "compile"
         },
@@ -1113,6 +1117,10 @@
       ],
       "inRepoDependents": [
         {
+          "artifactId": "asyncapi-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "audit-spring-boot-starter",
           "scope": "compile"
         },
@@ -1134,7 +1142,7 @@
         },
         {
           "artifactId": "messaging-db-spring-boot-starter",
-          "scope": "compile"
+          "scope": "test"
         },
         {
           "artifactId": "notification-service",
@@ -1163,7 +1171,7 @@
         "integration": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration"
       },
       "testClasses": {
-        "surefire": 8,
+        "surefire": 9,
         "failsafe": 1
       },
       "pom": "sources/outbox-spring-boot-starter/pom.xml",
@@ -1198,7 +1206,7 @@
         },
         {
           "artifactId": "outbox-spring-boot-starter",
-          "scope": "compile",
+          "scope": "test",
           "optional": false
         },
         {
@@ -1232,6 +1240,66 @@
       "pom": "sources/messaging-db-spring-boot-starter/pom.xml",
       "readme": "sources/messaging-db-spring-boot-starter/README.md",
       "readmeRu": "sources/messaging-db-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "asyncapi-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/asyncapi-spring-boot-starter",
+      "artifactId": "asyncapi-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.asyncapi",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/asyncapi-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "integration": "sources/asyncapi-spring-boot-starter/src/test/java/ru/ludwigandreas/asyncapi/integration",
+        "architecture": "sources/asyncapi-spring-boot-starter/src/test/java/ru/ludwigandreas/asyncapi/architecture"
+      },
+      "testClasses": {
+        "surefire": 1,
+        "failsafe": 1
+      },
+      "pom": "sources/asyncapi-spring-boot-starter/pom.xml",
+      "readme": "sources/asyncapi-spring-boot-starter/README.md",
+      "readmeRu": "sources/asyncapi-spring-boot-starter/README.ru.md"
     },
     {
       "name": "reconciliation-spring-boot-starter",
@@ -2303,6 +2371,10 @@
       "inRepoDependencies": [],
       "inRepoDependents": [
         {
+          "artifactId": "asyncapi-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "crud-service-example",
           "scope": "test"
         },
@@ -2378,6 +2450,10 @@
       "packageRoot": "ru.ludwigandreas.testsupport",
       "inRepoDependencies": [],
       "inRepoDependents": [
+        {
+          "artifactId": "asyncapi-spring-boot-starter",
+          "scope": "test"
+        },
         {
           "artifactId": "audit-spring-boot-starter",
           "scope": "test"
@@ -2470,7 +2546,7 @@
         "integration": "sources/test-support/src/test/java/ru/ludwigandreas/testsupport/integration"
       },
       "testClasses": {
-        "surefire": 1,
+        "surefire": 2,
         "failsafe": 2
       },
       "pom": "sources/test-support/pom.xml",
@@ -2656,6 +2732,11 @@
           "optional": false
         },
         {
+          "artifactId": "asyncapi-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
           "artifactId": "catalog-grpc-api",
           "scope": "compile",
           "optional": false
@@ -2748,7 +2829,7 @@
       },
       "testClasses": {
         "surefire": 5,
-        "failsafe": 7
+        "failsafe": 8
       },
       "pom": "services/crud-service-example/pom.xml",
       "readme": "services/crud-service-example/README.md",
@@ -2768,6 +2849,11 @@
         {
           "artifactId": "architecture-rules",
           "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "asyncapi-spring-boot-starter",
+          "scope": "compile",
           "optional": false
         },
         {
@@ -2884,7 +2970,7 @@
       },
       "testClasses": {
         "surefire": 29,
-        "failsafe": 24
+        "failsafe": 25
       },
       "pom": "services/notification-service/pom.xml",
       "readme": "services/notification-service/README.md",

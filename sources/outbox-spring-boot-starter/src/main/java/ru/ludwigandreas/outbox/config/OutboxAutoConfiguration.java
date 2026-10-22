@@ -21,6 +21,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import ru.ludwigandreas.db.core.repository.BaseRepositoryImpl;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
+import ru.ludwigandreas.outbox.api.OutboxEventTypes;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
 import ru.ludwigandreas.outbox.audit.PersistingOutboxAuditLogger;
 import ru.ludwigandreas.audit.AuditSink;
@@ -119,14 +120,15 @@ public class OutboxAutoConfiguration {
                                                        OutboxAuditLogger auditLogger,
                                                        OutboxMetrics metrics,
                                                        ObjectProvider<CorrelationProvider> correlation,
-                                                       Environment environment) {
+                                                       Environment environment,
+                                                       ObjectProvider<OutboxEventTypes> eventTypes) {
         // The name consumers' EnvelopeReader reads the correlation id from. Bound here rather than taken as
         // MessagingProperties, whose types reach into spring-kafka, which a REST-only outbox does not carry.
         String correlationHeader = Binder.get(environment).bind("ludwig.messaging.correlation-header", String.class)
                 .orElse(MessageHeaders.CORRELATION_ID);
         return new DefaultOutboxEventPublisher(repository, serializer, new CompositeOutboxPublishFilter(filters),
                 routeResolver, properties, auditLogger, metrics, correlation.getIfAvailable(CorrelationProvider::none),
-                correlationHeader);
+                correlationHeader, OutboxEventTypes.merge(eventTypes.orderedStream().toList()));
     }
 
     @Bean

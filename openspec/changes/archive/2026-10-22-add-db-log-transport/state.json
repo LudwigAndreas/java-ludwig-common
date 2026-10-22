@@ -1,0 +1,61 @@
+{
+  "change": "add-db-log-transport",
+  "contract": {
+    "goal": "a removable Kafka-shaped log in the shared PostgreSQL database that the outbox writes to and unmodified @KafkaListener consumers read from, chosen per consumed topic, with a draining cutover",
+    "output": "new module messaging-db-spring-boot-starter (library, parent common) + one removability ArchUnit rule in architecture-rules + reactor <module> + ludwig-bom entry; README.md/README.ru.md; CHANGELOG entries",
+    "constraints": [
+      "no edit to messaging-spring-boot-starter, outbox-spring-boot-starter, or any service/listener/container-factory bean/outbox route",
+      "no DeadLetterPublishingRecoverer declared in the new module",
+      "no new third-party dependency",
+      "changesets in Liquibase formatted SQL per unify-sql-migrations",
+      "do not touch the unrelated uncommitted work already in the tree"
+    ],
+    "done_when": [
+      "mvn -q validate",
+      "scripts/manifest.sh stale",
+      "scripts/manifest.sh layout",
+      "scripts/check_migrations.sh",
+      "mvn -pl :messaging-db-spring-boot-starter -am verify",
+      "mvn -pl :architecture-rules -am verify",
+      "mvn -pl :<each dependent of architecture-rules per scripts/manifest.sh module build/architecture-rules> -am verify",
+      "openspec validate add-db-log-transport --strict"
+    ]
+  },
+  "rollback_point": "fe88c0a8a62b8ed9234c52b69033c4fda51a05f3",
+  "current_task": "done",
+  "decisions": [
+    "Spike (group 1) answered by javap against spring-kafka 3.2.4 before writing code, then proven by the real integration tests rather than throwaway spike ITs. Scope note: the spike task names (FactoryWrapSpikeIT etc.) are replaced by the ITs that exercise the same fact; each group-1 task is ticked only when that IT has run green.",
+    "RecordInterceptor is not publicly reachable from a container (AbstractMessageListenerContainer.getRecordInterceptor is protected), so the log container composes every RecordInterceptor bean in the context - the same beans ListenerContainerFactoryBuilder composes. Design D2's named fallback.",
+    "The consumer name is not on the factory, and the consumer's retry/DLT settings are resolved by it. ListenerContainerFactoryBuilder is therefore proxied (Spring AOP, proxyTargetClass) by the same BeanPostProcessor that replaces the factories, recording factory -> name from forJsonPayload/forTextPayload's first argument. No edit to messaging.",
+    "Kafka-read dead letters in ACTIVE mode: the Kafka container's CommonErrorHandler is replaced (container.setCommonErrorHandler is public) by a DefaultErrorHandler built from the same resolved settings, wrapping messaging's AuditingDeadLetterRecoverer around a log-appending delegate. No DeadLetterPublishingRecoverer is declared. The backoff arithmetic (maxAttempts - 1) is duplicated from the builder with a comment tying the two together.",
+    "Outbox write path reuses the outbox's own KafkaOutboxDispatcher over a KafkaTemplate whose ProducerFactory returns a MockProducer subclass that appends to the log. Header building therefore stays in exactly one place; nothing in the outbox changes.",
+    "Design D4 revised during implementation: one record per claim, not a batch per round. Each poll claims a partition with FOR UPDATE SKIP LOCKED on a raw pooled connection (never thread-bound, because JpaTransactionManager refuses to start when a JDBC connection is already bound for its DataSource), handles one record, updates the position and commits. A crash costs one redelivery and no lock is held across more than one listener call. batch-size and round-timeout properties dropped as no longer meaningful.",
+    "Schema migration: changesets take pg_advisory_xact_lock(hashtext('ludwig-messaging-db')) and use IF NOT EXISTS instead of a table-exists precondition - that covers both a service whose changelog table never saw the changeset and two services racing. Rollback is '--rollback NOT REQUIRED' on purpose: one service's rollback must not drop the log every other service uses.",
+    "MessagingDbProperties is validated in LogStore's constructor (schema identifier pattern, partitions >= 1), not with Bean Validation annotations, so the check holds without a validator on the classpath; jakarta.validation-api not added.",
+    "Reversal of the earlier 'no Bean Validation' decision: architecture-rules' configuration-properties-are-validated rule requires @Validated. Rather than disable a rule, MessagingDbProperties is @Validated with @NotNull/@Min/@Pattern, jakarta.validation-api is optional (as in messaging) and spring-boot-starter-validation is test-scoped. LogStore keeps its own schema check because the name is interpolated into SQL.",
+    "MessagingDbProperties moved from config to settings: config<->consumer was a package cycle (cycles.modules-are-free-of-cycles). Same resolution messaging uses; architecture-rules.properties widens the configuration role with ..settings..",
+    "ludwig.messaging.db.schema is fixed once deployed: Liquibase checksums formatted SQL with the parameter substituted. Documented in the properties javadoc, README and design D6.",
+    "Group-1 and 5.1 honesty notes in tasks.md: ordering under contention is proven with three workers of one JVM, not three instances; LogPurgeJob scheduling is not exercised by a test; the missing-group-id refusal has no test.",
+    "Scope change (user-approved, 2026-10-21): the starter replaces named clusters (ludwig.messaging.db.clusters, default [internal]) instead of the single kafka transport, and the per-topic consume list is removed - a listener reads one cluster. Depends on the new change add-kafka-clusters, whose KafkaClusterProducers bean becomes the producer seam. Task group 10 added; the contract's goal is unchanged, its 'chosen per consumed topic' wording is superseded by 'chosen per cluster'.",
+    "User instruction (2026-10-21): fix the unused java.util.ArrayList import in security-spring-boot-starter AuthorizationDeniedAuditListener. Removed (one line); security-spring-boot-starter checkstyle-validate passes.",
+    "User instruction (2026-10-21): remove 'return Collections.emptyList();' and the Collections import from security-spring-boot-starter AuthorizationDeniedAuditListener. Done; the file is now identical to its state before commit 3065ec4 (git diff 3065ec4~1 empty) and compiles.",
+    "Group 10 (2026-10-22): writes go through LogClusterProducers, which decorates messaging's DefaultKafkaClusterProducers. It is registered before KafkaClustersAutoConfiguration, so messaging's @ConditionalOnMissingBean seam backs off. While active, a replaced cluster gets LogProducerFactory<K,V>, which serializes with the caller's serializers and appends the bytes. While draining, the replaced set is empty and every cluster gets its own producer (R4). The kafkaOutboxDispatcher override and the CommonErrorHandler swap are deleted. Dead letters from Kafka-read records reach the log through messaging's own DeadLetterPublishingRecoverer and template, built from the same seam.",
+    "The log container's own dead letters (DeadLetterWriter) go through DeadLetterTemplates.create(seam, settings.deadLetterCluster()), so dead-letter.cluster is honoured for log-read records too. DeadLetterWriter no longer touches LogStore directly.",
+    "outbox-spring-boot-starter moved to test scope: once the dispatcher override is gone, main code references nothing in the outbox. The ITs still publish through it. Manifest regenerated.",
+    "Routing: a consumer is on the log iff its resolved cluster is in ludwig.messaging.db.clusters. A factory not built by the builder reads 'default', so it is refused only when 'default' is replaced. NarrowedEndpoint is deleted; CompositeListenerContainer remains for draining only.",
+    "An undeclared cluster in ludwig.messaging.db.clusters fails startup, naming ludwig.kafka.clusters.<name>. A replaced cluster is declared with any property (e.g. client-id) and inherits spring.kafka.*'s address until it gets its own.",
+    "mode stays a single switch for all replaced clusters; documented in the README ('every replaced cluster moves at once'). Per-cluster draining is not supported.",
+    "Not done, deliberately: dropping the ListenerContainerFactoryBuilder proxy in favour of consumerNameOf (design D1 allows it). It is not a task and does not change behaviour.",
+    "Gate 2026-10-22: 20/22 pass. mvn -q validate passes now that the security Checkstyle error is fixed (unblocks 2.2 and 9.1). All 11 architecture-rules dependents pass (9.4). check_image_pins (pre-existing false positive in an archived proposal) and check_api_baseline (nexus.example.internal unreachable) fail as on HEAD."
+  ],
+  "failures": [
+    "LogOnlyTransportIT attempt 1: context failed - Boot's own LiquibaseAutoConfiguration looked for db/changelog/db.changelog-master.yaml, which the test application does not have. Fixed in the test with spring.liquibase.enabled=false; module SpringLiquibase beans are unaffected.",
+    "LogOnlyTransportIT attempt 2: 3/9 failed - every dead-letter append failed. Cause: kafka_dlt-original-partition is 4 binary bytes, all NUL for partition 0; NUL is valid UTF-8 so it was stored as text, and PostgreSQL jsonb rejects \\u0000. Fixed in LogStore.utf8: a value containing NUL is stored as base64. 9/9 green on attempt 3.",
+    "MixedTransportIT attempt 1: context failed with Liquibase checksum validation - three test contexts with different ludwig.messaging.db.schema values shared one PostgreSQL and one DATABASECHANGELOG. A real constraint, not a test artefact (see decision on schema). Tests now share the default schema and isolate by topic and group id.",
+    "ArchitectureTest attempt 1: 2 failures - config<->consumer package cycle, and @ConfigurationProperties without @Validated. Both fixed in code, no rule disabled for them.",
+    "StartupValidationTest attempts 1-2: SimpleKafkaListenerEndpoint does not exist in spring-kafka 3.2.4, then StaticListableBeanFactory's provider rejects getObject(); switched to MethodKafkaListenerEndpoint and DefaultListableBeanFactory.",
+    "Gate (task 9): mvn -q validate and 7 of the 11 architecture-rules dependents (crud-service-example, file-action, grpc-client, grpc-server, notification-service, pat, user-settings) stop at security-spring-boot-starter's checkstyle-validate: an unused java.util.ArrayList import in sources/security-spring-boot-starter/.../audit/AuthorizationDeniedAuditListener.java. That file is modified in the working tree by work outside this change and was not touched here, so it was not fixed here. check_image_pins fails on an archived proposal of another change; check_api_baseline fails because nexus.example.internal is unreachable (same environmental failure recorded by unify-sql-migrations)."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

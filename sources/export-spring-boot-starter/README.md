@@ -414,6 +414,8 @@ on a message bus is a message half the consumers reject and the other half hand 
 will. The link also means the download goes through the same authorisation check as any other, and
 that the expiry means something; an emailed copy is forever.
 
+The module declares `report.ready` → `ReportReadyEvent` as an `OutboxEventTypes` bean, so the event appears in the service's AsyncAPI document and passes `ludwig.outbox.events.require-declared`.
+
 ## Security
 
 - The base query always carries the requester's data-scope predicate from `security`. Being a

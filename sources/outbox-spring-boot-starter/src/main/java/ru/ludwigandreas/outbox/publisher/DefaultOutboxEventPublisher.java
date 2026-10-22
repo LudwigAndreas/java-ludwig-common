@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.audit.CorrelationProvider;
 import ru.ludwigandreas.outbox.api.OutboxEvent;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
+import ru.ludwigandreas.outbox.api.OutboxEventTypes;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
 import ru.ludwigandreas.outbox.config.OutboxProperties;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
@@ -36,6 +37,7 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
     private final OutboxMetrics metrics;
     private final CorrelationProvider correlation;
     private final String correlationHeader;
+    private final OutboxEventTypes eventTypes;
 
     /**
      * Creates the publisher.
@@ -49,6 +51,7 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
      * @param metrics           counts publications
      * @param correlation       the current request's correlation id, captured into the message's headers
      * @param correlationHeader the header name it is stored under, the name consumers read
+     * @param eventTypes        the declared payload class of each event type
      */
     // SUPPRESS CHECKSTYLE ParameterNumber - a collaborator list, assembled once by the autoconfiguration.
     @SuppressWarnings("checkstyle:ParameterNumber")
@@ -60,7 +63,8 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
                                         OutboxAuditLogger auditLogger,
                                         OutboxMetrics metrics,
                                         CorrelationProvider correlation,
-                                        String correlationHeader) {
+                                        String correlationHeader,
+                                        OutboxEventTypes eventTypes) {
         this.repository = repository;
         this.payloadSerializer = payloadSerializer;
         this.publishFilter = publishFilter;
@@ -70,6 +74,7 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
         this.metrics = metrics;
         this.correlation = correlation;
         this.correlationHeader = correlationHeader;
+        this.eventTypes = eventTypes;
     }
 
     @Override
@@ -78,6 +83,9 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
         Objects.requireNonNull(event.getAggregateId(), "OutboxEvent.aggregateId must not be null");
         Objects.requireNonNull(event.getEventType(), "OutboxEvent.eventType must not be null");
         Objects.requireNonNull(event.getPayload(), "OutboxEvent.payload must not be null");
+        if (properties.getEvents().isRequireDeclared()) {
+            requireDeclared(event);
+        }
 
         if (!publishFilter.shouldPublish(event)) {
             metrics.recordFiltered(event.getEventType());
@@ -118,6 +126,26 @@ public class DefaultOutboxEventPublisher implements OutboxEventPublisher {
         auditLogger.onTransition(saved, null, OutboxStatus.PENDING, "published");
         metrics.recordPublished(event.getEventType(), route.transport());
         return Optional.of(saved);
+    }
+
+    /**
+     * Refuses an event whose type is not declared, or whose payload is not the declared class: such an event
+     * would be published without anything able to describe it.
+     */
+    private void requireDeclared(OutboxEvent event) {
+        OutboxEventTypes.Declaration declared = Optional.ofNullable(eventTypes.declarations().get(event.getEventType()))
+                .orElseThrow(() -> new IllegalStateException("Outbox event type '" + event.getEventType()
+                        + "' is not declared in any OutboxEventTypes bean, and ludwig.outbox.events.require-declared"
+                        + " is on"));
+        if (!declared.payload().isInstance(event.getPayload())) {
+            throw new IllegalStateException("Outbox event type '" + event.getEventType() + "' is declared with payload "
+                    + declared.payload().getName() + " but was published with "
+                    + event.getPayload().getClass().getName());
+        }
+        if (!Objects.equals(declared.route(), event.getRoute())) {
+            throw new IllegalStateException("Outbox event type '" + event.getEventType() + "' is declared with route "
+                    + declared.route() + " but was published with route " + event.getRoute());
+        }
     }
 
     /**

@@ -44,6 +44,8 @@
 | `GreenMailFixture`, `WireMockFixture` | SMTP и HTTP в процессе — образа нет, закреплять нечего. Заглушка, привязанная к `@LudwigRestClient` по имени, с переключаемыми сбоями — в [`test-support-local`](../test-support-local/README.ru.md) |
 | `TestClock` | Изменяемый `Clock`: `advance(Duration)`, `set(Instant)` и фабрика фиксированного |
 
+`ru.ludwigandreas.testsupport.docs.PublishedDocument` — общая проверка за `ApiDocumentIT` и `AsyncApiDocumentIT` каждого сервиса: канонизирует сгенерированный документ (поля отсортированы, у OpenAPI убраны адреса серверов, у каждого сервера AsyncAPI host заменён его именем), пишет в `target/<kind>/` и сравнивает с `docs/api/` либо перезаписывает при `-Dludwig.apidocs.write=true`. Jackson и SnakeYAML — опциональные зависимости; у модуля, который её использует, есть обе.
+
 ## Как включить
 
 ```xml

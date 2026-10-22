@@ -22,7 +22,7 @@ class MessagingDbPropertiesTest {
         MessagingDbProperties properties = bind(Map.of());
 
         assertThat(properties.getMode()).isEqualTo(MessagingDbProperties.Mode.ACTIVE);
-        assertThat(properties.getConsume()).isEmpty();
+        assertThat(properties.getClusters()).containsExactly("internal");
         assertThat(properties.getPartitions()).isEqualTo(8);
         assertThat(properties.getPollInterval()).isEqualTo(Duration.ofSeconds(1));
         assertThat(properties.getSchema()).isEqualTo("ludwig_messaging");
@@ -30,13 +30,13 @@ class MessagingDbPropertiesTest {
     }
 
     @Test
-    void topicsAndModeBindFromConfiguration() {
+    void clustersAndModeBindFromConfiguration() {
         MessagingDbProperties properties = bind(Map.of(
                 "ludwig.messaging.db.mode", "draining",
-                "ludwig.messaging.db.consume", "a.b,c.d"));
+                "ludwig.messaging.db.clusters", "internal,billing"));
 
         assertThat(properties.getMode()).isEqualTo(MessagingDbProperties.Mode.DRAINING);
-        assertThat(properties.getConsume()).containsExactly("a.b", "c.d");
+        assertThat(properties.getClusters()).containsExactly("internal", "billing");
     }
 
     @Test

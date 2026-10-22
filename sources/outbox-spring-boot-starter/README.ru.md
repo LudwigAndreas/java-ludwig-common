@@ -136,6 +136,32 @@ ludwig.outbox.routes.partner-invoices.destination=invoices
 Зарегистрируйте собственный бин `OutboxRouteResolver`/`OutboxDispatcher`, чтобы добавить транспорт
 помимо встроенных Kafka и REST.
 
+## Объявленные типы событий
+
+`OutboxEvent.payload` имеет тип `Object`, поэтому сам outbox не знает, что несёт тип события. Это
+объявляет бин `OutboxEventTypes`; несколько таких бинов объединяются:
+
+```java
+@Bean
+OutboxEventTypes catalogEventTypes() {
+    return OutboxEventTypes.merge(List.of(
+            OutboxEventTypes.of(Map.of("ProductCreated", ProductEventPayload.class)),
+            // Событие, которое код отправляет по маршруту с именем, объявляется с этим маршрутом.
+            OutboxEventTypes.routed("NotifyProductCreated", ProductEventPayload.class, "product-notifications")));
+}
+```
+
+Тип, объявленный дважды с разными классами или маршрутами, роняет запуск. `asyncapi-spring-boot-starter`
+читает объявления и помещает каждое событие в AsyncAPI-документ сервиса, на тот топик и кластер, к
+которым ведёт его маршрут. Платформенные стартеры, которые публикуют события (audit, export, file-ingest,
+user-settings), объявляют свои события сами.
+
+При `ludwig.outbox.events.require-declared=true` публикатор ещё до записи отказывает необъявленному
+типу, полезной нагрузке, не являющейся экземпляром объявленного класса, и явному маршруту, отличному от
+объявленного. По умолчанию `false`, так что в production ничего не меняется; включите его в тестовых
+свойствах каждого сервиса, чтобы необъявленный продюсер ронял собственные тесты сервиса. Статической
+проверкой этого не сделать: тип события — строка времени выполнения.
+
 ## Упорядочивание
 
 Задайте `OutboxEvent.orderingKey(...)` для событий, которые обязаны отправляться в порядке друг
@@ -211,6 +237,7 @@ ludwig.outbox.routes.partner-invoices.destination=invoices
 | `ludwig.outbox.rest.connect-timeout` / `read-timeout` | `5s` / `10s` | Таймауты HTTP-клиента REST-отправителя |
 | `ludwig.outbox.rest.endpoints.<key>` | — | Логическое имя эндпоинта → URL, для назначений, не являющихся полным URL |
 | `ludwig.outbox.kafka.send-timeout` | `10s` | Максимум ожидания подтверждения брокера на сообщение |
+| `ludwig.outbox.events.require-declared` | `false` | Отказывать необъявленным типам событий; см. [Объявленные типы событий](#объявленные-типы-событий) |
 | `ludwig.outbox.routes.<name>.*` / `ludwig.outbox.default-route.*` | — | См. [Маршрутизацию](#маршрутизация-по-нескольким-назначениям) |
 
 Помимо счётчиков публикаций, фильтраций и отправок и длительности вызова отправки, метрика

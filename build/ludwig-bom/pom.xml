@@ -160,6 +160,13 @@
         <mockito.version>5.24.0</mockito.version>
         <byte-buddy.version>1.18.14</byte-buddy.version>
         <springdoc.version>2.6.0</springdoc.version>
+        <!-- 1.9.0 is the last Springwolf release built against Spring Boot 3.3.x (3.3.5, this platform's
+             line); 1.10.0 moves to 3.4. Move it together with the Boot version. -->
+        <springwolf.version>1.9.0</springwolf.version>
+        <!-- swagger-core is reached by both springdoc 2.6.0 (2.2.22) and Springwolf 1.9.0 (2.2.26); the
+             newer patch release is pinned so the two converge. The committed OpenAPI documents are the
+             check that springdoc's output did not change with it. -->
+        <swagger-core.version>2.2.26</swagger-core.version>
         <greenmail.version>2.1.3</greenmail.version>
         <jakarta-el.version>4.0.2</jakarta-el.version>
         <!-- Highest of the versions the transitive graph asks for; see the entry below. -->
@@ -237,6 +244,11 @@
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
                 <artifactId>messaging-db-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>asyncapi-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -555,6 +567,26 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.springwolf</groupId>
+                <artifactId>springwolf-kafka</artifactId>
+                <version>${springwolf.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-core-jakarta</artifactId>
+                <version>${swagger-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-models-jakarta</artifactId>
+                <version>${swagger-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>${swagger-core.version}</version>
             </dependency>
             <!-- The annotations and the OperationCustomizer SPI without the UI, for a starter that
                  contributes to an application's OpenAPI document but must not force the swagger-ui

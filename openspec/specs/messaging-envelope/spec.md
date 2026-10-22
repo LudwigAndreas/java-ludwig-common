@@ -5,9 +5,7 @@
 error-handling defaults. Before it, the names lived in the dispatcher as string literals: one
 consumer copied them with a comment saying the two had to agree, two gave up and parsed the
 payload, and `eventVersion` reached production with nothing consuming it.
-
 ## Requirements
-
 ### Requirement: One set of envelope header names
 A produced record SHALL carry the envelope headers `ludwig-event-type`,
 `ludwig-event-version`, `ludwig-aggregate-type`, `ludwig-aggregate-id`,
@@ -33,23 +31,6 @@ purpose, and `EnvelopeReader` SHALL accept the configured override.
   `observability-spring-boot-starter` already reads and writes that name on both. An id
   travelling as one name over HTTP and another over the broker is two ids as far as every log
   query is concerned
-
-### Requirement: Legacy header spellings are written and read during the migration window
-The dispatcher SHALL write both the canonical and the legacy spellings (`event-type`,
-`event-version`, `idempotency-key`, `trace-id`), and `EnvelopeReader` SHALL read the canonical
-name first and fall back to the legacy one.
-
-#### Scenario: A consumer replays records produced before this module existed
-- **WHEN** a consumer group replays from an offset predating the canonical names
-- **THEN** it still reads the values, via the legacy fallback
-
-#### Scenario: A change proposes dropping a legacy spelling
-- **WHEN** the legacy **write** is dropped, it SHALL be only after every topic's retention
-  window has passed with the new producer deployed; when the legacy **read** is dropped, it SHALL
-  be only after no consumer group can still be asked to replay from before that point
-- **THEN** dropping either earlier means a consumer reading `null` where a value exists — and for
-  `ludwig-event-type` that is a record silently ignored as an unknown type, an error nowhere,
-  with the replica simply never learning about that change
 
 ### Requirement: A malformed payload is dead-lettered, never retried forever
 `ErrorHandlingDeserializer` SHALL wrap both key and value, and `DeserializationException` and
@@ -118,3 +99,19 @@ A listener method SHALL NOT declare an `Acknowledgment` parameter.
 - **WHEN** a listener takes an `Acknowledgment`
 - **THEN** it is contradicting the container's `RECORD` acknowledgement, and the module's rules
   reject it
+
+### Requirement: Only the canonical header names are on the wire
+The outbox dispatcher SHALL write each envelope header under its canonical `ludwig-` name only, and
+`EnvelopeReader` and `VersionGatingDeserializer` SHALL read only those names. No pre-prefix spelling
+(`event-type`, `event-version`, `idempotency-key`, `trace-id`) is written or read.
+
+#### Scenario: The dispatcher produces a record
+- **WHEN** `KafkaOutboxDispatcher` sends an outbox message
+- **THEN** the record carries `ludwig-event-type`, `ludwig-event-version`, `ludwig-idempotency-key`
+  and `ludwig-trace-id`, and none of `event-type`, `event-version`, `idempotency-key` or `trace-id`
+
+#### Scenario: A record carries only a pre-prefix name
+- **WHEN** a consumer reads a record whose only type header is `event-type`
+- **THEN** its envelope's event type is `null` and its version is the default version, exactly as for a
+  record with no such header
+

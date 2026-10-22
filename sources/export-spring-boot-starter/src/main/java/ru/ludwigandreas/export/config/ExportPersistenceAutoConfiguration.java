@@ -1,6 +1,7 @@
 package ru.ludwigandreas.export.config;
 
 import java.time.Clock;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -26,6 +27,7 @@ import ru.ludwigandreas.export.api.ReportWriterFactory;
 import ru.ludwigandreas.export.engine.ExecutionPlanner;
 import ru.ludwigandreas.export.event.OutboxReportEventPublisher;
 import ru.ludwigandreas.export.event.ReportEventPublisher;
+import ru.ludwigandreas.export.event.ReportReadyEvent;
 import ru.ludwigandreas.export.entity.ExportReportRun;
 import ru.ludwigandreas.export.engine.ReportRunEngine;
 import ru.ludwigandreas.export.lifecycle.ExportRetentionPurge;
@@ -38,6 +40,7 @@ import ru.ludwigandreas.export.repository.ExportReportOutputRepository;
 import ru.ludwigandreas.export.repository.ExportReportRunRepository;
 import ru.ludwigandreas.job.core.claim.JobInstanceIdentity;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
+import ru.ludwigandreas.outbox.api.OutboxEventTypes;
 import ru.ludwigandreas.job.core.lock.RunLock;
 
 /**
@@ -215,6 +218,12 @@ public class ExportPersistenceAutoConfiguration {
         @ConditionalOnMissingBean(ReportEventPublisher.class)
         ReportEventPublisher outboxReportEventPublisher(OutboxEventPublisher outbox) {
             return new OutboxReportEventPublisher(outbox);
+        }
+
+        /** Declares {@code report.ready}, for the AsyncAPI document and {@code require-declared}. */
+        @Bean
+        OutboxEventTypes exportOutboxEventTypes() {
+            return OutboxEventTypes.of(Map.of(ReportReadyEvent.EVENT_TYPE, ReportReadyEvent.class));
         }
     }
 

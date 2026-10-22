@@ -48,6 +48,7 @@
     <module>sources/file-action-spring-boot-starter</module>
     <module>sources/outbox-spring-boot-starter</module>
     <module>sources/messaging-db-spring-boot-starter</module>
+    <module>sources/asyncapi-spring-boot-starter</module>
     <module>sources/reconciliation-spring-boot-starter</module>
     <!--
         pat-core before security-spring-boot-starter, and pat-spring-boot-starter after it. Maven

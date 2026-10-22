@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>asyncapi-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>AsyncAPI Spring Boot starter</name>
+    <description>
+        A service's Kafka surface as an AsyncAPI document. Springwolf scans the listeners; this module adds
+        what Springwolf cannot know: the platform envelope headers on every message, each consumer's
+        cluster and dead-letter channel, one send operation per outbox event type declared in
+        OutboxEventTypes and routed over Kafka, and the declared Kafka clusters as servers without
+        addresses.
+    </description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Nothing in this repository depends on this module except services, which add it. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>messaging-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>outbox-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.springwolf</groupId>
+            <artifactId>springwolf-kafka</artifactId>
+        </dependency>
+        <!-- Non-optional: what this module documents is spring-kafka's listeners. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- A Bean Validation provider: the validation API reaches this classpath, and @Validated properties
+             need an implementation to bind - see messaging-spring-boot-starter's POM. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- db-core's metrics autoconfiguration, reached through outbox, expects Micrometer, as every service has. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>lombok.launch.AnnotationProcessorHider$AnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,51 @@
+{
+  "change": "add-published-async-document",
+  "contract": {
+    "goal": "each service's Kafka surface as a generated, committed, drift-checked AsyncAPI document (Springwolf + platform customizers), outbox payloads declared per event type, and both OpenAPI and AsyncAPI documents published to Nexus by scripts/api-docs.sh",
+    "output": "new asyncapi-spring-boot-starter; OutboxEventTypes + require-declared in outbox; consumerNameOf in messaging; PublishedDocument in test-support; AsyncApiDocumentIT + committed docs/api/*.asyncapi.yaml in both services; scripts/api-docs.sh; READMEs; CHANGELOG",
+    "constraints": [
+      "drift only - no compatibility checking (user decision)",
+      "producer payloads declared by OutboxEventTypes, not @AsyncPublisher (user decision)",
+      "publish to Nexus via the root POM's ludwig.repo.* coordinates (user decision)",
+      "existing OpenAPI documents stay byte-identical",
+      "Springwolf only in asyncapi-spring-boot-starter"
+    ],
+    "done_when": [
+      "mvn -q validate",
+      "scripts/manifest.sh stale",
+      "scripts/manifest.sh layout",
+      "scripts/api-docs.sh check",
+      "mvn -pl :asyncapi-spring-boot-starter -am verify",
+      "mvn -pl :messaging-spring-boot-starter -am verify",
+      "mvn -pl :outbox-spring-boot-starter -am verify",
+      "mvn -pl :test-support -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :<every in-repo dependent of messaging, outbox, test-support> -am verify",
+      "openspec validate add-published-async-document --strict"
+    ]
+  },
+  "rollback_point": "818564501abab0ad47269179e6391e9f1298112a",
+  "current_task": "5.1",
+  "decisions": [
+    "Springwolf 1.9.0 pinned: last release built against Boot 3.3.5 (the platform's line); 1.10.0 is Boot 3.4. Checked from each release's POM on Maven Central.",
+    "Spike done before task 4.1's module skeleton could be separately verified: the skeleton (POM, reactor module, BOM entries) was created first because the spike has to live in the module. 4.1 is ticked only after its own proof runs.",
+    "Spike facts (design 'Spike outcome'): ConsumerRecord needs springwolf.payload.extractable-classes; customizers can add send operations with generated schemas; servers/base-package/info are mandatory and will be defaulted by an EnvironmentPostProcessor; Spring __TypeId__ headers replaced by the envelope.",
+    "OutboxEventTypes declarations can name the route an event is published with by name (OutboxEventTypes.routed). Found when adopting crud-service-example: NotifyProductCreated goes down an explicit REST route chosen in code, which config-only resolution would have documented as a Kafka send on the default route. require-declared also checks the explicit route.",
+    "ListenerContainerFactoryBuilder.consumerNameOf unwraps a DelegatingListenerContainerFactory (new 1-method interface in messaging, implemented by messaging-db's RoutingListenerContainerFactory), so a wrapped factory keeps its consumer name in the document.",
+    "User decision 2026-10-22 (1b): adding Springwolf changes the OpenAPI document once (title: on every schema, from Springwolf's SchemaTitleModelConverter in swagger's shared ModelConverters). Accepted as a reviewed refresh; this departs from the contract item 'existing OpenAPI documents stay byte-identical', with the user's approval. InitialConfig is excluded via the springdoc.packages-to-exclude=io.github.springwolf starter default.",
+    "User decision 2026-10-22 (2a): audit, export, file-ingest and user-settings declare their own OutboxEventTypes beans; they join Impact and the gate (task 3.2)."
+  ],
+  "failures": [
+    "Spike attempt 1-2: context failed - db-core's metrics autoconfiguration needs Micrometer, and the validation API without a provider broke MessagingProperties binding. Both test-scope deps added (as services and messaging have them).",
+    "Spike attempt 3: Springwolf refuses to build without servers ('No server has been defined in application.properties with path prefix springwolf'). Recorded as a design input.",
+    "Spike attempt 4 measured fact 1 false: ConsumerRecord payloads documented as an empty object. Resolved by configuration (extractable-classes), verified.",
+    "Task 5.1: full crud verify failed twice. (a) ApiDocumentIT OpenAPI drift: 'title:' on every schema plus an InitialConfig schema. Experiment: without the asyncapi starter, with swagger 2.2.26 pinned, ApiDocumentIT passes against the committed document, so Springwolf's presence is the cause, not the swagger pin. (b) ProductReportIntegrationTest: export publishes undeclared 'report.ready' under require-declared; audit, file-ingest and user-settings also publish undeclared outbox event types.",
+    "Task 5.2: notification's first refresh renamed every OpenAPI schema to its FQN. Cause: Springwolf toggles the JVM-wide swagger TypeNameResolver.std useFqn during its scan (springwolf.use-fqn defaults to true). Fixed by the starter default springwolf.use-fqn=false; the refreshed OpenAPI diff is then title: lines only. Also, AsyncApiDocumentIT could not extend NotificationTestBase: RecipientFixtures needs the user-settings projection. Made standalone.",
+    "test-support-local StubFaultIT.slow (an untouched module) timed out twice, once alone, and passed inside a later -am build. It is timing-sensitive: it awaits a stub that records a request only after its delay ends. Recorded as flaky.",
+    "User review 2026-10-22: IntelliJ and AsyncAPI Studio rejected both AsyncAPI documents ('server must have required property host'). Removing host broke AsyncAPI 3.0 validity. Fixed: canonicalization sets each server's host to its name. Spec, design, proposal and READMEs revised. Verified with @asyncapi/cli validate: both documents valid, 0 errors, 0 warnings; 1 info: 3.1.0 exists, which Springwolf 1.9.0 cannot emit.",
+    "Gate: scripts/check_image_pins.sh fails on HEAD as well. It reads the prose 'no new image: the mail server' in archive/2026-10-11-adopt-local-run-in-notification-service/proposal.md:78 as an unpinned image. Neither file has changed since 7abdcd4. Out of scope; reported to the user. scripts/check_api_baseline.sh fails because nexus.example.internal (the root POM placeholder) cannot be reached, leaving 28 baselines UNRESOLVED. Environmental."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

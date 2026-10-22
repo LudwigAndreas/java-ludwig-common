@@ -189,7 +189,8 @@ public class DbLogListenerContainer implements MessageListenerContainer {
         try {
             new AuditingDeadLetterRecoverer(
                     (consumed, exception) -> spec.support().deadLetters()
-                            .write(stored, exception, settings.deadLetterSuffix()),
+                            .write(stored, exception, settings.deadLetterCluster(),
+                                    settings.deadLetterSuffix()),
                     spec.support().envelopeReader(), spec.support().metrics(), spec.support().auditSink(),
                     spec.support().clock(), settings.cluster(), settings.deadLetterSuffix(), settings.maxAttempts())
                     .accept(record, failure);

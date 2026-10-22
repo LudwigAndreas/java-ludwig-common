@@ -89,6 +89,11 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>outbox-spring-boot-starter</artifactId>
         </dependency>
+        <!-- This service's Kafka surface as docs/api/crud-service-example.asyncapi.yaml. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>asyncapi-spring-boot-starter</artifactId>
+        </dependency>
         <!--
             Tabular exports. The starter is inert until a ReportDefinitionSource bean exists, so it
             costs a service that declares no reports nothing but the jar.

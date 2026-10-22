@@ -3,9 +3,7 @@
 ## Purpose
 Three tools check this codebase, and they must not overlap. Two tools checking one rule means two
 places to change it, two error messages for one mistake, and eventually two rules that disagree.
-
 ## Requirements
-
 ### Requirement: Each class of check has exactly one owner
 A check SHALL belong to exactly one of three tools:
 
@@ -14,6 +12,18 @@ A check SHALL belong to exactly one of three tools:
 | `architecture-rules` (ArchUnit) | structure and dependencies |
 | `checkstyle-rules` | source text |
 | SonarQube | bugs and security |
+
+The triad governs facts about **Java**. A fact that is neither in bytecode nor in Java source text —
+a file's position in the tree, the contents of a resource, the shape of a POM — SHALL be owned by a
+**gate script** under `scripts/`, listed in `scripts/gate.sh`'s `COMMANDS` so that it runs wherever
+the gate runs. A gate script is a fourth owner, not a fourth opinion: the "exactly one owner" rule
+applies across all four, and a check that a triad tool can express SHALL NOT be written as a script.
+
+This records what the repository already does rather than introducing it. `scripts/manifest.sh
+layout` owns module placement because a directory's position is a filesystem fact;
+`scripts/check_image_pins.sh` owns image-digest pinning because the references live in READMEs and
+YAML as well as in Java; `scripts/check_migrations.sh` owns the Liquibase migration layout because a
+changelog is a resource.
 
 #### Scenario: A new rule is about a type's name, package or dependencies
 - **WHEN** a change needs to forbid a shape that is visible in bytecode — a second audit SPI, a
@@ -32,6 +42,17 @@ A check SHALL belong to exactly one of three tools:
 - **THEN** it must be a Checkstyle rule, because ArchUnit reads bytecode and `JavaField` does not
   expose a constant's value. The split between `SecondRedactionMask` (Checkstyle) and the
   companion audit-SPI rule (ArchUnit) is deliberate for exactly this reason
+
+#### Scenario: The rule is about a resource file or a path
+- **WHEN** a change needs to check something no triad tool can see — a module in the wrong
+  directory, a container image referenced by bare tag, a Liquibase changeset authored in XML
+- **THEN** the check is a script under `scripts/`, added to `scripts/gate.sh`'s `COMMANDS`, and it
+  is not attempted in ArchUnit or Checkstyle
+
+#### Scenario: A script is proposed for something Checkstyle could check
+- **WHEN** a change proposes a gate script to forbid a pattern in Java source text
+- **THEN** it belongs in `checkstyle-rules` instead, because the owner is chosen by what kind of
+  fact the rule is about, and only a fact outside Java reaches the script tier
 
 ### Requirement: Where no mechanical check is possible, the reason is recorded in a comment
 A rule that bytecode analysis and source-text analysis both cannot express SHALL be recorded as a
@@ -401,3 +422,194 @@ the dependency graph, which bytecode analysis and source-text analysis both cann
 - **WHEN** the rule is added
 - **THEN** `crud-service-example` and `notification-service` pass it unchanged, because both
   already declare these artifacts at test scope
+
+### Requirement: `RuleGroup.CREDENTIALS` owns the credential-handling structural rules
+
+`architecture-rules`' `CREDENTIALS` group SHALL carry the structural rules that make the PAT attenuation
+invariant mechanical. The rule fencing construction of a credential-backed authentication SHALL name a
+**single type**, not a package.
+
+**Narrowed by this change rather than widened**, and the direction is the point. Adding a second
+authentication path created pressure to add a second package to the rule. Extracting the construction
+into one type instead meant the rule could name that type - which is stricter than what it replaced.
+
+A rule that grows a package each time a caller is added is a rule that expires quietly. One that names
+a single type cannot be satisfied by adding a caller; it can only be satisfied by routing through it.
+
+#### Scenario: A second authentication path is added
+- **WHEN** a change introduces another way to authenticate a credential
+- **THEN** it calls the single construction type, and the rule is unchanged. A change that instead adds
+  a package to the rule is a finding, not a fix
+
+#### Scenario: A module declares a second PAT store, SPI or token format
+- **THEN** the `CREDENTIALS` group fails the build naming the type, unchanged by this change
+
+#### Scenario: Raw secret material is read from an unpermitted package
+- **THEN** the build fails naming the class, unchanged by this change
+
+#### Scenario: The secret carrier is passed to a logger or an audit attribute
+- **WHEN** the secret carrier type is passed as an argument to an SLF4J logging method or into an
+  audit event attribute
+- **THEN** the build fails. The rule matches on the **typed** parameter, which is what makes it
+  checkable at all; a raw `String` that has already escaped the carrier defeats it, which is why the
+  carrier's own `toString()` masks and why the reveal accessor is fenced as well - three partial
+  mechanisms rather than one complete one, because no complete one exists
+
+#### Scenario: A second code path constructs a PAT-credentialed principal
+- **WHEN** any class other than the designated converter constructs a principal carrying the
+  personal-access-token credential kind
+- **THEN** the build fails. This is the rule that holds the attenuation invariant: the intersection
+  cannot be bypassed if there is exactly one constructor of such a principal and it performs the
+  intersection
+
+### Requirement: A weak digest algorithm in the PAT hashing path is a Checkstyle failure
+
+`checkstyle-rules` SHALL gain one `RegexpSinglelineJava` rule, carrying an `id`, that fails on a
+weak digest algorithm name at a PAT hashing call site.
+
+This belongs to Checkstyle and not to ArchUnit under the triad's existing split: the algorithm is a
+string literal argument, and bytecode analysis cannot see a string constant's value. It is the same
+reason `SecondRedactionMask` is a Checkstyle rule rather than an ArchUnit one.
+
+#### Scenario: A weak algorithm name is introduced
+- **WHEN** source in the PAT hashing path names a weak digest algorithm
+- **THEN** `mvn validate` fails on that module, before the compiler runs
+
+#### Scenario: The rule must be suppressed for a legitimate reason
+- **WHEN** a suppression is needed
+- **THEN** it uses the id form - `// SUPPRESS CHECKSTYLE ID <id> - reason` - because several checks
+  share the `RegexpSinglelineJava` class name and naming the class switches all of them off at once
+
+### Requirement: This change's unmechanisable rules are recorded, not dropped
+
+The six conventions this change introduces that no build can check SHALL be recorded with their
+reasons, and each SHALL carry a comment at the point of the rule.
+
+The existing requirement "Where no mechanical check is possible, the reason is recorded in a comment"
+states the general obligation. This requirement discharges it for this change explicitly, because a
+list of unenforceable rules is the backlog for the next improvement and is more useful than the part
+that already works.
+
+#### Scenario: The unmechanisable set is enumerated
+- **WHEN** this change's enforcement table is read
+- **THEN** it names exactly six, each with its reason and its partial mitigation:
+  1. **The edge must cache the exchange response.** The edge configuration is not in this repository.
+     Mitigated by the response declaring its own lifetime, and by an issuer metric on exchanges per
+     distinct PAT that makes a non-caching edge visible as a step change in traffic.
+  2. **A plain digest is correct only because the secret is full-entropy and machine-generated.** No
+     check can assert that the reasoning still holds if the generator changes. A comment at the
+     hashing site states the dependency.
+  3. **The secret is displayed exactly once.** The issuer returns it once and has no path to re-read
+     it, but what the consuming UI does with it is outside any build here.
+  4. **The checksum is not a security control.** There is nothing to detect, only a misreading to
+     pre-empt, so it is a comment by construction.
+  5. **The edge's client-facing `401` contract.** Same reason as 1. Mitigated by publishing the
+     problem type and the management location as constants in `pat-core` and documenting the required
+     response verbatim in the module README, so the edge configures against a definition rather than
+     inventing one.
+  6. **A long-lived connection re-derives authority on an interval.** Nothing in this repository holds
+     a connection open, so there is no code for a rule to fire on - and a rule written now would pass
+     vacuously and keep passing after the rule had been broken elsewhere, which is worse than no rule
+     because it reads as coverage.
+
+### Requirement: A check that cannot be written yet is deferred to a named change, not omitted
+
+Where a convention is specified before the code it governs exists, the change SHALL record the
+enforcing check as an obligation on the named future change that will introduce that code, rather
+than writing a vacuous rule or leaving the gap unstated.
+
+A rule that passes because there is nothing to check is the most expensive kind of absent rule: it
+appears in the enforcement table, it stays green forever, and it gives the next reader a reason not
+to look.
+
+#### Scenario: The streaming revalidation check is located
+- **WHEN** an agent or a reviewer asks what enforces the long-lived-connection revalidation
+  requirement
+- **THEN** the answer is that no check exists yet, that the configuration property and its ceiling
+  check ship with this change so the knob exists before the transport does, and that the enforcing
+  test is a recorded obligation on the MCP starter change - the first change that will have a
+  transport to enforce it against
+
+#### Scenario: A vacuous rule is proposed instead
+- **WHEN** a change proposes an ArchUnit rule whose matching set is empty in every module
+- **THEN** that is a finding, not coverage, and the deferral above is the expected form instead
+
+#### Scenario: A reader looks for the reason at the code rather than in the spec
+- **WHEN** any of the six sites is read in source
+- **THEN** a comment at that site states why no check is possible, rather than the reason living only
+  in this spec where the next person to change the code will not look
+
+### Requirement: Two further conventions in this area cannot be checked, and are recorded
+
+The conventions this change introduces that no build can hold SHALL be recorded with their reasons,
+bringing the credential area's unmechanisable list from six to eight.
+
+#### Scenario: The two new unmechanisable rules are enumerated
+- **THEN** they are:
+  1. **Machine traffic must bypass the company session gateway.** Not in this repository and not
+     expressible in it. A service cannot tell how it was reached, so not even a startup warning is
+     available. The mitigation is the module README and the fact that the failure is unmistakable - an
+     OIDC redirect in answer to a `curl`.
+  2. **This capability is meant to be deleted.** No check can assert that a deployment removed the
+     filter once its edge gained PAT support. A deprecation note on the property is the whole
+     mitigation, and it will be read by whoever is already looking at the property rather than by
+     whoever should be.
+
+#### Scenario: A reader looks for the reasons at the code rather than in the spec
+- **WHEN** either site is read in source
+- **THEN** a comment at that site states why no check is possible, rather than the reason living only
+  here where the next person to change the code will not look
+
+### Requirement: gRPC structure is owned by ArchUnit as one rule group
+The shared architecture rules SHALL include a gRPC rule group, on by default and vacuous for a
+module with no gRPC type, that fails the build when a channel or server is built outside the
+platform's two gRPC starters, when a gRPC service implementation lacks the platform stereotype, and
+when a stereotyped service carries a proxy-based security or transaction annotation or depends
+directly on a repository.
+
+#### Scenario: A service builds its own channel
+- **WHEN** a class outside the gRPC starters calls a gRPC channel builder
+- **THEN** the gRPC rule group fails and names the class
+
+#### Scenario: A gRPC service is annotated for method security
+- **WHEN** a stereotyped gRPC service declares `@PreAuthorize` or `@Transactional` on a method
+- **THEN** the gRPC rule group fails with a message that the annotation is not applied on the gRPC
+  call path
+
+#### Scenario: A module has no gRPC type
+- **WHEN** the rule group analyses a module that references no gRPC type
+- **THEN** it passes
+
+#### Scenario: Each rule is shown to fail
+- **WHEN** the architecture-rules module's own tests run
+- **THEN** each gRPC rule is asserted to fire on a deliberately violating fixture
+
+### Requirement: Protobuf conventions are owned by a gate script
+Conventions about the content and placement of `.proto` files SHALL be enforced by a script the
+verification gate runs, and SHALL NOT be written as ArchUnit or Checkstyle rules, because a `.proto`
+is a resource that neither bytecode nor Java source analysis can see.
+
+#### Scenario: The gate is run
+- **WHEN** `scripts/gate.sh` runs for any module
+- **THEN** it runs `scripts/check_protos.sh` and fails if that script fails
+
+#### Scenario: A protobuf convention is proposed as a Checkstyle rule
+- **WHEN** a change proposes checking a `.proto` option with Checkstyle
+- **THEN** it is rejected in favour of the gate script
+
+### Requirement: The gRPC area's unmechanisable rules are recorded, not dropped
+The conventions in this area that no build can check SHALL be listed in the architecture-rules
+README in both locales and stated at the point of each rule: wire compatibility of a proto change,
+truthfulness of a declared idempotency level, that a client's target resolves to every server,
+that a client's keepalive is compatible with its server's, and that a call between two platform
+services uses gRPC.
+
+#### Scenario: The unmechanisable set is enumerated
+- **WHEN** a reader opens the architecture-rules README
+- **THEN** it lists those five conventions under the gRPC rule group with the reason each cannot be
+  checked
+
+#### Scenario: A vacuous internal-call rule is proposed
+- **WHEN** a change proposes an ArchUnit rule that an internal call must use gRPC
+- **THEN** it is rejected, because whether a call is internal is not a fact bytecode carries
+

@@ -112,6 +112,11 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>outbox-spring-boot-starter</artifactId>
         </dependency>
+        <!-- This service's Kafka surface as docs/api/notification-service.asyncapi.yaml. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>asyncapi-spring-boot-starter</artifactId>
+        </dependency>
         <!-- All error handling: LocalizedException, ExceptionProblemMapper, PageResponse. This
              service ships no @RestControllerAdvice of its own. -->
         <dependency>

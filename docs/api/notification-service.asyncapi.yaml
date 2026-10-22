@@ -1,0 +1,311 @@
+asyncapi: 3.0.0
+channels:
+  corp.identity.users:
+    address: corp.identity.users
+    bindings:
+      kafka:
+        bindingVersion: 0.5.0
+    messages:
+      string:
+        $ref: '#/components/messages/string'
+    servers:
+    - $ref: '#/servers/default'
+  corp.identity.users.dlt:
+    address: corp.identity.users.dlt
+    description: Dead letters of the consumer of corp.identity.users.
+    messages:
+      string:
+        $ref: '#/components/messages/string'
+    servers:
+    - $ref: '#/servers/default'
+  platform.notifications.events:
+    address: platform.notifications.events
+    messages:
+      NotificationDelivered:
+        $ref: '#/components/messages/NotificationDelivered'
+      NotificationFailed:
+        $ref: '#/components/messages/NotificationFailed'
+      NotificationSuppressed:
+        $ref: '#/components/messages/NotificationSuppressed'
+    servers:
+    - $ref: '#/servers/default'
+  platform.notifications.requests:
+    address: platform.notifications.requests
+    bindings:
+      kafka:
+        bindingVersion: 0.5.0
+    messages:
+      NotificationRequestMessage:
+        $ref: '#/components/messages/NotificationRequestMessage'
+    servers:
+    - $ref: '#/servers/default'
+  platform.notifications.requests.dlt:
+    address: platform.notifications.requests.dlt
+    description: Dead letters of the consumer of platform.notifications.requests.
+    messages:
+      NotificationRequestMessage:
+        $ref: '#/components/messages/NotificationRequestMessage'
+    servers:
+    - $ref: '#/servers/default'
+components:
+  messages:
+    NotificationDelivered:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: NotificationDelivered
+      payload:
+        schema:
+          $ref: '#/components/schemas/NotificationLifecyclePayload'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: NotificationDelivered
+    NotificationFailed:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: NotificationFailed
+      payload:
+        schema:
+          $ref: '#/components/schemas/NotificationLifecyclePayload'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: NotificationFailed
+    NotificationRequestMessage:
+      bindings:
+        kafka:
+          bindingVersion: 0.5.0
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: NotificationRequestMessage
+      payload:
+        schema:
+          $ref: '#/components/schemas/NotificationRequestMessage'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: NotificationRequestMessage
+    NotificationSuppressed:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: NotificationSuppressed
+      payload:
+        schema:
+          $ref: '#/components/schemas/NotificationLifecyclePayload'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: NotificationSuppressed
+    string:
+      bindings:
+        kafka:
+          bindingVersion: 0.5.0
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: string
+      payload:
+        schema:
+          examples:
+          - '"string"'
+          type: string
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: string
+  schemas:
+    LudwigEnvelope:
+      description: The platform envelope, carried on every record.
+      properties:
+        X-Correlation-Id:
+          description: The correlation id of the request that caused it.
+          type: string
+        ludwig-aggregate-id:
+          description: The aggregate instance.
+          type: string
+        ludwig-aggregate-type:
+          description: The type of aggregate the event is about.
+          type: string
+        ludwig-event-type:
+          description: The kind of event; what a consumer dispatches on.
+          type: string
+        ludwig-event-version:
+          description: The payload's schema version.
+          type: string
+        ludwig-idempotency-key:
+          description: The producer's dedup key.
+          type: string
+        ludwig-produced-at:
+          description: When the producer emitted it, ISO-8601 UTC.
+          type: string
+        ludwig-trace-id:
+          description: The W3C trace id, when sampled.
+          type: string
+      title: LudwigEnvelope
+      type: object
+    NotificationLifecyclePayload:
+      examples:
+      - attempts: 0
+        category: string
+        channel: string
+        deliveryId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        occurredAt: '2015-07-20T15:49:04-07:00'
+        reason: string
+        recipientId: string
+        requestId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        state: string
+        templateKey: string
+      properties:
+        attempts:
+          format: int32
+          type: integer
+        category:
+          type: string
+        channel:
+          type: string
+        deliveryId:
+          format: uuid
+          type: string
+        occurredAt:
+          format: date-time
+          type: string
+        reason:
+          type: string
+        recipientId:
+          type: string
+        requestId:
+          format: uuid
+          type: string
+        state:
+          type: string
+        templateKey:
+          type: string
+      title: NotificationLifecyclePayload
+      type: object
+    NotificationRequestMessage:
+      examples:
+      - category: string
+        categoryClass: string
+        channels:
+        - string
+        idempotencyKey: string
+        priority: string
+        recipients:
+        - address: string
+          locale: string
+          timezone: string
+          userId: string
+          variables:
+            key: {}
+        scheduledAt: '2015-07-20T15:49:04-07:00'
+        templateKey: string
+        variables:
+          key: {}
+      properties:
+        category:
+          type: string
+        categoryClass:
+          type: string
+        channels:
+          items:
+            type: string
+          type: array
+          uniqueItems: true
+        idempotencyKey:
+          type: string
+        priority:
+          type: string
+        recipients:
+          items:
+            $ref: '#/components/schemas/RecipientMessage'
+          type: array
+        scheduledAt:
+          format: date-time
+          type: string
+        templateKey:
+          type: string
+        variables:
+          additionalProperties:
+            type: object
+          type: object
+      title: NotificationRequestMessage
+      type: object
+    RecipientMessage:
+      examples:
+      - address: string
+        locale: string
+        timezone: string
+        userId: string
+        variables:
+          key: {}
+      properties:
+        address:
+          type: string
+        locale:
+          type: string
+        timezone:
+          type: string
+        userId:
+          type: string
+        variables:
+          additionalProperties:
+            type: object
+          type: object
+      title: RecipientMessage
+      type: object
+    string:
+      examples:
+      - '"string"'
+      type: string
+defaultContentType: application/json
+info:
+  title: notification-service
+  version: current
+  x-generator: springwolf
+operations:
+  corp.identity.users_receive_onMessage:
+    action: receive
+    bindings:
+      kafka:
+        bindingVersion: 0.5.0
+        groupId:
+          enum:
+          - notification-service-identity-projection
+          type: string
+    channel:
+      $ref: '#/channels/corp.identity.users'
+    messages:
+    - $ref: '#/channels/corp.identity.users/messages/string'
+  platform.notifications.events_send_NotificationDelivered:
+    action: send
+    channel:
+      $ref: '#/channels/platform.notifications.events'
+    description: Published through the outbox over transport 'KAFKA'.
+    messages:
+    - $ref: '#/channels/platform.notifications.events/messages/NotificationDelivered'
+    title: NotificationDelivered
+  platform.notifications.events_send_NotificationFailed:
+    action: send
+    channel:
+      $ref: '#/channels/platform.notifications.events'
+    description: Published through the outbox over transport 'KAFKA'.
+    messages:
+    - $ref: '#/channels/platform.notifications.events/messages/NotificationFailed'
+    title: NotificationFailed
+  platform.notifications.events_send_NotificationSuppressed:
+    action: send
+    channel:
+      $ref: '#/channels/platform.notifications.events'
+    description: Published through the outbox over transport 'KAFKA'.
+    messages:
+    - $ref: '#/channels/platform.notifications.events/messages/NotificationSuppressed'
+    title: NotificationSuppressed
+  platform.notifications.requests_receive_onRequest:
+    action: receive
+    bindings:
+      kafka:
+        bindingVersion: 0.5.0
+        groupId:
+          enum:
+          - notification-service
+          type: string
+    channel:
+      $ref: '#/channels/platform.notifications.requests'
+    messages:
+    - $ref: '#/channels/platform.notifications.requests/messages/NotificationRequestMessage'
+servers:
+  default:
+    host: default
+    protocol: kafka

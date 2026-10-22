@@ -42,6 +42,8 @@ import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
         // The test's own category has to be declinable, exactly as a real deployment declares its own.
         "ludwig.notification.preferences.declinable-categories=campaigns,marketing",
         "ludwig.outbox.polling.enabled=false",
+        // An event type published without an OutboxEventTypes declaration fails the test that publishes it.
+        "ludwig.outbox.events.require-declared=true",
         // GreenMail, started by the test that needs it, on its standard test-offset port.
         "spring.mail.host=127.0.0.1",
         "spring.mail.port=3025",

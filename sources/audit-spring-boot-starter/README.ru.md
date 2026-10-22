@@ -115,6 +115,8 @@ outbox и reconciliation: FK заставляет брать key-share блок�
 добавленная в платформу позже, не начала отправляться в чей-то SIEM только потому, что никто не подумал её
 исключить.
 
+Когда outbox-приёмник включён, модуль объявляет `audit.event` → `AuditEvent` бином `OutboxEventTypes`, поэтому событие попадает в AsyncAPI-документ сервиса и проходит `ludwig.outbox.events.require-declared`.
+
 ## Retention
 
 По образцу `ExportRetentionPurge`: `SelfSchedulingLifecycle` из `job-core` под арендованным `RunLock`,

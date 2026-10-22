@@ -463,6 +463,8 @@ them leaves `config` holding the bound properties and the startup validator, and
 depends on `autoconfigure` at all. The rule library is *told* about the package rather than having the
 rule suppressed, so bean definitions are still required to be in one place.
 
+With events on, the module declares the completion event → `IngestRunSummary` as an `OutboxEventTypes` bean, so it appears in the service's AsyncAPI document and passes `ludwig.outbox.events.require-declared`.
+
 ## Testing
 
 `mvn test` runs the unit suite and the architecture rules: batch bounding at both limits, the balance

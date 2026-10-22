@@ -148,6 +148,8 @@ search endpoint are contributed by `odata-filter-spring-boot-starter`'s customiz
 because springdoc is on this service's classpath; that starter declares springdoc as `optional`, and
 an optional dependency is not transitive, which is why this service has to declare it itself.
 
+Its Kafka surface is published the same way, as `docs/api/crud-service-example.asyncapi.yaml`, by `AsyncApiDocumentIT` through `asyncapi-spring-boot-starter`. `CatalogEventTypesConfig` declares what each outbox event carries, and the test properties set `ludwig.outbox.events.require-declared=true`, so an undeclared event fails this service's tests. `scripts/api-docs.sh` refreshes, checks and publishes both documents; see `docs/api/README.md`.
+
 ## Three models, and why
 
 ```

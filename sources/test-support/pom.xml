@@ -124,6 +124,17 @@
             fixture's transitive tree - makes dependency convergence everybody's problem.
             architecture-rules takes the same position with junit-jupiter-api.
         -->
+        <!-- PublishedDocument: the committed API documents, read as JSON trees and written as YAML. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>kafka</artifactId>

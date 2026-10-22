@@ -9,6 +9,7 @@ components:
           type: string
         name:
           type: string
+      title: CategoryResponse
       type: object
     ColumnResponse:
       description: A column of a report
@@ -21,6 +22,7 @@ components:
           type: boolean
         type:
           type: string
+      title: ColumnResponse
       type: object
     CreateProductRequest:
       properties:
@@ -63,6 +65,7 @@ components:
       - price
       - sku
       - status
+      title: CreateProductRequest
       type: object
     FilterMetadata:
       properties:
@@ -86,6 +89,7 @@ components:
           items:
             $ref: '#/components/schemas/FilterPropertyMetadata'
           type: array
+      title: FilterMetadata
       type: object
     FilterPropertyMetadata:
       properties:
@@ -99,6 +103,7 @@ components:
           type: boolean
         type:
           type: string
+      title: FilterPropertyMetadata
       type: object
     ODataQueryOptions:
       properties:
@@ -114,6 +119,7 @@ components:
         top:
           format: int32
           type: integer
+      title: ODataQueryOptions
       type: object
     OperationFailure:
       properties:
@@ -125,6 +131,7 @@ components:
           type: string
         detail:
           type: string
+      title: OperationFailure
       type: object
     OperationProgress:
       properties:
@@ -138,6 +145,7 @@ components:
           type: integer
         unit:
           type: string
+      title: OperationProgress
       type: object
     OperationResponse:
       properties:
@@ -173,6 +181,7 @@ components:
           type: string
         terminal:
           type: boolean
+      title: OperationResponse
       type: object
     OperationResult:
       properties:
@@ -187,6 +196,7 @@ components:
         sizeBytes:
           format: int64
           type: integer
+      title: OperationResult
       type: object
     PageResponseProductResponse:
       properties:
@@ -209,6 +219,7 @@ components:
         totalPages:
           format: int32
           type: integer
+      title: PageResponse
       type: object
     PageResponseRowRejectResponse:
       properties:
@@ -231,6 +242,7 @@ components:
         totalPages:
           format: int32
           type: integer
+      title: PageResponse
       type: object
     Pageable:
       properties:
@@ -246,6 +258,7 @@ components:
           items:
             type: string
           type: array
+      title: Pageable
       type: object
     ProblemDetail:
       description: RFC 9457 problem document, as produced by web-core-spring-boot-starter.
@@ -305,6 +318,7 @@ components:
         version:
           format: int64
           type: integer
+      title: ProductResponse
       type: object
     ReportDefinitionResponse:
       description: A report this service can produce
@@ -329,6 +343,7 @@ components:
           type: array
         title:
           type: string
+      title: ReportDefinitionResponse
       type: object
     ReportRunResponse:
       description: The state of a report run
@@ -380,6 +395,7 @@ components:
           - CANCELLED
           - EXPIRED
           type: string
+      title: ReportRunResponse
       type: object
     RowRejectResponse:
       properties:
@@ -398,6 +414,7 @@ components:
           type: integer
         sheet:
           type: string
+      title: RowRejectResponse
       type: object
     RunReportRequest:
       description: A request to produce a report
@@ -441,6 +458,7 @@ components:
           type: array
         timeZone:
           type: string
+      title: RunReportRequest
       type: object
     ServerInfoResponse:
       properties:
@@ -454,6 +472,7 @@ components:
           type: string
         version:
           type: string
+      title: ServerInfoResponse
       type: object
     SortRequest:
       description: One term of the requested order
@@ -462,6 +481,7 @@ components:
           type: string
         direction:
           type: string
+      title: SortRequest
       type: object
     SubmissionResponse:
       properties:
@@ -518,6 +538,7 @@ components:
         submittedAt:
           format: date-time
           type: string
+      title: SubmissionResponse
       type: object
     UpdateProductRequest:
       properties:
@@ -557,6 +578,7 @@ components:
       - name
       - price
       - status
+      title: UpdateProductRequest
       type: object
 info:
   description: |

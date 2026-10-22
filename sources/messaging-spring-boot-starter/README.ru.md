@@ -428,6 +428,8 @@ ludwig:
   outbox `kafka:<name>` помещался в свой столбец. Имя `default` зарезервировано. Потребитель, который
   называет необъявленный кластер, не даёт сервису стартовать.
 
+`ListenerContainerFactoryBuilder.consumerNameOf(factory)` возвращает имя потребителя, для которого построена фабрика, разворачивая фабрику, реализующую `DelegatingListenerContainerFactory`. `asyncapi-spring-boot-starter` использует его, чтобы описать каждого слушателя с кластером и dead-letter-каналом его потребителя.
+
 ## Справочник конфигурации
 
 Каждый ключ под `ludwig.messaging.consumers.<name>` существует и под `ludwig.messaging.defaults`, что

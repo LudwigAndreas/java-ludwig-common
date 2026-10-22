@@ -1352,6 +1352,8 @@ diff, а не только внутри запущенного процесса.
 корректный статус: единственный advice из `web-core` может ответить на любой операции, поэтому
 перечислять 400, 404 и 409 поэндпоинтно значило бы вести список, расходящийся с мапперами.
 
+Kafka-поверхность публикуется так же — как `docs/api/notification-service.asyncapi.yaml`, тестом `AsyncApiDocumentIT` через `asyncapi-spring-boot-starter`. Документ включает Kafka-вход, хотя по умолчанию он выключен: это топик, в который публикуют другие команды; проекция user-settings не включена, потому что её модуль не входит в поставку. `NotificationEventTypesConfig` объявляет три события жизненного цикла на маршруте `ludwig.notification.events.route`, а `NotificationTestBase` задаёт `ludwig.outbox.events.require-declared=true`.
+
 ## Конфигурация
 
 Всё под `ludwig.notification.*`, одно дерево `@Validated @ConfigurationProperties`, с

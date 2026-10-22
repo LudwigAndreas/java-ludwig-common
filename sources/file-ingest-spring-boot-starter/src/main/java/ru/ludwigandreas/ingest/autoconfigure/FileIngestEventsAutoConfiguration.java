@@ -1,5 +1,6 @@
 package ru.ludwigandreas.ingest.autoconfigure;
 
+import java.util.Map;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -7,9 +8,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import ru.ludwigandreas.ingest.api.IngestRunSummary;
 import ru.ludwigandreas.ingest.event.IngestEventPublisher;
 import ru.ludwigandreas.ingest.event.OutboxIngestEventPublisher;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
+import ru.ludwigandreas.outbox.api.OutboxEventTypes;
 
 /**
  * Publishes completion through the outbox, when the outbox is present and events are switched on.
@@ -36,5 +39,16 @@ public class FileIngestEventsAutoConfiguration {
     @ConditionalOnMissingBean(IngestEventPublisher.class)
     public IngestEventPublisher outboxIngestEventPublisher(OutboxEventPublisher outbox) {
         return new OutboxIngestEventPublisher(outbox);
+    }
+
+    /**
+     * Declares the completion event, so that a service's AsyncAPI document lists it and
+     * {@code ludwig.outbox.events.require-declared} accepts it.
+     *
+     * @return the declaration
+     */
+    @Bean
+    public OutboxEventTypes fileIngestOutboxEventTypes() {
+        return OutboxEventTypes.of(Map.of(IngestRunSummary.EVENT_TYPE, IngestRunSummary.class));
     }
 }

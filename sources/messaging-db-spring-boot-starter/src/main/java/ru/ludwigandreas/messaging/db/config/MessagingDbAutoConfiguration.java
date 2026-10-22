@@ -3,6 +3,7 @@ package ru.ludwigandreas.messaging.db.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.util.List;
+import java.util.Set;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -11,7 +12,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CompositeRecordInterceptor;
 import org.springframework.kafka.listener.RecordInterceptor;
 import org.springframework.scheduling.TaskScheduler;
@@ -19,37 +19,35 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.audit.NoopAuditSink;
 import ru.ludwigandreas.messaging.api.EnvelopeReader;
+import ru.ludwigandreas.messaging.cluster.DefaultKafkaClusterProducers;
 import ru.ludwigandreas.messaging.cluster.KafkaClusterProducers;
+import ru.ludwigandreas.messaging.config.KafkaClustersAutoConfiguration;
 import ru.ludwigandreas.messaging.db.consumer.ConsumerSupport;
 import ru.ludwigandreas.messaging.db.consumer.DeadLetterWriter;
 import ru.ludwigandreas.messaging.db.consumer.ListenerFactoryPostProcessor;
 import ru.ludwigandreas.messaging.db.log.LogStore;
 import ru.ludwigandreas.messaging.db.ops.LogPurgeJob;
-import ru.ludwigandreas.messaging.db.outbox.LogProducerFactory;
+import ru.ludwigandreas.messaging.db.producer.LogClusterProducers;
 import ru.ludwigandreas.messaging.db.settings.MessagingDbProperties;
-import ru.ludwigandreas.messaging.dlt.DeadLetterTemplates;
 import ru.ludwigandreas.messaging.metrics.ConsumerActivityMonitor;
 import ru.ludwigandreas.messaging.metrics.MessagingMetrics;
 import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.messaging.settings.MessagingProperties;
-import ru.ludwigandreas.outbox.config.OutboxKafkaAutoConfiguration;
-import ru.ludwigandreas.outbox.config.OutboxProperties;
-import ru.ludwigandreas.outbox.dispatch.OutboxDispatcher;
-import ru.ludwigandreas.outbox.dispatch.kafka.KafkaOutboxDispatcher;
 
 /**
- * Puts the log behind the outbox's kafka transport and behind every listener container factory.
+ * Puts the log behind the replaced Kafka clusters: behind messaging's producer seam, which every platform
+ * write goes through, and behind every listener container factory.
  *
  * <p>No enabling property: this module is switched on by being a dependency and off by not being one,
  * which is the whole point of it.
  *
- * <p>Before {@link OutboxKafkaAutoConfiguration}, because the outbox registers its Kafka dispatcher only
- * when no bean named {@code kafkaOutboxDispatcher} exists. Registering that name here is what leaves
- * exactly one dispatcher for the transport - the outbox's registry refuses two.
+ * <p>Before {@link KafkaClustersAutoConfiguration}, because messaging registers its producer seam only when
+ * no {@link KafkaClusterProducers} bean exists. Registering the decorated seam here leaves exactly one, and
+ * the outbox's templates and messaging's dead-letter templates are all built from it.
  */
-@AutoConfiguration(before = OutboxKafkaAutoConfiguration.class)
+@AutoConfiguration(before = KafkaClustersAutoConfiguration.class)
 @ConditionalOnClass(KafkaListener.class)
-@EnableConfigurationProperties({MessagingDbProperties.class, MessagingProperties.class, OutboxProperties.class})
+@EnableConfigurationProperties({MessagingDbProperties.class, MessagingProperties.class})
 public class MessagingDbAutoConfiguration {
 
     /**
@@ -81,24 +79,29 @@ public class MessagingDbAutoConfiguration {
     }
 
     /**
-     * The outbox's kafka transport. While active it is the outbox's own dispatcher over a template whose
-     * producer appends to the log; while draining it is the outbox's own dispatcher over the outbox's own
-     * template, exactly what the outbox would have registered.
+     * Messaging's producer seam, with each replaced cluster appending to the log while active. While
+     * draining every cluster gets its own producer, so a replaced cluster's writes go to the address
+     * {@code ludwig.kafka.clusters.<name>} gives it.
      *
-     * @param properties       this module's configuration
-     * @param store            the log
-     * @param outboxProperties the outbox's configuration, for the send timeout
-     * @param outboxTemplate   the outbox's Kafka template, used only while draining
-     * @return the dispatcher
+     * @param clusters   the declared clusters
+     * @param store      the log
+     * @param properties this module's configuration
+     * @return the seam
+     * @throws IllegalStateException naming a replaced cluster that is not declared
      */
-    @Bean(name = "kafkaOutboxDispatcher")
-    public OutboxDispatcher kafkaOutboxDispatcher(
-            MessagingDbProperties properties, LogStore store, OutboxProperties outboxProperties,
-            @Qualifier("outboxKafkaTemplate") ObjectProvider<KafkaTemplate<String, String>> outboxTemplate) {
-        KafkaTemplate<String, String> template = properties.getMode() == MessagingDbProperties.Mode.DRAINING
-                ? outboxTemplate.getObject()
-                : new KafkaTemplate<>(new LogProducerFactory(store));
-        return new KafkaOutboxDispatcher(template, outboxProperties.getKafka().getSendTimeout());
+    @Bean
+    public KafkaClusterProducers ludwigKafkaClusterProducers(KafkaClusters clusters, LogStore store,
+                                                            MessagingDbProperties properties) {
+        for (String cluster : properties.getClusters()) {
+            if (!clusters.contains(cluster)) {
+                throw new IllegalStateException(MessagingDbProperties.PREFIX + ".clusters names '" + cluster
+                        + "', which is not a declared Kafka cluster. Declare it under " + KafkaClusters.PREFIX + "."
+                        + cluster + " (no address is needed until draining). Declared: " + clusters.names());
+            }
+        }
+        boolean active = properties.getMode() == MessagingDbProperties.Mode.ACTIVE;
+        return new LogClusterProducers(new DefaultKafkaClusterProducers(clusters), store,
+                active ? properties.getClusters() : Set.of());
     }
 
     /**
@@ -112,7 +115,7 @@ public class MessagingDbAutoConfiguration {
      * @param auditSink       the audit sink, when there is one
      * @param clock           the application's clock, when there is exactly one
      * @param interceptors    every record interceptor in the context
-     * @param producers       the producer seam, for the dead-letter producer while draining
+     * @param producers       the producer seam, which every dead letter goes through
      * @param activityMonitor messaging's activity monitor, so log records count as consumed
      * @param objectMapper    the application's mapper
      * @return the shared collaborators
@@ -127,8 +130,6 @@ public class MessagingDbAutoConfiguration {
             KafkaClusterProducers producers, ConsumerActivityMonitor activityMonitor,
             ObjectProvider<ObjectMapper> objectMapper) {
         ObjectMapper mapper = objectMapper.getIfAvailable(ObjectMapper::new);
-        KafkaTemplate<Object, Object> deadLetterKafka = properties.getMode() == MessagingDbProperties.Mode.DRAINING
-                ? DeadLetterTemplates.create(producers, KafkaClusters.DEFAULT, mapper) : null;
         // Every interceptor in the context, as ListenerContainerFactoryBuilder composes them: messaging's
         // activity monitor and observability's correlation interceptor among them. A container's own
         // interceptor is not reachable through spring-kafka's public API, so it is rebuilt from the same beans.
@@ -137,7 +138,7 @@ public class MessagingDbAutoConfiguration {
                 : new CompositeRecordInterceptor<>(all.toArray(new RecordInterceptor[0]));
         return new ConsumerSupport(properties, messaging, store, metrics, envelopeReader,
                 auditSink.getIfAvailable(NoopAuditSink::new), clock.getIfUnique(Clock::systemUTC),
-                new DeadLetterWriter(store, deadLetterKafka, mapper), interceptor, activityMonitor);
+                new DeadLetterWriter(producers, mapper), interceptor, activityMonitor);
     }
 
     /**

@@ -44,6 +44,8 @@ failure along the way.
 | `GreenMailFixture`, `WireMockFixture` | In-process SMTP and HTTP stubs - no image, nothing to pin. For a stub wired to a `@LudwigRestClient` by name, with switchable faults, see [`test-support-local`](../test-support-local/README.md) |
 | `TestClock` | A mutable `Clock`: `advance(Duration)`, `set(Instant)`, plus a fixed factory |
 
+`ru.ludwigandreas.testsupport.docs.PublishedDocument` is the shared check behind every service's `ApiDocumentIT` and `AsyncApiDocumentIT`: it canonicalizes a generated document (members sorted, server addresses dropped for OpenAPI, each AsyncAPI server's host replaced by its name), writes `target/<kind>/`, and compares it with `docs/api/`, or overwrites it under `-Dludwig.apidocs.write=true`. Jackson and SnakeYAML are optional dependencies; a module that uses it has both.
+
 ## Switching it on
 
 ```xml

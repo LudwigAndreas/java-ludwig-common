@@ -34,7 +34,7 @@ import ru.ludwigandreas.outbox.scheduler.OutboxProcessingService;
 import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
 
 /**
- * A service with the starter, every consumed topic listed, and no broker anywhere.
+ * A service with the starter replacing cluster {@code internal}, every consumer on it, and no broker anywhere.
  *
  * <p>{@code spring.kafka.bootstrap-servers} points at a port nothing listens on, so any path that still
  * reached for a broker - the outbox's send, a container's poll, a dead-letter publish - would fail or hang
@@ -49,10 +49,16 @@ import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
         "spring.kafka.bootstrap-servers=localhost:9",
         "spring.kafka.consumer.auto-offset-reset=earliest",
 
-        "ludwig.messaging.db.consume=it.orders,it.text,it.ordered,it.deduped,it.broken,it.correlated",
+        // Declared with no address of its own: it inherits localhost:9, and the log stands in for it.
+        "ludwig.kafka.clusters.internal.client-id=it-internal",
         "ludwig.messaging.db.poll-interval=50ms",
         "ludwig.messaging.db.partitions=4",
 
+        "ludwig.messaging.consumers.typed.cluster=internal",
+        "ludwig.messaging.consumers.text.cluster=internal",
+        "ludwig.messaging.consumers.ordered.cluster=internal",
+        "ludwig.messaging.consumers.deduped.cluster=internal",
+        "ludwig.messaging.consumers.broken.cluster=internal",
         "ludwig.messaging.consumers.typed.dedup=false",
         "ludwig.messaging.consumers.typed.accepted-versions.max=1",
         "ludwig.messaging.consumers.text.dedup=false",
@@ -72,7 +78,7 @@ import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
                 + "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
 
         "ludwig.outbox.polling.enabled=false",
-        "ludwig.outbox.routes.orders.transport=kafka",
+        "ludwig.outbox.routes.orders.transport=kafka:internal",
         "ludwig.outbox.routes.orders.destination=it.orders",
         "ludwig.outbox.routes.orders.event-types=OrderPlaced"
 })

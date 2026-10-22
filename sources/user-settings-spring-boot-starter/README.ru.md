@@ -789,6 +789,8 @@ SettingDefinitionSource notificationOptOuts() {
 
 ---
 
+В режиме владельца с включённой публикацией модуль объявляет `UserSettingChanged` → `UserSettingChangedEvent` и `ConsentGranted`/`ConsentRevoked` → `ConsentChangedEvent` бином `OutboxEventTypes`, поэтому они попадают в AsyncAPI-документ сервиса и проходят `ludwig.outbox.events.require-declared`.
+
 ## Конфигурация
 
 | Свойство | По умолчанию | Назначение |

@@ -134,6 +134,32 @@ which observability-spring-boot-starter provides.
 Register your own `OutboxRouteResolver`/`OutboxDispatcher` bean to add a transport beyond the built-in
 Kafka/REST ones.
 
+## Declared event types
+
+`OutboxEvent.payload` is `Object`, so the outbox alone cannot say what an event type carries. An
+`OutboxEventTypes` bean declares it, and several beans are merged:
+
+```java
+@Bean
+OutboxEventTypes catalogEventTypes() {
+    return OutboxEventTypes.merge(List.of(
+            OutboxEventTypes.of(Map.of("ProductCreated", ProductEventPayload.class)),
+            // An event the code sends down a route by name declares that route.
+            OutboxEventTypes.routed("NotifyProductCreated", ProductEventPayload.class, "product-notifications")));
+}
+```
+
+A type declared twice with different classes or routes fails startup. `asyncapi-spring-boot-starter`
+reads the declarations to put each event in the service's AsyncAPI document, on the topic and cluster
+its route resolves to. The platform starters that publish (audit, export, file-ingest, user-settings)
+declare their own events.
+
+With `ludwig.outbox.events.require-declared=true` the publisher refuses, before anything is written, an
+undeclared type, a payload that is not an instance of the declared class, and an explicit route other
+than the declared one. The default is `false`, so production is unaffected; set it in each service's test
+properties, so that a producer nobody declared fails that service's own tests. No static check can do
+this, because an event type is a runtime string.
+
 ## Ordering
 
 Set `OutboxEvent.orderingKey(...)` on events that must be dispatched in order relative to each other
@@ -207,6 +233,7 @@ consuming application.
 | `ludwig.outbox.rest.connect-timeout` / `read-timeout` | `5s` / `10s` | REST dispatcher HTTP client timeouts |
 | `ludwig.outbox.rest.endpoints.<key>` | - | Logical endpoint name -> URL, for destinations that aren't already a full URL |
 | `ludwig.outbox.kafka.send-timeout` | `10s` | Max time to wait for Kafka broker acknowledgement per message |
+| `ludwig.outbox.events.require-declared` | `false` | Refuse undeclared event types; see [Declared event types](#declared-event-types) |
 | `ludwig.outbox.routes.<name>.*` / `ludwig.outbox.default-route.*` | - | See [Multi-destination routing](#multi-destination-routing) |
 
 Beyond publish/filter/dispatch counts and dispatch-call duration, `ludwig.outbox.latency` records the

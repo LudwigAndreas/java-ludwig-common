@@ -47,6 +47,20 @@ class MessagingAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("the builder remembers the consumer name of every factory it built")
+    void remembersConsumerNames() {
+        runner.run(context -> {
+            ListenerContainerFactoryBuilder builder = context.getBean(ListenerContainerFactoryBuilder.class);
+            var orders = builder.forTextPayload("orders-ingress", "orders");
+
+            assertThat(builder.consumerNameOf(orders)).contains("orders-ingress");
+            assertThat(builder.consumerNameOf(
+                    new org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<String, String>()))
+                    .isEmpty();
+        });
+    }
+
+    @Test
     @DisplayName("switching the module off wires nothing")
     void backsOffWhenDisabled() {
         runner.withPropertyValues("ludwig.messaging.enabled=false")

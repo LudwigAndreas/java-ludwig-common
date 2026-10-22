@@ -27,11 +27,14 @@ public class MessagingDbProperties {
     /** The property prefix. */
     public static final String PREFIX = "ludwig.messaging.db";
 
-    /** Where writes go, and whether the listed topics are also read from Kafka. */
+    /** Where a replaced cluster's writes go, and where its consumers read from. */
     public enum Mode {
-        /** Every write goes to the log; listed topics are read from the log only. */
+        /** A replaced cluster's writes go to the log, and its consumers read the log only. */
         ACTIVE,
-        /** Every write goes to Kafka; listed topics are read from the log and Kafka, until the log is drained. */
+        /**
+         * A replaced cluster's writes go to its own address, and its consumers read the log and the cluster,
+         * until the log is drained.
+         */
         DRAINING
     }
 
@@ -39,9 +42,12 @@ public class MessagingDbProperties {
     @NotNull
     private Mode mode = Mode.ACTIVE;
 
-    /** The topics read from the log. Every other topic is read from Kafka. */
+    /**
+     * The Kafka clusters the log stands in for, by the names {@code ludwig.kafka.clusters} declares
+     * ({@code default} is {@code spring.kafka.*}). Each must be declared. Every other cluster is untouched.
+     */
     @NotNull
-    private Set<String> consume = new LinkedHashSet<>();
+    private Set<String> clusters = new LinkedHashSet<>(Set.of("internal"));
 
     /**
      * How many partitions each topic is split into. Fixed once records exist: changing it moves keys to

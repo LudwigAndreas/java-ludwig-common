@@ -21,6 +21,17 @@ either.
 
 ### Added
 
+- **AsyncAPI documents** (`add-published-async-document`). New `asyncapi-spring-boot-starter` (Springwolf
+  1.9.0) documents a service's Kafka surface: its consumers with their cluster and dead-letter channel,
+  every outbox event type it publishes over Kafka, the platform envelope headers, and its clusters as
+  servers. Each service commits `docs/api/<service>.asyncapi.yaml`, drift-checked like the OpenAPI one.
+  `scripts/api-docs.sh refresh | check | publish --version <v>` refreshes, checks and uploads both kinds to
+  Nexus as `ru.ludwigandreas:<service>:<v>:yaml:openapi|asyncapi`; `gate.sh` runs its `missing` check.
+- **Declared outbox event types.** An `OutboxEventTypes` bean maps an event type to its payload class (and,
+  with `routed`, its route). `ludwig.outbox.events.require-declared=true`, meant for tests, refuses an
+  undeclared type, a payload of the wrong class or a different route. audit, export, file-ingest and
+  user-settings declare their own events. messaging gains `ListenerContainerFactoryBuilder.consumerNameOf`;
+  test-support gains `PublishedDocument`, the shared document check.
 - **Named Kafka clusters.** `ludwig.kafka.clusters.<name>.*` declares a cluster with `spring.kafka.*`'s
   shape, bound on top of it; `spring.kafka.*` stays the cluster `default`. A consumer reads from
   `ludwig.messaging.consumers.<name>.cluster` and dead-letters to `dead-letter.cluster` (`source` by
@@ -29,13 +40,15 @@ either.
   claim; `default` keeps its scope. Every platform producer now comes from messaging's
   `KafkaClusterProducers`, and the new `kafka.producers-come-from-the-cluster-seam` architecture rule keeps
   it that way.
-- **`messaging-db-spring-boot-starter`: a removable stand-in for a Kafka cluster you can write to.** With
-  the dependency present, the outbox's `kafka` transport appends to a Kafka-shaped log in the shared
-  PostgreSQL database, every dead letter lands there too, and `@KafkaListener` consumers read the topics
-  listed under `ludwig.messaging.db.consume` from it. The log keeps partitions, per-key ordering, one
+- **`messaging-db-spring-boot-starter`: a removable stand-in for the Kafka clusters you own but do not
+  have yet.** With the dependency present, every platform write to a cluster named in
+  `ludwig.messaging.db.clusters` (default `internal`) - outbox events over `kafka:<cluster>` and dead
+  letters addressed to it - is appended to a Kafka-shaped log in the shared PostgreSQL database, and
+  `@KafkaListener` consumers on those clusters read it. The log keeps partitions, per-key ordering, one
   position per consumer group, and messaging's retry, dead-letter, version-gate, dedup and interceptor
-  behaviour. Every other topic is still read from Kafka. No listener, factory bean or outbox route
-  changes. `ludwig.messaging.db.mode=draining` moves writes to Kafka while the log drains, and
+  behaviour. Every other cluster is untouched. No listener, factory bean or outbox route changes.
+  `ludwig.messaging.db.mode=draining` moves the replaced clusters' writes to their own addresses while the
+  log drains, and
   `ludwig.messaging.db.lag` reports when the dependency can be removed. A new
   `kafka.nothing-depends-on-the-db-log-transport` architecture rule keeps it removable.
 - **gRPC between platform services.** `grpc-core`, `grpc-server-spring-boot-starter` and
@@ -74,6 +87,11 @@ either.
 
 ### Changed
 
+- **Adding `asyncapi-spring-boot-starter` changes a service's OpenAPI document once:** Springwolf registers
+  a schema-title converter in swagger's shared registry, so every schema gains `title:`. Refresh and
+  review the document when adopting it. `DefaultOutboxEventPublisher` takes an `OutboxEventTypes` as its
+  last constructor argument (`OutboxEventTypes.none()` for none). The BOM pins swagger-core 2.2.26 so that
+  springdoc and Springwolf converge.
 - **BREAKING - named Kafka clusters** (`add-kafka-clusters`, shipped as a major release):
   - `MessagingMetrics` methods take the cluster as their first argument, and every `ludwig.messaging.*`
     meter carries a `cluster` tag.

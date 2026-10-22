@@ -16,19 +16,17 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.listener.AbstractMessageListenerContainer;
 import org.springframework.kafka.listener.CompositeRecordInterceptor;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
-import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.listener.RecordInterceptor;
 import org.springframework.kafka.support.TopicPartitionOffset;
-import org.springframework.kafka.support.serializer.DeserializationException;
-import org.springframework.messaging.converter.MessageConversionException;
-import org.springframework.util.backoff.ExponentialBackOff;
+import ru.ludwigandreas.messaging.consumer.DelegatingListenerContainerFactory;
 import ru.ludwigandreas.messaging.db.settings.MessagingDbProperties;
-import ru.ludwigandreas.messaging.dlt.AuditingDeadLetterRecoverer;
+import ru.ludwigandreas.messaging.settings.KafkaClusters;
 import ru.ludwigandreas.messaging.settings.ResolvedConsumerSettings;
 
 /**
- * Stands in for a listener container factory bean and splits each endpoint between the log and Kafka.
+ * Stands in for a listener container factory bean and gives a consumer on a replaced cluster a container
+ * that reads the log.
  *
  * <p>Spring-kafka resolves {@code @KafkaListener(containerFactory = "...")} by name, as a
  * {@link KafkaListenerContainerFactory}, so replacing the bean with this type is invisible to the
@@ -36,7 +34,8 @@ import ru.ludwigandreas.messaging.settings.ResolvedConsumerSettings;
  * deserializers, interceptors, error handling, dedup, transaction manager - is reused by asking it to
  * build a container for the endpoint and reading that container's configuration.
  */
-public class RoutingListenerContainerFactory implements KafkaListenerContainerFactory<MessageListenerContainer> {
+public class RoutingListenerContainerFactory
+        implements KafkaListenerContainerFactory<MessageListenerContainer>, DelegatingListenerContainerFactory {
 
     private final AbstractKafkaListenerContainerFactory<?, ?, ?> delegate;
     private final String consumerName;
@@ -66,6 +65,7 @@ public class RoutingListenerContainerFactory implements KafkaListenerContainerFa
      *
      * @return the original factory bean
      */
+    @Override
     public AbstractKafkaListenerContainerFactory<?, ?, ?> delegate() {
         return delegate;
     }
@@ -74,31 +74,19 @@ public class RoutingListenerContainerFactory implements KafkaListenerContainerFa
     public MessageListenerContainer createListenerContainer(KafkaListenerEndpoint endpoint) {
         ConsumerSupport shared = support.getObject();
         MessagingDbProperties properties = shared.properties();
-        Set<String> listed = properties.getConsume();
-        refuseUnsupported(endpoint, listed, shared);
-
-        List<String> topics = List.copyOf(endpoint.getTopics());
-        List<String> logTopics = topics.stream().filter(listed::contains).toList();
-        if (logTopics.isEmpty()) {
-            return redirectDeadLetters(delegate.createListenerContainer(endpoint), shared);
+        if (!readsTheLog(endpoint, properties.getClusters(), shared)) {
+            return delegate.createListenerContainer(endpoint);
         }
-        // Built first, with the real endpoint, so that the factory configures the endpoint itself - see
-        // NarrowedEndpoint. Never started on its own unless it doubles as the Kafka container below.
+        // Built with the real endpoint, so that the factory configures the endpoint itself - its dedup filter
+        // among other things - and its configuration is read off the result. Never started while active.
         AbstractMessageListenerContainer<?, ?> template =
                 (AbstractMessageListenerContainer<?, ?>) delegate.createListenerContainer(endpoint);
-        DbLogListenerContainer log = new DbLogListenerContainer(spec(endpoint, template, logTopics, shared));
-
+        DbLogListenerContainer log = new DbLogListenerContainer(spec(endpoint, template, shared));
         if (properties.getMode() == MessagingDbProperties.Mode.DRAINING) {
-            // Draining: every topic is read from Kafka too, so the template is the Kafka container as built.
+            // Draining: the cluster is read too, so the template is the Kafka container as built.
             return new CompositeListenerContainer(List.of(template, log));
         }
-        List<String> kafkaTopics = topics.stream().filter(topic -> !listed.contains(topic)).toList();
-        if (kafkaTopics.isEmpty()) {
-            return log;
-        }
-        MessageListenerContainer kafka = redirectDeadLetters(
-                delegate.createListenerContainer(new NarrowedEndpoint(endpoint, kafkaTopics)), shared);
-        return new CompositeListenerContainer(List.of(kafka, log));
+        return log;
     }
 
     @Override
@@ -116,36 +104,44 @@ public class RoutingListenerContainerFactory implements KafkaListenerContainerFa
         return delegate.createContainer(topicPattern);
     }
 
-    private void refuseUnsupported(KafkaListenerEndpoint endpoint, Set<String> listed, ConsumerSupport shared) {
-        Pattern pattern = endpoint.getTopicPattern();
-        if (pattern != null) {
-            listed.stream().filter(topic -> pattern.matcher(topic).matches()).findFirst().ifPresent(topic -> {
-                throw new IllegalStateException("Listener '" + endpoint.getId() + "' on container factory '"
-                        + beanName + "' subscribes by pattern " + pattern + ", which matches '" + topic
-                        + "' listed in ludwig.messaging.db.consume; a pattern cannot be resolved against the log."
-                        + " Name the topics instead.");
-            });
-        }
-        boolean readsTheLog = endpoint.getTopics().stream().anyMatch(listed::contains);
-        if (!readsTheLog) {
-            return;
-        }
+    /**
+     * Whether the endpoint's consumer is on a replaced cluster, refusing what the log cannot serve.
+     *
+     * <p>A factory not built by messaging's builder has no consumer settings and reads {@code spring.kafka.*},
+     * the {@value KafkaClusters#DEFAULT} cluster, so it is refused only when that cluster is replaced.
+     */
+    private boolean readsTheLog(KafkaListenerEndpoint endpoint, Set<String> replaced, ConsumerSupport shared) {
         if (consumerName == null) {
-            throw new IllegalStateException("Listener '" + endpoint.getId() + "' reads " + endpoint.getTopics()
-                    + " from the log, but its container factory '" + beanName + "' was not built by"
-                    + " ListenerContainerFactoryBuilder, so it has no consumer settings to apply there.");
+            if (replaced.contains(KafkaClusters.DEFAULT)) {
+                throw new IllegalStateException("Listener '" + endpoint.getId() + "' on container factory '"
+                        + beanName + "' reads cluster '" + KafkaClusters.DEFAULT + "', which the log replaces, but"
+                        + " the factory was not built by ListenerContainerFactoryBuilder, so it has no consumer"
+                        + " settings to apply there.");
+            }
+            return false;
         }
-        if (shared.messaging().resolve(consumerName).nonBlocking()) {
-            throw new IllegalStateException("Consumer '" + consumerName + "' enables non-blocking retry topics and"
-                    + " reads " + endpoint.getTopics().stream().filter(listed::contains).toList()
-                    + " from the log; retry topics are not supported on log topics.");
+        ResolvedConsumerSettings settings = shared.messaging().resolve(consumerName);
+        if (!replaced.contains(settings.cluster())) {
+            return false;
         }
+        if (endpoint.getTopicPattern() != null) {
+            throw new IllegalStateException("Listener '" + endpoint.getId() + "' of consumer '" + consumerName
+                    + "' subscribes by pattern " + endpoint.getTopicPattern() + " on cluster '" + settings.cluster()
+                    + "', which the log replaces; a pattern cannot be resolved against the log. Name the topics.");
+        }
+        if (settings.nonBlocking()) {
+            throw new IllegalStateException("Consumer '" + consumerName + "' enables non-blocking retry topics on"
+                    + " cluster '" + settings.cluster() + "', which the log replaces; retry topics are not supported"
+                    + " on the log.");
+        }
+        return true;
     }
 
     @SuppressWarnings("unchecked")
     private DbLogListenerContainer.Spec spec(KafkaListenerEndpoint endpoint,
                                              AbstractMessageListenerContainer<?, ?> template,
-                                             List<String> logTopics, ConsumerSupport shared) {
+                                             ConsumerSupport shared) {
+        List<String> logTopics = List.copyOf(endpoint.getTopics());
         ConsumerFactory<?, ?> consumerFactory = delegate.getConsumerFactory();
         if (!(consumerFactory instanceof DefaultKafkaConsumerFactory<?, ?> defaults)
                 || defaults.getKeyDeserializer() == null || defaults.getValueDeserializer() == null) {
@@ -189,37 +185,5 @@ public class RoutingListenerContainerFactory implements KafkaListenerContainerFa
             reset = config.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG);
         }
         return "earliest".equals(String.valueOf(reset));
-    }
-
-    /**
-     * While active, a record read from Kafka is dead-lettered into the log, because there is no cluster
-     * this side can write to. The handler is messaging's - same backoff, same non-retryable classes, same
-     * audited recoverer - with only the write replaced.
-     */
-    private MessageListenerContainer redirectDeadLetters(MessageListenerContainer container, ConsumerSupport shared) {
-        if (shared.properties().getMode() != MessagingDbProperties.Mode.ACTIVE || consumerName == null
-                || !(container instanceof AbstractMessageListenerContainer<?, ?> kafka)) {
-            return container;
-        }
-        ResolvedConsumerSettings settings = shared.messaging().resolve(consumerName);
-        if (!settings.deadLetterEnabled()) {
-            return container;
-        }
-        ExponentialBackOff backOff =
-                new ExponentialBackOff(settings.initialBackoff().toMillis(), settings.multiplier());
-        backOff.setMaxInterval(settings.maxBackoff().toMillis());
-        // maxAttempts - 1: ExponentialBackOff counts retries, not deliveries. ListenerContainerFactoryBuilder
-        // explains the arithmetic and its history; the two must stay equal.
-        backOff.setMaxAttempts(settings.maxAttempts() - 1);
-        DefaultErrorHandler handler = new DefaultErrorHandler(new AuditingDeadLetterRecoverer(
-                (record, exception) -> shared.deadLetters().write(record.topic(), record.partition(), record.offset(),
-                        record.key(), record.value(), record.headers(), exception, settings.deadLetterSuffix()),
-                shared.envelopeReader(), shared.metrics(), shared.auditSink(), shared.clock(),
-                settings.cluster(), settings.deadLetterSuffix(), settings.maxAttempts()), backOff);
-        handler.addNotRetryableExceptions(DeserializationException.class, MessageConversionException.class);
-        handler.setRetryListeners((record, exception, attempt) ->
-                shared.metrics().recordRetry(settings.cluster(), record.topic()));
-        kafka.setCommonErrorHandler(handler);
-        return container;
     }
 }

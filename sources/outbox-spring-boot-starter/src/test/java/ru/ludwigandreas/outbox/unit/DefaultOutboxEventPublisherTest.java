@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import ru.ludwigandreas.outbox.api.OutboxEvent;
+import ru.ludwigandreas.outbox.api.OutboxEventTypes;
 import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
 import ru.ludwigandreas.outbox.config.OutboxProperties;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -54,7 +56,45 @@ class DefaultOutboxEventPublisherTest {
     private DefaultOutboxEventPublisher publisher(OutboxPublishFilter filter) {
         return new DefaultOutboxEventPublisher(repository, serializer, filter, routeResolver,
                 properties, auditLogger, new NoopOutboxMetrics(), () -> Optional.ofNullable(currentCorrelationId),
-                "X-Correlation-Id");
+                "X-Correlation-Id", OutboxEventTypes.of(Map.of("OrderCreated", Map.class)));
+    }
+
+    @Test
+    void anUndeclaredEventTypeIsRefusedWhenDeclarationIsRequired() {
+        properties.getEvents().setRequireDeclared(true);
+
+        assertThatThrownBy(() -> publisher(event -> true).publish(eventBuilder().eventType("OrderArchived").build()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("OrderArchived");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void aPayloadOfTheWrongClassIsRefusedWhenDeclarationIsRequired() {
+        properties.getEvents().setRequireDeclared(true);
+
+        assertThatThrownBy(() -> publisher(event -> true).publish(eventBuilder().payload("not a map").build()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("java.lang.String");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void aDeclaredEventIsPublishedWhenDeclarationIsRequired() {
+        properties.getEvents().setRequireDeclared(true);
+
+        assertThat(publisher(event -> true).publish(eventBuilder().build())).isPresent();
+    }
+
+    @Test
+    void anEventPublishedDownAnotherRouteThanDeclaredIsRefused() {
+        properties.getEvents().setRequireDeclared(true);
+
+        assertThatThrownBy(() -> publisher(event -> true).publish(eventBuilder().route("elsewhere").build()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("elsewhere");
+    }
+
+    @Test
+    void anUndeclaredEventTypeIsPublishedByDefault() {
+        assertThat(publisher(event -> true).publish(eventBuilder().eventType("OrderArchived").build())).isPresent();
     }
 
     @Test

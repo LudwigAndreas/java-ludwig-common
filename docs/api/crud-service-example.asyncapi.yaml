@@ -1,0 +1,276 @@
+asyncapi: 3.0.0
+channels:
+  catalog.product-events:
+    address: catalog.product-events
+    messages:
+      ProductCreated:
+        $ref: '#/components/messages/ProductCreated'
+      ProductDeleted:
+        $ref: '#/components/messages/ProductDeleted'
+      ProductUpdated:
+        $ref: '#/components/messages/ProductUpdated'
+      report.ready:
+        $ref: '#/components/messages/report.ready'
+    servers:
+    - $ref: '#/servers/default'
+  corp.identity.users:
+    address: corp.identity.users
+    bindings:
+      kafka:
+        bindingVersion: 0.5.0
+    messages:
+      string:
+        $ref: '#/components/messages/string'
+    servers:
+    - $ref: '#/servers/default'
+  corp.identity.users.dlt:
+    address: corp.identity.users.dlt
+    description: Dead letters of the consumer of corp.identity.users.
+    messages:
+      string:
+        $ref: '#/components/messages/string'
+    servers:
+    - $ref: '#/servers/default'
+components:
+  messages:
+    ProductCreated:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: ProductCreated
+      payload:
+        schema:
+          $ref: '#/components/schemas/ProductEventPayload'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: ProductCreated
+    ProductDeleted:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: ProductDeleted
+      payload:
+        schema:
+          $ref: '#/components/schemas/ProductEventPayload'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: ProductDeleted
+    ProductUpdated:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: ProductUpdated
+      payload:
+        schema:
+          $ref: '#/components/schemas/ProductEventPayload'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: ProductUpdated
+    report.ready:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: report.ready
+      payload:
+        schema:
+          $ref: '#/components/schemas/ReportReadyEvent'
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: report.ready
+    string:
+      bindings:
+        kafka:
+          bindingVersion: 0.5.0
+      headers:
+        $ref: '#/components/schemas/LudwigEnvelope'
+      name: string
+      payload:
+        schema:
+          examples:
+          - '"string"'
+          type: string
+        schemaFormat: application/vnd.aai.asyncapi+json;version=3.0.0
+      title: string
+  schemas:
+    LudwigEnvelope:
+      description: The platform envelope, carried on every record.
+      properties:
+        X-Correlation-Id:
+          description: The correlation id of the request that caused it.
+          type: string
+        ludwig-aggregate-id:
+          description: The aggregate instance.
+          type: string
+        ludwig-aggregate-type:
+          description: The type of aggregate the event is about.
+          type: string
+        ludwig-event-type:
+          description: The kind of event; what a consumer dispatches on.
+          type: string
+        ludwig-event-version:
+          description: The payload's schema version.
+          type: string
+        ludwig-idempotency-key:
+          description: The producer's dedup key.
+          type: string
+        ludwig-produced-at:
+          description: When the producer emitted it, ISO-8601 UTC.
+          type: string
+        ludwig-trace-id:
+          description: The W3C trace id, when sampled.
+          type: string
+      title: LudwigEnvelope
+      type: object
+    ProductEventPayload:
+      examples:
+      - categoryCode: string
+        id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        name: string
+        price: 1.1
+        sku: string
+        status: string
+      properties:
+        categoryCode:
+          type: string
+        id:
+          format: uuid
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        sku:
+          type: string
+        status:
+          type: string
+      title: ProductEventPayload
+      type: object
+    ReadyOutput:
+      examples:
+      - fileName: string
+        formatId: string
+        mediaType: string
+        sha256: string
+        sizeBytes: 0
+      properties:
+        fileName:
+          type: string
+        formatId:
+          type: string
+        mediaType:
+          type: string
+        sha256:
+          type: string
+        sizeBytes:
+          format: int64
+          type: integer
+      title: ReadyOutput
+      type: object
+    ReportReadyEvent:
+      examples:
+      - completedAt: '2015-07-20T15:49:04-07:00'
+        definitionKey: string
+        degradedStages:
+        - string
+        expiresAt: '2015-07-20T15:49:04-07:00'
+        outputs:
+        - fileName: string
+          formatId: string
+          mediaType: string
+          sha256: string
+          sizeBytes: 0
+        recipients:
+        - string
+        requester: string
+        rowsWritten: 0
+        runId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        savedReportId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      properties:
+        completedAt:
+          format: date-time
+          type: string
+        definitionKey:
+          type: string
+        degradedStages:
+          items:
+            type: string
+          type: array
+        expiresAt:
+          format: date-time
+          type: string
+        outputs:
+          items:
+            $ref: '#/components/schemas/ReadyOutput'
+          type: array
+        recipients:
+          items:
+            type: string
+          type: array
+        requester:
+          type: string
+        rowsWritten:
+          format: int64
+          type: integer
+        runId:
+          format: uuid
+          type: string
+        savedReportId:
+          format: uuid
+          type: string
+      title: ReportReadyEvent
+      type: object
+    string:
+      examples:
+      - '"string"'
+      type: string
+defaultContentType: application/json
+info:
+  title: product-catalog
+  version: current
+  x-generator: springwolf
+operations:
+  catalog.product-events_send_ProductCreated:
+    action: send
+    channel:
+      $ref: '#/channels/catalog.product-events'
+    description: Published through the outbox over transport 'KAFKA'.
+    messages:
+    - $ref: '#/channels/catalog.product-events/messages/ProductCreated'
+    title: ProductCreated
+  catalog.product-events_send_ProductDeleted:
+    action: send
+    channel:
+      $ref: '#/channels/catalog.product-events'
+    description: Published through the outbox over transport 'KAFKA'.
+    messages:
+    - $ref: '#/channels/catalog.product-events/messages/ProductDeleted'
+    title: ProductDeleted
+  catalog.product-events_send_ProductUpdated:
+    action: send
+    channel:
+      $ref: '#/channels/catalog.product-events'
+    description: Published through the outbox over transport 'KAFKA'.
+    messages:
+    - $ref: '#/channels/catalog.product-events/messages/ProductUpdated'
+    title: ProductUpdated
+  catalog.product-events_send_report.ready:
+    action: send
+    channel:
+      $ref: '#/channels/catalog.product-events'
+    description: Published through the outbox over transport 'KAFKA'.
+    messages:
+    - $ref: '#/channels/catalog.product-events/messages/report.ready'
+    title: report.ready
+  corp.identity.users_receive_onMessage:
+    action: receive
+    bindings:
+      kafka:
+        bindingVersion: 0.5.0
+        groupId:
+          enum:
+          - product-catalog-identity-projection
+          type: string
+    channel:
+      $ref: '#/channels/corp.identity.users'
+    messages:
+    - $ref: '#/channels/corp.identity.users/messages/string'
+servers:
+  default:
+    host: default
+    protocol: kafka

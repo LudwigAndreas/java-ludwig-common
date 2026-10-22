@@ -34,6 +34,7 @@ components:
         visibleUntil:
           format: date-time
           type: string
+      title: AnnouncementResponse
       type: object
     AnnouncementAdmin:
       description: One announcement as its publisher sees it, audience included
@@ -72,6 +73,7 @@ components:
         visibleUntil:
           format: date-time
           type: string
+      title: AnnouncementAdminResponse
       type: object
     AnnouncementSummary:
       description: The caller's outstanding announcement count
@@ -79,6 +81,7 @@ components:
         outstanding:
           format: int64
           type: integer
+      title: AnnouncementSummaryResponse
       type: object
     BatchItem:
       properties:
@@ -94,6 +97,7 @@ components:
           $ref: '#/components/schemas/SendNotificationRequest'
       required:
       - request
+      title: BatchItem
       type: object
     BatchItemResult:
       description: The outcome of one item in a batch submission
@@ -109,6 +113,7 @@ components:
           type: string
         request:
           $ref: '#/components/schemas/NotificationRequestResponse'
+      title: BatchItemResult
       type: object
     BatchSendRequest:
       properties:
@@ -120,6 +125,7 @@ components:
           type: array
       required:
       - items
+      title: BatchSendRequest
       type: object
     BatchSendResponse:
       description: Per-item outcome of a batch submission
@@ -134,6 +140,7 @@ components:
           items:
             $ref: '#/components/schemas/BatchItemResult'
           type: array
+      title: BatchSendResponse
       type: object
     DeliveryContentResponse:
       properties:
@@ -151,6 +158,7 @@ components:
           type: string
         textBody:
           type: string
+      title: DeliveryContentResponse
       type: object
     DeliveryResponse:
       properties:
@@ -233,6 +241,7 @@ components:
           type: string
         templateVersion:
           type: string
+      title: DeliveryResponse
       type: object
     DeliveryTransitionResponse:
       properties:
@@ -272,6 +281,7 @@ components:
           - BATCHED
           - COLLAPSED
           type: string
+      title: DeliveryTransitionResponse
       type: object
     FilterMetadata:
       properties:
@@ -295,6 +305,7 @@ components:
           items:
             $ref: '#/components/schemas/FilterPropertyMetadata'
           type: array
+      title: FilterMetadata
       type: object
     FilterPropertyMetadata:
       properties:
@@ -308,6 +319,7 @@ components:
           type: boolean
         type:
           type: string
+      title: FilterPropertyMetadata
       type: object
     InboxItem:
       description: One notification in the caller's own inbox
@@ -363,6 +375,7 @@ components:
         templateKey:
           description: The notification catalogue key this was rendered from
           type: string
+      title: InboxItemResponse
       type: object
     InboxSummary:
       description: The caller's outstanding notification count
@@ -370,6 +383,7 @@ components:
         unread:
           format: int64
           type: integer
+      title: InboxSummaryResponse
       type: object
     NotificationRequestResponse:
       properties:
@@ -412,6 +426,7 @@ components:
           type: string
         templateKey:
           type: string
+      title: NotificationRequestResponse
       type: object
     ODataQueryOptions:
       properties:
@@ -427,6 +442,7 @@ components:
         top:
           format: int32
           type: integer
+      title: ODataQueryOptions
       type: object
     OperationFailure:
       properties:
@@ -438,6 +454,7 @@ components:
           type: string
         detail:
           type: string
+      title: OperationFailure
       type: object
     OperationProgress:
       properties:
@@ -451,6 +468,7 @@ components:
           type: integer
         unit:
           type: string
+      title: OperationProgress
       type: object
     OperationResponse:
       properties:
@@ -486,6 +504,7 @@ components:
           type: string
         terminal:
           type: boolean
+      title: OperationResponse
       type: object
     OperationResult:
       properties:
@@ -500,6 +519,7 @@ components:
         sizeBytes:
           format: int64
           type: integer
+      title: OperationResult
       type: object
     PageResponseAnnouncement:
       properties:
@@ -522,6 +542,7 @@ components:
         totalPages:
           format: int32
           type: integer
+      title: PageResponse
       type: object
     PageResponseDeliveryResponse:
       properties:
@@ -544,6 +565,7 @@ components:
         totalPages:
           format: int32
           type: integer
+      title: PageResponse
       type: object
     PageResponseInboxItem:
       properties:
@@ -566,6 +588,7 @@ components:
         totalPages:
           format: int32
           type: integer
+      title: PageResponse
       type: object
     ProblemDetail:
       description: RFC 9457 problem document, as produced by web-core-spring-boot-starter.
@@ -629,6 +652,7 @@ components:
       - category
       - templateKey
       - visibleUntil
+      title: PublishAnnouncementRequest
       type: object
     RecipientDto:
       properties:
@@ -654,6 +678,7 @@ components:
           additionalProperties:
             type: object
           type: object
+      title: RecipientDto
       type: object
     RenderPreviewRequest:
       properties:
@@ -680,6 +705,7 @@ components:
       required:
       - channel
       - templateKey
+      title: RenderPreviewRequest
       type: object
     RenderPreviewResponse:
       properties:
@@ -702,6 +728,7 @@ components:
           type: string
         textBody:
           type: string
+      title: RenderPreviewResponse
       type: object
     SendNotificationRequest:
       properties:
@@ -756,6 +783,7 @@ components:
       - priority
       - recipients
       - templateKey
+      title: SendNotificationRequest
       type: object
     ServerInfoResponse:
       properties:
@@ -769,6 +797,7 @@ components:
           type: string
         version:
           type: string
+      title: ServerInfoResponse
       type: object
     SuppressionRequest:
       properties:
@@ -798,6 +827,7 @@ components:
       - address
       - channel
       - reason
+      title: SuppressionRequest
       type: object
     SuppressionResponse:
       properties:
@@ -823,6 +853,7 @@ components:
           type: string
         reason:
           type: string
+      title: SuppressionResponse
       type: object
 info:
   description: |

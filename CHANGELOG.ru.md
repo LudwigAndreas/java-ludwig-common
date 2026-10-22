@@ -19,6 +19,18 @@
 
 ### Added
 
+- **Документы AsyncAPI** (`add-published-async-document`). Новый `asyncapi-spring-boot-starter`
+  (Springwolf 1.9.0) описывает Kafka-поверхность сервиса: его потребителей с кластером и dead-letter-каналом,
+  каждый тип outbox-события, публикуемый через Kafka, заголовки платформенного конверта и кластеры как
+  серверы. Каждый сервис коммитит `docs/api/<service>.asyncapi.yaml` с проверкой дрейфа, как и OpenAPI.
+  `scripts/api-docs.sh refresh | check | publish --version <v>` обновляет, проверяет и выгружает оба вида в
+  Nexus как `ru.ludwigandreas:<service>:<v>:yaml:openapi|asyncapi`; `gate.sh` запускает его проверку `missing`.
+- **Объявленные типы outbox-событий.** Бин `OutboxEventTypes` сопоставляет типу события класс полезной
+  нагрузки (а через `routed` — и маршрут). `ludwig.outbox.events.require-declared=true`, предназначенный для
+  тестов, отказывает необъявленному типу, нагрузке не того класса и другому маршруту. audit, export,
+  file-ingest и user-settings объявляют свои события сами. messaging получает
+  `ListenerContainerFactoryBuilder.consumerNameOf`; test-support — `PublishedDocument`, общую проверку
+  документов.
 - **Именованные кластеры Kafka.** `ludwig.kafka.clusters.<name>.*` объявляет кластер в форме
   `spring.kafka.*`, связанный поверх него; `spring.kafka.*` остаётся кластером `default`. Потребитель
   читает из `ludwig.messaging.consumers.<name>.cluster` и отправляет dead letter в `dead-letter.cluster`
@@ -27,14 +39,15 @@
   `kafka:<cluster>/<topic>`, так что один топик в двух кластерах никогда не делит захват; у `default`
   область прежняя. Каждый producer платформы теперь берётся из `KafkaClusterProducers` в messaging, и новое
   правило архитектуры `kafka.producers-come-from-the-cluster-seam` следит за этим.
-- **`messaging-db-spring-boot-starter`: удаляемая замена кластера Kafka, в который можно писать.** Пока
-  зависимость подключена, транспорт `kafka` в outbox дописывает записи в журнал в общей базе PostgreSQL,
-  устроенный как Kafka. Туда же попадает каждая запись dead-letter. Потребители `@KafkaListener` читают
-  оттуда топики из `ludwig.messaging.db.consume`. Журнал сохраняет партиции, порядок по ключу, отдельную
-  позицию на каждую группу потребителей, а также повторы, dead-letter, проверку версии события,
-  дедупликацию и перехватчики из messaging. Все остальные топики по-прежнему читаются из Kafka. Ни
-  слушатели, ни бины фабрик, ни маршруты outbox не меняются. `ludwig.messaging.db.mode=draining`
-  переводит запись в Kafka, пока журнал дочитывается, а `ludwig.messaging.db.lag` показывает, когда
+- **`messaging-db-spring-boot-starter`: удаляемая замена собственных кластеров Kafka, которых пока
+  нет.** Пока зависимость подключена, каждая запись платформы в кластер из `ludwig.messaging.db.clusters`
+  (по умолчанию `internal`) — события outbox через `kafka:<cluster>` и адресованные ему dead letter —
+  дописывается в журнал в общей базе PostgreSQL, устроенный как Kafka, а потребители `@KafkaListener`
+  этих кластеров читают его. Журнал сохраняет партиции, порядок по ключу, отдельную позицию на каждую
+  группу потребителей, а также повторы, dead-letter, проверку версии события, дедупликацию и перехватчики
+  из messaging. Остальные кластеры не затрагиваются. Ни слушатели, ни бины фабрик, ни маршруты outbox не
+  меняются. `ludwig.messaging.db.mode=draining` переводит записи заменённых кластеров на их собственные
+  адреса, пока журнал дочитывается, а `ludwig.messaging.db.lag` показывает, когда
   зависимость можно убрать. Новое правило архитектуры `kafka.nothing-depends-on-the-db-log-transport`
   не даёт сделать стартер неудаляемым.
 - **gRPC между сервисами платформы.** `grpc-core`, `grpc-server-spring-boot-starter` и
@@ -74,6 +87,11 @@
 
 ### Changed
 
+- **Подключение `asyncapi-spring-boot-starter` один раз меняет OpenAPI-документ сервиса:** Springwolf
+  регистрирует конвертер заголовков схем в общем реестре swagger, и у каждой схемы появляется `title:`.
+  При подключении обновите документ и просмотрите diff. `DefaultOutboxEventPublisher` принимает
+  `OutboxEventTypes` последним аргументом конструктора (`OutboxEventTypes.none()`, если объявлений нет).
+  BOM фиксирует swagger-core 2.2.26, чтобы springdoc и Springwolf сходились.
 - **BREAKING — именованные кластеры Kafka** (`add-kafka-clusters`, выпускается как мажорная версия):
   - Методы `MessagingMetrics` принимают кластер первым аргументом, и каждый метр `ludwig.messaging.*`
     получает тег `cluster`.
