@@ -11,6 +11,13 @@ modules. It exists to show how [`db-core`](../../sources/db-core/README.md),
 together in one service, and what a layered, boilerplate-free, compile-time-checked implementation on
 top of them looks like.
 
+| | |
+|---|---|
+| Role | reference service (runnable Spring Boot application) |
+| Depends on (in-repo) | `ludwig-service-parent`, db-core, odata-filter, outbox, asyncapi, export, file-action, web-core, observability, rest-client, security, identity-projection, grpc-server, `catalog-grpc-api` |
+| Used by | nothing - it is the copy-from example |
+| Surfaces | REST `/api/v1/**`, gRPC `CatalogService` (port 9090), Kafka via the outbox, `/server/info`, actuator `health`, `info`, `metrics`, `prometheus` |
+
 ## What it demonstrates
 
 | Requirement | How |
@@ -212,12 +219,9 @@ wording with the security starter - each contributes a message bundle, and resol
 service's bundle *first*, so any of their messages can be reworded by adding that key here. Nothing
 has to be configured and nothing has to be re-handled.
 
-That last point is the whole reason the starter exists, and this service is where the problem showed
-up. Its `ApiExceptionHandler` used to carry a comment explaining that
-`odata.filter.web.problem-detail-advice-enabled` was set to `false` because that starter's messages
-were English-only - so this service re-handled all seven of its exception types by hand to keep one
-localized error shape. That flag is gone from `application.yml`, along with the advice, the
-`LocalizationConfig` and the `PageResponse` DTO: four files of boilerplate that every service copied.
+So this service re-handles none of the starters' exceptions: there is no `@ControllerAdvice`, no
+`LocalizationConfig` and no page DTO here. A service that adds a starter gains its message bundle,
+not a handler to write.
 
 Every response is an RFC 9457 `ProblemDetail` with a stable machine-readable `code` alongside the
 localized `title`/`detail`, so clients can branch on the code and show the text. It also carries a
@@ -451,6 +455,67 @@ a client never has to know which layer denied it.
 - `ludwig.security.public-paths` restates the three actuator entries beside `/server/info`. A list
   in YAML replaces the security starter's default rather than extending it, so naming only the new
   path would put the health probes behind authentication. `ServerInfoIT` asserts both halves.
+
+## Deployment
+
+There is no Dockerfile or Kubernetes manifest for this service; it is an example. Build an image with
+Jib from [`ludwig-service-parent`](../../build/ludwig-service-parent/README.md#building-an-image)
+(`mvn -pl crud-service-example package jib:dockerBuild`), and use
+[notification-service's manifest](../notification-service/deploy/k8s/notification-service.yaml) as the
+template for probes, resources, secrets and the disruption budget.
+
+| Environment variable | Purpose |
+|---|---|
+| `CATALOG_DB_URL`, `CATALOG_DB_USER`, `CATALOG_DB_PASSWORD` | PostgreSQL (secret) |
+| `OIDC_ISSUER_URI`, `OIDC_TOKEN_URI`, `CATALOG_CLIENT_ID`, `CATALOG_CLIENT_SECRET` | resource server and outbound client credentials (secret) |
+| `KAFKA_BOOTSTRAP_SERVERS`, `OUTBOX_POLLING_ENABLED` | outbox relay to Kafka |
+| `IDENTITY_PROJECTION_ENABLED`, `OIDC_USER_TOPIC` | the user projection consumer |
+| `GRPC_PORT`, `GRPC_TLS_BUNDLE` | gRPC server; **startup fails without a TLS bundle** |
+| `PARTNER_MTLS_ENABLED`, `MESH_PROXY_CIDRS` | partner mTLS and trusted proxies |
+| `REPORT_POLLER_ENABLED`, `REPORT_OUTPUT_DIR`, `FILE_ACTION_STORAGE_ROOT` | export and import workers and their storage |
+| `CATALOG_NOTIFICATIONS_ENABLED`, `NOTIFICATION_BASE_URL`, `CATALOG_STEWARD_USER_IDS` | export completion notices through notification-service |
+| `SUPPLIER_DIRECTORY_BASE_URL` | the `@LudwigRestClient` example |
+| `SERVER_PORT` | HTTP port, default 8080 |
+
+Liquibase migrates on startup (this service's tables plus the outbox, export, file-action and identity
+projection changelogs). Probes: `/actuator/health/liveness` and `/actuator/health/readiness`.
+
+## Observability
+
+Everything comes from the starters: structured JSON logs with service, version and commit; correlation
+across HTTP, outbound HTTP and Kafka; tracing; and the meters of
+[outbox](../../sources/outbox-spring-boot-starter/README.md#observability),
+[export](../../sources/export-spring-boot-starter/README.md#observability),
+[file-action](../../sources/file-action-spring-boot-starter/README.md#observability),
+[rest-client](../../sources/rest-client-spring-boot-starter/README.md#observability) and
+[grpc-server](../../sources/grpc-server-spring-boot-starter/README.md#observability), plus Boot's
+`http.server.requests`. Alerts worth having: the outbox's dead-letter counter, export run failures and
+the HTTP 5xx rate.
+
+### Known gaps
+
+- **No readiness group.** `management.endpoint.health.probes` is on but no `group.readiness.include` is
+  set, so readiness reports `readinessState` only and stays UP with the database down.
+  notification-service includes `db`; copy that.
+- File-action has no metrics (see its README), so the spreadsheet import is visible only in logs.
+
+## Audit
+
+The service records no audit events of its own. Export and file-action write theirs through
+[audit-core](../../sources/audit-core/README.md), which falls back to its SLF4J sink here, since
+`audit-spring-boot-starter` is not packaged. Every entity carries db-core's audit columns
+(`created_at`, `created_by`, `updated_at`, `updated_by`).
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Fails to start, gRPC TLS error | No `GRPC_TLS_BUNDLE` | Supply the bundle under `spring.ssl.bundle.pem.<name>` from the secret store |
+| `409` on update | Stale `version` in the request | The client re-reads and retries; this is optimistic locking working |
+| `403` reading a product that exists | Data scope (partner or OWN policy) | Expected; see "Security: two layers, two places" |
+| Events not reaching Kafka | `OUTBOX_POLLING_ENABLED` off or broker unreachable | See the [outbox runbook](../../sources/outbox-spring-boot-starter/README.md#runbook) |
+| Partner products missing from searches | Identity projection not fed | `IDENTITY_PROJECTION_ENABLED`, `OIDC_USER_TOPIC`; see the [projection runbook](../../sources/identity-projection-spring-boot-starter/README.md#runbook) |
+| Export or import stuck | Worker disabled or storage unwritable | `REPORT_POLLER_ENABLED`, `REPORT_OUTPUT_DIR`, `FILE_ACTION_STORAGE_ROOT`; see those modules' runbooks |
 
 ## Testing
 

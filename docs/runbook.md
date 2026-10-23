@@ -21,8 +21,8 @@ Read these before anything else. Each one has bitten somebody.
 3. **An integration test must be named `…IT` or `…IntegrationTest`, or it never runs.** Surefire
    excludes those names and failsafe runs them at `verify`. A test called `FooTest` that needs
    Postgres runs under surefire and fails on a machine with no Docker.
-4. **Select modules as `-pl :artifactId`, never by directory.** Directories moved once already and
-   every path-based command broke.
+4. **Select modules as `-pl :artifactId`, never by directory.** Directories can move, and every
+   path-based command breaks when they do.
 5. **The API of a published library is frozen against the last release.** Removing a public method is
    a build failure unless the version increment permits it *and* the previous release warned about
    it. Section 5.
@@ -132,7 +132,8 @@ and the script substitutes it rather than letting you run a partial one.
 
 ### 2.6 Open the PR
 
-Target `develop`. On merge, IFT redeploys automatically (section 4).
+Target `develop`. On merge, `develop` builds and tests; IFT is deployed by hand until the stages in
+section 4.4 exist.
 
 ---
 
@@ -348,7 +349,7 @@ A removal nobody wrote a line for fails the build whatever the version says.
 
 ### 5.5 If the gate reports something that is not a break
 
-It has happened, and the answer depends on which kind:
+The answer depends on which kind:
 
 - **`java.missing.newClass`** — a type revapi could not load. Usually fixable at the cause
   (a `provided`-scope dependency it did not resolve). Fix it there. Ignoring a class revapi *could*

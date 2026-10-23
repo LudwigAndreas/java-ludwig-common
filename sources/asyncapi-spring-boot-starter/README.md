@@ -1,38 +1,21 @@
 # asyncapi-spring-boot-starter
 
-[Русская версия](README.ru.md)
+***English** · [Русский](README.ru.md)*
 
-A service's Kafka surface as an AsyncAPI 3.0 document, generated from its real application context.
+Generates a service's Kafka surface as an AsyncAPI 3.0 document from its real application context.
+[Springwolf](https://www.springwolf.dev) scans the `@KafkaListener` methods; this module adds what
+Springwolf cannot know - clusters, dead-letter channels, the platform envelope headers, and the events
+the service produces through the outbox. The document is committed under `docs/api/` and checked for
+drift like the OpenAPI document (see [`docs/api/README.md`](../../docs/api/README.md)).
 
-[Springwolf](https://www.springwolf.dev) scans the `@KafkaListener` methods. This module adds what
-Springwolf cannot know, so that the document describes what actually goes over the wire on this platform.
-The document is committed under `docs/api/` and checked for drift exactly like the OpenAPI document. See
-[`docs/api/README.md`](../../docs/api/README.md) for the check, the refresh command and publishing to
-Nexus.
-
-- [What the document contains](#what-the-document-contains)
-- [Adopting it](#adopting-it)
-- [Declaring what the outbox produces](#declaring-what-the-outbox-produces)
-- [Defaults, and how to override them](#defaults-and-how-to-override-them)
-- [What this module deliberately does not do](#what-this-module-deliberately-does-not-do)
-
-## What the document contains
-
-| Part | From |
+| | |
 |---|---|
-| A receive operation per listener, with its payload schema | Springwolf's scan. A `ConsumerRecord<String, T>` listener documents `T`; a text listener documents a string |
-| The cluster each consumer's channel is bound to | `ludwig.messaging.consumers.<name>.cluster` |
-| A channel for each consumer's dead-letter topic, on the dead-letter cluster | `dead-letter.cluster` and `dead-letter.suffix` |
-| A send operation per declared outbox event type routed over Kafka | `OutboxEventTypes` and `ludwig.outbox.routes.*`, see below |
-| The platform envelope as every message's headers | `MessageHeaders`, plus the configured correlation header |
-| One server per Kafka cluster, named, its host the name rather than an address | `default` and every `ludwig.kafka.clusters` key |
+| Role | starter (build-time documentation) |
+| Depends on (in-repo) | [`messaging-spring-boot-starter`](../messaging-spring-boot-starter), [`outbox-spring-boot-starter`](../outbox-spring-boot-starter) |
+| Used by | `crud-service-example`, `notification-service` |
+| Surfaces | none of its own (Springwolf's document endpoint) |
 
-A topic this service only consumes is documented as a receive operation describing the shape it expects.
-Nothing in the document claims to own it.
-
-## Adopting it
-
-Add the dependency:
+## Usage
 
 ```xml
 <dependency>
@@ -41,24 +24,37 @@ Add the dependency:
 </dependency>
 ```
 
-Then declare what the service produces (below), and add an `AsyncApiDocumentIT` beside the service's
-`ApiDocumentIT`:
+1. Declare what the service produces (below).
+2. Add an `AsyncApiDocumentIT` beside the service's `ApiDocumentIT`:
 
-```java
-@Test
-void committedDocumentIsCurrent() throws Exception {
-    PublishedDocument.check(ARTIFACT_ID, PublishedDocument.Kind.ASYNCAPI,
-            objectMapper.readTree(serializer.toJsonString(asyncApi.getAsyncAPI())), AsyncApiDocumentIT.class);
-}
-```
+   ```java
+   @Test
+   void committedDocumentIsCurrent() throws Exception {
+       PublishedDocument.check(ARTIFACT_ID, PublishedDocument.Kind.ASYNCAPI,
+               objectMapper.readTree(serializer.toJsonString(asyncApi.getAsyncAPI())), AsyncApiDocumentIT.class);
+   }
+   ```
 
-The first run fails and writes `target/asyncapi/<artifactId>.asyncapi.yaml`. Refresh with
-`scripts/api-docs.sh refresh` and commit the document.
+3. The first run fails and writes `target/asyncapi/<artifactId>.asyncapi.yaml`. Run
+   `scripts/api-docs.sh refresh` and commit the document.
 
-## Declaring what the outbox produces
+### What the document contains
 
-An outbox event's payload is `Object`, so nothing can describe it until the service says what it is. Do
-it once per event type:
+| Part | Source |
+|---|---|
+| A receive operation per listener, with its payload schema | Springwolf's scan. A `ConsumerRecord<String, T>` listener documents `T`; a text listener documents a string |
+| The cluster each consumer's channel is bound to | `ludwig.messaging.consumers.<name>.cluster` |
+| A channel per consumer's dead-letter topic, on the dead-letter cluster | `dead-letter.cluster`, `dead-letter.suffix` |
+| A send operation per declared outbox event type routed over Kafka | `OutboxEventTypes` and `ludwig.outbox.routes.*` |
+| The platform envelope as every message's headers | `MessageHeaders`, plus the configured correlation header |
+| One server per Kafka cluster, named; its host is the cluster name, not an address | `default` and every `ludwig.kafka.clusters` key |
+
+A topic the service only consumes is documented as a receive operation describing the shape it expects;
+the document does not claim to own it. Events routed over REST are not in the document.
+
+### Declaring what the outbox produces
+
+An outbox payload is `Object`, so the service declares each event type once:
 
 ```java
 @Bean
@@ -67,45 +63,69 @@ OutboxEventTypes catalogEvents() {
 }
 ```
 
-The topic and cluster are not repeated: the outbox routes already say them. An event the code publishes
-down a route by name, with `OutboxEvent.route(...)`, says which route, because that choice is made in code
-and no configuration records it:
+Topic and cluster come from the outbox routes. An event published down a route by name with
+`OutboxEvent.route(...)` declares the route, because that choice is made in code:
 
 ```java
 OutboxEventTypes.routed("NotifyProductCreated", ProductEventPayload.class, "product-notifications")
 ```
 
-An event type routed over REST is not part of this document.
+Set `ludwig.outbox.events.require-declared=true` in the service's **test** properties: the publisher then
+refuses undeclared types, wrong payload classes and undeclared routes, so an undocumented producer fails a
+test. This only covers publishes that some test exercises - the event type is a runtime string, so no
+static check is possible.
 
-Set `ludwig.outbox.events.require-declared=true` in the service's test properties. The publisher then
-refuses an undeclared event type, a payload of the wrong class, or a route other than the declared one, so
-a producer cannot go undocumented
-without a test failing. It stays off in production. No static check is possible here, because the event
-type is a runtime string. That makes the tests the check, which only works if a test exercises each
-publish.
+## Configuration
 
-## Defaults, and how to override them
-
-Springwolf will not build a document without servers, a base package and an info block. This module sets
-them at the lowest precedence, so any of them can be overridden in the service's configuration:
+The module sets Springwolf's required defaults at the lowest precedence; the service can override any
+of them.
 
 | Property | Default | Why |
 |---|---|---|
-| `springwolf.docket.servers.<cluster>.*` | one per cluster, protocol `kafka`, host = the cluster name | the committed document replaces each host with the server's name (AsyncAPI requires a host); the names are what a reader needs |
-| `springwolf.docket.base-package` | `ru.ludwigandreas` | listeners contributed by platform starters are part of the service's surface |
+| `springwolf.docket.servers.<cluster>.protocol` / `.host` | `kafka` / the cluster name, one per cluster | The committed document names clusters, not addresses |
+| `springwolf.docket.base-package` | `ru.ludwigandreas` | Listeners contributed by platform starters are part of the service's surface |
 | `springwolf.docket.info.title` | `spring.application.name` | |
-| `springwolf.docket.info.version` | `current` | the Nexus coordinate is the real version; one inside the document would make every release a drift |
-| `springwolf.payload.extractable-classes[org.apache.kafka.clients.consumer.ConsumerRecord]` | `1` | without it, a `ConsumerRecord<String, T>` listener is documented as an empty object |
-| `springdoc.packages-to-exclude` | `io.github.springwolf` | Springwolf's own endpoints stay out of the service's OpenAPI document; a service that sets this property must include the package |
-| `springwolf.use-fqn` | `false` | Springwolf sets swagger's JVM-wide type-name flag to this while it scans; `true` leaks fully-qualified schema names into the OpenAPI document |
+| `springwolf.docket.info.version` | `current` | The Nexus coordinate carries the version; a version inside the document would make every release a drift |
+| `springwolf.payload.extractable-classes[org.apache.kafka.clients.consumer.ConsumerRecord]` | `1` | Without it a `ConsumerRecord<String, T>` listener is documented as an empty object |
+| `springdoc.packages-to-exclude` | `io.github.springwolf` | Keeps Springwolf's endpoints out of the OpenAPI document. A service that sets this property must include the package |
+| `springwolf.use-fqn` | `false` | `true` leaks fully-qualified schema names into the OpenAPI document (Springwolf sets a JVM-wide swagger flag while scanning) |
 
-Springwolf is pinned to 1.9.0 in `ludwig-bom`, the last release built against Spring Boot 3.3.x. Move it
-together with the Boot version.
+Springwolf is pinned to 1.9.0 in `ludwig-bom`, the last release built against Spring Boot 3.3.x. Upgrade
+it together with Spring Boot.
 
-## What this module deliberately does not do
+## Deployment
 
-- **Check compatibility.** The check is drift only. A breaking payload change passes the build and is
-  visible in the diff.
-- **Ship Springwolf's UI.** Other teams read the published document from Nexus.
-- **Document `@AsyncPublisher` annotations.** The outbox routes and `OutboxEventTypes` are the single
-  place a producer is described, so topic and cluster cannot drift between an annotation and the routing.
+Nothing to deploy. The committed document is published to Nexus by the pipeline; see
+[`docs/api/README.md`](../../docs/api/README.md#publishing-to-nexus).
+
+## Observability
+
+Not applicable: the module only builds a document at startup and adds no runtime behaviour to message
+handling.
+
+## Audit
+
+Not applicable: no state changes.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `AsyncApiDocumentIT` fails with a diff | The service's Kafka surface changed (new listener, route, payload field) | Read the diff. If intended: `scripts/api-docs.sh refresh`, commit the document with the change |
+| A listener's payload documented as an empty object | `extractable-classes` override removed | Restore the default |
+| An outbox event missing from the document | Not declared in `OutboxEventTypes`, or routed over REST | Declare it; REST routes are out of scope |
+| Springwolf endpoints appear in the OpenAPI document | Service overrode `springdoc.packages-to-exclude` without `io.github.springwolf` | Add the package |
+
+## Testing
+
+`AsyncApiDocumentShapeIT` builds a document from a context with listeners, clusters, routes and declared
+events (no broker, no Docker) and checks its shape, including that a declared event without a Kafka route
+is absent. Each consuming service owns an `AsyncApiDocumentIT`.
+
+## Design decisions
+
+- **Drift check, not compatibility check.** A breaking payload change passes the build and shows up as a
+  diff for review.
+- **No Springwolf UI.** Consumers read the published document from Nexus.
+- **No `@AsyncPublisher` annotations.** Outbox routes plus `OutboxEventTypes` are the one place a producer
+  is described, so topic and cluster cannot disagree between an annotation and the routing.

@@ -1,18 +1,25 @@
 # grpc-client-spring-boot-starter
 
-Named gRPC clients as configuration. Declare a client under `ludwig.grpc.client.clients.<name>`,
-inject a generated stub with `@LudwigGrpcClient("<name>")`, and every call through it carries a
-deadline, runs behind a rate limiter, bulkhead and circuit breaker, is retried only where the
-contract says a repeat is safe, authenticates as configured, fails with a typed exception, and is
-measured, logged without its payload and - if asked - audited. No `@Configuration` of your own.
+***English** · [Русский](README.ru.md)*
 
-The contract and the shared vocabulary (metadata keys, the status codec) are in
-[grpc-core](../grpc-core/README.md); the serving side is
-[grpc-server-spring-boot-starter](../grpc-server-spring-boot-starter/README.md). The shape follows
-[rest-client-spring-boot-starter](../rest-client-spring-boot-starter/README.md) wherever gRPC has
-the same concept, and only there.
+Named gRPC clients as configuration. Declare a client under `ludwig.grpc.client.clients.<name>`, inject a
+generated stub with `@LudwigGrpcClient("<name>")`, and every call carries a deadline, runs behind a rate limiter,
+bulkhead and circuit breaker, is retried only where the contract says a repeat is safe, authenticates as
+configured, fails with a typed exception, and is measured, logged without its payload and optionally audited.
+No `@Configuration` of your own.
 
-## Quick start
+| | |
+|---|---|
+| Role | starter |
+| Depends on (in-repo) | [`audit-core`](../audit-core), [`grpc-core`](../grpc-core), [`observability`](../observability-spring-boot-starter), [`outbound-token-core`](../outbound-token-core), [`security`](../security-spring-boot-starter), [`web-core`](../web-core-spring-boot-starter) |
+| Used by | none in this repository (services calling gRPC peers) |
+| Surfaces | outbound gRPC |
+
+Contracts and the shared vocabulary are in [grpc-core](../grpc-core); the serving side is
+[grpc-server-spring-boot-starter](../grpc-server-spring-boot-starter). The shape follows
+[rest-client-spring-boot-starter](../rest-client-spring-boot-starter) wherever gRPC has the same concept.
+
+## Usage
 
 ```yaml
 ludwig:
@@ -52,7 +59,7 @@ Three ways to consume a client, one behaviour - all three hand out the same inte
 
 A stub bound to a name that is not configured fails startup naming the injection point.
 
-## Precedence
+### Precedence
 
 Built-in values, then `defaults`, then the client. Scalars override when set; nested blocks merge
 field by field (a client that sets only `sliding-window-size` keeps the inherited threshold); lists
@@ -60,7 +67,7 @@ and maps replace. **`target` and `auth.relay-enabled` are never inherited** - a 
 is a startup failure, and relaying a caller's token is decided per client. A `bulkhead` or
 `rate-limiter` block that is written anywhere enables that policy; the built-in layer has neither.
 
-## The pipeline, and why it is fixed
+### The pipeline, and why it is fixed
 
 ```
 observation -> correlation -> log/audit -> failure typing
@@ -83,7 +90,7 @@ failure is not the dependency's failure. Instances are named `grpc-<client>` in 
 Resilience4j registries (or private ones when it has none), so a REST client and a gRPC client with
 the same name never share a breaker.
 
-## Retry is read from the contract
+### Retry is read from the contract
 
 A method is retried only when its `.proto` declares `idempotency_level = IDEMPOTENT` or
 `NO_SIDE_EFFECTS`, and only on `retry.retry-on` (built-in `UNAVAILABLE`). Every other method gets
@@ -95,7 +102,7 @@ than an interceptor's, because replaying a call from an interceptor is code that
 loses a message. The starter finds the contracts by scanning `ru.ludwigandreas` for generated
 `<Service>Grpc` classes, which `check_protos.sh` places there.
 
-## Deadlines
+### Deadlines
 
 Every call gets the earliest of: the client's `deadline` (built-in 5s), a deadline the call site set,
 and - applied by gRPC from the current `Context` - what remains of the inbound call it is made
@@ -103,7 +110,7 @@ within. A handler with 500 ms left cannot start a 3 s call. The deadline bounds 
 retries included. A client whose deadline is not positive fails startup; there is no way to switch
 deadlines off.
 
-## Authentication
+### Authentication
 
 | `auth.type` | |
 |---|---|
@@ -123,7 +130,7 @@ is not a resource server (no `JwtDecoder`) cannot configure it at all.
 
 A credential over plaintext to a non-loopback target fails startup.
 
-### Where the tokens come from
+#### Where the tokens come from
 
 The machine-token cache, the client-credentials mint and the reader of the caller's token are
 [`outbound-token-core`](../outbound-token-core/README.md), the one implementation this starter shares
@@ -131,7 +138,7 @@ with `rest-client-spring-boot-starter`. What is this module's own is how a token
 gRPC `CallCredentials`, applied per attempt. `TokenOwnershipTest` fails the build if a second cache,
 minter or token reader appears here.
 
-## Failures
+### Failures
 
 A stub throws `StatusRuntimeException`, unchanged, with the peer's status and trailers. Its cause is
 one of these, each naming the client and the correlation id - read it with
@@ -147,23 +154,6 @@ one of these, each naming the client and the correlation id - read it with
 
 The rendering is a contributed `ExceptionProblemMapper`: there is no advice in this module, and
 web-core's registry reaches the typed cause by walking the cause chain.
-
-## Observability and audit
-
-- `ludwig.grpcclient.requests{client,service,method,status}` - Micrometer's gRPC observation, renamed;
-  also the client span.
-- `ludwig.grpcclient.retries{client,method}` - counted by a stream tracer per attempt, because
-  in-channel retries are invisible to an interceptor.
-- `ludwig.grpcclient.calls.notpermitted{client,policy}` and
-  `ludwig.grpcclient.auth.token.refreshes{client,type}`.
-- One INFO line per call on `ludwig.grpcclient.<client>`: method, status, duration, attempts,
-  correlation id. **No payload.** `logging.level: payload` renders messages as JSON through
-  audit-core's `Redactor`, capped at `max-payload-chars`, and is refused under a production profile.
-- The correlation id goes out as `x-correlation-id` (observability's header name): the inbound call's
-  when there is one, otherwise observability's current id; without observability, none.
-- `audit.enabled: true` records `GrpcCallAudit` events into the one `AuditSink` under
-  `category=outbound-call`: every failure and refusal (a refusal as `DENIED`), successes sampled by
-  `audit.success-sampling`. No payload, no metadata.
 
 ## Configuration
 
@@ -201,6 +191,60 @@ production, an unknown auth type, relay without its switch or without a resource
 that cannot open, payload logging in production - fails startup **once**, listing every problem in
 every client.
 
+## Deployment
+
+- **Targets**: point `target` at a **headless** Kubernetes `Service` (`dns:///<svc>-headless:9090`) so
+  `round_robin` balances per call.
+- **TLS**: the JDK trust store or a Spring Boot SSL bundle (`tls.bundle`), with a key for mTLS.
+- **Machine tokens**: a `spring.security.oauth2.client.registration.<id>` per client using
+  `oauth2-client-credentials`; the client secret from the secret store.
+- **Keepalive**: `keepalive.time` must not be below the server's `keepalive.permit-time` (defaults are aligned).
+
+## Observability
+
+| Signal | Meaning |
+|---|---|
+| `ludwig.grpcclient.requests{client,service,method,status}` | Micrometer gRPC observation (timer) and client span |
+| `ludwig.grpcclient.retries{client,method}` | Attempts beyond the first, counted per attempt by a stream tracer |
+| `ludwig.grpcclient.calls.notpermitted{client,policy}` | Calls refused by this client's rate limiter, bulkhead or breaker |
+| `ludwig.grpcclient.auth.token.refreshes{client,type}` | Token re-mints |
+| Resilience4j meters for `grpc-<client>` instances | Breaker state, bulkhead usage (application registries) |
+| `INFO` on `ludwig.grpcclient.<client>` | One line per call: method, status, duration, attempts, correlation id. **No payload** |
+
+`logging.level: payload` renders messages as JSON through audit-core's `Redactor`, capped at
+`max-payload-chars`, and is refused under a production profile. The correlation id goes out as
+`x-correlation-id`: the inbound call's, else observability's current id.
+
+**Recommended alerts:**
+
+| Condition | Why |
+|---|---|
+| `increase(ludwig_grpcclient_calls_notpermitted_total{policy="circuit-breaker"}[5m]) > 0` | Breaker open: the peer is failing |
+| Ratio of `status` ∈ {`UNAVAILABLE`, `DEADLINE_EXCEEDED`} > 5% | Peer degraded or deadline too tight |
+| `rate(ludwig_grpcclient_retries_total[5m])` rising | Peer flapping |
+
+## Audit
+
+`audit.enabled: true` records `GrpcCallAudit` events into the `AuditSink`:
+
+| Field | Value |
+|---|---|
+| category | `outbound-call` |
+| outcome | `FAILURE` for failures, `DENIED` for refusals by this client's policies, `SUCCESS` for sampled successes (`audit.success-sampling`) |
+| content | client, service, method, status, attempts, correlation id - no payload, no metadata |
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Startup fails listing client problems | Invalid combination (no target, target in defaults, plaintext rules, relay without resource server, ...) | Fix every listed item |
+| `GrpcClientCallNotPermittedException` | Breaker open / bulkhead full / rate limit | Check the peer's health; the breaker half-opens after 30s |
+| `GrpcClientTimeoutException` | Deadline passed - the request **may** have been processed | Do not blindly repeat non-idempotent calls; check the peer; raise `deadline` only if the inbound budget allows |
+| `GrpcClientAuthenticationException` | Token mint failed or peer rejected the token twice | Check the OAuth2 registration and the peer's audience |
+| A method is never retried | Its `idempotency_level` is not `IDEMPOTENT`/`NO_SIDE_EFFECTS` | Correct - ask the server owner to declare it if repeats are safe |
+| All calls go to one peer pod | Normal (non-headless) `Service` or `pick_first` | Use a headless `Service` and `round_robin` |
+| Controller returns 500 for a peer's `NOT_FOUND` | Caller-side codes mean this service sent a wrong request | Handle `GrpcClientResponseException` where a missing entity is expected |
+
 ## Testing
 
 ```java
@@ -212,7 +256,7 @@ class NotificationSenderTest { ... }
 client at an in-process server the test starts (`InProcessServerBuilder.forName("peer")`) and every
 call runs the production pipeline.
 
-## What it deliberately does not do
+## Design decisions
 
 - **No call-site retry opt-in**, and no hedging.
 - **No per-attempt timeout** - gRPC has no stable one, and the deadline bounds the logical call.

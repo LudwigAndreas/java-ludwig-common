@@ -2,29 +2,38 @@
 
 ***English** · [Русский](README.ru.md)*
 
-What two platform services share when they talk over gRPC, with no transport attached.
-
-Both gRPC starters depend on this module, and a service may carry only one of them. So it holds only
-what *both* sides of a call have to agree on - four things - and nothing that opens a socket.
+What two platform services must agree on when they talk over gRPC, with no transport attached: the metadata
+keys, the codec between RFC 9457 problems and `google.rpc.Status`, the long-running-operation message, the
+context bridge that restores thread-locals around every gRPC callback, and MapStruct configuration for
+protobuf messages. Both gRPC starters depend on it; a service may carry only one of them.
 
 | | |
 |---|---|
-| [Metadata keys](#metadata-keys) | The names under which the correlation id, idempotency key, locale and zone travel |
-| [Problem codec](#a-problem-and-a-status-are-one-fact) | An RFC 9457 problem rendered as a `google.rpc.Status`, and read back |
-| [Operation message](#the-operation-message) | The long-running-operation envelope, on the wire |
-| [Context bridge](#the-context-bridge) | Thread-bound state restored on whichever thread gRPC delivers a callback |
+| Role | library |
+| Depends on (in-repo) | [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) |
+| Used by | `grpc-client`, `grpc-server` starters; [`ludwig-grpc-api-parent`](../../build/ludwig-grpc-api-parent) |
+| Surfaces | none (defines `ludwig/operation/v1/operation.proto`) |
 
-It also defines [what a contract module is](#publishing-a-contract).
+```
+ru.ludwigandreas.grpc.core
+├── metadata    GrpcMetadataKeys
+├── problem     GrpcStatusCodes, GrpcStatusCodec, DecodedProblem
+├── operation   OperationMessages
+├── context     GrpcCallContext, ThreadBinding, ContextRestoringServerInterceptor
+└── mapping     ProtobufMapperConfig, ProtobufConversions
 
-## Publishing a contract
+ru.ludwigandreas.operation.grpc.v1   generated from ludwig/operation/v1/operation.proto
+```
 
-A service's gRPC contract is its own module, `<service>-grpc-api`, in `sources/`, parented by
-`build/ludwig-grpc-api-parent`. It holds the `.proto` files and the code generated from them and nothing
-else. Callers depend on that jar; nobody keeps a private copy of the messages.
+## Usage
 
-The parent supplies everything else - `grpc-protobuf`, `grpc-stub`, `protobuf-java`, this module (so a
-contract can import `ludwig/operation/v1/operation.proto`), and protobuf generation, which runs in any
-module with a `src/main/proto` directory. The whole POM of a contract module is:
+Services do not depend on this module directly; they get it through a gRPC starter or a contract module.
+
+### Writing a contract module
+
+A service's gRPC contract is its own module `sources/<service>-grpc-api`, parented by
+[`ludwig-grpc-api-parent`](../../build/ludwig-grpc-api-parent), holding only `.proto` files and generated code.
+Callers depend on that jar. The whole POM:
 
 ```xml
 <parent>
@@ -39,10 +48,9 @@ module with a `src/main/proto` directory. The whole POM of a contract module is:
 <description>The gRPC contract of billing.</description>
 ```
 
-plus three registrations: a `<module>` in the root `pom.xml`, an entry in `build/ludwig-bom/pom.xml`,
-and a dependency of `build/jacoco-aggregate/pom.xml`. `scripts/manifest.sh layout`, which the gate runs,
-fails naming the module when any of that is missing, when the parent is another one, when the module
-has Java, or when it has no `.proto` - so the ten lines are checked rather than generated.
+plus three registrations: a `<module>` in the root `pom.xml`, an entry in `build/ludwig-bom/pom.xml`, and a
+dependency in `build/jacoco-aggregate/pom.xml`. `scripts/manifest.sh layout` (run by the gate) fails naming the
+module if any is missing, the parent differs, the module has Java, or it has no `.proto`.
 
 ```proto
 syntax = "proto3";
@@ -62,30 +70,22 @@ service BillingService {
 }
 ```
 
-`scripts/check_protos.sh`, which the gate runs, fails on any departure from this shape. Each rule is
-load-bearing somewhere else:
+`scripts/check_protos.sh` (run by the gate) enforces:
 
-| Rule | Why it is not a matter of taste |
+| Rule | Why |
 |---|---|
-| `package ludwig.<service>.v<N>` | The version is in the package so `v2` can be served beside `v1` |
-| `java_package = ru.ludwigandreas.<service>.grpc.v<N>` | It is the single coverage and analysis exclusion for generated code (`**/grpc/v*/**`); a contract outside it is measured as if somebody wrote it by hand |
-| `java_multiple_files = true` | Otherwise every message is a nested class of one outer class named after the file, and renaming the file renames every type |
-| every `rpc` declares `idempotency_level` | The gRPC client reads it to decide whether a failed call may be repeated. `IDEMPOTENCY_UNKNOWN` is a valid answer; silence is not, because it must not look like a decision |
-| a `.proto` lives only in a `-grpc-api` module (or here) | A proto inside a service makes callers depend on a jar built as an image |
+| `package ludwig.<service>.v<N>` | `v2` can be served beside `v1` |
+| `java_package = ru.ludwigandreas.<service>.grpc.v<N>` | The single coverage/analysis exclusion for generated code (`**/grpc/v*/**`) |
+| `java_multiple_files = true` | Renaming the file must not rename every type |
+| every `rpc` declares `idempotency_level` | The gRPC client decides retries from it; `IDEMPOTENCY_UNKNOWN` is a valid answer, silence is not |
+| `.proto` only in a `-grpc-api` module (or here) | Callers must not depend on a jar built as an image |
+| `protoc.version` (root POM) = `protobuf.version` (BOM) | Generated code matches the runtime |
 
-`protoc` is resolved as a Maven artifact, so the build needs no system compiler. Its version is the
-`protoc.version` property in the root POM, which must equal `protobuf.version` in `ludwig-bom`; the same
-script fails the gate when they differ.
+`protoc` is resolved as a Maven artifact; no system compiler. **Not checked:** whether an `idempotency_level` is
+true (only the author knows), and wire compatibility of a changed proto (needs a per-release descriptor baseline;
+see [architecture-rules](../../build/architecture-rules)). Review both.
 
-**What the script cannot check:** that an `idempotency_level` is *true*, and that a change to a
-published proto is wire-compatible. The first is known only to the method's author. The second needs a
-baseline descriptor per release and is deferred - see `build/architecture-rules/README.md`.
-
-## Mapping messages
-
-A service maps between a generated message and its model with MapStruct, like at every other model
-boundary - `ludwig-service-parent` puts the protobuf SPI on the annotation-processor path, and this
-module supplies the configuration:
+### Mapping messages
 
 ```java
 @Mapper(config = ProtobufMapperConfig.class)
@@ -94,36 +94,33 @@ public interface ProductMessageMapper {
 }
 ```
 
-`ProtobufMapperConfig` makes an absent model value leave a message field unset (a builder's setter
-throws on `null`), fills repeated fields through their adders, and converts `Instant`/`Duration` to and
-from `google.protobuf.Timestamp`/`Duration` (`ProtobufConversions`). The SPI does the rest: builders,
-`hasX` presence (an unset optional field maps back to `null`), and `ENUM_NAME_` prefixes with the
-`UNSPECIFIED` constant. `crud-service-example`'s `ProductMessageMapper` is the worked example.
+`ProtobufMapperConfig` leaves a field unset for an absent value (builder setters throw on `null`), fills repeated
+fields through adders, and converts `Instant`/`Duration` ↔ `google.protobuf.Timestamp`/`Duration`
+(`ProtobufConversions`). The protobuf MapStruct SPI (on the annotation-processor path from
+`ludwig-service-parent`) handles builders, `hasX` presence and `ENUM_NAME_` prefixes. Worked example:
+`crud-service-example`'s `ProductMessageMapper`.
 
-## Metadata keys
+### Metadata keys
 
-`GrpcMetadataKeys` declares each key once. Every one is the HTTP header that carries the same value,
-lower-cased, so there is one name per concept across both transports.
+`GrpcMetadataKeys` declares each key once; each is the lower-cased HTTP header carrying the same value.
 
 | Key | Mirrors |
 |---|---|
 | `authorization` | HTTP `Authorization` |
-| `x-correlation-id` | `ludwig.observability.correlation.header-name` (use `forHeader` if a deployment renamed it) |
+| `x-correlation-id` | `ludwig.observability.correlation.header-name` (`forHeader` if renamed) |
 | `idempotency-key` | `IdempotencyHeaders.KEY` |
 | `idempotency-replayed` | `IdempotencyHeaders.REPLAYED` |
-| `accept-language` | HTTP `Accept-Language`, read by web-core's request-header preference source |
-| `x-time-zone` | web-core's time-zone header |
+| `accept-language` | HTTP `Accept-Language` |
+| `x-time-zone` | web-core's time zone header |
 | `retry-after` | `OperationHeaders.RETRY_AFTER` |
 
-The owning modules are not dependencies of this one, so the literals are repeated here; the starters
-that depend on both sides carry a test asserting they are equal.
+The owning modules are not dependencies here, so the literals are repeated; the starters carry tests asserting
+equality.
 
-## A problem and a status are one fact
+### Problems as gRPC status
 
-Deciding *which* problem an exception is stays in `web-core`'s `ProblemMapperRegistry`, fed by the
-mappers every module contributes. `GrpcStatusCodec` starts from the `ProblemDetail` that pipeline
-produced and changes only the envelope. **A module never writes a gRPC-specific exception mapping**; the
-mapper it contributed for HTTP is the one that takes effect.
+Which problem an exception is stays in web-core's `ProblemMapperRegistry`; `GrpcStatusCodec` changes only the
+envelope. **No module writes a gRPC-specific exception mapping.**
 
 | Problem status | gRPC code | | Problem status | gRPC code |
 |---|---|---|---|---|
@@ -134,39 +131,27 @@ mapper it contributed for HTTP is the one that takes effect.
 | 409, 423 | `ABORTED` | | 504 | `DEADLINE_EXCEEDED` |
 | 412, 422 | `FAILED_PRECONDITION` | | | |
 
-The gRPC code is the coarse signal - what a retry policy and a circuit breaker act on. The precise
-answer travels beside it, which is what lets the caller rebuild the exact problem:
-
-| Problem member | Where it travels |
+| Problem member | Travels as |
 |---|---|
-| status | the code above, and the exact number in `ErrorInfo.metadata[http_status]` |
+| status | the code above, exact number in `ErrorInfo.metadata[http_status]` |
 | `code` | `ErrorInfo.reason` |
 | type, title | `ErrorInfo.metadata[type]`, `[title]` |
-| detail | the status message, and `LocalizedMessage` with its locale |
+| detail | status message and `LocalizedMessage` with its locale |
 | `violations` | `BadRequest.field_violations` |
-| a retry-after | `RetryInfo.retry_delay` |
-| the correlation id | `ErrorInfo.metadata[correlation_id]` |
+| retry-after | `RetryInfo.retry_delay` |
+| correlation id | `ErrorInfo.metadata[correlation_id]` |
 
-`409` is `ABORTED` rather than `ALREADY_EXISTS` because a conflict here is as often an optimistic-lock
-failure as a duplicate; the problem code says which.
+- `409` is `ABORTED`, not `ALREADY_EXISTS`: a conflict is as often an optimistic-lock failure; the problem code says
+  which.
+- `GrpcStatusCodes.forProblemStatus` is an exhaustive `switch` with no default: a new status in web-core stops
+  compilation until it gets a gRPC code.
+- **Never on the wire**: exception messages, class names, stack traces, free-form problem properties (including
+  `debug`), rejected values unless HTTP would carry them. The encoder takes no `Throwable`.
+- Decoding never throws; a non-platform status decodes to an approximation with `fromPlatform() == false`.
 
-**The table has no default branch.** `GrpcStatusCodes.forProblemStatus` is a `switch` expression naming
-every constant, so a status added to `web-core` stops this module compiling until someone decides its
-gRPC code, instead of falling through to `UNKNOWN` and being discovered by a caller's circuit breaker.
+### Operation message
 
-**What never travels:** an exception message, a class name, a stack trace. The codec has no
-`Throwable` parameter on the encoding side, so it cannot leak what it is never given. Free-form problem
-properties are not forwarded either - including the `debug` member `web-core` can add to a 5xx - and a
-violation's rejected value crosses the wire only if the HTTP response would have carried it.
-
-Decoding never throws on a malformed or foreign status. A failure from a server that is not on this
-platform decodes to an approximation whose `fromPlatform()` is `false`.
-
-## The operation message
-
-`ludwig/operation/v1/operation.proto` is `OperationResponse` on the wire. A gRPC method that starts,
-polls or cancels a long-running operation returns `Operation`, built by `OperationMessages.toMessage`
-from the same envelope the module would have handed to `OperationResponses` for HTTP:
+`ludwig/operation/v1/operation.proto` is web-core's `OperationResponse` on the wire:
 
 ```proto
 import "ludwig/operation/v1/operation.proto";
@@ -182,56 +167,51 @@ service ExportService {
 return OperationMessages.toMessage(run.toOperationResponse(), Duration.ofSeconds(5));
 ```
 
-There is still one envelope, no shared operation table, and no persistence dependency here. The
-module's own run table and its richer lifecycle in `detail` are exactly as they were.
+`retry_after` carries what HTTP puts in `Retry-After`. A contract never declares its own status enum; the enum in
+this proto is the single exemption from the operation-vocabulary architecture rule. Both conversions are exhaustive
+switches; the proto3 zero value and `UNRECOGNIZED` are rejected, not read as `PENDING`.
 
-**A contract never declares a status enum of its own.** The enum in this proto is the single named
-exemption from `architecture-rules`' operation-vocabulary rule, and exists only because a wire format
-cannot import a Java enum. Both status switches in `OperationMessages` name every constant and have no
-default, so the two vocabularies cannot drift by omission; the proto3 zero value and `UNRECOGNIZED` are
-rejected rather than read as `PENDING`, because an operation whose status nobody set is not one that is
-waiting.
+### Context bridge
 
-`retry_after` carries what the HTTP rendering puts in the `Retry-After` header.
+Identity, correlation and preferences live in thread-locals, but gRPC delivers each callback on whichever executor
+thread is free. `ContextRestoringServerInterceptor` attaches a gRPC `Context` and applies every `ThreadBinding`
+**around each callback**, undoing them in reverse after. A binding restores the thread as it found it (pooled
+threads may carry an outer scope). The server starter contributes the bindings.
 
-## The context bridge
+## Configuration
 
-The platform keeps the caller's identity, the correlation id and the caller's preferences in
-thread-locals. That works for a servlet request because one thread serves it. A gRPC call has no such
-thread: its events are delivered by whichever executor thread is free.
+None: the module has no auto-configuration; the starters construct what they need.
 
-`ContextRestoringServerInterceptor` runs the rest of a call with a gRPC `Context` attached and every
-`ThreadBinding` in force **around each callback**, and undoes them in reverse afterwards.
+## Deployment
 
-The obvious implementation - set the thread-locals once in `interceptCall` - is wrong and passes every
-single-threaded test. `interceptCall` returns before the request message has arrived; for a unary call
-the handler runs later, inside `onHalfClose`, on a thread the executor picks then. In production that is
-routinely a different thread, where the security context is empty; and the thread `interceptCall` ran on
-goes back to the pool carrying the previous caller's identity. `ContextBridgeTest` therefore delivers
-callbacks on a different thread from the interceptor's, interleaving two callers on one pooled thread.
+Nothing to deploy.
 
-A `ThreadBinding` restores the thread *as it found it* rather than clearing it, because executor
-threads are shared and an outer scope on the same thread may still need its value.
+## Observability
 
-`grpc-server-spring-boot-starter` contributes the bindings; this module restores all three subsystems
-while depending on none of them.
+Not applicable at this level; calls are instrumented by the starters. The correlation id travels as
+`x-correlation-id` and inside every error status.
 
-## What it deliberately does not do
+## Audit
 
-- **No transport.** No Netty, no channel, no server. `ModuleIndependenceTest` fails the build if a
-  transport type, a servlet type or any platform module other than `web-core` is reached from here.
-- **No Spring wiring.** There is no auto-configuration; the starters construct what they need.
-- **No message validation.** Validation stays in the service layer and reaches the caller through the
-  problem mapping above.
+Not applicable.
 
-## Package layout
+## Runbook
 
-```
-ru.ludwigandreas.grpc.core
-├── metadata    GrpcMetadataKeys
-├── problem     GrpcStatusCodes, GrpcStatusCodec, DecodedProblem
-├── operation   OperationMessages
-└── context     GrpcCallContext, ThreadBinding, ContextRestoringServerInterceptor
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Gate fails in `check_protos.sh` | Contract violates a rule above | Fix the proto as the message says |
+| Gate fails in `manifest.sh layout` for a `-grpc-api` module | Missing registration or wrong parent | Add the `<module>`, BOM entry and jacoco-aggregate dependency |
+| Caller receives `UNKNOWN` with no details | Server is not on this platform | Expected; `fromPlatform()` is false |
+| Identity or correlation missing in a gRPC handler | Handler reads thread-locals outside the bridged callbacks (own executor) | Capture values on the callback thread and pass them on |
 
-ru.ludwigandreas.operation.grpc.v1   generated from ludwig/operation/v1/operation.proto
-```
+## Testing
+
+`ContextBridgeTest` delivers callbacks on threads other than the interceptor's and interleaves two callers on one
+pooled thread; codec round-trip tests per status; exhaustive-switch tests; `ModuleIndependenceTest` fails on any
+transport, servlet or platform type other than web-core.
+
+## Design decisions
+
+- **No transport, no Spring wiring, no validation** here: only what both sides must agree on.
+- **One problem pipeline for HTTP and gRPC**: mappers written for HTTP apply to gRPC.
+- **Exhaustive switches without defaults** for every vocabulary crossing, so drift is a compile error.

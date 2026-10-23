@@ -1,17 +1,25 @@
 # grpc-server-spring-boot-starter
 
-A gRPC server as configuration. Add the starter, extend a generated `ImplBase`, put
-`@LudwigGrpcService` on it, and the service is served on its own port behind a fixed interceptor
-chain that carries the platform's principal, correlation id, caller preferences and RFC 9457
-problem mapping across the transport. No `@Configuration` class of your own.
+***English** · [Русский](README.ru.md)*
 
-Built on `grpc-java` directly (Spring gRPC needs Boot 3.5+). Properties live under
-`ludwig.grpc.server.*`, never `spring.grpc.*`, so a later Boot upgrade cannot bind the same keys with
-another meaning. The contract (`.proto`) lives in a `<service>-grpc-api` module; see
-[grpc-core](../grpc-core/README.md) for the proto conventions, the metadata keys and the status code
-table.
+A gRPC server as configuration. Extend a generated `ImplBase`, annotate it `@LudwigGrpcService`, and it is
+served on its own port behind a fixed interceptor chain that carries the platform's principal, correlation id,
+caller preferences and RFC 9457 problem mapping across the transport, with limits that hold without
+configuration, TLS unless plaintext is explicitly permitted twice, health bound to readiness, graceful shutdown,
+optional idempotent replay, and an in-process test slice.
 
-## Quick start
+| | |
+|---|---|
+| Role | starter |
+| Depends on (in-repo) | [`grpc-core`](../grpc-core), [`idempotency`](../idempotency-spring-boot-starter), [`observability`](../observability-spring-boot-starter), [`security`](../security-spring-boot-starter), [`web-core`](../web-core-spring-boot-starter) |
+| Used by | `crud-service-example`; `grpc-client` (tests) |
+| Surfaces | gRPC (own port, default 9090) |
+
+Built on `grpc-java` directly; properties live under `ludwig.grpc.server.*` (never `spring.grpc.*`, so a later
+Spring Boot upgrade cannot bind the same keys with another meaning). Contracts live in `<service>-grpc-api`
+modules; see [grpc-core](../grpc-core).
+
+## Usage
 
 ```java
 @LudwigGrpcService
@@ -20,8 +28,8 @@ class CatalogGrpcService extends CatalogServiceGrpc.CatalogServiceImplBase {
     private final ProductService products;          // the application service does the work
 
     @Override
-    public void getProduct(GetProductRequest request, StreamObserver<ProductReply> reply) {
-        reply.onNext(mapper.toReply(products.get(request.getId())));
+    public void getProduct(GetProductRequest request, StreamObserver<Product> reply) {
+        reply.onNext(mapper.toMessage(products.get(request.getId())));
         reply.onCompleted();
     }
 }
@@ -36,11 +44,10 @@ ludwig:
         bundle: grpc            # a spring.ssl.bundle.* entry
 ```
 
-With a resource server configured (`spring.security.oauth2.resourceserver.jwt.*`) that is all.
-Throw your domain exceptions as you do in a controller: the `ExceptionProblemMapper`s your modules
-already contribute decide the gRPC status too.
+With a resource server configured (`spring.security.oauth2.resourceserver.jwt.*`) nothing else is needed. Throw
+domain exceptions as in a controller: the `ExceptionProblemMapper`s modules contribute decide the gRPC status.
 
-## The chain, and why it is fixed
+### The interceptor chain (fixed)
 
 ```
 observation → correlation → access log → exception→status → admission → authentication
@@ -48,131 +55,58 @@ observation → correlation → access log → exception→status → admission 
             → your LudwigGrpcServerInterceptor beans → handler
 ```
 
-The order is the declaration order of `BuiltInServerInterceptor.Stage` and nothing else. Every other
-order has a concrete defect: observation outermost, so a refused call is still measured; the
-exception translator outside authentication, so a rejected credential is rendered like any other
-problem; admission before authentication, so a saturated server does not validate a token for a call
-it is about to refuse; the context bridge inside authentication, because the principal is one of the
-things it binds. Your own interceptors are `LudwigGrpcServerInterceptor` beans and always run after
-the built-in stages. A plain `ServerInterceptor` bean is deliberately not picked up.
+- Observation outermost: a refused call is still measured.
+- Exception translation outside authentication: a rejected credential is rendered like any problem.
+- Admission before authentication: a saturated server does not validate tokens for calls it will refuse.
+- Context bridge inside authentication: the principal is one of the things it binds.
+- Custom interceptors are `LudwigGrpcServerInterceptor` beans and always run after the built-in stages; a plain
+  `ServerInterceptor` bean is not picked up.
 
-**Thread-locals are restored on every callback**, not once per call. gRPC delivers a call's events on
-whichever executor thread is free, and the handler of a unary call runs in `onHalfClose`, usually on
-a different thread from the interceptors. `SecurityContextHolder`, the correlation MDC entry and the
-bound `UserPreferences` are therefore set around each callback and put back afterwards - so a handler
-sees its own caller and a pooled thread never carries the previous caller's identity.
+Thread-locals (`SecurityContextHolder`, correlation MDC, `UserPreferences`) are restored **around every
+callback**, because a unary handler runs in `onHalfClose`, usually on a different thread.
 
-## The proxy-annotation trap
+### The proxy-annotation trap
 
-gRPC dispatches to the object `bindService()` captured, not through the Spring proxy around your
-bean. `@PreAuthorize`, `@Secured`, `@RolesAllowed`, `@Transactional`, `@Cacheable` and `@Async` on a
-gRPC service compile, start, and **do nothing**. A gRPC service is an adapter: authorization and
-transactions belong on the application service it calls. `architecture-rules`' `RuleGroup.GRPC`
-fails the build on any of those annotations, and on a repository dependency, in a class carrying
-`@LudwigGrpcService`.
+gRPC dispatches to the object `bindService()` captured, not through the Spring proxy.
+`@PreAuthorize`, `@Secured`, `@RolesAllowed`, `@Transactional`, `@Cacheable` and `@Async` on a gRPC service
+**do nothing**. Put authorization and transactions on the application service it calls. `architecture-rules`
+`RuleGroup.GRPC` fails the build on those annotations and on a repository dependency in a `@LudwigGrpcService`
+class. `@Idempotent` is the exception (read reflectively at bind time).
 
-`@Idempotent` is the exception: the server reads it reflectively when it binds the service.
+### Authentication
 
-## Authentication
+Deny by default. The bearer token in `authorization` metadata is decoded by the application's `JwtDecoder` and
+converted by its `Converter<Jwt, AbstractAuthenticationToken>` (`JwtPrincipalConverter`), so the same token gives
+the same principal over gRPC and HTTP. Exempt: `grpc.health.v1.Health`, reflection when enabled, and methods in
+`security.permit-unauthenticated` (each logged at `WARN` at startup). Identity headers the HTTP chain strips
+(`x-ludwig-*`, `x-forwarded-*`, ...) are stripped here too.
 
-Deny by default. A bearer token in `authorization` metadata is decoded by the application's own
-`JwtDecoder` and converted by its `Converter<Jwt, AbstractAuthenticationToken>` (the platform's
-`JwtPrincipalConverter`), so a gRPC caller and an HTTP caller holding the same token are the same
-principal with the same authorities. Exempt: `grpc.health.v1.Health`, reflection when enabled, and
-the methods in `security.permit-unauthenticated` (each logged at WARN at startup). The identity
-headers the HTTP chain strips (`x-ludwig-*`, `x-forwarded-*`, ...) are stripped here too.
+A service with a `@LudwigGrpcService` bean and no `JwtDecoder` **does not start**, naming
+`ludwig.grpc.server.security.enabled`; setting it `false` is logged at `WARN`.
 
-**A service with no way to authenticate does not start.** With a `@LudwigGrpcService` bean and no
-`JwtDecoder`, startup fails naming `ludwig.grpc.server.security.enabled`. Setting it to `false` is a
-decision you write down; it is logged at WARN.
+### Failures
 
-## Failures
+Resolved by web-core's `ProblemMapperRegistry` and rendered as `google.rpc.Status` (code table, `ErrorInfo`,
+`LocalizedMessage`, `BadRequest`, `RetryInfo` - see [grpc-core](../grpc-core#problems-as-grpc-status)). An
+unmapped exception is `INTERNAL` with generic text and the correlation id. `onError(e)` is translated like a throw.
+Failures before the context bridge (authentication, admission) use the default locale.
 
-An exception is resolved by `web-core`'s `ProblemMapperRegistry`, exactly as for HTTP, and rendered
-as `google.rpc.Status`: the code from the table in `grpc-core`, `ErrorInfo` carrying the problem code,
-`LocalizedMessage` in the caller's locale, `BadRequest` for violations, `RetryInfo` where there is a
-retry-after. An exception no mapper claims is `INTERNAL` with the generic text and the correlation
-id, never its own message. A handler that calls `onError(e)` is translated the same way as one that
-throws. A failure raised before the context bridge (authentication, admission) is rendered in the
-platform's default locale, because the caller's has not been resolved yet.
+### Idempotent replay
 
-## Idempotent replay
+With `idempotency-spring-boot-starter`, a **unary** method annotated `@Idempotent` runs at most once per
+`idempotency-key` and scope (default: the method's full name), using the same `IdempotencyStore` and `STANDALONE`
+claim as the HTTP filter. A repeat gets the stored reply with `idempotency-replayed: true`; a reused key with a
+different request, or a duplicate while the first runs, gets the idempotency module's problems; failed or
+cancelled calls are not stored. `@Idempotent(required = true)` without a key → `INVALID_ARGUMENT`. `@Idempotent`
+without an `IdempotencyStore`, or on a streaming method, fails startup.
 
-With `idempotency-spring-boot-starter` present, a **unary** method carrying `@Idempotent` runs at most
-once per `idempotency-key` and scope (default scope: the method's full name). The claim, the store
-and the problems are the idempotency module's own - same `IdempotencyStore`, same `STANDALONE` claim
-mode as `IdempotencyFilter`; no table or SQL is added here. A repeat with the same request gets the
-stored reply with `idempotency-replayed: true`; a reused key with a different request, and a
-duplicate while the first is running, get the idempotency module's problems; a call that fails or is
-cancelled is not stored. `@Idempotent(required = true)` without a key is `INVALID_ARGUMENT`. An
-`@Idempotent` method with no `IdempotencyStore` bean, or on a streaming method, fails startup naming
-the method.
+### Health and shutdown
 
-## Observability
+`grpc.health.v1.Health` is always registered, follows Spring's `ReadinessState` (server-wide and per service) and
+is anonymous. On shutdown it turns `NOT_SERVING`, the server stops accepting, in-flight calls get `shutdown-grace`,
+then are cancelled.
 
-- `ludwig.grpcserver.requests{service,method,status}` - Micrometer's gRPC observation, renamed; also
-  the server span.
-- `ludwig.grpcserver.calls.nodeadline{service,method}` - calls that arrived with no deadline. Such a
-  caller can hold a handler thread for as long as the handler takes.
-- One INFO line per call on logger `ludwig.grpcserver.<service>`: method, status, duration,
-  correlation id. **No payload, ever.**
-- The correlation id is resolved with observability's own resolver and acceptance rules from
-  `x-correlation-id` (or the configured header) and bound to the MDC in the handler. Without
-  `observability-spring-boot-starter` calls carry none.
-
-## Configuration
-
-Every key needs a restart: the server, its transport and its chain are built once, at startup.
-
-| Key | Default | |
-|---|---|---|
-| `ludwig.grpc.server.enabled` | `true` | `false` binds nothing whatever services exist |
-| `ludwig.grpc.server.port` | `9090` | `0` picks a free port |
-| `ludwig.grpc.server.address` | all interfaces | |
-| `ludwig.grpc.server.in-process-name` | - | serve in-process instead of on a port (tests) |
-| `ludwig.grpc.server.max-inbound-message-size` | `4MB` | larger is `RESOURCE_EXHAUSTED` |
-| `ludwig.grpc.server.max-inbound-metadata-size` | `8KB` | a JWT fits; a header bomb does not |
-| `ludwig.grpc.server.max-concurrent-calls-per-connection` | `100` | one caller cannot monopolise a pod |
-| `ludwig.grpc.server.max-connection-age` | `30m` | makes callers re-resolve, which is what rebalances after a scale-out |
-| `ludwig.grpc.server.max-connection-age-grace` | `30s` | raise it for long server-streaming calls, or they are cancelled |
-| `ludwig.grpc.server.handshake-timeout` | `20s` | |
-| `ludwig.grpc.server.keepalive.permit-time` | `30s` | must not exceed the clients' keepalive time; the client starter's default is aligned - move them together |
-| `ludwig.grpc.server.keepalive.permit-without-calls` | `true` | |
-| `ludwig.grpc.server.executor.threads` | `64` | handler threads |
-| `ludwig.grpc.server.executor.queue-capacity` | `256` | beyond threads + queue a call is `RESOURCE_EXHAUSTED`, not queued without bound |
-| `ludwig.grpc.server.shutdown-grace` | `30s` | in-flight calls get this long on shutdown, then are cancelled |
-| `ludwig.grpc.server.tls.bundle` | - | a Spring Boot SSL bundle holding key and certificate |
-| `ludwig.grpc.server.tls.client-auth` | `none` | `optional` / `require` - mTLS authenticates the transport; the principal still comes from the token |
-| `ludwig.grpc.server.plaintext` | `false` | first of two plaintext switches |
-| `ludwig.grpc.allow-plaintext` | `false` | second switch, shared with the client starter |
-| `ludwig.grpc.production-profiles` | `prod, production` | plaintext and reflection are refused under these |
-| `ludwig.grpc.server.security.enabled` | `true` | `false` serves unauthenticated, and must be written down |
-| `ludwig.grpc.server.security.permit-unauthenticated` | `[]` | `pkg.Service/Method` or `pkg.Service/*` |
-| `ludwig.grpc.server.reflection.enabled` | `false` | refused under a production profile |
-
-**Plaintext.** With no `tls.bundle` the server would listen in plaintext. That is accepted on a
-loopback address, otherwise only with both `plaintext: true` and `ludwig.grpc.allow-plaintext: true`,
-and never under a production profile - loopback included. There is deliberately no "the mesh
-encrypts" mode: a sidecar that is absent or misconfigured is exactly when the token is readable on
-the wire. Every refused configuration is reported at once, each naming its property.
-
-## Health and shutdown
-
-`grpc.health.v1.Health` is always registered, follows Spring's `ReadinessState` for the server as a
-whole and for each service by name, and is open to anonymous callers. On shutdown it turns
-`NOT_SERVING` first, then the server stops accepting, in-flight calls get `shutdown-grace`, the rest
-are cancelled.
-
-## Deployment prerequisites
-
-- **A second port.** Expose `9090` (or your `port`) in the container and the `Service`; a network
-  policy can then open gRPC to peers without opening the REST surface.
-- **A headless `Service`** for callers, so the client starter's `round_robin` balances per call. A
-  normal `Service` balances per connection, and HTTP/2 puts every call on one connection.
-- **A gRPC readiness probe** (`grpc: { port: 9090 }`) if you want Kubernetes to use the health
-  service; it agrees with the HTTP readiness endpoint.
-
-## Testing
+### Testing slice
 
 ```java
 @LudwigGrpcServerTest
@@ -182,17 +116,105 @@ class CatalogGrpcServiceTest {
 }
 ```
 
-`@LudwigGrpcServerTest` boots this starter's auto-configurations and web-core's problem and
-preference configuration, nothing else, on the in-process transport under a random name.
-Authentication is on, as in production: declare a `JwtDecoder`, or set
-`ludwig.grpc.server.security.enabled=false` in `properties`. Add further auto-configurations with
-`@ImportAutoConfiguration`.
+Boots this starter plus web-core's problem and preference configuration on the in-process transport. Authentication
+is on: declare a `JwtDecoder`, or set `ludwig.grpc.server.security.enabled=false` in `properties`.
 
-## What it deliberately does not do
+## Configuration
 
-- **No gRPC-over-servlet.** Shaded Netty on its own port, so gRPC's Netty is independent of the one
-  Boot manages and HTTP/2 tuning stays out of Tomcat.
-- **No configurable chain order** and no way to put an interceptor before a built-in stage.
-- **No behaviour for client-streaming or bidirectional calls** beyond the chain; replay is unary only.
-- **No message payload logging.**
-- **No wire-compatibility check of `.proto` changes** - see the architecture-rules README.
+All keys require a restart.
+
+| Property | Default | Meaning |
+|---|---|---|
+| `ludwig.grpc.server.enabled` | `true` | `false` binds nothing |
+| `ludwig.grpc.server.port` | `9090` | `0` = free port |
+| `ludwig.grpc.server.address` | all interfaces | |
+| `ludwig.grpc.server.in-process-name` | - | Serve in-process (tests) |
+| `ludwig.grpc.server.max-inbound-message-size` | `4MB` | Larger → `RESOURCE_EXHAUSTED` |
+| `ludwig.grpc.server.max-inbound-metadata-size` | `8KB` | Fits a JWT, not a header bomb |
+| `ludwig.grpc.server.max-concurrent-calls-per-connection` | `100` | One caller cannot monopolise a pod |
+| `ludwig.grpc.server.max-connection-age` | `30m` | Forces clients to re-resolve (rebalancing after scale-out) |
+| `ludwig.grpc.server.max-connection-age-grace` | `30s` | Raise for long server-streaming calls |
+| `ludwig.grpc.server.handshake-timeout` | `20s` | |
+| `ludwig.grpc.server.keepalive.permit-time` | `30s` | ≤ clients' keepalive time; aligned with the client starter's default - change together |
+| `ludwig.grpc.server.keepalive.permit-without-calls` | `true` | |
+| `ludwig.grpc.server.executor.threads` | `64` | Handler threads |
+| `ludwig.grpc.server.executor.queue-capacity` | `256` | Beyond threads + queue → `RESOURCE_EXHAUSTED` |
+| `ludwig.grpc.server.shutdown-grace` | `30s` | In-flight calls on shutdown |
+| `ludwig.grpc.server.tls.bundle` | - | Spring Boot SSL bundle with key and certificate |
+| `ludwig.grpc.server.tls.client-auth` | `none` | `optional` / `require` (mTLS authenticates the transport; the principal still comes from the token) |
+| `ludwig.grpc.server.plaintext` | `false` | First plaintext switch |
+| `ludwig.grpc.allow-plaintext` | `false` | Second switch, shared with the client starter |
+| `ludwig.grpc.production-profiles` | `prod, production` | Plaintext and reflection refused under these |
+| `ludwig.grpc.server.security.enabled` | `true` | `false` serves unauthenticated (logged) |
+| `ludwig.grpc.server.security.permit-unauthenticated` | `[]` | `pkg.Service/Method` or `pkg.Service/*` |
+| `ludwig.grpc.server.reflection.enabled` | `false` | Refused under a production profile |
+
+**Plaintext** is accepted on loopback, otherwise only with both `plaintext: true` and
+`ludwig.grpc.allow-plaintext: true`, and never under a production profile (loopback included). There is no "the
+mesh encrypts" mode. All refused settings are reported at once, each naming its property.
+
+## Deployment
+
+- **A second port**: expose `9090` (or `port`) in the container and `Service`; network policies can open gRPC
+  without the REST surface.
+- **A headless `Service`** for callers, so the client starter's `round_robin` balances per call (HTTP/2 puts every
+  call on one connection behind a normal `Service`).
+- **gRPC readiness probe** (`grpc: { port: 9090 }`) optionally; it agrees with HTTP readiness.
+- **TLS**: an SSL bundle (`spring.ssl.bundle.*`) from mounted certificates; rotate by redeploying.
+
+## Observability
+
+| Signal | Meaning |
+|---|---|
+| `ludwig.grpcserver.requests{service,method,status}` | Micrometer gRPC observation (timer) and server span |
+| `ludwig.grpcserver.calls.nodeadline{service,method}` | Calls without a deadline; such callers can hold a handler thread indefinitely |
+| `INFO` on logger `ludwig.grpcserver.<service>` | One line per call: method, status, duration ms, correlation id. **No payloads** |
+| `INFO gRPC server started on <address> serving <services>` | Startup |
+| `ERROR gRPC method <m> failed` | Unmapped exception (rendered `INTERNAL`) |
+| `WARN gRPC calls still in flight after <grace>; cancelling them` | Shutdown cut calls short |
+
+Correlation is resolved from `x-correlation-id` with observability's rules and bound to the MDC in the handler.
+
+**Recommended alerts:**
+
+| Condition | Why |
+|---|---|
+| Rate of `status` ∈ {`INTERNAL`, `UNKNOWN`, `UNAVAILABLE`} > 1% | Server errors |
+| `status="RESOURCE_EXHAUSTED"` rising | Executor saturated or oversized messages |
+| `ludwig_grpcserver_calls_nodeadline_total` rising | A caller without deadlines (fix the client) |
+
+**Known gaps:** no gauge for executor queue depth or active calls.
+
+## Audit
+
+No events of its own. Authorization denials from `@PreAuthorize` on the application service are audited by the
+security starter (`access.denied`).
+
+**Known gap:** rejected authentication (missing/invalid/expired token) on a gRPC call is not recorded in the audit
+trail - only rendered as `UNAUTHENTICATED`. The same holds for the HTTP chain.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Startup fails naming `ludwig.grpc.server.security.enabled` | No `JwtDecoder` | Configure the resource server, or explicitly disable security (not in production) |
+| Startup fails on plaintext / reflection | Production profile or missing second switch | Configure `tls.bundle`; reflection only outside production |
+| Clients get `UNAUTHENTICATED` | Missing/expired token, wrong audience, identity headers stripped | Check the client's token and the resource server's audience |
+| `@PreAuthorize` on the gRPC service has no effect | Proxy-annotation trap | Move it to the application service |
+| `RESOURCE_EXHAUSTED` under load | `executor.threads` + `queue-capacity` exceeded | Scale out or raise threads (watch DB pool size) |
+| All traffic on one pod after scale-out | Long-lived connections behind a normal `Service` | Use a headless `Service`; `max-connection-age` forces re-resolution |
+| Streaming calls cut on deploy | `max-connection-age-grace` / `shutdown-grace` too short | Raise them (and `terminationGracePeriodSeconds`) |
+
+## Testing
+
+`@LudwigGrpcServerTest` (in-process, same chain). The module's own tests cover chain order, per-callback context
+restoration across threads, problem rendering, authentication refusals, plaintext/reflection refusals, limits,
+health and shutdown, and idempotent replay; `architecture-rules` `GRPC` group checks services.
+
+## Design decisions
+
+- **Netty on its own port**, not gRPC-over-servlet: independent of Boot's Netty and Tomcat HTTP/2 tuning.
+- **Fixed chain order**; no way to place an interceptor before a built-in stage.
+- **No payload logging.**
+- **Replay is unary only**; no special behaviour for client-streaming or bidirectional calls beyond the chain.
+- **No wire-compatibility check of `.proto` changes** (see architecture-rules).

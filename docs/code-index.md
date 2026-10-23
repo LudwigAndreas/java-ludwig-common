@@ -4,9 +4,8 @@
 and neither does `rg` across the reactor. Navigation goes through the **`code-index` MCP server**
 (`mcp__code-index__*`), plus one generated manifest for the Maven questions the index cannot answer.
 
-There is deliberately **one** index. A previous iteration of this repository carried a parallel
-Universal Ctags + ast-grep toolchain under a `scripts/index.sh` that no longer exists; it was retired, because a second
-index is a second thing to keep fresh and a second answer to the same question. Do not reintroduce
+There is deliberately **one** index: a second index is a second thing to keep fresh and a second answer to
+the same question. Do not add
 `universal-ctags`, `ast-grep`, `scip-java` or `semgrep`.
 
 ## Bootstrap — unconditional, every session

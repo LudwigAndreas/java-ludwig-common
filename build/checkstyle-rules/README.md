@@ -6,6 +6,13 @@
 > naming, source-level and Javadoc conventions that make unfamiliar code read like the rest of the
 > repository. Runs on every module at `validate`, before the compiler.
 
+| | |
+|---|---|
+| Role | build tooling (Checkstyle configuration jar) |
+| Depends on (in-repo) | nothing |
+| Used by | every module, at the `validate` phase |
+| Surfaces | none |
+
 ## Why
 
 A developer who has not shipped production Java yet writes code that compiles, passes its test and
@@ -305,8 +312,7 @@ recorded so nobody re-derives them.
 
 ## Adopting it in a codebase that predates it
 
-This repository was brought to zero violations before the gate was switched on, which is the
-preferable order: a build that ships red teaches everyone to ignore it. In a larger codebase where
+Reach zero violations before switching the gate on: a build that ships red teaches everyone to ignore it. In a larger codebase where
 that is not practical:
 
 1. Run `mvn checkstyle:checkstyle -Dcheckstyle.failOnViolation=false` and read
@@ -317,3 +323,16 @@ that is not practical:
 3. For whatever is left, add **dated, file-scoped** entries to a service-local suppressions file
    rather than weakening a rule, so new code is held to the full standard from day one and the
    backlog is visible in one place.
+
+## Deployment, observability, audit
+
+Not applicable: build tooling.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `mvn validate` fails with a Checkstyle violation | Source does not match the rules | Run IntelliJ Reformat Code / Optimize Imports; fix the named rule; suppress only with one of the three in-code forms naming the rule |
+| `No enum constant ...SeverityLevel.WARNING PACKAGE.INFO.SEVERITY=IGNORE` | `pom.xml` was reformatted and `<propertyExpansion>` lost its `&#10;` | Restore the `&#10;` separators |
+| Need a local build without style checks | - | `-Dcheckstyle.skip=true` locally only, never in CI |
+

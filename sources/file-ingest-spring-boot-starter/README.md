@@ -1,37 +1,38 @@
 # file-ingest-spring-boot-starter
 
-[English] | [Русский](README.ru.md)
+***English** · [Русский](README.ru.md)*
 
-The once-a-day job that reads a large object out of storage, parses it record by record, writes the
-records into the database, and tells somebody it's done — **without ever holding the file in memory
-and without ever losing a record.**
-
-A service writes two things: a `RecordParser<R>` and a `RecordApplier<R>`. Everything else is
-configuration.
+The scheduled bulk file ingest: reads a large object out of storage, parses it record by record, writes the records
+into the database and reports completion - **without ever holding the file in memory and without ever losing a
+record**. A service writes a `RecordParser<R>` (bytes → records) and a `RecordApplier<R>` (records → staging rows);
+schedule, lock, discovery, arrival detection, ranged streaming, checkpointing, batching, quarantine, the balance
+check, receipts, archival, metrics, audit and the actuator endpoint are the module's.
 
 | | |
 |---|---|
-| **the author writes** | bytes → records, and records → staging rows |
-| **the module owns** | schedule, lock, discovery, arrival detection, ranged streaming, checkpointing, batching, quarantine, the balance check, receipts, archival, metrics, audit, actuator |
+| Role | starter |
+| Depends on (in-repo) | [`audit-core`](../audit-core), [`db-core`](../db-core), [`job-core`](../job-core), [`object-storage`](../object-storage-spring-boot-starter), [`outbox`](../outbox-spring-boot-starter) (optional at runtime), [`web-core`](../web-core-spring-boot-starter) |
+| Used by | none in this repository (services importing partner files) |
+| Surfaces | object storage (read, receipt, archive); actuator `fileingest`; optional outbox event `ingest.completed` |
 
-## Why this is not part of `reconciliation-spring-boot-starter`
+**Not reconciliation.** [`reconciliation`](../reconciliation-spring-boot-starter) is demand-driven (local rows ask for
+external state by key); a file is the authority and its keys are unknown until read. Reconciliation's per-record
+bookkeeping is right for thousands of drifting records and wrong for ten million rows a day.
 
-The two look similar and are inverses, and merging them would break this one.
+## Usage
 
-[`reconciliation`](../reconciliation-spring-boot-starter) is **demand-driven**: stage 2 asks "which
-*local* rows need external state" and stage 3 fetches *by key*. A file inverts that — **the file is
-the authority**, and the keys are unknown until the file is read. `Fetcher.Paged` joins its results
-against demand, so a record in the file with no matching local row would be **silently dropped**,
-which is precisely the failure this module exists to prevent.
+```xml
+<dependency>
+    <groupId>ru.ludwigandreas</groupId>
+    <artifactId>file-ingest-spring-boot-starter</artifactId>
+</dependency>
+```
 
-The sizing is opposite too. Reconciliation's per-record `sync_inbox_record` staging row carries
-`attempts`, `next_attempt_at`, `locked_by` and `version` — exactly right for a few thousand drifting
-records that each need their own retry budget, and exactly wrong for ten million rows a day, where
-the per-row bookkeeping would cost more than the import.
+Object storage is required; for S3 add the AWS SDK artifacts listed in
+[object-storage](../object-storage-spring-boot-starter#usage). Declare a parser and an applier bean for each configured
+task (the validator refuses a task without a bean and a bean without a task).
 
-`Fetcher` is `sealed` on purpose. There is no fifth shape to add.
-
-## The core loop
+### The loop
 
 ```
 discover object  →  confirm arrival  →  claim run (unique on bucket+key+etag)
@@ -39,315 +40,65 @@ discover object  →  confirm arrival  →  claim run (unique on bucket+key+etag
     └─ loop:  open(uri, Range(checkpoint, EOF))
               → decompress → split into records
               → accumulate a batch, bounded by BOTH record count AND bytes
-              → ONE transaction: { write batch to staging ; advance checkpoint }
+              → ONE transaction: { write batch to staging ; advance checkpoint ; quarantine rows ; read counts }
               → renew the lock lease
     │
-    └─ final: single set-based MERGE staging → target
-              → balance check
-              → run = SUCCEEDED  →  receipt object  →  archive source
+    └─ final: balance check → single set-based MERGE staging → target
+              → run = SUCCEEDED (+ ingest.completed via outbox)  →  receipt object  →  archive source
 ```
 
-### 1. The checkpoint and the data commit in the same transaction
+### Guarantees and how they are kept
 
-This is the entire "never miss data" argument, and it lives in one method: `BatchCommitter.commit`.
-
-There is **no** arrangement of two transactions that is safe:
-
-* **Data first, then checkpoint.** A crash in between leaves staged rows the checkpoint does not
-  account for. The next run resumes from the older checkpoint and writes them again — *duplicates*.
-* **Checkpoint first, then data.** A crash in between leaves a checkpoint claiming records that were
-  never staged. The next run resumes past them and they are never read again — *a gap*: silent,
-  permanent, and invisible to every count the module keeps, because the records were never read and
-  so were never counted.
-
-One transaction has neither failure mode. **This is exactly the kind of thing that gets refactored
-apart by somebody who doesn't know why it's together** — for testability, for a cleaner service
-layer, to reuse the writer elsewhere.
-
-`CheckpointAtomicityIT` is the test that catches that, and it is the only one that does:
-`CheckpointResumeIT` would pass with the transaction removed, because every write would still happen
-on its own auto-commit. The atomicity test writes the batch, fails, and asserts that *both* the staged
-rows and the checkpoint went away. It was verified to fail when the annotation is removed — an
-architecture test that has never been seen red is a test nobody should trust.
-
-Quarantine rows are in the same transaction, for the same reason: a quarantined record is accounted
-for by the checkpoint just as an applied one is.
-
-> The read counts (`records_read`, `bytes_read`) are in that transaction too, and getting this wrong
-> was a real bug caught by the balance check during this module's own development: kept outside, they
-> were lost when a run was interrupted while the applied count — which was inside — survived, so the
-> resumed run read the remainder and the two stopped adding up.
-
-### 2. Checkpoint granularity is format-dependent
-
-`Checkpoint` is `sealed` over two shapes, and the parser declares which one it can produce:
-
-| Shape | For | Resume costs |
-|---|---|---|
-| `ByteOffset` | line-delimited (CSV, NDJSON) | a ranged GET from the offset — nothing already consumed is transferred again |
-| `RecordOrdinal` | XML, Parquet, fixed-block, anything with a header | re-read from the start and skip forward |
-
-Both are equally **correct**. They differ only in what a resume costs, and saying so matters: an
-ordinal checkpoint is not a degraded checkpoint, it is one whose resume re-reads rather than seeks.
-
-A byte-offset-only design would have forced the first XML feed to be a rewrite of the loop rather
-than an addition to it.
-
-**One honest caveat about compression.** A byte offset counts *uncompressed* bytes, because that is
-what the parser sees. For an uncompressed object those are the store's own bytes and the resume is a
-ranged GET. For a **gzipped** object they are not, and there is no general way to map one to the
-other — gzip is a single stream, and reaching an offset means decompressing everything before it. So
-a gzipped resume re-reads and discards. That is a real cost, it is stated rather than hidden, and the
-answer for a partner whose files are large enough for it to matter is to ask for a seekable format,
-not to pretend the offset means something it does not.
-
-### 3. Memory is bounded in bytes, not records
-
-The batch flushes at `max-records` **or** `max-bytes`, whichever comes first. A record-count bound on
-its own is a module that works until a partner sends one row with a 200 MB free-text column: five
-thousand records is then a gigabyte, and the process dies with an `OutOfMemoryError` naming none of
-the four million rows in the file.
-
-A single record larger than `max-bytes` is a **poison record** — quarantined with its offset, never
-grown into.
-
-Nothing here calls `readAllBytes`, `readAllLines` or `Files.readString`, and no collection grows with
-the object's size. An ArchUnit rule forbids the first three by name; the rule cannot catch a
-collection that quietly accumulates across batches, so `LargeFileHeapIT` ingests a **200 MB object
-under a measured heap ceiling**. The requirement is worth testing, not restating.
-
-### 4. Identity is `(bucket, key, etag)` — and the constraint is the guard
-
-`file_ingest_run` carries a unique constraint on that triple, and **that constraint is the
-exactly-once guard** — not a `processed` flag somebody remembers to check. The difference is not
-stylistic: a flag is read and *then* acted on, so two replicas reading it in the same moment both
-act, while a unique constraint is enforced at the moment of the insert.
-
-The third column keeps it honest. Keying on the object key alone means a partner re-uploading a
-**corrected** file under the same name is recognised as a duplicate and skipped: silent data loss,
-discovered weeks later when somebody asks why the correction never landed. Use `versionId` instead of
-`etag` where the bucket is versioned — `StoredObject.contentIdentity()` prefers it automatically.
-
-### 5. Arrival detection — the file must be complete before you read it
-
-Reading a half-written object is **the most common way a daily ingest loses data**, and it is the
-worst-behaved failure here because it does not look like one: the run reads what is there, parses it,
-applies it, balances perfectly against what it read, and completes. The tail is simply absent, and
-nothing alerts on a successful run. Every other guard in this module reasons about the bytes that
-*were* there, so none of them can see it.
-
-Two mechanisms, independently configurable, because partners differ:
-
-* **`arrival.sentinel`** (default **on**): don't touch `data.csv` until `data.csv.done` exists. The
-  strong form — the partner asserts completion rather than this module inferring it. The sentinel's
-  content is ignored except for an optional record count (see the balance check).
-* **`arrival.stability`**: no sentinel available, so require identical size + ETag across two polls
-  `stability-window` apart, and require that long since the last write. Honestly weaker — an upload
-  that stalls for longer than the window looks finished — which is why it is not the default.
-
-Configuring neither logs a warning at startup. It is legitimate for a partner who writes atomically
-and a mistake otherwise, and the module says so rather than deciding for you.
-
-### 6. The done file, both directions
-
-"Send done file" covers two separate features. Both are built and switch independently:
-
-* **consume** a partner's sentinel — `arrival.sentinel`, above, on by default;
-* **produce** a receipt object after a successful run — off by default, because a partner who does
-  not read receipts should not have objects written into their bucket. `receipt.key-template`
-  (e.g. `processed/{name}.receipt.json`), content is the run summary: run id, source uri + etag,
-  records read / applied / quarantined / skipped, byte count, started/finished timestamps.
-
-The receipt carries the **counts**, not just "ok", because the question a partner actually asks is
-whether the number of records that arrived is the number they sent — and the counts let them check
-that themselves, without asking anybody.
-
-### 7. The ordering of the side effects cannot be changed
-
-`run = SUCCEEDED` in the database **first**, because it is the source of truth. Then the receipt.
-Then the archive.
-
-A crash anywhere after the status re-runs, finds the run already complete through the identity
-constraint, and redoes only the bucket operations — which are idempotent: copying an object over
-itself and deleting something already absent both succeed.
-
-The reverse order is the one that looks natural and cannot recover: archive the source, then mark the
-run, and a crash in between leaves a bucket that says "processed" and a database that says the run
-never happened. The next pass finds no object and no record that there ever was one.
-
-A failing receipt or archive does **not** fail the run. The records are already in the target;
-turning a bucket permission problem into a failed run would make the module claim that data did not
-arrive when it did.
-
-### 8. Write path: staging table, then one set-based merge
-
-Records stream into a per-task staging table; the target is changed once, at the end, by one
-statement. That buys three things a row-by-row merge loses:
-
-* **the target changes atomically** — nothing ever observes a half-imported catalogue;
-* **the parse phase runs free of the target's constraints** — one violating row does not abort a
-  transaction carrying five thousand good ones;
-* **the counts are checkable**, which is what the balance check is built on.
-
-> ⚠️ **This needed a deliberate exception to a standing repo rule.** `CLAUDE.md` mandates QueryDSL
-> against generated Q-types only — no JPQL, no SQL strings — and neither Postgres `COPY` (via
-> `CopyManager`, which is *why* you want this: it streams and is several times faster than batched
-> `INSERT`) nor a set-based upsert can be expressed in QueryDSL. The exception is granted with
-> conditions, all four of which are met:
->
-> 1. every SQL string is in **one package**, `ru.ludwigandreas.ingest.bulk`, and nowhere else;
-> 2. each statement carries javadoc saying why QueryDSL cannot express it — the standard
->    `DistributedLockRepository`'s native `@Query` already meets;
-> 3. `SqlConfinementTest` fails the build if SQL *or* JDBC appears outside that package, so the
->    exception cannot quietly spread;
-> 4. `CLAUDE.md`'s "Module conventions" records the carve-out and its boundary.
->
-> This module's **own** tables are queried through QueryDSL predicates in `IngestRunQueries`, like
-> everything else in the platform. The carve-out is about the bulk path into the author's schema.
-
-A JDBC-batch writer is provided for non-Postgres, selected by `write.staging-writer` — whose default
-asks the data source once, at startup, and picks `COPY` when it can. The module is fast where it can
-be and correct everywhere, and is not Postgres-only by accident.
-
-Identifiers (table and column names) are interpolated after validation, because no SQL dialect lets a
-placeholder stand for one. **Values are always bound as parameters.**
-
-### 9. The balance check is the correctness proof
-
-A run may only reach `SUCCEEDED` when:
-
-```
-records_read == records_applied + records_quarantined + records_skipped
-```
-
-and, when the sentinel declared an expected count, `records_read == expected`. There is a third check:
-a `COUNT(*)` of the staging table must match what the run believes it wrote — the equation reconciles
-the engine's numbers with each other, and only counting the table catches a staging writer that
-reported five thousand rows and wrote four thousand nine hundred.
-
-A run that cannot balance is `FAILED`, loudly, with all four numbers in the message, **and the target
-is untouched** because the balance runs *before* the merge. Checking afterwards would make it a report
-on damage already done.
-
-This is the difference between a module that claims not to lose data and one that demonstrates it
-every single run. It found two real bugs in this module's own engine before release.
-
-The sentinel's count is the stronger of the two checks: the equation is satisfied perfectly by a run
-that read a *truncated* file, because everything it read was accounted for. The expected count is the
-only number that comes from outside the run.
-
-### 10. Poison records never abort and never vanish
-
-A quarantine row carries the raw record text (truncated at `quarantine.max-record-length`), the byte
-offset **and** the record ordinal, the stage (`PARSE` / `APPLY` / `OVERSIZED`), the error, and the run
-id. All of it: a row with only a count sends whoever reads it back to the source object with a line
-number they do not have, and the first question about a quarantine spike is whether it is the
-partner's file or this service's constraints.
-
-Two policies:
-
-* **`fail-fast`** — the first bad record fails the run. Right for a file that is *entirely* wrong,
-  where dying on row one is the fastest possible signal; wrong for one bad row in four million.
-* **`threshold`** (**default**) — continue while the rate stays under `max-quarantine-ratio`, fail
-  past it.
-
-The threshold is what catches the case the other two handle badly and which happens most: a partner
-adds a column, or changes a delimiter, and the file **parses**. Every row produces a record and every
-record is wrong. Nothing about it is malformed enough for fail-fast to trigger on row one, and nothing
-is rare enough to be junk — but the rate goes from a handful of rows a day to most of the file.
-
-The ratio is not applied until at least 100 records have been read. A first bad record gives a ratio
-of 1.0, which is past every threshold, and failing there would be fail-fast wearing the wrong name.
-
-### 11. Schedule, lock, lease renewal
-
-`job-core`'s `SelfSchedulingLifecycle` + `ScheduleSpec.cron`, and the platform's one leased `RunLock`
-via `runIfAvailable`. `ExportRetentionPurge` is the reference, and the consolidated lock has landed,
-so there is no second lock anywhere here.
-
-**The lease is renewed inside the batch loop.** A forty-minute ingest under a five-minute lease
-renewed only at the top has lost the lock by minute six — nothing tells it so, a lease simply
-expires — and from minute six a second replica is free to import the same object into the same
-staging table. The result is every record written twice, discovered when somebody notices the target
-has roughly double the rows it should.
-
-**A failed renewal stops the run immediately, mid-file.** The asymmetry is enormous: stopping costs
-the work since the last checkpoint, which is at most one batch, because the next run resumes from
-exactly where this one committed. Continuing risks every remaining record being written twice. There
-is no amount of remaining work that makes the second trade worth taking.
-
-Renewal happens *before* the margin runs out — `lock.renew-at-remaining-fraction`, a fraction rather
-than a duration so that changing the lease does not silently change the safety margin.
-
-`schedule.run-timeout` is checked in the same place and is enforced, not merely validated. The socket
-timeout is per-read and catches a store that sends nothing; it cannot catch a run that is making
-progress and will not finish — a file that grew tenfold, a staging table whose indexes have degraded —
-because such a run reads a byte often enough to keep every lower-level timeout satisfied while running
-into the next business day. Stopping keeps the checkpoint, so a budget slightly too small does not make
-a large file permanently un-ingestable; it makes the operator raise the budget deliberately.
-
-### 12. Observability — including the file that never came
-
-Metrics interface + Micrometer implementation + no-op, following `OutboxMetrics` / `ExportMetrics` /
-`ReconciliationMetrics`:
-
-| Metric | What |
+| Guarantee | Mechanism |
 |---|---|
-| `ludwig.ingest.bytes.read` | uncompressed bytes consumed |
-| `ludwig.ingest.records{outcome}` | read / applied / quarantined / skipped |
-| `ludwig.ingest.batch.flush` | per-batch flush duration, checkpoint included |
-| `ludwig.ingest.merge` | staging → target merge duration |
-| `ludwig.ingest.runs{status}` | run duration and outcome by task |
-| `ludwig.ingest.skipped{reason}` | objects already processed |
-| **`ludwig.ingest.missing`** | **non-zero when no file has arrived for a task by its `alert.expected-by` time** |
+| **No duplicates, no gaps on crash** | The batch, the checkpoint, quarantine rows and read counts commit in **one transaction** (`BatchCommitter.commit`). Data-then-checkpoint duplicates; checkpoint-then-data leaves a silent gap. `CheckpointAtomicityIT` fails if the transaction is split |
+| **Bounded memory** | Batches flush at `max-records` **or** `max-bytes`. A record larger than `max-bytes` is quarantined as `OVERSIZED`. ArchUnit forbids `readAllBytes`/`readAllLines`/`Files.readString`; `LargeFileHeapIT` ingests 200 MB under a heap ceiling |
+| **Exactly once per content** | Unique constraint on `(bucket, key, etag)` in `file_ingest_run` (`versionId` preferred where the bucket is versioned). A corrected re-upload under the same name has a new etag and is a new run |
+| **Never read a half-written file** | `arrival.sentinel` (default): wait for `{name}.done`. Or `arrival.stability-window`: identical size + etag across two polls. Configuring neither logs a warning |
+| **Target untouched unless balanced** | Before the merge: `read == applied + quarantined + skipped`, `read == expected` when the sentinel declares a count, and `COUNT(*)` of staging = rows written. A failed balance fails the run with all numbers in the message |
+| **Atomic target change** | Staging table, then one set-based `MERGE` |
+| **One replica per task** | `RunLock`, **renewed inside the batch loop**; a failed renewal stops the run immediately (cost: at most one batch) |
+| **Bounded run time** | `schedule.run-timeout` enforced between batches; the checkpoint is kept |
 
-The last one is the one worth alerting on. Every other number can look perfectly healthy while the
-thing the module exists to do is not happening: for a once-a-day job the failure nobody notices is the
-file that never showed up. The schedule fires, the listing is empty, a line goes to DEBUG, and the
-pass exits successfully — the run count stays flat because there was no run, the error count stays at
-zero because there was no error, and the table goes quietly stale until somebody downstream asks why
-a number looks wrong.
+**Checkpoints are format-dependent** (`Checkpoint` is sealed):
 
-Same reasoning as the run-lock lease: **an absence nothing reports is an absence nobody sees.**
+| Shape | For | Resume cost |
+|---|---|---|
+| `ByteOffset` | line-delimited (CSV, NDJSON) | ranged GET from the offset |
+| `RecordOrdinal` | XML, Parquet, fixed-block, headered formats | re-read from the start and skip |
 
-It checks for a `SUCCEEDED` run, not any run — a run that started and failed is not a file that
-arrived, and counting it would silence the alarm on exactly the morning it should ring. Every instance
-runs the monitor and there is no lock on it, deliberately: putting the one signal about things *not
-happening* behind a lock means it stops when the lock holder dies.
+A byte offset counts **uncompressed** bytes, so a gzipped object's resume re-reads and discards (gzip cannot seek). Ask
+large partners for a seekable format.
 
-Plus an audit SPI (`IngestAuditLogger`, SLF4J default) and a `fileingest` actuator endpoint listing
-recent runs, their counts and **their checkpoints** — because the question at nine in the morning is
-usually "is it moving", and only the checkpoint answers it. A run `RUNNING` for forty minutes with a
-climbing checkpoint is a large file; the same run with a checkpoint that hasn't moved in ten is a
-problem, and from outside the process the two are otherwise indistinguishable.
+**Side-effect order** is fixed: `SUCCEEDED` in the database first, then the receipt, then the archive. A crash after the
+status re-runs into an idempotent finish. A failing receipt or archive does not fail the run.
 
-### 13. Publishing completion
+**Write path.** Records stream into a per-task staging table in the **service's** schema (the service owns its
+columns). Writer `auto` uses PostgreSQL `COPY` when available, batched JDBC `INSERT` otherwise. SQL and JDBC are
+confined to `ru.ludwigandreas.ingest.bulk` (`SqlConfinementTest`); identifiers are validated, values always bound.
+The module's own tables are queried with QueryDSL. `truncate-staging-on-fresh-run` applies **only** when the
+checkpoint is zero (truncating on a resume would lose the work the checkpoint claims).
 
-Optional dependency on `outbox-spring-boot-starter`. When present and `events.enabled`, a completed
-run publishes `ingest.completed` carrying the run summary — through the outbox, so the event and the
-`SUCCEEDED` status commit together. `OutboxReportEventPublisher` in export is the pattern, including
-the run id being both the ordering key and the idempotency key.
+**Quarantine.** A row carries the raw record (truncated at `quarantine.max-record-length`), byte offset, record ordinal,
+stage (`PARSE` / `APPLY` / `OVERSIZED`), error and run id.
 
-Ordering, because a later event about the same run has to arrive after this one. Idempotency, because
-the outbox delivers at least once and a downstream service reacting twice to a four-million-row import
-is worse than one that missed it — the second is noticed.
+- `fail-fast`: first bad record fails the run.
+- `threshold` (default): continue while the ratio stays under `max-ratio`; evaluated after at least 100 records.
+  Catches the "file parses but every row is wrong" case (a new column, a changed delimiter).
 
-Enabling events without the outbox on the classpath is refused at startup rather than silently
-discarding them.
+**Receipts** (off by default): `receipt.key-template` (e.g. `processed/{name}.receipt.json`) with run id, source uri
+and etag, read/applied/quarantined/skipped counts, bytes, timestamps - the counts let the partner check the numbers
+themselves.
 
-### 14. Scale-out stays possible
+**Completion event** (`events.enabled`, requires outbox): `ingest.completed` (`IngestRunSummary`) in the same
+transaction as `SUCCEEDED`; the run id is the ordering and idempotency key. Declared as an `OutboxEventTypes` bean.
 
-Nothing here forecloses splitting one object into N byte ranges across replicas later — each worker
-skipping to the first record boundary after its start and reading past its end to finish the last
-record, the standard input-split trick. It is **not built**. What matters is that the checkpoint model
-(a position plus a record count, per run), the ranged read API, and a staging table that is append-only
-during the parse phase do not make it impossible, because "supports any size in future" concretely
-means this.
+**Run states** use web-core's `OperationStatus`; this module writes `RUNNING`, `SUCCEEDED` and `FAILED` only.
 
-The pieces that would need to change: `file_ingest_run` would gain a split identifier alongside the
-identity triple, and the balance check would sum across splits instead of over one run.
+**Scale-out** of one object across replicas (byte-range splits) is not built; the checkpoint model, ranged reads and
+append-only staging keep it possible (it would add a split id to `file_ingest_run` and sum the balance across splits).
 
-## Configuration (`ludwig.ingest.*`)
+## Configuration
 
 ```yaml
 ludwig:
@@ -356,7 +107,7 @@ ludwig:
     scheduler-enabled: true        # false on an instance that only serves the endpoint
     drain-timeout: 30s
     liquibase:
-      enabled: true                # false to fold the changelog into your own master history
+      enabled: true
     events:
       enabled: false               # requires outbox-spring-boot-starter
     endpoint:
@@ -380,141 +131,119 @@ ludwig:
                      truncate-staging-on-fresh-run: true }
 ```
 
-`truncate-staging-on-fresh-run` applies **only** when the checkpoint is at zero. A resumed run must
-not truncate: those staged rows are exactly the work its checkpoint says has been done, and removing
-them would lose every record before the resume point while the checkpoint went on claiming they were
-written. That is the one way this module could lose data with no individual step being wrong, which is
-why the decision is taken from the checkpoint rather than from configuration.
+| Property | Meaning |
+|---|---|
+| `ludwig.ingest.scheduler-enabled` | Run schedules on this instance |
+| `ludwig.ingest.drain-timeout` | Shutdown wait for a running pass |
+| `ludwig.ingest.endpoint.*` | Actuator endpoint; `allow-manual-run` enables the trigger operation |
+| `tasks.<t>.source.uri` / `pattern` / `compression` / `max-objects-per-pass` | What to read |
+| `tasks.<t>.arrival.sentinel` / `stability-window` / `expected-count-field` | Arrival detection and declared count |
+| `tasks.<t>.schedule.cron` / `run-timeout` | When, and the run budget |
+| `tasks.<t>.lock.lease` / `renew-at-remaining-fraction` | Lease and renewal margin (a fraction, so changing the lease keeps the margin) |
+| `tasks.<t>.batch.max-records` / `max-bytes` | Batch bounds |
+| `tasks.<t>.quarantine.policy` / `max-ratio` / `max-record-length` | Quarantine behaviour |
+| `tasks.<t>.receipt.*`, `archive.mode` / `prefix` | Post-completion side effects |
+| `tasks.<t>.alert.expected-by` / `zone` | Deadline for `ludwig.ingest.missing` |
+| `tasks.<t>.write.staging-writer` / `jdbc-batch-size` / `truncate-staging-on-fresh-run` | Staging write path |
 
-The startup validator refuses a configured task with no bean, a bean with no configured task, an
-unparseable cron, a `run-timeout` shorter than the lock lease, a `max-record-length` larger than
-`batch.max-bytes`, a sentinel template that would make every object wait on one marker, an unknown
-time zone, an unparseable source uri, and events enabled with no outbox. All of it in one message.
+**Startup refuses** (all in one message): a task without a bean or a bean without a task, an unparseable cron, a
+`run-timeout` shorter than the lease, `max-record-length` larger than `batch.max-bytes`, a sentinel template that
+makes every object wait on one marker, an unknown zone, an unparseable source uri, events without the outbox.
 
-## The platform operation vocabulary, and the one string that changed
+## Deployment
 
-This module now uses `ru.ludwigandreas.webcore.operation.OperationStatus` instead of its own
-`IngestRunStatus`, and **one value was renamed: `COMPLETED` is now `SUCCEEDED`.**
+- **Schema** (`db/changelog/file-ingest/file-ingest-changelog.xml`, ids `file-ingest-NNNN` / author
+  `ludwig-file-ingest`, own `SpringLiquibase` bean, `ludwig.ingest.liquibase.enabled`): `file_ingest_run` (identity
+  `container` + `object_key` + `content_identity` with its unique constraint, status, checkpoint, counts, timings, lock owner, version, post-completion flags)
+  and `file_ingest_quarantine`. No foreign key between them (separate retention decisions).
+- **Staging tables** in the service's own changelog, one per task.
+- **Bucket access**: read/list on the source prefix; put for receipts; copy/delete for archival.
+- **Partner agreement**: a sentinel (`{name}.done`, optionally with a record count) is the strongest arrival signal.
 
-Export had the same state under the other spelling, and its word was already in a published REST API
-while this module's was in an actuator payload - so this was the cheaper of the two to move. Say so
-loudly rather than letting somebody discover it:
+## Observability
 
-- **The `status` column of `file_ingest_run` is migrated** by changeset
-  `file-ingest-0004-rename-completed-to-succeeded`, which is guarded by a precondition and is therefore a
-  no-op on a clean install and idempotent on a re-run. It has a rollback.
-- **The `fileingest` actuator payload changed shape.** The loose `status`, `startedAt`, `finishedAt`
-  and `failure` members of each run are replaced by a single `operation` member carrying the platform
-  envelope. A dashboard reading `runs[].status` reads `runs[].operation.status` now.
-- **`IngestMetrics.recordRun` takes an `OperationStatus`.** The metric's `status` tag value changes
-  from `COMPLETED` to `SUCCEEDED` with it, so a dashboard or alert filtering on that tag needs the new
-  value.
-- Nothing else moved. The counts, the checkpoint, the identity triple, the receipt and the balance
-  check are untouched.
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `ludwig.ingest.runs` | timer | `task`, `status` (`succeeded`, `failed`) | Run duration and outcome |
+| `ludwig.ingest.records` | counter | `task`, `outcome` (`read`, `applied`, `quarantined`, `skipped`) | Record accounting |
+| `ludwig.ingest.bytes.read` | counter | `task` | Uncompressed bytes consumed |
+| `ludwig.ingest.batch.flush` | timer | `task` | Batch flush (checkpoint included) |
+| `ludwig.ingest.merge` | timer | `task` | Staging → target merge |
+| `ludwig.ingest.skipped` | counter | `task`, `reason` | Objects already processed |
+| **`ludwig.ingest.missing`** | gauge | `task` | **1 when no `SUCCEEDED` run exists today by `alert.expected-by`** |
 
-The three states this module reaches stay three. `PENDING`, `CANCELLED` and `EXPIRED` arrive with the
-shared vocabulary and are simply never written: a run is claimed by the pass that creates it, so
-there is no queued state, and nothing cancels or expires one. A module that cannot reach a state does
-not write it - that is cheaper than a vocabulary per module, which is what this replaced.
+`missing` is the signal for the file that never came: no run, no error, a quietly stale table. It counts only
+`SUCCEEDED` runs, and every instance runs the monitor without a lock (so it cannot stop with a lock holder).
 
-There is still no REST surface here, deliberately. Adopting the vocabulary and the envelope now is
-what makes adding one later a rename rather than a redesign.
+**Actuator** `fileingest`: recent runs with counts, `operation` envelope and **checkpoints** (a moving checkpoint = a
+large file; a static one = a problem). Optional write operation to trigger a task (`allow-manual-run`).
 
+**Logs.** `INFO`: configuration validated, schedules started, staging writer chosen, already-ingested skips, "not
+reading yet" (arrival), manual trigger, receipt written, archive done. `WARN`: no completed run by the deadline, no
+arrival mechanism configured, receipt or archive failure. `ERROR`: run failed.
 
-## Schema
+**Recommended alerts:**
 
-`db/changelog/file-ingest/file-ingest-changelog.xml`, changeset ids and author namespaced
-(`file-ingest-NNNN` / `ludwig-file-ingest`), applied by its own `FileIngestLiquibaseAutoConfiguration` —
-which copies `JobCoreLiquibaseAutoConfiguration` exactly, including `@AutoConfigureAfter(
-LiquibaseAutoConfiguration.class)` and the guard-by-**name** (a type guard makes the bean suppress
-itself). Gate with `ludwig.ingest.liquibase.enabled`.
+| Condition | Why |
+|---|---|
+| `ludwig_ingest_missing == 1` | Today's file has not been ingested |
+| `increase(ludwig_ingest_runs_seconds_count{status="failed"}[1d]) > 0` | Balance, quarantine threshold, timeout or lease failure |
+| `increase(ludwig_ingest_records_total{outcome="quarantined"}[1d])` above normal | Partner format drift |
 
-Two tables: `file_ingest_run` (the identity triple and its unique constraint, status, checkpoint, all
-the counts, timings, lock owner, version, the two post-completion flags) and
-`file_ingest_quarantine`. **Per-task staging tables are not here** — they belong to the author's
-schema, because only the author knows what a record looks like, and a module that created them would
-be guessing at columns.
+**Known gaps:** no retention for `file_ingest_run` and `file_ingest_quarantine`; quarantine rows hold raw record text
+(possibly personal data). Purge them on a schedule appropriate to the data.
 
-There is no foreign key from quarantine to run, deliberately: a cascade would make the retention of
-the two a single decision, and they are not one — a run row is small and worth keeping a long time, a
-quarantine row can be 8 KB of raw record.
+## Audit
 
-## Consuming it
+Category `ingest`; resource `ingest-task` / task name (the task outlives runs; the run id is an attribute).
 
-```xml
-<dependency>
-    <groupId>ru.ludwigandreas</groupId>
-    <artifactId>file-ingest-spring-boot-starter</artifactId>
-</dependency>
-```
+| Action | Outcome |
+|---|---|
+| `ingest.claimed`, `ingest.resumed`, `ingest.batch-committed`, `ingest.merged`, `ingest.completed`, `ingest.skipped-already-processed` | `SUCCESS` |
+| `ingest.quarantined` | `PARTIAL` |
+| `ingest.failed`, `ingest.missing` | `FAILURE` |
 
-Versions come from `ludwig-bom`; name none here. `object-storage-spring-boot-starter` is **not**
-optional — reading the object through the platform's one `ObjectStore` rather than a bucket client of
-this module's own is most of the point — so a service that wants S3 also declares the AWS SDK
-artifacts that starter documents.
+"Did anything go wrong overnight" is a query on the outcome column.
 
-### One note on the layout
+## Runbook
 
-The auto-configuration classes are in `ru.ludwigandreas.ingest.autoconfigure`, not in `config`, which
-is this module's one departure from the other starters. It is a correctness fix, not a preference:
-with the wiring and the properties in one package, `config` creates the engine's beans and the engine
-reads `config`'s properties — a package cycle the shared `cycles` rule correctly refused. Splitting
-them leaves `config` holding the bound properties and the startup validator, and nothing in the module
-depends on `autoconfigure` at all. The rule library is *told* about the package rather than having the
-rule suppressed, so bean definitions are still required to be in one place.
-
-With events on, the module declares the completion event → `IngestRunSummary` as an `OutboxEventTypes` bean, so it appears in the service's AsyncAPI document and passes `ludwig.outbox.events.require-declared`.
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `ludwig_ingest_missing == 1` | File not delivered, sentinel missing, pattern mismatch, or run failed | Check the bucket for the object and `{name}.done`; the log line `is not reading ... yet` names the reason; check the last run in the actuator |
+| Run `FAILED`: balance mismatch | Truncated file (declared count differs), staging writer lost rows, or parser bug | Message carries all four numbers; target is untouched. Ask the partner for the full file; re-upload (new etag) to rerun |
+| Run `FAILED`: quarantine threshold | Partner changed format | `SELECT stage, error, count(*) FROM file_ingest_quarantine WHERE run_id = '<id>' GROUP BY 1, 2;` fix parser or ask partner |
+| `RUNNING` with a static checkpoint | Stuck I/O or database | `SELECT id, checkpoint_position, records_read, locked_by, started_at FROM file_ingest_run WHERE status = 'RUNNING';` thread dump; the lease expires and the next pass resumes from the checkpoint |
+| Run stopped at `run-timeout` | File grew or staging degraded | Raise `run-timeout` deliberately; the next run resumes |
+| Corrected file not picked up | Same etag (filesystem store with preserved mtime) | Re-upload so the content identity changes |
+| Re-ingest a file deliberately | - | Delete or rename the identity row only if you are sure: `SELECT id, status, content_identity FROM file_ingest_run WHERE task = '<task>' AND object_key = '<key>';` - prefer re-uploading the object |
+| Receipt/archive warnings | Bucket permissions | Fix permissions; the next pass re-applies idempotently |
 
 ## Testing
 
-`mvn test` runs the unit suite and the architecture rules: batch bounding at both limits, the balance
-arithmetic in both directions, quarantine threshold behaviour at *and* past the ratio, checkpoint
-arithmetic for both sealed variants, every location-derivation template, the `COPY` escaping, and the
-identifier check. Plus the 42 shared ArchUnit rules and five module-specific ones — the SQL and JDBC
-confinement, the no-materialisation rule, the published-api boundary, and the absence of a
-`@RestControllerAdvice`.
+`mvn test`: batch bounding at both limits, balance arithmetic, quarantine threshold at and past the ratio, checkpoint
+arithmetic, location templates, `COPY` escaping, identifier validation, shared and module ArchUnit rules (SQL/JDBC
+confinement, no materialisation, published-api boundary, no `@RestControllerAdvice`).
 
-`mvn verify` adds the integration suite against Postgres **and** LocalStack, both digest-pinned
-(LocalStack rather than MinIO for the reason
-[`object-storage-spring-boot-starter`](../../sources/object-storage-spring-boot-starter/README.md#why-localstack-and-not-minio)
-documents: MinIO's images can no longer be pulled anonymously, so there is no digest to pin):
+`mvn verify` (Docker; PostgreSQL and LocalStack, digest-pinned, started once per suite):
 
-| Test | What it proves |
+| Test | Proves |
 |---|---|
-| `LargeFileHeapIT` | a 200 MB object ingests fully **under a measured heap ceiling** |
-| `CheckpointAtomicityIT` | the batch and the checkpoint **roll back together** — the one test that catches the transaction being split, verified to fail without it |
-| `CheckpointResumeIT` | a run killed mid-file resumes and the target holds every record exactly once; the resume transfers **less than the whole object**; and it issues a **ranged** GET starting at the committed offset |
-| `FileIngestLifecycleIT` | a corrupt record mid-file is quarantined with the right ordinal and byte offset while everything else lands; a rate past the threshold fails the run and leaves the target untouched; a re-offered object is skipped; the same *name* with a different etag is a new run; every `SUCCEEDED` run balances |
-| `SentinelArrivalIT` | an object with no sentinel is **not read at all**; the sentinel is not itself ingested; a declared count that does not match fails the run with the target untouched |
-| `ConcurrentReplicaIT` | two replicas racing the same object produce exactly one run and one set of staged rows |
-| `SchedulingAndMissingFileIT` | one schedule per enabled task plus the monitor, all started — and `ludwig.ingest.missing` going to 1 past the deadline with nothing ingested, and back to 0 once something lands |
-| `RunTimeoutIT` | a run past `schedule.run-timeout` stops between batches and keeps the checkpoint it reached |
-| `ReceiptAndArchiveIT` | the receipt carries the counts and the source is archived; a crash between `SUCCEEDED` and the archive re-runs into a clean idempotent finish |
+| `LargeFileHeapIT` | 200 MB ingests under a measured heap ceiling |
+| `CheckpointAtomicityIT` | batch and checkpoint roll back together (fails if the transaction is split) |
+| `CheckpointResumeIT` | a killed run resumes exactly once, transfers less than the whole object, with a ranged GET at the committed offset |
+| `FileIngestLifecycleIT` | quarantine with ordinal and offset; threshold failure leaves the target untouched; re-offer skipped; same name new etag = new run; every success balances |
+| `SentinelArrivalIT` | no sentinel = not read; sentinel not ingested; count mismatch fails with target untouched |
+| `ConcurrentReplicaIT` | two replicas → one run, one set of staged rows |
+| `SchedulingAndMissingFileIT` | schedules start; `missing` goes 1 past the deadline and back to 0 |
+| `RunTimeoutIT` | a run past `run-timeout` stops between batches, keeping the checkpoint |
+| `ReceiptAndArchiveIT` | receipt counts, archive, crash between `SUCCEEDED` and archive finishes idempotently |
 
-The resume tests assert on the **bytes transferred and the ranges requested**, not on the fact that
-the run finished. A run that re-read the object from zero and skipped forward would finish correctly
-and would have thrown away the entire reason `ObjectStore` has a ranged read; asserting resumption
-rather than proving it is how that regression gets in.
+## Design decisions
 
-Containers are started once for the suite rather than per class. `@Container` stops a static container
-when its test class finishes, so the second IT class gets new containers on new ports while Spring —
-whose context cache key has not changed — reuses the context wired to the old ones. The symptom is
-"connection refused" in the second class and nowhere else, a long way from its cause.
-
-## Auditing
-
-This module no longer has an audit mechanism of its own. `IngestAuditLogger` and `Slf4jIngestAuditLogger` are gone. Its trail now goes through the
-platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
-SIEM through the transactional outbox, or several at once - see
-[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
-
-`IngestAuditEvent` stays, with all nine of its action constants, and gained a `toAuditEvent()`. Its
-flat-record-with-a-details-map shape was vindicated rather than replaced: that is what the platform
-envelope is too. Two mappings are worth knowing - `failed` and `missing` become outcome `FAILURE` and
-`quarantined` becomes `PARTIAL`, so "did anything go wrong overnight" is a query on the outcome
-column rather than a list of action names somebody has to know; and the run id is an `attributes`
-entry rather than the resource id, because the resource an ingest event is about is the *task*, which
-outlives any one run and is what a `missing` event has instead of a run.
-
-**What a deployment notices:** the `ru.ludwigandreas.ingest.audit.Slf4jIngestAuditLogger` logger no longer exists; the trail is
-on `ru.ludwigandreas.audit` with `category=ingest`.
+- **Checkpoint and data in one transaction** - the whole "never lose data" argument; do not refactor it apart.
+- **Identity by content, enforced by a constraint**, not a flag.
+- **Balance before merge**: a check after the merge would only report damage.
+- **Sentinel by default**: inferring completion is weaker than the partner asserting it.
+- **Auto-configuration in `ru.ludwigandreas.ingest.autoconfigure`**, separate from `config` (properties and validator),
+  to avoid a package cycle.
+- **SQL carve-out confined to one package** for `COPY` and set-based merge, which QueryDSL cannot express.

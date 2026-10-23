@@ -19,7 +19,7 @@ statement that none does and why. **The second list is the backlog**, and it is 
 | No edit under `**/generated-sources/**` | `permissions.deny` and the same hook | hook pipe-tested |
 | No edit of `.flattened-pom.xml` | `permissions.deny` and the same hook | hook pipe-tested |
 | No edit under `openspec/changes/archive/**` | `permissions.deny` and the same hook | **yes** — a `Write` there was refused |
-| No edit of `.mvn/maven.config`, ever | `permissions.deny` (four patterns) **and** `.claude/hooks/guard-edit.sh`, now unconditional — the transcript grep is gone, because a release is a tag and a deny that unlocks when the transcript says a word is not a deny | hook pipe-tested |
+| No edit of `.mvn/maven.config`, ever | `permissions.deny` (four patterns) **and** `.claude/hooks/guard-edit.sh`, unconditional, because a release is a tag and a deny that unlocks on a word in the transcript is not a deny | hook pipe-tested |
 | `clear_settings` on the code index | `permissions.deny` | rule present |
 | A stale manifest goes unnoticed | `scripts/manifest.sh stale` (content SHA over the POM set), the `SessionStart` hook, the `PostToolUse` hook on `pom.xml`, and `scripts/gate.sh` regenerating it | all pipe-tested |
 | The gate skips a module's in-repo dependents | `scripts/gate.sh` reads them from the manifest rather than accepting a list | **yes** — ran 10 commands for `job-core`, all passing |

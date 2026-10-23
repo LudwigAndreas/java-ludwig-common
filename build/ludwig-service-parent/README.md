@@ -36,6 +36,13 @@ No version on any dependency, and nothing else to copy.
 
 ---
 
+| | |
+|---|---|
+| Role | parent POM for services |
+| Depends on (in-repo) | imports `ludwig-bom`; uses `checkstyle-rules` |
+| Used by | `crud-service-example`, `notification-service`, any service |
+| Surfaces | none (builds images with Jib) |
+
 ## Contents
 
 - [Who inherits this, and who does not](#who-inherits-this-and-who-does-not)
@@ -101,8 +108,8 @@ negotiable:
    autocomplete in an IDE.
 
 Versions come from `ludwig-bom` via `annotationProcessorPathsUseDepMgmt`, not from a `<version>` on
-every `<path>`. Before that flag existed, every module repeated `${lombok.version}`, which is how the
-Lombok used to *compile* a module drifts from the Lombok whose processor *generates* its code.
+every `<path>`. Repeating `${lombok.version}` on every path is how the
+Lombok that *compiles* a module drifts from the Lombok whose processor *generates* its code.
 
 `-parameters` is on: Spring reads parameter names to bind a `@RequestParam` without repeating it in
 the annotation, and a parameter-level constraint violation can only name the parameter it rejected if
@@ -265,3 +272,16 @@ one without the other:
 
 A nearer import wins, so the newer BOM's versions apply while the build configuration stays where it
 was.
+
+## Observability and audit
+
+Not applicable: build artifact. It packages `git.properties` and `META-INF/build-info.properties`, which the [observability starter](../../sources/observability-spring-boot-starter) reports at runtime.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `non-resolvable parent` in a standalone service | `<relativePath/>` missing | Add an empty `<relativePath/>` |
+| Coverage gate fails | Below 70% instruction / 60% branch | Add tests, or override `jacoco.*.coverage.minimum` deliberately |
+| Image has no `org.opencontainers.image.revision` label | A bare `jib:dockerBuild` skipped the lifecycle | Use `mvn package jib:dockerBuild` |
+| `jib:build` fails to authenticate | No registry credentials | See "Building an image" |

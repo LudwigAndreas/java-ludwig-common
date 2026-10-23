@@ -1,48 +1,41 @@
-# `pat-spring-boot-starter`
+# pat-spring-boot-starter
 
-The issuing half of the platform's personal access tokens, as a drop-in. Add the dependency, include the
-changelog, supply a signing key, and the identity provider has a complete PAT subsystem: the table, the
-management API, the RFC 8693 exchange, audit, metrics, i18n and problem details.
+***English** · [Русский](README.ru.md)*
 
-The *verifying* half is not here. Every service already has it, in `security-spring-boot-starter`.
+The issuing half of the platform's personal access tokens (PATs), for the identity-provider service: the
+`ludwig_pat` table, the management API, the RFC 8693 token exchange, RFC 7662 introspection, audit, metrics,
+i18n and problem details. The **verifying** half is in
+[`security-spring-boot-starter`](../security-spring-boot-starter), in every service. The format is in
+[`pat-core`](../pat-core).
 
-## The topology in one diagram
+| | |
+|---|---|
+| Role | starter (identity provider only) |
+| Depends on (in-repo) | [`audit-core`](../audit-core), [`cache`](../cache-spring-boot-starter), [`db-core`](../db-core), [`pat-core`](../pat-core), [`security`](../security-spring-boot-starter), [`web-core`](../web-core-spring-boot-starter) |
+| Used by | the identity-provider service (not in this repository) |
+| Surfaces | REST: `POST /oauth2/token`, `POST /introspect`, `/api/v1/personal-access-tokens` |
 
 ```
   CI / curl / notebook
-        │  Authorization: Bearer lpat_<keyId>_<secret>_<crc>     ← ONE static header, forever
+        │  Authorization: Bearer lpat_<keyId>_<secret>_<crc>     ← one static header
         ▼
-  ┌──────────────────────────────────────────────────────────┐
-  │ EDGE (Envoy / gateway)   ← NOT in this repository         │
-  │   prefix "lpat_" ?  ──▶ cache[(digest, audience)] hit ?    │
-  │                            hit  ──▶ reuse assertion        │
-  │                            miss ──▶ exchange, then cache   │
-  │                                     for expires_in - skew  │
-  └───────────────────────────┬──────────────────────────────┘
-                              │ POST /oauth2/token
-                              ▼
-  ┌──────────────────────────────────────────────────────────┐
-  │ identity-provider-service   (this starter)                │
-  │   parse → checksum → rate limit → keyId point read        │
-  │   → constant-time digest compare → not revoked/expired    │
-  │   → source allowed → audience permitted                   │
-  │   → mint JWT: sub=<owner>, ludwig_pat={id, scopes}, 5m    │
-  └───────────────────────────┬──────────────────────────────┘
-                              │ short-lived, audience-scoped assertion
-                              ▼
-  ┌──────────────────────────────────────────────────────────┐
-  │ ANY service - unchanged filter chain                      │
-  │   owner authorities = AuthorityLookup.lookup(sub) ← LIVE  │
-  │   effective         = owner ∩ ludwig_pat.scopes           │
-  └──────────────────────────────────────────────────────────┘
+  EDGE (Envoy / gateway, not in this repository)
+        │  prefix "lpat_"? → cache[(digest, audience)] hit → reuse assertion
+        │                                               miss → exchange, cache for expires_in - skew
+        ▼  POST /oauth2/token
+  identity provider (this starter)
+        parse → checksum → rate limit → keyId point read → constant-time digest compare
+        → not revoked / expired → source allowed → audience permitted
+        → mint JWT: sub=<owner>, ludwig_pat={id, scopes}, 5m
+        ▼  short-lived, audience-scoped assertion
+  ANY service (security starter)
+        owner authorities = AuthorityLookup.lookup(sub)  ← live
+        effective         = owner ∩ ludwig_pat.scopes
 ```
 
-The property worth noticing: **the client sends one static header and never performs an exchange**. No
-token endpoint call, no `jq` to pull a field out of a JSON body, no expiry tracking, no refresh. That is the
-main reason this topology was chosen over a client-side exchange, which would push OAuth logic into every
-`curl` in every runbook.
+The client sends one static header and never performs an exchange itself.
 
-## Quick start
+## Usage
 
 ```xml
 <dependency>
@@ -55,77 +48,55 @@ main reason this topology was chosen over a client-side exchange, which would pu
 ludwig:
   pat:
     exchange:
-      issuer: https://idp.internal            # REQUIRED - startup fails without it
+      issuer: https://idp.internal            # required - startup fails without it
       audiences: [deploy-service, billing-service]
   security:
     public-paths:
       - /actuator/health
-      - /oauth2/token                          # REQUIRED - see "The exchange must be public"
+      - /oauth2/token                          # required
+      - /introspect                            # if services authenticate tokens directly
 ```
 
-Plus an `RSAKey` bean for the default minter, or your own `PatAssertionMinter` if the provider already owns
-a signing key — which is the better arrangement and is why the SPI exists.
+Plus an `RSAKey` bean for the default minter, or a `PatAssertionMinter` bean that delegates to the provider's
+existing signing key (preferred: one key to rotate, one JWKS).
 
-## What the edge owes, and why no build here can check it
+### Management API (`ludwig.pat.web.base-path`, default `/api/v1/personal-access-tokens`)
 
-Three obligations live outside this repository. They are written out verbatim because nothing in the build
-can observe them, and that gap is recorded in the change's enforcement table rather than left to be found.
+| Method | Path | Does |
+|---|---|---|
+| `POST` | `/` | Issue a token (secret shown **once**) |
+| `GET` | `/` | List the caller's tokens |
+| `GET` | `/{id}` | One token (no secret, no digest) |
+| `POST` | `/{id}/rotations` | Rotate: new secret; the old one keeps working for `rotation-overlap` |
+| `DELETE` | `/{id}` | Revoke |
 
-**1. Exchange per destination audience, and cache per `(secret digest, audience)`.**
+Authorities: `pat:manage` to manage one's own tokens; `pat:manage:any` to act for someone else (grant sparingly: it
+lets a credential outlive the person who created it). A request authenticated **by a PAT** is refused on every
+management endpoint (`PatCredentialGuard`): a token cannot mint, rotate or revoke a token.
+
+Issuance refuses missing expiry, lifetime over `max-lifetime`, empty scopes and empty audiences, each with its own
+localized message.
+
+### The exchange (`POST /oauth2/token`)
 
 ```
-POST /oauth2/token
-Content-Type: application/x-www-form-urlencoded
-
 grant_type=urn:ietf:params:oauth:grant-type:token-exchange
-&subject_token=<the lpat_ value from the Authorization header>
+&subject_token=<the lpat_ value>
 &subject_token_type=urn:ludwig:params:oauth:token-type:pat
-&resource=<the service this request is going to>
+&resource=<destination service>
 ```
 
-Cache the response for `expires_in` seconds minus a clock-skew margin. **A digest-only cache key is wrong**:
-it would serve one service's assertion to another, and every such request would then fail audience
-validation at the destination.
+Unauthenticated by design (it consumes the token as its subject). Every failure returns the same refusal; the
+reason is only in metrics and audit.
 
-**Without the caching the whole design collapses.** Every service request becomes an issuer request by
-proxy, which is the remote-check-per-request topology that was rejected for availability. The observable
-proof that caching works: `ludwig.pat.exchange` stays proportional to *distinct tokens per assertion
-lifetime* rather than rising with request volume. Alert on that.
+### Introspection (`POST /introspect`)
 
-**2. Render a failed exchange as a client-facing `401`.** The client called a *service*; it never called the
-exchange and does not know it exists. The uniform refusal the issuer returns is for the edge.
+For platforms whose edge cannot perform the exchange (e.g. a session gateway that only does cookie → JWT): a
+**service** asks about a token it received.
 
 ```
-HTTP/1.1 401 Unauthorized
-WWW-Authenticate: Bearer error="invalid_token"
-Content-Type: application/problem+json
-
-{ "type": "https://problems.ludwigandreas.ru/credential/rejected",
-  "status": 401,
-  "detail": "This credential was not accepted. ...",
-  "manageCredentialsAt": "/api/v1/personal-access-tokens" }
-```
-
-The constants are published as `PatProblemTypes` in `pat-core` so the edge configures against a definition
-rather than inventing one. **Disclose no cause.** Not which of eleven, not "revoked", not "expired".
-
-**3. Strip the `lpat_` credential before forwarding.** The service receives the assertion, never the token.
-
-## Introspection: the route for a platform whose edge cannot exchange
-
-Everything above assumes an edge that calls `/oauth2/token` and replaces the caller's credential. If your
-edge cannot — a company-provided session gateway that only does cookie → JWT, cannot be extended, and
-redirects a request with no session to OIDC — then under the exchange-only design a personal access token
-cannot be used at all.
-
-`/introspect` is the other route. A **service** asks about the token itself:
-
-```
-POST /introspect                      ← requires an AUTHENTICATED caller, unlike the exchange
-Content-Type: application/x-www-form-urlencoded
-
-token=lpat_...&resource=deploy-service     ← resource is the CALLER's own audience:
-                                             "may this token be used *here*"
+POST /introspect
+token=lpat_...&resource=deploy-service     ← the caller's own audience
 ```
 
 ```json
@@ -133,123 +104,161 @@ token=lpat_...&resource=deploy-service     ← resource is the CALLER's own audi
   "aud": ["deploy-service"], "patId": "pat-42", "exp": "2026-09-01T00:00:00Z" }
 ```
 
-and for **every** failure, identically:
+and `{ "active": false }` with `200` for every failure (RFC 7662). It reuses the exchange's verifier unchanged
+(parse, checksum, point read, constant-time compare, revocation, expiry, CIDR allowlist, rotation overlap, the
+security-purpose cache). It needs no signing key. The consuming side is enabled with
+`ludwig.security.pat.filter.enabled=true` in each service; when the edge supports the exchange, switch that off and
+`ludwig.pat.introspection.enabled=false` here.
 
-```json
-{ "active": false }
-```
+`/introspect` must be in `public-paths`: a service authenticating a token calls it with no credential of its own.
+It discloses less than the public exchange; both need the full secret. Expose it only inside the mesh.
 
-`200`, not `401` — RFC 7662's model, where "this token is not usable" is a successful answer to a valid
-question. A `401` would read as *"your introspection call was unauthorized"* and send an operator to the
-wrong place.
+### What the edge must do (not checkable from this repository)
 
-### Three things about it that are deliberate
+1. **Exchange per destination audience and cache per `(secret digest, audience)`** for `expires_in` minus a skew.
+   A digest-only key would serve one service's assertion to another. Without caching, every request becomes an
+   issuer request.
+2. **Render a failed exchange as a client `401`** with `WWW-Authenticate: Bearer error="invalid_token"` and the
+   `PatProblemTypes` body (`manageCredentialsAt`). **Disclose no cause.**
+3. **Strip the `lpat_` credential** before forwarding; services receive only the assertion.
 
-**It reuses `PatVerifier` unchanged.** The parse before any I/O, the checksum rejection before any
-database access, the indexed point read on either key id, the constant-time digest comparison, the
-revocation and expiry checks, the CIDR allowlist, the rotation overlap and the `CachePurpose.SECURITY`
-cache all apply exactly as they do to the exchange. A second verification path would be a second place
-for one of those to be subtly wrong.
+### Revocation window
 
-**It requires an authenticated caller, and the exchange does not.** Opposite, and the right way round: the
-exchange *consumes* a token as its subject so it must be reachable unauthenticated; introspection is one
-service asking another, so the asker authenticates with its workload identity. It is also behind the same
-credential guard as the management surface — a leaked token able to introspect could enumerate which
-tokens are live, which is reconnaissance the uniform failure elsewhere exists to deny.
-
-**It needs no signing key, no JWKS and no issuer identity.** That is the single largest simplification of
-this route, and it is why it works on a platform where you do not own the issuer.
-
-### It is scaffolding
-
-When the company gateway gains PAT support, the exchange is what it will call and the `ludwig_pat` claim
-reader in `security-spring-boot-starter` is what will consume the result — both already shipped and
-tested. Removal is one property on the consuming side (`ludwig.security.pat.filter.enabled=false`); this
-endpoint can then be switched off with `ludwig.pat.introspection.enabled=false` or simply left unused.
-
-What survives either way: the table, the management API, rotation, revocation, retention, every audit
-event, the attenuation, and the whole of `pat-core`.
-
-## The exchange must be public
-
-`/oauth2/token` has to be reachable unauthenticated. It *consumes* a token as its subject; it does not
-accept one as the caller's credential — the same rule that keeps a token off the management surface.
-
-`/introspect` has to be reachable unauthenticated for the same reason, and that is less obvious. A service
-authenticating a token itself calls introspection with **no credential of its own** — the only credential
-involved is the token being asked about. Behind `anyRequest().authenticated()` the call receives a `401`,
-introspection fails closed, and every token is refused.
-
-It discloses strictly less than the exchange, which is already public: both require presenting the full
-secret, and the exchange hands back a usable assertion on top. Neither is an enumeration oracle, because
-what an attacker lacks is the token. "Public" here means the application does not authenticate the caller —
-the endpoint is expected to be reachable only inside the mesh, which is a deployment control no build can
-assert. `PatCredentialGuard` still refuses a caller that *is* authenticated by a personal access token.
-
-`PatExchangeConfigurationValidator` warns when the path is missing from `ludwig.security.public-paths`. A
-warning rather than a startup failure, because the failure mode is loud and safe: the edge receives a 401,
-no assertion is minted, PATs visibly do not work, and nothing is exposed. Refusing to start would also be
-wrong for an application that published the path through its own `SecurityFilterChain`, which this module
-cannot see.
-
-## The revocation window, computed for you
-
-Three TTLs compose into the one number that matters, and nobody multiplies them out in production. Startup
-computes **both** paths, logs them, and refuses to start when either exceeds the ceiling:
+The security starter computes two windows at startup in every service and refuses to start when either exceeds
+`ludwig.security.pat.max-revocation-window` (15m):
 
 ```
-request/response callers:  assertion lifetime + edge cache lifetime + authority cache TTL
-long-lived connections:    revalidation interval + authority cache TTL
+request/response callers:  assertion lifetime + edge cache lifetime + authority cache TTL   (5m + 5m + 60s = 11m)
+long-lived connections:    revalidation interval + authority cache TTL                      (1m + 60s = 2m)
 ```
 
-With the defaults: `5m + 5m + 60s = 11m` and `1m + 60s = 2m`, against a `15m` ceiling.
+To shorten it, lower `ludwig.pat.exchange.assertion-lifetime` here **and** the edge cache together, and keep
+`ludwig.security.pat.assertion-lifetime` / `edge-cache-lifetime` in services equal to them.
 
-To shorten it, shorten `ludwig.pat.exchange.assertion-lifetime` **and** the edge's cache together — they are
-one number split across two systems, and lowering only the first makes the computed figure a fiction.
+## Configuration
 
-Both paths are computed on purpose. Computing only the first would log a correct-looking number while being
-false for exactly the callers whose window is largest.
+| Property | Default | Meaning |
+|---|---|---|
+| `ludwig.pat.enabled` | `true` | Master switch |
+| `ludwig.pat.max-lifetime` | `90d` | Longest lifetime at issuance |
+| `ludwig.pat.allow-non-expiring` | `false` | Allow tokens without expiry |
+| `ludwig.pat.rotation-overlap` | `24h` | Old secret still accepted after a rotation |
+| `ludwig.pat.retention` | `365d` | Terminal records kept before purge |
+| `ludwig.pat.last-used-debounce` | `5m` | Minimum interval between `last_used_at` writes |
+| `ludwig.pat.inactivity-expiry` | `180d` | Unused tokens are revoked after this (`0` disables) |
+| `ludwig.pat.dormancy-threshold` | `7d` | Gap after which a use is audited as `pat.dormant-wake` |
+| `ludwig.pat.sweep-batch-size` | `500` | Rows per maintenance batch |
+| `ludwig.pat.exchange.enabled` | `true` | Mount the exchange |
+| `ludwig.pat.exchange.path` | `/oauth2/token` | |
+| `ludwig.pat.exchange.issuer` | - | **Required**; `iss` of minted assertions |
+| `ludwig.pat.exchange.audiences` | `[]` | Audiences this issuer will mint for (empty logs a warning) |
+| `ludwig.pat.exchange.assertion-lifetime` | `5m` | Lifetime of minted assertions |
+| `ludwig.pat.rate-limit.enabled` | `true` | |
+| `ludwig.pat.rate-limit.per-key-failures` | `10` | Failures per key id per window |
+| `ludwig.pat.rate-limit.per-source-failures` | `100` | Failures per source per window |
+| `ludwig.pat.rate-limit.window` | `1m` | |
+| `ludwig.pat.introspection.enabled` / `.path` | `true` / `/introspect` | |
+| `ludwig.pat.web.base-path` | `/api/v1/personal-access-tokens` | Management API |
+| `ludwig.pat.liquibase.enabled` | `true` | Apply the changelog as an own bean |
+| `ludwig.cache.caches.pat-verification.*` | purpose `security` | Verification cache (see cache starter) |
 
-## What is enforced for you
+## Deployment
 
-| Rule | How |
+1. **Register the `lpat_` pattern with every secret scanner before the first token is issued** (`pat-core`'s
+   `pat-secret-detection.properties` has a ready `gitleaks` rule).
+2. Schema: `db/changelog/pat/pat-changelog.xml` (table `ludwig_pat`, unique indexes on `key_id` and
+   `previous_key_id`, indexes on `owner_subject` and `expires_at`), included or run by
+   `PatLiquibaseAutoConfiguration`.
+3. A signing key (`RSAKey` bean) or a `PatAssertionMinter` delegating to the provider.
+4. `/oauth2/token` (and `/introspect` if used) in `ludwig.security.public-paths`; reachable only inside the mesh.
+5. Grant `pat:manage` to token holders; `pat:manage:any` only to administrators.
+6. **Schedule the maintenance operations** - see Known gaps below.
+7. Configure the edge as described above.
+
+## Observability
+
+**Metrics:**
+
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `ludwig.pat.exchange` | counter | `audience` | Successful exchanges. Should track *distinct tokens per assertion lifetime*, not request volume |
+| `ludwig.pat.exchange.failure` | counter | `reason` (`malformed`, `unknown-key`, `bad-secret`, `revoked`, `expired`, `source-not-allowed`, `audience-not-permitted`, `audience-not-issuable`, `audience-missing`, `rate-limited`) | Refused exchanges |
+| `ludwig.pat.rate-limited` | counter | `limit` | Rate-limit trips |
+| `ludwig.pat.last-used.write-failed` | counter | | `last_used_at` could not be recorded (exchange still succeeded) |
+
+**Logs.** `WARN` when the exchange or introspection path is missing from `public-paths`, when `audiences` is empty,
+when a PAT-authenticated request is refused on the management surface, when last use cannot be recorded. `INFO` when a
+disabled owner's tokens are revoked.
+
+**Recommended alerts:**
+
+| Condition | Why |
 |---|---|
-| Effective authority is owner ∩ scopes, never a union | one construction site, `credentials.one-attenuation-path` |
+| `increase(ludwig_pat_exchange_failure_total{reason="revoked"}[15m]) > 0` | Something still holds a revoked credential |
+| `rate(ludwig_pat_exchange_total[5m])` proportional to service request volume | The edge is not caching |
+| `increase(ludwig_pat_exchange_failure_total{reason=~"bad-secret|unknown-key"}[5m])` high | Guessing / brute force |
+| `ludwig_pat_rate_limited_total` rising | Same, or a misconfigured client |
+
+**Known gaps:**
+
+- `PatService.destroyExpiredSecrets()`, `endElapsedRotationOverlaps()`, `revokeInactive()` and `purge()` are **not
+  scheduled by the starter**. Verification still enforces expiry and the rotation overlap by time, but without a
+  scheduler: unused tokens are never revoked after `inactivity-expiry`, digests of expired secrets stay in the table,
+  and terminal records are never purged after `retention`. A deployment must run them on one replica (for example
+  a `job-core` `ScheduledJob` under a `RunLock`).
+- No gauge of live tokens by state, and no metric for the maintenance operations.
+
+## Audit
+
+Category `credential`; actions:
+
+| Action | When |
+|---|---|
+| `pat.issued` / `pat.issuance-refused` | Issuance and refused issuance (with reason) |
+| `pat.rotated` | Rotation |
+| `pat.revoked` | Revocation (manual, owner disabled, inactivity) with reason |
+| `pat.expired` | Expiry processed |
+| `pat.first-use` | First successful exchange of a token |
+| `pat.dormant-wake` | Use after more than `dormancy-threshold` of inactivity |
+| `pat.unseen-source` | Use from a source not seen before |
+| `pat.revoked-token-presented` | A revoked token was presented |
+| `pat.purged` | Terminal record deleted by retention |
+
+Secrets and digests never appear in events.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Every PAT fails at the edge with 401 | `/oauth2/token` not public, issuer/signing key misconfigured, or edge not exchanging | Check startup `WARN`s, `ludwig_pat_exchange_failure_total` reasons, the edge config |
+| `audience-not-permitted` / `audience-not-issuable` | Token not issued for that service, or service not in `exchange.audiences` | Re-issue with the audience, or add it to `audiences` |
+| A token must be killed now | Leak | `DELETE /api/v1/personal-access-tokens/{id}` (owner or `pat:manage:any`); effective within the revocation window (≤ 11m by default) |
+| Owner left the company | - | Disabling the principal (`PrincipalDisabledEvent`) revokes their tokens (`PatOwnerDisabledListener`); verify with `SELECT id, revoked_at, revocation_reason FROM ludwig_pat WHERE owner_subject = '<sub>';` |
+| Old tokens never get revoked for inactivity / table grows | Maintenance not scheduled | See Known gaps; run `revokeInactive()` and `purge()` on a schedule |
+| `last-used.write-failed` rising | Database contention on `ludwig_pat` | Raise `last-used-debounce`; check DB |
+
+## Testing
+
+Unit: service rules, last-used tracking, cache definition, audit events, owner-disabled revocation. Integration
+(Docker): `TokenExchangeIT`, `UniformExchangeFailureIT` (every failure is indistinguishable), `ExchangeRateLimitIT`,
+`PatIntrospectionIT`, `UniformIntrospectionFailureIT`, `PatDirectAuthenticationIT`, `PatManagementIT`,
+`PatRetentionIT`, `PatSchemaIT`, `CredentialRejectedProblemIT`. `SqlConfinementTest` (no SQL/JDBC) and
+`PatArchitectureRulesTest`.
+
+## Design decisions
+
+| Rule | Enforced by |
+|---|---|
+| Effective authority = owner ∩ scopes, never union | single construction site, `credentials.one-attenuation-path` |
 | No second credential store, SPI or token format | `credentials.no-second-credential-store`, `...-spi` |
-| The raw secret never leaves the credential modules | `credentials.secret-carrier-stays-inside` + a fenced accessor + a masked `toString()` |
-| A token may not mint, rotate or revoke a token | `PatCredentialGuard`, asserted on **every** endpoint |
-| Mandatory expiry, maximum lifetime, non-empty scopes, non-empty audiences | refused at issuance, each with its own localized message |
-| The verification TTL is a bounded revocation window | `CachePurpose.SECURITY` — startup ceiling, no stale reads |
-| No SQL or JDBC anywhere | `SqlConfinementTest`, the inverse of the two carve-outs |
+| The raw secret never leaves the credential modules | `credentials.secret-carrier-stays-inside`, fenced accessor, masked `toString()` |
+| A token cannot manage tokens | `PatCredentialGuard` on every endpoint |
+| Verification cache is a bounded revocation window | `CachePurpose.SECURITY` |
 | No weak digest algorithm | Checkstyle `WeakDigestAlgorithm` |
 
-## Deployment checklist
-
-1. **Register the `lpat_` format with your secret scanners *before* the first token is issued.** A scanner
-   added afterwards does not scan history by default, so tokens committed in the gap stay invisible for
-   exactly as long as they stay valid. The pattern and a ready `gitleaks` rule are in `pat-core`'s
-   `pat-secret-detection.properties`.
-2. Include `db/changelog/pat/pat-changelog.xml`, or let `PatLiquibaseAutoConfiguration` run it.
-3. Supply the signing key, or a `PatAssertionMinter` that delegates to your provider.
-4. Add `/oauth2/token` to `ludwig.security.public-paths`, and `/introspect` too if any service
-   authenticates tokens directly.
-5. Grant `pat:manage` to anyone who may hold a token, and `pat:manage:any` only to whoever may mint one for
-   somebody else — that second one is how a credential outlives the person who created it.
-6. Alert on `ludwig.pat.exchange.failure{reason="revoked"}`. Presenting a revoked credential means something
-   still holds it.
-7. Alert on `ludwig.pat.exchange` rising with request volume. That is a non-caching edge.
-
-## What this module deliberately leaves alone
-
-- **Verification.** `security-spring-boot-starter`, in every service. This module never sees a request that
-  a token authenticated.
-- **The token format.** `pat-core`, which has zero in-repo dependencies so both sides of the seam can share
-  one definition of the `ludwig_pat` claim.
-- **Signing, in production.** The `PatAssertionMinter` SPI. A deployment with an OIDC provider should point
-  it there: one key to rotate, one JWKS to publish.
-- **Streaming transports.** `ludwig.pat.revalidation-interval` and the long-lived composition above ship
-  now so the knob exists before the first transport does. There is deliberately **no ArchUnit rule** —
-  nothing in this repository holds a connection open, so a rule would pass vacuously and read as coverage.
-  Whoever adds the first streaming transport owes this module the enforcing test.
-- **A shared credential table.** A deploy key or a signed webhook secret has a different lifecycle,
-  issuance authority and revocation story. A table built for all three would hold none of them well.
+- **Edge exchange, not client exchange**: OAuth logic stays out of every `curl` and CI script.
+- **Introspection is the fallback route** until the edge can exchange; table, API, rotation, revocation, audit and
+  attenuation are the same either way.
+- **No shared credential table** for deploy keys or webhook secrets: different lifecycles and authorities.
+- **No streaming-transport enforcement yet**: `revalidation-interval` exists; the first streaming transport owes the
+  enforcing test.

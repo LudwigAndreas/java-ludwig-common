@@ -2,34 +2,54 @@
 
 ***English** · [Русский](README.ru.md)*
 
-Enterprise-ready hot reload for Java 17 + Spring Boot services: typed and validated configuration,
-live-reloading property/YAML files, FreeMarker templates and HashiCorp Vault secrets - with environment
-variables and system properties always able to override a reloaded value. Add the dependency, point it
-at your files and/or Vault paths, and bound configuration beans refresh themselves as sources change - no
-restart, no redeploy.
+Configuration that changes without a restart: live-reloading property and YAML files, HashiCorp Vault
+secrets (KV polling, lease-renewed dynamic secrets, Kubernetes auth), FreeMarker templates, and typed,
+validated configuration objects that always hold the latest valid value. Environment variables and system
+properties always override a reloaded value. Every reload is audited with secrets redacted.
 
-## Quick start
+| | |
+|---|---|
+| Role | starter |
+| Depends on (in-repo) | [`audit-core`](../audit-core) |
+| Used by | `export`, `observability`, `user-settings` starters; `notification-service` |
+| Surfaces | none (reads files and Vault) |
+
+| Feature | Package |
+|---|---|
+| Reload engine (diff, last-known-good on failure, listeners) | `core`, `core.watch` |
+| Live property/YAML files | `properties`, `propertysource` |
+| Typed, validated configuration | `binding` (`RefreshableConfig`, `HotReloadTypedConfigFactory`) |
+| Vault secrets | `secrets` |
+| FreeMarker templates | `template` |
+| Reload notification | `event` (`ConfigurationRefreshedEvent`) |
+| Audit | `audit` (`HotReloadAuditEntry`, `AuditingSourceChangeListener`) |
+| Metrics | `metrics` |
+
+## Usage
 
 ```xml
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>hot-reload-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
 </dependency>
 ```
 
-Hot-reload a properties or YAML file:
+### Live files
 
 ```properties
 ludwig.hotreload.files[0].path=/etc/config/app.properties
 ```
 
-Any key in that file is now a live Spring property - read it the normal way (`@Value`,
-`Environment.getProperty(...)`, `@ConfigurationProperties`) and it reflects the file's current content.
-Editing the file (or, in Kubernetes, the ConfigMap/Secret it's mounted from) is picked up automatically.
+Every key in the file is a live Spring property (`@Value`, `Environment.getProperty`,
+`@ConfigurationProperties`). Edits - including Kubernetes ConfigMap/Secret updates of a mounted volume - are
+picked up automatically. The watcher watches the directory, so atomic symlink swaps (ConfigMaps, Vault
+Agent) are handled.
 
-For a value that needs to refresh *without* restarting a `@ConfigurationProperties` bean, use
-`RefreshableConfig` instead:
+**Precedence.** Reloaded sources sit at the **lowest** precedence: below `application.yml`, system
+properties and environment variables. An explicit override (`MYAPP_MYSERVICE_NAME=local-override`) always
+wins.
+
+### Typed configuration that refreshes in place
 
 ```java
 @Service
@@ -43,201 +63,47 @@ class MyService {
 
     void doWork() {
         MyServiceProperties current = config.get(); // always the latest valid value
-        ...
     }
 }
 ```
 
-`MyServiceProperties` can carry `jakarta.validation` constraints (`@NotBlank`, `@Min`, ...) - a reload
-that fails validation is rejected and the previous, valid value keeps serving.
+`jakarta.validation` constraints on the class are checked on every reload; a reload that fails validation is
+rejected and the previous value keeps serving. Add `spring-boot-starter-validation` (Hibernate Validator plus
+the EL implementation; `hibernate-validator` alone fails with `HV000183`). Without a validator, binding works
+and constraints are not checked.
 
-## Why hot reload, and what "environment overrides" means here
+### Vault on Kubernetes
 
-Hot-reloaded values (files, Vault secrets) are registered at the **lowest** precedence in the
-`Environment` - below `application.yml`/`.properties`, system properties and environment variables. This
-is deliberate: hot reload exists for values that live outside your deployable (secrets, ops-managed
-config), and none of them should be able to silently mask an explicit override you set for local
-development or troubleshooting. If you export `MYAPP_MYSERVICE_NAME=local-override`, that value wins,
-full stop, regardless of what a hot-reloaded file or Vault secret says.
+1. **Vault Agent Injector (preferred where available).** The sidecar renders secrets to files on an
+   `emptyDir`; point `ludwig.hotreload.files` at them. No Vault client, no network call from the application.
+2. **Direct Vault API (`ludwig.hotreload.vault.*`).** For clusters without the injector, or for dynamic
+   (leased) secrets. KV secrets are polled; dynamic secrets (database credentials, PKI) are renewed and
+   rotated by `SecretLeaseContainer`. Vault values may not be present when the first beans are constructed
+   (authentication is a network call), so read them through `RefreshableConfig`, or use pattern 1 if a value
+   is needed from the first line of `main()`.
 
-## Features and where they live
-
-| Feature | Package |
-|---|---|
-| Reload engine (diff, last-known-good on failure, listeners) | `core`, `core.watch` |
-| Live property/YAML files | `properties`, `propertysource` |
-| Typed, validated configuration | `binding` (`RefreshableConfig`, `HotReloadTypedConfigFactory`) |
-| HashiCorp Vault secrets (KV polling, lease-renewed dynamic secrets, Kubernetes auth) | `secrets` |
-| FreeMarker templates | `template` |
-| Configuration, autoconfiguration | `config` (`HotReloadProperties`, `ludwig.hotreload.*`) |
-| Generic reload notification | `event` (`ConfigurationRefreshedEvent`) |
-| Audit trail (who/when/old/new) | `audit` (`HotReloadAuditEntry`, `AuditingSourceChangeListener`) |
-| Metrics | `metrics` (Micrometer, optional) |
-
-## Configuration reference
-
-```properties
-ludwig.hotreload.enabled=true
-
-# --- Files -------------------------------------------------------------
-ludwig.hotreload.files[0].path=/etc/config/app.properties
-ludwig.hotreload.files[0].key-prefix=
-ludwig.hotreload.file-watch.debounce=500ms
-
-# --- Vault ---------------------------------------------------------------
-ludwig.hotreload.vault.enabled=true
-ludwig.hotreload.vault.uri=https://vault.vault.svc:8200
-ludwig.hotreload.vault.poll-interval=30s
-
-# Kubernetes auth (recommended in-cluster: exchanges the pod's service account JWT for a Vault token)
-ludwig.hotreload.vault.kubernetes.role=my-app
-ludwig.hotreload.vault.kubernetes.auth-path=kubernetes
-# ludwig.hotreload.vault.kubernetes.service-account-token-file defaults to the projected token path
-
-# Static token auth (local development only)
-# ludwig.hotreload.vault.token=...
-
-# Static KV secret (v1 or v2), re-read every poll-interval
-ludwig.hotreload.vault.secrets[0].mount=secret
-ludwig.hotreload.vault.secrets[0].path=myapp/config
-ludwig.hotreload.vault.secrets[0].kv-version=2
-ludwig.hotreload.vault.secrets[0].key-prefix=
-
-# Dynamic secret (e.g. database/creds/my-role), pushed via Vault's own lease renewal/rotation
-ludwig.hotreload.vault.dynamic-secrets[0].path=database/creds/my-role
-ludwig.hotreload.vault.dynamic-secrets[0].rotating=true
-ludwig.hotreload.vault.dynamic-secrets[0].key-prefix=db.
-
-# --- FreeMarker ------------------------------------------------------------
-ludwig.hotreload.freemarker.template-directory=/etc/templates
-
-# --- Audit trail -----------------------------------------------------------
-ludwig.hotreload.audit.enabled=true
-ludwig.hotreload.audit.actor=
-
-# --- Metrics -----------------------------------------------------------
-ludwig.hotreload.metrics.enabled=true
-```
-
-## HashiCorp Vault on Kubernetes: two supported patterns
-
-1. **Vault Agent Injector (recommended when available).** The sidecar renders secrets to files on an
-   `emptyDir`, updating them in place via an atomic symlink swap on every rotation. Point
-   `ludwig.hotreload.files` at those files - no Vault client, no network call from your application at
-   all. This is HashiCorp's own recommended Kubernetes integration, and `FileResourceWatcher` is built
-   specifically to handle that symlink-swap update mechanism correctly (it watches the directory, not
-   just the filename).
-2. **Direct Vault API (`ludwig.hotreload.vault.*`).** For when you don't run the injector, or need
-   dynamic (leased) secrets. `VaultKvSecretSource` polls static KV secrets; dynamic secrets (database
-   credentials, PKI, ...) are requested from Vault in renewable/rotating mode and pushed via
-   `SecretLeaseContainer`'s own lease renewal - no polling involved. Because authenticating against Vault
-   is a network call, Vault-sourced values are not guaranteed to be present at the very first bean's
-   construction the way file-sourced values are (see `HotReloadVaultAutoConfiguration`'s Javadoc) - prefer
-   `RefreshableConfig`/`HotReloadTypedConfigFactory` for values sourced this way, or fall back to pattern
-   1 if a value must be present from the first line of `main()`.
-
-## Validation
-
-Add `spring-boot-starter-validation` to get both Hibernate Validator and the EL implementation its
-default message interpolator needs (`hibernate-validator` alone throws `HV000183` without one). Without
-any validator on the classpath, binding still works - constraints are simply not checked.
-
-## FreeMarker
+### FreeMarker
 
 ```properties
 ludwig.hotreload.freemarker.template-directory=/etc/templates
 ```
 
-With that set (and `freemarker` on the classpath), a `freemarker.template.Configuration` bean is
-provided automatically, wired to reload a template the moment its directory changes - no waiting for
-FreeMarker's own lazy `templateUpdateDelay` check. If your application already defines its own
-`Configuration` bean, wire it manually instead:
+With `freemarker` on the classpath, a `freemarker.template.Configuration` bean reloads a template the moment
+its directory changes. If the application defines its own `Configuration`:
 
 ```java
 @Bean
 Configuration freeMarkerConfiguration(HotReloadableTemplateLoader templateLoader) {
     Configuration configuration = new Configuration(Configuration.VERSION_2_3_32);
     configuration.setTemplateLoader(templateLoader);
-    templateLoader.bindTo(configuration); // required so invalidateAll() can clear this Configuration's cache
+    templateLoader.bindTo(configuration); // required so invalidateAll() clears this Configuration's cache
     return configuration;
 }
 ```
 
-## Audit trail
+### Reload notifications
 
-Every successful reload produces one `HotReloadAuditEntry` - source, timestamp, actor, and the old and
-new value of every key that changed - which is flattened into the platform's audit envelope and handed to
-the single `AuditSink`:
-
-```java
-public record HotReloadAuditEntry(String sourceId, Instant timestamp, String actor,
-                                   Map<String, ValueChange> changes) {
-    public record ValueChange(Object oldValue, Object newValue) { }
-    public AuditEvent toAuditEvent() { ... }        // action: config.reloaded
-}
-```
-
-**`HotReloadAuditLogger` and `Slf4jHotReloadAuditLogger` are gone.** They were two of the nine audit
-mechanisms this platform had collected, and the trail now goes wherever every other module's goes - a log,
-the append-only `audit_event` table, a SIEM through the transactional outbox, or several at once. See
-[`audit-core`](../audit-core). For a regulated environment, publish an `@Bean AuditSink` instead of a
-`HotReloadAuditLogger`, and you get every other module's trail through the same bean rather than only this
-one's:
-
-```java
-@Bean
-AuditSink auditSink(MySiemClient siem) {
-    return event -> siem.ship(event);               // every category, not just config
-}
-```
-
-**One reload is now one event, not one event per key.** The changed keys are an attribute - a map of
-`key -> {old, new}` plus a sorted `changedKeys` list - because a reload *is* one thing that happened:
-somebody edited a ConfigMap once. `Slf4jHotReloadAuditLogger` did log a line per key, and splitting a
-reload into N events would make "what did that reload change" a correlation problem instead of a single
-row. A failed reload is a separate action, `config.reload-failed`, with outcome `FAILURE`, rather than an
-entry with an empty change set - "nothing changed" and "it broke" must not be the same shape.
-
-**What `actor` is, and what it isn't.** `actor` identifies *this application instance* (the local
-hostname by default, override with `ludwig.hotreload.audit.actor`) - i.e. "which instance observed and
-applied the change, and when." It is **not** the upstream identity that made the change in the first
-place. Neither a mounted file nor a plain Vault read exposes who wrote it - that's what Vault's own audit
-device (or `git blame` on the ConfigMap/Secret manifest) is for. This library's audit trail is the
-complementary "who/when noticed and applied it" record on the consuming side, not a replacement for
-Vault's audit log. It is recorded with `principalType` `INSTANCE` for exactly that reason: a trail in
-which a hostname sits in the same column as a person's id with nothing to tell them apart is a trail that
-will be read wrong.
-
-**Secret values are always redacted before the entry exists** - every key sourced from Vault, plus any key
-whose name matches a common secret pattern (`password`, `secret`, `token`, `credential`, `apiKey`, ...), is
-masked as `***REDACTED***` no matter which sink is configured, so a custom sink persisting to a database
-can't accidentally leak a credential into it. If you need full audit visibility into actual secret
-*values*, that has to come from Vault's own audit device, which is access-controlled for exactly that
-purpose - this library deliberately doesn't try to be that.
-
-Both of this module's classification rules survived the consolidation as composable classifiers, and the
-`vault:` / `vault-lease:` prefixes are now configuration rather than source: see
-`ludwig.audit.redaction.sensitive-provenance-prefixes`. A deployment with a differently named secret store
-adds its own prefix there rather than patching this module.
-
-Set `ludwig.hotreload.audit.enabled=false` to disable this module's contribution to the audit trail
-entirely. **What a deployment notices:** the `ru.ludwigandreas.hotreload.audit` logger no longer exists;
-reloads are on `ru.ludwigandreas.audit` with `category=config`.
-
-## Metrics
-
-Optional (only if Micrometer is on the classpath, enabled by default via
-`ludwig.hotreload.metrics.enabled`): `ludwig.hotreload.reload.succeeded` and
-`ludwig.hotreload.reload.failed` (tagged `source`, and `exception` for failures) count every reload;
-`ludwig.hotreload.reload.changed.keys` is a distribution summary of how many keys changed per reload; and
-`ludwig.hotreload.reload.seconds.since.last.success` is a gauge, one per source, for "how stale is this
-source right now" - the metric worth alerting on, since a source that's stopped reloading fails silently
-by design (it just keeps serving last-known-good content).
-
-## Generic reload notifications
-
-Every successful reload - file, KV secret, or dynamic secret - publishes a `ConfigurationRefreshedEvent`
-on the `ApplicationContext`, regardless of whether anything is using `RefreshableConfig` for it:
+Every successful reload publishes a `ConfigurationRefreshedEvent`:
 
 ```java
 @EventListener
@@ -245,3 +111,123 @@ void onConfigChanged(ConfigurationRefreshedEvent event) {
     log.info("{} changed: {}", event.getSourceId(), event.getChangedKeys());
 }
 ```
+
+[observability](../observability-spring-boot-starter#runtime-log-levels) uses this to apply `logging.level.*`
+at runtime.
+
+## Configuration
+
+```properties
+ludwig.hotreload.enabled=true
+
+# Files
+ludwig.hotreload.files[0].path=/etc/config/app.properties
+ludwig.hotreload.files[0].key-prefix=
+ludwig.hotreload.file-watch.debounce=500ms
+
+# Vault
+ludwig.hotreload.vault.enabled=true
+ludwig.hotreload.vault.uri=https://vault.vault.svc:8200
+ludwig.hotreload.vault.poll-interval=30s
+# Kubernetes auth (in-cluster: exchanges the pod's service account JWT for a Vault token)
+ludwig.hotreload.vault.kubernetes.role=my-app
+ludwig.hotreload.vault.kubernetes.auth-path=kubernetes
+# ludwig.hotreload.vault.kubernetes.service-account-token-file defaults to the projected token path
+# Static token auth - local development only
+# ludwig.hotreload.vault.token=...
+# Static KV secret (v1 or v2), re-read every poll-interval
+ludwig.hotreload.vault.secrets[0].mount=secret
+ludwig.hotreload.vault.secrets[0].path=myapp/config
+ludwig.hotreload.vault.secrets[0].kv-version=2
+ludwig.hotreload.vault.secrets[0].key-prefix=
+# Dynamic secret, renewed/rotated through Vault leases
+ludwig.hotreload.vault.dynamic-secrets[0].path=database/creds/my-role
+ludwig.hotreload.vault.dynamic-secrets[0].rotating=true
+ludwig.hotreload.vault.dynamic-secrets[0].key-prefix=db.
+
+# FreeMarker
+ludwig.hotreload.freemarker.template-directory=/etc/templates
+
+# Audit
+ludwig.hotreload.audit.enabled=true
+ludwig.hotreload.audit.actor=            # default: local hostname
+
+# Metrics
+ludwig.hotreload.metrics.enabled=true
+```
+
+## Deployment
+
+- **Files**: mount ConfigMaps/Secrets as volumes (not `subPath` mounts, which Kubernetes does not update).
+- **Vault, Kubernetes auth**: a Vault role bound to the service account, with policies for the listed paths;
+  the projected service-account token mounted (default path).
+- **Vault, static token**: local development only; never in a deployed profile.
+- Keep secrets out of `application.yml` and the image; put them in Vault or a mounted Secret.
+
+## Observability
+
+**Metrics** (when Micrometer is present):
+
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `ludwig.hotreload.reload.succeeded` | counter | `source` | Successful reloads |
+| `ludwig.hotreload.reload.failed` | counter | `source`, `exception` | Failed reloads (last-known-good keeps serving) |
+| `ludwig.hotreload.reload.changed.keys` | summary | `source` | Keys changed per reload |
+| `ludwig.hotreload.reload.seconds.since.last.success` | gauge | `source` | Staleness of a source. **The one to alert on**: a failing source is silent by design |
+
+**Logs.** `INFO Source '<id>' <action> (<n> key(s) changed)`. `WARN` when a source reports a failure
+(keeping last known good), when a typed configuration fails validation (keeping the previous value), when the
+initial load of a file fails, and on Vault lease errors. `ERROR` when a listener throws.
+
+**Recommended alerts:**
+
+| Condition | Why |
+|---|---|
+| `ludwig_hotreload_reload_seconds_since_last_success` > expected change interval + poll interval, for Vault sources | Source stopped refreshing; secrets may expire |
+| `increase(ludwig_hotreload_reload_failed_total[15m]) > 0` | A bad edit or an unreachable Vault |
+
+## Audit
+
+| Field | Applied | Failed |
+|---|---|---|
+| category | `config` | `config` |
+| action | `config.reloaded` | `config.reload-failed` |
+| actor | this instance (hostname or `ludwig.hotreload.audit.actor`), principal type `INSTANCE` | same |
+| outcome | `SUCCESS` | `FAILURE` |
+| attributes | `changes` (`key → {old, new}`), sorted `changedKeys` | the error |
+
+- **One reload = one event**, with all changed keys.
+- The actor is the instance that **applied** the change, not the person who made it. Upstream authorship is in
+  Vault's audit device or the ConfigMap's git history.
+- **Secret values are redacted before the event exists**: every Vault-sourced key (provenance `vault:` /
+  `vault-lease:`) and every key whose name matches a secret pattern is `***REDACTED***`. Extend with
+  `ludwig.audit.redaction.*` (see [audit-core](../audit-core#redaction)).
+- `ludwig.hotreload.audit.enabled=false` disables this module's audit events.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Edited ConfigMap not picked up | `subPath` mount, or the key is overridden by an env var / `application.yml` | Mount the whole volume; check precedence (`/actuator/env` is not exposed - inspect the deployment's env) |
+| `Refresh of configuration ... failed validation` | Invalid value in the source | Fix the source; the previous value is still in use |
+| `seconds_since_last_success` growing for a Vault source | Vault unreachable, token/role expired, policy changed | Check Vault connectivity and the role binding; the last secret keeps being used until its lease expires |
+| `Vault lease error` | Dynamic secret lease could not be renewed or rotated | Check the Vault secrets engine; credentials expire at lease end |
+| Template change not visible | Own `Configuration` bean not bound to the loader | Call `templateLoader.bindTo(configuration)` |
+| Value missing at startup from Vault | Read before Vault authentication completed | Use `RefreshableConfig` or the Vault Agent file pattern |
+
+## Testing
+
+Unit tests only, no Docker: reload coordination and last-known-good, property and YAML sources, file watching
+(`FileResourceWatcherTest`, `PollingResourceWatcherTest`), environment bridging, typed binding and validation,
+audit entry redaction, metrics, auto-configuration.
+
+**Not covered by tests:** the Vault sources (KV polling, dynamic secret leases, Kubernetes auth) have no
+automated test. Verify Vault changes manually against a real Vault before release.
+
+## Design decisions
+
+- **Lowest precedence** for reloaded values: externally managed config must never silently mask an explicit
+  override.
+- **Last-known-good**: a broken edit never replaces a working value.
+- **Redact at construction**: the audit sink can never receive a secret.
+- **Not a Vault audit log**: the module records who applied a change, not who made it.

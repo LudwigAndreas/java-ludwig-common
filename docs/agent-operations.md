@@ -227,9 +227,7 @@ change the revision as part of a feature change.
 - Never introduce a second code index (`universal-ctags`, `ast-grep`, `scip-java`, `semgrep`) or a
   second manifest generator. `project-index.json` and `PROJECT_INDEX.md` are generated only by
   `scripts/manifest.sh build` — never hand-edited.
-- Never edit `.mvn/maven.config`, in any session, for any reason. This used to be conditional on
-  the conversation being about a release; it is now unconditional, because a release is a tag and
-  the version reaches Maven from GitVersion as `-Drevision`. Denied in `.claude/settings.json` and
+- Never edit `.mvn/maven.config`, in any session, for any reason: a release is a tag and the version reaches Maven from GitVersion as `-Drevision`. Denied in `.claude/settings.json` and
   by `.claude/hooks/guard-edit.sh`.
 
 Which of these are mechanically enforced, and which are guide-only, is written down in

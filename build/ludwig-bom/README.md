@@ -37,6 +37,13 @@ automatically and **should not import it a second time**.
 
 ---
 
+| | |
+|---|---|
+| Role | BOM (POM, published without a parent) |
+| Depends on (in-repo) | nothing (lists every module) |
+| Used by | every module, `ludwig-service-parent`, any consuming service |
+| Surfaces | none |
+
 ## What it is, and what it deliberately is not
 
 `<packaging>pom</packaging>`, one `<dependencyManagement>` block, and nothing else. **No `<build>`, no
@@ -172,6 +179,18 @@ Keeping them separate lets a service take a **new BOM without new build config**
 [the parent's README](../../build/ludwig-service-parent/README.md#taking-a-newer-bom-without-new-build-config).
 
 ---
+
+## Deployment, observability, audit
+
+Not applicable: build artifact. A change here has no narrower gate than a full `mvn clean install`.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| A version override in a service has no effect | Only the property was redeclared | Redeclare the property **and** the dependency with that version (see "Overriding a version in a service") |
+| Consumers cannot resolve a new module | Not listed in the BOM | Add a `<dependency>` entry (and its classified artifacts, if any) |
+| Convergence failure after an upgrade | Import order or a transitive pin | See "Ordering is load-bearing" |
 
 ## Verifying it
 

@@ -1,5 +1,7 @@
 # jacoco-aggregate
 
+***English** · [Русский](README.ru.md)*
+
 One coverage report over the whole platform.
 
 ```bash
@@ -12,6 +14,13 @@ analysis: the root POM's `sonar.coverage.jacoco.xmlReportPaths` names
 `build/jacoco-aggregate/target/site/jacoco-aggregate/jacoco.xml`. Move the report and that property
 together - `scripts/check_aggregate_report.py` fails when they disagree, because the alternative is
 an analysis that reports 0% coverage on a green build.
+
+| | |
+|---|---|
+| Role | build aggregate (POM, not deployed) |
+| Depends on (in-repo) | every module with code |
+| Used by | SonarCloud analysis (`sonar.coverage.jacoco.xmlReportPaths`) |
+| Surfaces | none |
 
 ## What it is
 
@@ -38,15 +47,9 @@ POM's `<modules>`" already is.
 
 ## Why the instrumentation lives in the root POM
 
-It did not always. JaCoCo used to sit in the reactor root's `<pluginManagement>` only, which meant
-each module re-declared the plugin to be measured. Twenty modules did. Five did not —
-`object-storage-spring-boot-starter`, `file-ingest-spring-boot-starter`, `test-support`,
-`test-support-security` and `checkstyle-rules` — and nothing failed, because a module that is not
-instrumented looks exactly like a module with no code.
-
-An aggregate built on that would have under-counted the platform by five modules and still been
-green, which is the failure this report exists to avoid rather than to demonstrate. So the plugin
-is now declared in the root POM's active `<build><plugins>`, next to Checkstyle and for the reason
+Declared only in `<pluginManagement>`, JaCoCo would measure just the modules that opt in, and nothing
+would fail for one that forgot: a module that is not instrumented looks exactly like a module with no
+code. An aggregate built on that under-counts the platform and stays green. So the plugin is declared in the root POM's active `<build><plugins>`, next to Checkstyle and for the reason
 already written there: *so that every module, and every module added later, is measured without
 anyone having to remember to opt in.*
 
@@ -89,3 +92,15 @@ Reading all three is not double counting. JaCoCo merges execution data by class 
 probe arrays, so a probe recorded in both `jacoco.exec` and `jacoco-merged.exec` is one covered
 probe, not two. An explicit include list would buy nothing and would then have to be kept in step
 with `ludwig-service-parent`'s merge configuration for as long as both exist.
+
+## Deployment, observability, audit
+
+Not applicable: build tooling.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| SonarCloud shows 0% coverage | Analysis ran after a narrow `-pl` build | Run a full `mvn clean install` first |
+| A module's coverage is missing from the aggregate | Module not listed in this POM's `<dependencies>` | Add it (part of adding any module) |
+| `scripts/check_aggregate_report.py` fails | Report path and `sonar.coverage.jacoco.xmlReportPaths` disagree | Move them together |

@@ -12,6 +12,13 @@ overridden for one module or a list of modules. Every run writes two reports: a 
 summary for the person whose build just went red, and a JSON file for tooling, coding agents and the
 org-wide architecture dashboard.
 
+| | |
+|---|---|
+| Role | build tooling (test-scoped jar of ArchUnit rules) |
+| Depends on (in-repo) | nothing |
+| Used by | most starters and both services, at test scope |
+| Surfaces | none (console and JSON reports per test run) |
+
 ## Why
 
 Conventions that live in a document, in a reviewer's head or in one reference service decay silently.
@@ -281,7 +288,7 @@ This group is the durable half of a consolidation. Nine modules of this platform
 audit mechanism - nine SPIs, seven SLF4J implementations, three persistent stores with three schemas -
 and every one was a reasonable local decision: a module needed somewhere for its trail to go, an SPI with
 a shipped default is the idiomatic answer, and nobody was in a position to see the other eight. Replacing
-them with [`audit-core`](../audit-core) fixed the state of the code; only a rule stops the same reasonable
+them with [`audit-core`](../../sources/audit-core) fixed the state of the code; only a rule stops the same reasonable
 local decision being made again next quarter.
 
 Interfaces only, and only ones somebody could implement. A concrete class named `SomethingAuditRecorder`
@@ -479,23 +486,22 @@ transport does.
 
 Whoever adds that transport owes this repository the test. That sentence is the enforcement.
 
-#### The attenuation fence names a type, not a package - and that was a near miss
+#### The attenuation fence names a type, not a package
 
-When a second authentication path was added (a filter that authenticates an `lpat_` credential directly,
-for a platform whose edge cannot perform the token exchange), `credentials.one-attenuation-path` came
-under pressure to **widen**: append the filter's package to the fence and move on. Two packages today,
-three next year, and the invariant is gone by increments with the rule green the whole way.
+There are two authentication paths (the token exchange at the edge, and a filter that authenticates an
+`lpat_` credential directly for a platform whose edge cannot exchange). A fence listing packages would grow
+by one per path - two today, three next year - and the invariant would erode with the rule green throughout.
 
-Instead the attenuation and the principal construction were extracted into one type -
-`security.authn.attenuation.AttenuatedAuthentications` - and the rule was re-pointed at that type alone.
-The rule is now **stricter** than it was: it cannot be satisfied by adding a caller, only by routing
+So the attenuation and the principal construction live in one type -
+`security.authn.attenuation.AttenuatedAuthentications` - and the rule points at that type alone.
+That makes the rule **stricter** than an allowlist: it cannot be satisfied by adding a caller, only by routing
 through the type.
 
 So a change that adds a third authentication path has exactly one correct move, and a change that
 instead appends to `ATTENUATION_TYPE` is a finding rather than a fix. That sentence is in the constant's
 javadoc, where somebody would make the edit.
 
-#### The list is now eight, not six
+#### Two further unenforceable conventions
 
 Two more conventions in the credential area cannot be checked by any build:
 
@@ -992,6 +998,19 @@ in:
   rather than failed in JUnit, and still present in both reports. Severity that only applied to one
   entry point would be a trap.
 
+## Deployment, observability, audit
+
+Not applicable: build tooling. The JSON report (`report.json-file`) is the input for an org-wide architecture dashboard; collect it from CI artifacts.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Architecture test fails naming a rule id | A convention was broken | Read the message (it names the class and the fix); fix the code, or downgrade/disable the rule by id with a ticket |
+| Rule group asks to be configured | A shared base type (`exceptions`, `entity-base`, `kafka-contracts`) is unset | Set the property the message names |
+| Architecture test passes but checked nothing | Mistyped base package | An empty import is refused by default; check the base packages |
+| Two architecture test classes overwrite each other's report | Shared default report path | Give each its own `report.json-file` |
+
 ## Testing
 
 `mvn -pl architecture-rules test` runs the rules against fixture services in `src/test/java`: one
@@ -1001,5 +1020,5 @@ than no report. A rule that only ever passes
 proves nothing, so each is asserted from both sides. The frameworks the fixtures use are stubs
 declared under their real package names - which is also what proves the name-based matching works.
 
-The reference service in [`crud-service-example`](../crud-service-example) enables the library on
+The reference service in [`crud-service-example`](../../services/crud-service-example) enables the library on
 itself, so this repository's own example proves compliance on every build.

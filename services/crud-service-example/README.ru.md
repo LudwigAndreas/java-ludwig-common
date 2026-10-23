@@ -11,6 +11,13 @@ CRUD-микросервис боевой формы — каталог това�
 складываются в один сервис и как выглядит слоистая, свободная от шаблонного кода и проверяемая на
 этапе компиляции реализация поверх них.
 
+| | |
+|---|---|
+| Роль | эталонный сервис (запускаемое приложение Spring Boot) |
+| Зависит от (в репозитории) | `ludwig-service-parent`, db-core, odata-filter, outbox, asyncapi, export, file-action, web-core, observability, rest-client, security, identity-projection, grpc-server, `catalog-grpc-api` |
+| Используется | ничем - это пример для копирования |
+| Поверхности | REST `/api/v1/**`, gRPC `CatalogService` (порт 9090), Kafka через outbox, `/server/info`, actuator `health`, `info`, `metrics`, `prometheus` |
+
 ## Что он демонстрирует
 
 | Требование | Как |
@@ -211,13 +218,9 @@ security-стартером; каждый вносит свой bundle сооб�
 сервиса**, поэтому любое их сообщение можно переформулировать, добавив ключ сюда. Настраивать нечего и
 переобрабатывать нечего.
 
-Последний пункт и есть причина существования стартера, а этот сервис — место, где проблема
-проявилась. Его `ApiExceptionHandler` нёс комментарий, объясняющий, что
-`odata.filter.web.problem-detail-advice-enabled` выставлен в `false`, потому что сообщения того
-стартера были только на английском, — и сервис вручную переобрабатывал все семь типов его исключений,
-чтобы сохранить единую локализованную форму ошибки. Этого флага больше нет в `application.yml`, как
-нет и advice, `LocalizationConfig` и DTO `PageResponse`: четыре файла шаблонного кода, которые
-копировал каждый сервис.
+Поэтому сервис не переобрабатывает ни одного исключения стартеров: здесь нет `@ControllerAdvice`,
+`LocalizationConfig` и DTO страницы. Сервис, добавляющий стартер, получает его bundle сообщений, а
+не обработчик, который нужно писать.
 
 Каждый ответ — это `ProblemDetail` по RFC 9457 со стабильным машиночитаемым `code` рядом с
 локализованными `title`/`detail`, чтобы клиенты ветвились по коду и показывали текст. Он также несёт
@@ -455,6 +458,65 @@ security передала запрос дальше, поэтому собств
 - `ludwig.security.public-paths` повторяет три записи actuator рядом с `/server/info`. Список в
   YAML заменяет список по умолчанию из стартера безопасности, а не дополняет его, поэтому одна лишь
   новая строка спрятала бы пробы здоровья за аутентификацию. `ServerInfoIT` проверяет обе половины.
+
+## Развёртывание
+
+У сервиса нет Dockerfile и манифеста Kubernetes: это пример. Образ собирается Jib из
+[`ludwig-service-parent`](../../build/ludwig-service-parent/README.ru.md)
+(`mvn -pl crud-service-example package jib:dockerBuild`); как шаблон проб, ресурсов, секретов и бюджета
+прерываний используйте [манифест notification-service](../notification-service/deploy/k8s/notification-service.yaml).
+
+| Переменная окружения | Назначение |
+|---|---|
+| `CATALOG_DB_URL`, `CATALOG_DB_USER`, `CATALOG_DB_PASSWORD` | PostgreSQL (секрет) |
+| `OIDC_ISSUER_URI`, `OIDC_TOKEN_URI`, `CATALOG_CLIENT_ID`, `CATALOG_CLIENT_SECRET` | resource server и учётные данные исходящего клиента (секрет) |
+| `KAFKA_BOOTSTRAP_SERVERS`, `OUTBOX_POLLING_ENABLED` | ретрансляция outbox в Kafka |
+| `IDENTITY_PROJECTION_ENABLED`, `OIDC_USER_TOPIC` | потребитель проекции пользователей |
+| `GRPC_PORT`, `GRPC_TLS_BUNDLE` | gRPC-сервер; **без TLS-бандла старт падает** |
+| `PARTNER_MTLS_ENABLED`, `MESH_PROXY_CIDRS` | mTLS партнёров и доверенные прокси |
+| `REPORT_POLLER_ENABLED`, `REPORT_OUTPUT_DIR`, `FILE_ACTION_STORAGE_ROOT` | воркеры экспорта и импорта и их хранилище |
+| `CATALOG_NOTIFICATIONS_ENABLED`, `NOTIFICATION_BASE_URL`, `CATALOG_STEWARD_USER_IDS` | уведомления о завершении экспорта через notification-service |
+| `SUPPLIER_DIRECTORY_BASE_URL` | пример `@LudwigRestClient` |
+| `SERVER_PORT` | HTTP-порт, по умолчанию 8080 |
+
+Liquibase мигрирует при старте (таблицы сервиса плюс changelog-и outbox, export, file-action и проекции
+пользователей). Пробы: `/actuator/health/liveness` и `/actuator/health/readiness`.
+
+## Наблюдаемость
+
+Всё приходит из стартеров: структурные JSON-логи с сервисом, версией и коммитом; корреляция через HTTP,
+исходящий HTTP и Kafka; трассировка; метрики
+[outbox](../../sources/outbox-spring-boot-starter/README.ru.md),
+[export](../../sources/export-spring-boot-starter/README.ru.md),
+[file-action](../../sources/file-action-spring-boot-starter/README.ru.md),
+[rest-client](../../sources/rest-client-spring-boot-starter/README.ru.md) и
+[grpc-server](../../sources/grpc-server-spring-boot-starter/README.ru.md), плюс `http.server.requests`
+от Boot. Стоит алертить на счётчик dead letter outbox, падения запусков экспорта и долю HTTP 5xx.
+
+### Известные пробелы
+
+- **Нет группы readiness.** `management.endpoint.health.probes` включён, но `group.readiness.include` не
+  задан, поэтому readiness сообщает только `readinessState` и остаётся UP при упавшей БД.
+  notification-service включает `db` - скопируйте оттуда.
+- У file-action нет метрик (см. его README), поэтому импорт таблиц виден только в логах.
+
+## Аудит
+
+Собственных событий аудита сервис не пишет. Export и file-action пишут свои через
+[audit-core](../../sources/audit-core/README.ru.md), который здесь использует SLF4J-приёмник, так как
+`audit-spring-boot-starter` не упакован. Каждая сущность несёт колонки аудита db-core
+(`created_at`, `created_by`, `updated_at`, `updated_by`).
+
+## Runbook
+
+| Симптом | Вероятная причина | Что делать |
+|---|---|---|
+| Не стартует, ошибка TLS gRPC | Нет `GRPC_TLS_BUNDLE` | Передать бандл в `spring.ssl.bundle.pem.<name>` из хранилища секретов |
+| `409` при обновлении | Устаревший `version` в запросе | Клиент перечитывает и повторяет; так работает оптимистическая блокировка |
+| `403` при чтении существующего товара | Область данных (партнёр или политика OWN) | Ожидаемо; см. «Безопасность: два слоя, два места» |
+| События не доходят до Kafka | `OUTBOX_POLLING_ENABLED` выключен или брокер недоступен | См. [runbook outbox](../../sources/outbox-spring-boot-starter/README.ru.md) |
+| Товары партнёра не находятся | Проекция пользователей не наполняется | `IDENTITY_PROJECTION_ENABLED`, `OIDC_USER_TOPIC`; см. [runbook проекции](../../sources/identity-projection-spring-boot-starter/README.ru.md) |
+| Экспорт или импорт застрял | Воркер выключен или хранилище недоступно для записи | `REPORT_POLLER_ENABLED`, `REPORT_OUTPUT_DIR`, `FILE_ACTION_STORAGE_ROOT`; см. runbook этих модулей |
 
 ## Тестирование
 

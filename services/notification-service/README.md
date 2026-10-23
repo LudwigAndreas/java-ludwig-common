@@ -23,10 +23,16 @@ this service's database rather than somebody else's network. It is the destinati
 when a recipient has declined every push channel or has no verified address — see
 [the inbox](#the-inbox-the-one-passive-channel).
 
-It is built entirely from this repository's own modules. It used to add the two things none of them
-provided - consumer-side idempotency and a leased distributed lock - and both have since been promoted
-into the platform: the store into `idempotency-spring-boot-starter`, the lock into `job-core`. See
-[Promoted: both platform gaps are filled](#promoted-both-platform-gaps-are-filled).
+It is built entirely from this repository's own modules, including consumer-side idempotency
+(`idempotency-spring-boot-starter`) and leased locks (`job-core`). See
+[Platform modules it relies on](#platform-modules-it-relies-on).
+
+| | |
+|---|---|
+| Role | service (deployable, three replicas) |
+| Depends on (in-repo) | `ludwig-service-parent`, db-core, outbox, messaging, asyncapi, job-core, idempotency, security, identity-projection, hot-reload, web-core, observability, odata-filter, audit-core; user-settings at `provided` scope |
+| Used by | every service that notifies somebody (REST, or Kafka where a broker exists) |
+| Surfaces | REST `/api/v1/notifications/**`, inbox and announcements APIs, receipt webhook, Kafka `platform.notifications.requests` (off by default), actuator `health`, `info`, `prometheus` |
 
 ```console
 $ curl -X POST https://notifications.internal/api/v1/notifications \
@@ -55,7 +61,7 @@ Location: /api/v1/notifications/0f8a…
 - [The two aggregates, and why](#the-two-aggregates-and-why)
 - [The delivery state machine](#the-delivery-state-machine)
 - [The delivery queue is not the outbox](#the-delivery-queue-is-not-the-outbox)
-- [Promoted: both platform gaps are filled](#promoted-both-platform-gaps-are-filled)
+- [Platform modules it relies on](#platform-modules-it-relies-on)
 - [The request contract](#the-request-contract)
 - [Running without a broker](#running-without-a-broker)
 - [The Kafka topic](#the-kafka-topic)
@@ -72,6 +78,8 @@ Location: /api/v1/notifications/0f8a…
 - [Operational runbook](#operational-runbook)
 - [The published API document](#the-published-api-document)
 - [Configuration](#configuration)
+- [Deployment](#deployment)
+- [Audit](#audit)
 - [Deviations and known gaps](#deviations-and-known-gaps)
 
 ---
@@ -126,7 +134,7 @@ that is fine: the value is in the status trail, where *"created, then suppressed
 had opted out"* is a different and far more useful record than a row that simply appeared as
 suppressed.
 
-**`BATCHED` and `COLLAPSED` are additions** to the lifecycle as originally specified. Without a state
+**`BATCHED` and `COLLAPSED` exist for collapsing.** Without a state
 meaning "real, but not eligible for dispatch", a notification waiting to be folded into a digest is
 indistinguishable from one the poller has not reached yet; and without a terminal state meaning
 "folded into a digest that was sent", the members of a collapsed group would have to be recorded as
@@ -215,21 +223,16 @@ condition and removes the class of bug where the two disagree.
 Two more partial indexes exist for the SLO gauges (`created_at` over the claimable set) and the stale
 sweeper (`claimed_at` over `CLAIMED`).
 
-## Promoted: both platform gaps are filled
+## Platform modules it relies on
 
-Two capabilities lived behind narrow interfaces here because the platform had neither, and **without either
-of them this service double-sends at more than one replica** — they were never optional polish. The narrow
-interface was the point: it is what made promoting each of them a move rather than a rewrite. Both have now
-been promoted, and this section is the record of where they went.
+Two capabilities are essential to running at more than one replica, and both come from the platform:
+**consumer-side idempotency** from `idempotency-spring-boot-starter` and **leased locks** for the
+maintenance jobs from `job-core`. Without either, this service double-sends.
 
-### 1. `IdempotencyStore` → **`idempotency-spring-boot-starter`**
+### Idempotency: `idempotency-spring-boot-starter`
 
-This service no longer has a dedup store of its own. `IdempotencyStore`, `PostgresIdempotencyStore`,
-`IdempotencyRecordEntity`, `IdempotencyRecordRepository`, `IdempotencyQueryRepository(Impl)` and the
-`notification_idempotency` table are gone; the claim lives in `idempotency_claim` and this service calls that
-module's store.
-
-The correctness was always in one statement, and it survived the move unchanged:
+Claims live in `idempotency_claim`; this service calls that module's store directly. The correctness is in
+one statement:
 
 ```sql
 INSERT INTO idempotency_claim (…)
@@ -238,99 +241,74 @@ ON CONFLICT (scope, idempotency_key) DO UPDATE SET …
 RETURNING request_id, state, …
 ```
 
-Read-then-insert passes a single-threaded test and fails exactly here: two replicas handling the same record
-both read "no row", both insert, and one takes a constraint violation that aborts a transaction which has
-already written a request and its deliveries. `DO UPDATE` makes the loser block on the winner's row lock and
-then read the committed winner — no exception, no rollback, no double send. `DO NOTHING` would not do either:
-it returns no row on conflict, and in `READ COMMITTED` the re-select can still miss a row whose inserting
-transaction has not committed.
+Read-then-insert passes a single-threaded test and fails here: two replicas handling the same record both
+read "no row", both insert, and one takes a constraint violation that aborts a transaction which has already
+written a request and its deliveries. `DO UPDATE` makes the loser block on the winner's row lock and then read
+the committed winner. `DO NOTHING` would not do: it returns no row on conflict, and in `READ COMMITTED` the
+re-select can still miss a row whose inserting transaction has not committed.
 
-Scoped by ingress, because a Kafka record key and an HTTP `Idempotency-Key` come from different namespaces and
-a collision between them would silently drop a genuine request. **The two scope names stay here**, in
-`ludwig.notification.idempotency`, for the same reason the two lock names did: a scope is this service's
-coordination contract between its own two ingresses and means nothing to any other service.
+Claims are scoped by ingress, because a Kafka record key and an HTTP `Idempotency-Key` come from different
+namespaces and a collision between them would silently drop a genuine request. The two scope names live here,
+in `ludwig.notification.idempotency`: a scope is this service's coordination contract between its own two
+ingresses.
 
-**Two API-compatibility decisions, both taken deliberately rather than inherited.**
+**This service does not use the module's HTTP filter.** That filter replays a completed duplicate's response,
+which is wrong here:
 
-**The store stays directly callable, and this service does not use the module's HTTP filter.** That filter
-replays a completed duplicate's response, which is the better default for most APIs and the wrong one here:
+- `NotificationRequestResponse.duplicate` is a documented field, and the **200-versus-202 distinction** below is
+  built on it: a duplicate answers 200 with the original request, so a caller retrying after a timeout can tell
+  whether their retry did the work. The filter would replay the original 202.
+- `BatchSendRequest` carries a key **per item, in the body**, which no header-based filter can serve; using the
+  filter for `POST /` alone would make the two endpoints deduplicate differently.
 
-- `NotificationRequestResponse.duplicate` is a documented field of this service's API, and the **200-versus-202
-  distinction below is built on it** — a duplicate answers 200 with the original request so a caller retrying
-  after a timeout can tell whether their retry did the work. The filter's natural behaviour is to replay the
-  original **202** instead, which would silently change what a retrying caller is told. The flag is kept and
-  the contract is unchanged.
-- `BatchSendRequest` carries a key **per item, in the body**, precisely because a header cannot carry one value
-  per item. No header-based filter can serve that endpoint, so adopting the filter for `POST /` alone would
-  leave the two endpoints deduplicating differently — which is worse than either choice made consistently.
+`NotificationServiceImpl` claims in `TRANSACTIONAL` mode: the claim is written in the same transaction as the
+request row and its deliveries, and a rollback frees the key. A claim that committed independently would leave
+a key reserved for a request whose transaction rolled back, and the retry would be rejected as a duplicate of
+something that does not exist.
 
-So `NotificationServiceImpl` claims in `TRANSACTIONAL` mode, which is exactly what the local primitive did:
-the claim is written in the same transaction as the request row and its deliveries, and a rollback frees the
-key. That is required rather than convenient — a claim that committed independently would leave a key
-permanently reserved for a request whose transaction then rolled back, and the retry of that request would be
-rejected as a duplicate of something that does not exist.
+| Concern | Where |
+|---|---|
+| Table | `idempotency_claim` (state, lease, fingerprint, stored response this service does not use) |
+| TTL | `ludwig.idempotency.ttl`, per scope: the Kafka ingress can hold keys for a week while REST holds them for a day |
+| Expiry | evaluated inside the claim statement |
+| Purge | the module's batched job under `job-core`'s lock |
+| Metrics | claims, replays, failures, fingerprint mismatches, purged rows (`ludwig.idempotency.*`) |
 
-What changed for a deployment:
+### Locks: `job-core`
 
-| | was, here | is, in `idempotency-spring-boot-starter` |
-|---|---|---|
-| Table | `notification_idempotency` | `idempotency_claim`, with state, lease, fingerprint and a stored response this service does not use |
-| TTL | `ludwig.notification.idempotency.ttl` | `ludwig.idempotency.ttl`, **per scope** — so the Kafka ingress can hold keys for a week while REST holds them for a day, which this service could not express before |
-| Purge | a step in `RetentionScheduler`, under `LockNames.RETENTION` | the module's own batched job under `job-core`'s lock, with the lease renewed **between batches** — which this service's single-statement step did not do |
-| Claim modes | one, transactional and undocumented as such | two, named and required at the call site |
-| Expiry | evaluated by the purge only, so a key past its TTL still deduped until the purge next ran | evaluated **inside the claim statement**, so the TTL means what the configuration says |
-| Metrics | none | claims, replays, failures, **fingerprint mismatches** and purged rows |
+The maintenance jobs run under `job-core`'s `RunLock`, backed by `job_run_lock`. The lock *names* live here in
+`LockNames`, because a lock name is this service's coordination contract between its own replicas.
 
-**The migration moves the rows.** `db.changelog-master.xml` includes the module's changelog *above*
-`0006-fold-idempotency-into-starter.xml`, which drops the old table — and that order is load-bearing rather
-than cosmetic. The module's changelog carries the changeset that moves every row across; dropping first would
-discard every in-flight key, and **every in-flight key is a claim on work that has been done**, so every one
-of them is a notification this service would send to a real person a second time, during the very deploy that
-introduces the module whose purpose is to prevent it. The drop's precondition is the reconciliation an operator
-would otherwise perform by eye: zero rows in the old table that are not in the new one.
-
-### 2. The distributed lock → **`job-core`**
-
-This service no longer has a lock of its own. `DistributedLock`, `PostgresDistributedLock`,
-`LockLeaseService`, their repositories and entity, and the `notification_lock` table are gone; the maintenance
-jobs run under `job-core`'s `RunLock`, backed by `job_run_lock`. The two lock *names* stay here in
-`LockNames`, because a lock name is this service's coordination contract between its own replicas and means
-nothing to any other service.
-
-The reasoning that made a lock necessary here is unchanged and now lives in `job-core`. The delivery poller
-**does not use it and must not**: `SKIP LOCKED` already partitions the queue, so three pollers claim disjoint
-batches with no coordination, and putting a lock there would throw away two thirds of the throughput to solve a
-problem that does not exist. What needs it is every job defined over a *set* of rows rather than over each row
-independently: the digest collapse (three replicas → three digests for one person), the retention purge, and
+The delivery poller **does not use a lock and must not**: `SKIP LOCKED` already partitions the queue, so three
+pollers claim disjoint batches with no coordination. What needs a lock is every job defined over a *set* of
+rows: the digest collapse (three replicas would build three digests for one person), the retention purge and
 the suppression compaction.
 
-Still a leased row rather than `pg_try_advisory_lock`, for the same reason it always was. An advisory lock is
-held by the database *session*, and with a connection pool the session returns to the pool the moment the
-statement finishes — so holding one across a multi-minute digest run means pinning a pooled connection and
-trusting nothing in the stack quietly returns it. It is also invisible: an operator asking "why has the digest
-not run for an hour?" has nothing to look at. A row with an explicit `expires_at` is inspectable, survives the
-connection, fails over on a configured timeout rather than an accidental one, and can be broken by hand.
+A leased row rather than `pg_try_advisory_lock`: an advisory lock is held by the database session, and with a
+connection pool that means pinning a pooled connection across a multi-minute run. It is also invisible. A row
+with an explicit `expires_at` is inspectable, survives the connection, fails over on a configured timeout and
+can be broken by hand. Renewal matches `owner` **and** `run_id`, so a superseded run is told to stop.
 
-What changed in the fold, and why the platform's version won on every axis where the two differed:
+| Concern | Where |
+|---|---|
+| Table | `job_run_lock` (release nulls the owner and expires the row; the row stays) |
+| Lease | `ludwig.job-core.lock.default-lease` |
+| Metrics | `ludwig.job.lock.acquisition{lock,acquired}`, `ludwig.job.lock.lost{lock}` (a failed renewal: alert on it) |
 
-| | was, here | is, in `job-core` |
-|---|---|---|
-| Table | `notification_lock`, id **is** the lock name, release **deletes** the row | `job_run_lock`, surrogate id + unique `lock_name`, release nulls the owner and expires the row — so the table is bounded by lock names and acquisition has one shape instead of two |
-| Transactions | `@Transactional(REQUIRES_NEW)` on a separate `LockLeaseService` bean, which existed **only** to dodge Spring's proxy self-invocation trap, and which coupled leases to a `PlatformTransactionManager`, a JPA entity, entity scanning and a generated Q-type | a short auto-commit JDBC connection of its own — one class, no proxy caveat, no JPA at all |
-| Fencing | renew matched `owner` only, so a lease that lapsed and was re-acquired **by the same pod** renewed as though nothing had happened | renew matches `owner` **and** `run_id`, so a superseded run is told to stop — a correctness property this service did not have |
-| Lease TTL | `ludwig.notification.locks.lease` | `ludwig.job-core.lock.default-lease`, one failover time for the platform |
-| Metrics | `notification.locks{lock,outcome}` | `ludwig.job.lock.acquisition{lock,acquired}` plus `ludwig.job.lock.lost{lock}` — a failed renewal, the event worth alerting on, which **neither** implementation used to record |
+### Migrations
 
-### What is left here that could still be promoted
+`db.changelog-master.xml` includes `job-core`'s changelog above `0016-drop-lock-table.sql` and the idempotency
+module's changelog above `0017-drop-idempotency.sql`. **Keep that order.** The idempotency changelog moves
+every row out of the legacy `notification_idempotency` table, and dropping it first would discard in-flight
+keys, each of which is a notification that would be sent a second time. The drop's precondition refuses to run
+while any row is uncopied.
 
-The **cluster-wide rate limiter** (`notification_rate_limit_window`, `PostgresChannelRateLimiter`). It is
-genuinely general — an in-process token bucket is wrong at more than one replica and wrong in the direction
-nobody notices, because three pods each holding a 100-per-minute bucket send 300 per minute — and nothing about
-it is specific to notifications. It has not been promoted because no second consumer has asked for it, and a
-platform module with one consumer is a module whose interface has been guessed rather than designed.
+### Candidates for the platform
 
-The **template revision table** is not a candidate: it is about FreeMarker sources this service owns, and a
-platform module for it would have exactly one possible user.
+The **cluster-wide rate limiter** (`notification_rate_limit_window`, `PostgresChannelRateLimiter`) is general:
+an in-process token bucket is wrong at more than one replica (three pods with 100 per minute each send 300).
+It stays here until a second consumer needs it, so its interface is designed rather than guessed. The
+**template revision table** is not a candidate: it is about FreeMarker sources this service owns.
 
 ## The request contract
 
@@ -469,7 +447,7 @@ Two header changes a client will notice:
 
 - **`GET /{id}` of a request that has not finished fanning out carries `Retry-After`**, from
   `ludwig.notification.ingress.rest.retry-after` (default `1s`).
-- **A duplicate submit now carries `Retry-After` too**, when the original it resolved to is still
+- **A duplicate submit carries `Retry-After` too**, when the original it resolved to is still
   `ACCEPTED`. It is still a `200` and still not a `202`: the caller is being handed somebody else's
   in-flight work, and nothing new was started. That distinction is the one
   `idempotency-spring-boot-starter` is careful about, and this endpoint does not blur it - a `409`
@@ -523,32 +501,19 @@ the code paths behind them are the ones that already ship — not alternatives m
 as it behaves once a broker exists. Default topic `platform.notifications.requests`, group
 `notification-service`, dead letters to `platform.notifications.requests.dlt`.
 
-The container now comes from **`messaging-spring-boot-starter`**, and `NotificationMessagingConfig` is
-three lines naming this service's payload type and its topic. That is deliberate rather than incidental:
-this configuration was the only one of the platform's three Kafka consumers that had been reasoned about,
-so its decisions became the platform's defaults and it became the caller rather than being replaced by
-one. The effective configuration is unchanged — `RECORD` acknowledgement, `ErrorHandlingDeserializer`
-around key and value, auto-commit off, a `JsonDeserializer` with type headers off, 1s tripling to a 30s
-cap, `DeserializationException` and `MessageConversionException` non-retryable, `<topic>.dlt` on a
-broker-chosen partition — with three exceptions, all of which are fixes:
+The container comes from **`messaging-spring-boot-starter`**; `NotificationMessagingConfig` only names
+this service's payload type and its topic. The effective configuration: `RECORD` acknowledgement,
+`ErrorHandlingDeserializer` around key and value, auto-commit off, a `JsonDeserializer` with type headers off,
+backoff 1s tripling to a 30s cap, `DeserializationException` and `MessageConversionException` non-retryable,
+`<topic>.dlt` on a broker-chosen partition, and:
 
-- **The attempt budget is four deliveries, where it used to be five.** Spring's
-  `ExponentialBackOff.maxAttempts` counts the intervals it hands out, which is the number of retries, so
-  the old `MAX_ATTEMPTS = 4` produced five deliveries under a comment reading "Attempts before a record is
-  dead-lettered, including the first". Four is what that comment said; the code now matches it, and an
-  integration test counts the deliveries.
-- **A poison record can now actually be dead-lettered.** The old configuration handed Boot's
-  `KafkaTemplate` to its `DeadLetterPublishingRecoverer`, and a record that failed to deserialize is
-  republished as raw bytes, which that template's serializer cannot send: the publication failed, the
-  offset was committed, and the record was lost. Invisible, because nothing had ever put a malformed
-  record on this topic in a test with a real broker.
-- **The correlation id now reaches the listener.** `NotificationRequestListener` reads it from the
-  correlation context, and the observability starter's interceptor that populates it was only ever applied
-  to Boot's own container factory — so every request consumed from this topic was logged under a
-  correlation id of its own. The listener's code was right; nothing had connected the two.
+- **Four deliveries in total**, the first included. Spring's `ExponentialBackOff.maxAttempts` counts retries,
+  not deliveries; an integration test counts the deliveries.
+- **A record that fails to deserialize is dead-lettered** as its raw bytes.
+- **The correlation id reaches the listener**: the observability interceptor is applied to the starter's
+  container factory, and `NotificationRequestListener` reads it from the correlation context.
 
-The consumer also gains, for the first time, a lag metric and a `ludwig.messaging.silent` gauge — see that
-module's README.
+The consumer publishes a lag metric and a `ludwig.messaging.silent` gauge; see that module's README.
 
 ```json
 {
@@ -1074,7 +1039,7 @@ All three apply to an **interrupting** channel. On the one passive channel only 
 see [the inbox](#the-inbox-the-one-passive-channel) for which of them is switched off and why each
 has its own reason.
 
-There are now **three** category classes, and the third exists because the first two cannot express
+There are **three** category classes, and the third exists because the first two cannot express
 "undeclinable but not urgent" — see [platform announcements](#platform-announcements):
 
 | class | per-category opt-out | quiet hours |
@@ -1254,7 +1219,7 @@ POST /admin/settings/backfill
 Safe to run at any time and safe to repeat — every republished event carries the owner's original
 timestamp, so a replica that is already current drops all of it. The same call is the recovery when this
 service has been down longer than the topic's retention. See
-[the backfill section](../../sources/user-settings-spring-boot-starter/README.md#seeding-a-new-projection-the-backfill).
+[the backfill section](../../sources/user-settings-spring-boot-starter/README.md#backfill-seeding-a-new-projection).
 
 ## Priority lanes and rate limits
 
@@ -1342,9 +1307,8 @@ the inbox expire before the push attempt it exists to outlive.
 | Announcements + content, markers, email run | `retention.announcement-ttl` | 90d | anchored on **`visible_until`** — everything cascades from one row, so the purge is a constant number of statements whatever the audience was |
 
 Also purged: expired suppressions (**never** permanent ones — a spam complaint does not stop being true)
-and closed rate-limit windows. **Expired dedup claims are not in this list any more**: that table belongs
-to `idempotency-spring-boot-starter`, which runs its own batched purge under the same `RunLock` mechanism.
-Two purges of one table on two schedules is exactly the duplication the promotion removed.
+and closed rate-limit windows. **Expired dedup claims are not purged here**: that table belongs to
+`idempotency-spring-boot-starter`, which runs its own batched purge under the same `RunLock` mechanism.
 
 ## Metrics, and the two that matter
 
@@ -1447,10 +1411,9 @@ Fix the cause first: `lastError` on the delivery says what happened, and
 
 ## The published API document
 
-This service already served its OpenAPI document at `/v3/api-docs` and a Swagger UI at
-`/swagger-ui.html`. What is new is that the document is **committed**, at
-`docs/api/notification-service.openapi.yaml`, so a change to this service's HTTP surface shows up as
-a diff rather than only inside a running process.
+This service serves its OpenAPI document at `/v3/api-docs` and a Swagger UI at `/swagger-ui.html`. The
+document is also **committed**, at `docs/api/notification-service.openapi.yaml`, so a change to this
+service's HTTP surface shows up as a diff rather than only inside a running process.
 
 `ApiDocumentIT` regenerates it at `verify` and fails the build when the committed copy no longer
 matches what the service serves. An ordinary build never rewrites it; refreshing is an explicit
@@ -1458,13 +1421,9 @@ matches what the service serves. An ordinary build never rewrites it; refreshing
 `docs/api/README.md` has the command and explains why the document is canonicalized - every object's
 members sorted, `servers` stripped - before it is compared.
 
-One detail in that document is worth knowing, because it was nearly wrong. The `ProblemDetail`
-schema is declared by hand in `OpenApiConfig`, since every error here is produced by `web-core`'s
-advice rather than returned from a controller, and a document inferred from return types alone would
-describe only the happy paths. But springdoc prunes a component nothing refers to, and for a while
-this schema survived only because `BatchItemResult` happens to carry a `ProblemDetail` field -
-meaning the whole error contract would have vanished from the document the day that unrelated field
-was removed. It is now attached to every operation as its `default` response, which is also the
+The `ProblemDetail` schema is declared by hand in `OpenApiConfig`, since every error here is produced by
+`web-core`'s advice rather than returned from a controller, and a document inferred from return types
+alone would describe only the happy paths. springdoc prunes a component nothing refers to, so it is attached to every operation as its `default` response, which is also the
 accurate status to use: `web-core`'s single advice can answer on any operation, so listing 400, 404
 and 409 per endpoint would be a list that drifts from the mappers.
 
@@ -1498,6 +1457,48 @@ Two settings are deliberately **not** declared in `application.yml` —
 `ludwig.hotreload.files[0].path` and `ludwig.hotreload.freemarker.template-directory`. Both activate
 on the property merely existing, so a `${VAR:}` placeholder would switch them on against a directory
 that is not there. The deployment sets them as environment variables; see `deploy/k8s`.
+
+## Deployment
+
+Image: `Dockerfile` here (multi-stage, every base image pinned by digest; build context is the repository root:
+`docker build -f services/notification-service/Dockerfile -t notification-service:<version> .`), or Jib via
+`ludwig-service-parent`. Manifest: [`deploy/k8s/notification-service.yaml`](deploy/k8s/notification-service.yaml).
+
+| Object | What it carries |
+|---|---|
+| `Deployment` | 3 replicas; image by digest; requests 250m / 512Mi, memory limit 1Gi (the heap is sized from it); liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness` (includes `db` and `notificationQueue`) |
+| `PodDisruptionBudget` | `minAvailable: 2`, so a drain never leaves one pod holding every maintenance lock |
+| `ConfigMap notification-templates` | FreeMarker templates, hot-reloaded from the mount |
+| `ConfigMap notification-runtime` | runtime switches (channels on/off), hot-reloaded |
+| `Service`, `ServiceAccount` | HTTP on 8080; Prometheus scrape annotations on the pod |
+
+Secrets (`secretKeyRef`): `notification-db` (`url`, `username`, `password`), `notification-smtp`
+(`username`, `password`), `notification-signing` (`receipt-secret`). Plain environment: `OIDC_ISSUER_URI`,
+`KAFKA_BOOTSTRAP_SERVERS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_AUTH`, `NOTIFICATION_FROM_ADDRESS`,
+`NOTIFICATION_UNSUBSCRIBE_URL`, `MANAGEMENT_OTLP_TRACING_ENDPOINT`, the template directory, and
+`LUDWIG_NOTIFICATION_INSTANCE_ID` from the pod name. Replace `REPLACE_WITH_RELEASE_DIGEST` with the released
+image's digest before applying; `scripts/check_image_pins.sh` enforces a digest on every reference.
+
+Rollout: Liquibase migrates on start; startup validation (see [Configuration](#configuration)) refuses an
+unsafe combination before the pod becomes ready, so a bad configuration stops the rollout instead of
+double-sending. Rollback is an image rollback; migrations are additive except the two legacy-table drops
+described under [Migrations](#migrations).
+
+## Audit
+
+Announcements are the only audited actions; deliveries are recorded in
+`notification_delivery_status_history` (the operational trail) rather than the audit log.
+
+| Action | When |
+|---|---|
+| `config.announcement-published` | an announcement is published |
+| `config.announcement-corrected` | its content is corrected |
+| `config.announcement-broadcast-cancelled` | its email fan-out is cancelled |
+
+Category `config`, resource type `notification-announcement`. The audience is recorded as its kind and value,
+never as a resolved list of people. Idempotency claims are audited by `idempotency-spring-boot-starter`. This
+service does not package `audit-spring-boot-starter`, so events go to audit-core's SLF4J sink; add the starter
+to persist them.
 
 ## Deviations and known gaps
 
@@ -1534,8 +1535,8 @@ Stated plainly rather than buried.
 
    An **unverified** address is treated as no address at all
    (`ludwig.notification.recipients.require-verified-contact`, on by default). A provider that says
-   nothing at all is not treated as a refusal — that would have stopped every message on the day the
-   field was introduced.
+   nothing about verification is not treated as a refusal; otherwise every message from such a provider
+   would stop.
 
    A user unknown to the projection is **not** a failure: the notification still goes out for a
    literal address, because the projection is fed by a Kafka stream and a new user can be addressable
@@ -1543,11 +1544,11 @@ Stated plainly rather than buried.
    rejected request — a request naming five people where one is unreachable produces four sends and
    one explicable failure.
 
-   What genuinely went away is the per-user **webhook URL**. A webhook is a machine destination rather
+   There is no per-user **webhook URL**. A webhook is a machine destination rather
    than a person's contact point, and a request that wants one names it literally as an `ADDRESS`
-   recipient — which it could always do.
+   recipient — which it can always do.
 
-2. **`BATCHED` and `COLLAPSED` were added to the specified lifecycle.** Without them, collapsing is
+2. **`BATCHED` and `COLLAPSED` extend the basic lifecycle.** Without them, collapsing is
    unrepresentable. See [the state machine](#the-delivery-state-machine).
 
 3. **Rate limits are cluster-wide by construction**, not per replica. See
@@ -1565,57 +1566,44 @@ Stated plainly rather than buried.
    must depend on nothing. Together in one package they would form a cycle no rearranging could remove.
    No architecture rule is disabled except `storage`, which this service genuinely has none of.
 
-6. **Three bugs were fixed in shared modules** to make this service work; all three affected any
-   service using those starters:
-   - `web-core` and `security` both registered a bean named `ludwigSecurityProblemMapper`, so an
-     application with both failed to start. Renamed in `web-core`; the two are *meant* to coexist and
-     resolve by `Ordered`.
-   - `security`'s `ResourceServerAutoConfiguration` was declared `@AutoConfiguration(after = …)`, so
-     its `SecurityFilterChain` lost the `@ConditionalOnDefaultWebSecurity` race **every time** and
-     services silently ran on Boot's default chain — no public paths, CSRF on, default empty-bodied
-     401/403, no mTLS filter. Changed to `before`.
-   - `observability`'s histogram `MeterFilter` matched `http.server.requests` by *prefix*, so it also
-     caught the `…​.active` long-task timer and forced an invalid distribution range onto it —
-     throwing on the first HTTP request the service ever served. Changed to an exact match.
-
-7. **The in-app channel is a carve-out from "a transport is a bean", with a boundary and two tests.**
+6. **The in-app channel is a carve-out from "a transport is a bean", with a boundary and two tests.**
    Stated here as well as in [its own section](#the-inbox-the-one-passive-channel), because the
-   add-a-channel instructions are what a reader finds first and they are no longer the whole story.
-   The honest cost: the dispatch path is no longer identical for every transport. The reason it is
+   add-a-channel instructions are what a reader finds first and they do not tell the whole story.
+   The cost: the dispatch path is not identical for every transport. The reason it is
    worth paying is that the queue protects against a hazard this destination does not have, and
    deferring a row insert out of the transaction already writing it is strictly less reliable.
 
-8. **Real-time push is deliberately absent.** No SSE, no websocket. An unread count polled every
+7. **Real-time push is deliberately absent.** No SSE, no websocket. An unread count polled every
    thirty seconds is honest and free; push is decoration over a durable inbox and must never become
    the delivery mechanism. No rule forbids it today, on purpose - a rule with no code to fire on
    passes forever and reads as coverage.
 
-9. **The fallback does not fire on an unreachable channel**, only on a refused one. See
+8. **The fallback does not fire on an unreachable channel**, only on a refused one. See
    [the fallback](#the-fallback).
 
-10. **Announcement audiences are `EVERYONE` and `ROLE` only.** Organisation units are deliberately
+9. **Announcement audiences are `EVERYONE` and `ROLE` only.** Organisation units are deliberately
     absent: the identity provider owns the org structure (`ou_id`, `organization`) and
     `identity-projection` does not carry it yet. Adding it is a separate change that touches a shared
     starter; the audience model has the hole shaped for it — one more kind, one more `OR` branch.
 
-11. **There are no notification-local user groups, and there will not be.** A durable, meaningful
+10. **There are no notification-local user groups, and there will not be.** A durable, meaningful
     grouping of people is directory data and belongs to the provider; a one-off "tell these forty
     people" is already `recipients: [...]` on an ordinary request. The case in between — a reusable
     list that exists only here — is the one that rots, because no leaver process touches it and it
     quietly announces things to people who left eighteen months ago.
 
-12. **An announcement cannot be acknowledged**, only dismissed. "This must stay until acknowledged,
+11. **An announcement cannot be acknowledged**, only dismissed. "This must stay until acknowledged,
     and report who has not" is a different feature with its own reporting surface.
 
-13. **A published announcement's audience is immutable.** Its content can be corrected; moving it
+12. **A published announcement's audience is immutable.** Its content can be corrected; moving it
     between audiences cannot, because part of the audience may already have been emailed and the
     change would make the record of who was told untrue.
 
-14. **The emailed audience and live visibility can diverge.** Somebody who loses the targeted role
+13. **The emailed audience and live visibility can diverge.** Somebody who loses the targeted role
     while a fan-out is still walking may or may not be emailed. Specified and tested rather than
     hidden - a run lasting minutes cannot also be instantaneous.
 
-15. **Not implemented:** provider-specific receipt adapters (the endpoint takes this service's own
+14. **Not implemented:** provider-specific receipt adapters (the endpoint takes this service's own
    normalised shape, so each provider needs a small translation in front of it), and per-tenant
    template overrides. Digest is implemented but ships **disabled**, because a digest window is a
    product decision per category rather than something to default.
@@ -1738,24 +1726,7 @@ Under `src/test`, all of it: `application-localrun.yml`, the stand-ins, the fixt
 It cannot be packaged, so there is no local profile or local secret that could be active in a
 deployment, and `ludwig-service-parent` fails the build if a `test-support` artifact leaves test scope.
 
-### What the local run found
-
-Running the whole service against real stand-ins for the first time surfaced four defects in other
-modules within the first hour. All four are fixed; they are listed because they are the argument for
-running a service this way.
-
-- **A token for another audience was accepted.** `security-spring-boot-starter` installed its audience
-  check only on a `NimbusJwtDecoder`; with `issuer-uri`, which is how this service is configured
-  everywhere, Spring Boot's decoder is a different type and the check never ran. It now wraps any
-  decoder. `LocalNotificationApplicationIT` asserts the 401 against a real issuer.
-- **The identity projection's Kafka consumer could not start.** With
-  `IDENTITY_PROJECTION_ENABLED=true` the service failed on a missing bean, because
-  `IdentityKafkaAutoConfiguration` was evaluated before the messaging auto-configuration it depends
-  on. It is now ordered after it, and the consumer is on in the local run.
-- **`user-settings-spring-boot-starter`, present but not enabled, stopped start-up** when hot-reload
-  was on. Its hot-reload auto-configuration is now conditional on a mode being enabled.
-- **A test context that closed or failed to load stopped the shared PostgreSQL container**, which
-  turned one failure into ninety-eight. `test-support`'s shared containers now ignore `stop()`.
+### What differs from a deployment
 
 Two things the local run does differently from what you might expect, both deliberate:
 

@@ -1,261 +1,219 @@
 # audit-spring-boot-starter
 
-[English] | [Русский](README.ru.md)
+***English** · [Русский](README.ru.md)*
 
-Everything the platform's audit trail needs that a database, a scheduler or an outbox can provide: the
-append-only `audit_event` table and its JPA sink, the outbox sink that ships the trail off-platform
-exactly once, the per-category retention purge that audits itself, and the QueryDSL read side.
+The persistent half of the platform audit trail: the append-only `audit_event` table and its JPA sink,
+an outbox sink that ships events to a SIEM exactly once, a per-category retention purge that audits its
+own deletions, and a QueryDSL read side. The envelope, sink SPI, failure policy and redaction are in
+[`audit-core`](../audit-core) - read that README first.
 
-The envelope, the sink SPI and the redaction package are in [`audit-core`](../audit-core), which
-depends on nothing in this repository. **Read that README first** - it explains why there are two
-modules, what an `AuditEvent` is, and why there used to be nine of everything.
+| | |
+|---|---|
+| Role | starter |
+| Depends on (in-repo) | [`audit-core`](../audit-core), [`db-core`](../db-core), [`job-core`](../job-core), [`outbox-spring-boot-starter`](../outbox-spring-boot-starter), [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) |
+| Used by | `user-settings-spring-boot-starter` |
+| Surfaces | none (no HTTP endpoint by design); optional Kafka via outbox |
 
-## Why this is a separate module
-
-`security-spring-boot-starter`, `rest-client-spring-boot-starter` and `hot-reload-spring-boot-starter`
-all need to audit and all sit below `db-core`. Maven's reactor DAG ignores scope, so an edge from the
-audit envelope to `db-core` would be a cycle the moment anything upstream of `db-core` wanted a trail.
-Those three take `audit-core` and get the SLF4J sink; anything that already has a data source can take
-this one on top and get a table as well.
+Which modules take what:
 
 | Module | Takes | Why |
 |---|---|---|
-| security, rest-client, hot-reload | `audit-core` | Below `db-core` |
-| export, file-ingest, outbox, reconciliation | `audit-core` | The destination is the deployment's choice, not the module's |
-| user-settings | `audit-spring-boot-starter` | Its trail was already persistent, so it needs the table, the changelog and the migration of its own rows |
-
-## What is in it
+| security, rest-client, hot-reload | `audit-core` | Below `db-core`; get the SLF4J sink |
+| export, file-ingest, outbox, reconciliation | `audit-core` | The destination is the deployment's choice |
+| user-settings | this starter | Its trail must be persistent and transactional |
+| a service | this starter | To get a queryable trail for all of the above |
 
 | Piece | What it is |
 |---|---|
-| `AuditEventEntity` | One flat, append-only row per event; a `SnapshotEntity`, so `db-core`'s `SnapshotImmutabilityListener` rejects every update |
-| `JpaAuditSink` | Writes `audit_event` in the **caller's** transaction (`Propagation.SUPPORTS`) |
-| `OutboxAuditSink` | Ships events through `outbox-spring-boot-starter`; the event id is the idempotency key |
-| `CategoryFilteringAuditSink` | An allow-list in front of the outbox sink, for the reason below |
-| `AuditEventQueryRepository` / `AuditTrailQuery` | The read side, QueryDSL only, capped at 1000 rows |
-| `AuditRetentionPurge` | A `job-core` self-scheduling job under a leased `RunLock`, per category |
-| `ActorResolverAuditorProvider` | Feeds `db-core`'s `created_by` stamping from the trail's own actor resolution |
-| `AuditMetrics` | `ludwig.audit.events.written`, `.sink.failures`, `.events.purged` |
-| `AuditProblemMapper` | An unwritable audit row becomes a **503**, not a 500 |
+| `AuditEventEntity` | One flat, append-only row per event (`SnapshotEntity`: `db-core`'s `SnapshotImmutabilityListener` rejects updates) |
+| `JpaAuditSink` | Writes `audit_event` in the caller's transaction (`Propagation.SUPPORTS`) |
+| `OutboxAuditSink` | Ships through the outbox; the event id is the idempotency and ordering key |
+| `CategoryFilteringAuditSink` | Allow-list in front of the outbox sink |
+| `AuditEventQueryRepository` / `AuditTrailQuery` | Read side, QueryDSL, max 1000 rows per read |
+| `AuditRetentionPurge` | Per-category purge on `job-core` under a leased `RunLock` |
+| `ActorResolverAuditorProvider` | Feeds `db-core`'s `created_by` stamping from the trail's actor resolution |
+| `AuditMetrics` | Written / failed / purged counters |
+| `AuditProblemMapper` | An unwritable audit row becomes **503**, not 500 |
 
-## The table
+## Usage
 
-One flat table for every category, not one shaped table per subsystem. The reasoning is
-`SyncAuditRecord`'s, which had already made the same call inside one module:
+```xml
+<dependency>
+    <groupId>ru.ludwigandreas</groupId>
+    <artifactId>audit-spring-boot-starter</artifactId>
+</dependency>
+```
 
-> The question this table exists to answer is "what happened around this, in order, on this day" - and
-> answering it across five tables means five queries and a manual merge, at the moment somebody is
-> trying to work out why a partner was called twice.
+With the dependency on the classpath, every `AuditSink.record(...)` in the service also writes a row to
+`audit_event`, in the same transaction as the business change when there is one.
 
-This change is that argument at the next scale up: five shapes in one module became nine across the
-platform.
+### Transactions
 
-**Append-only, enforced.** `AuditEventEntity` extends `db-core`'s `SnapshotEntity`, reusing the
-platform's existing immutability mechanism rather than inventing a second one. There is no update path
-in this module and no delete path outside the retention purge, and an attempt to update a row throws
-rather than a convention asking nicely.
+`JpaAuditSink` uses `Propagation.SUPPORTS`: inside a business transaction the row commits or rolls back
+with the change; outside one (an authorization denial before any business method) it gets the
+repository's own transaction.
 
-`UserSettingAuditEntity` explicitly argued *against* that base class - "that family models data
-imported from an outer system and carries the provenance columns to match, none of which mean anything
-for a record this service authored itself". That was true of a table one service wrote for itself and
-stops being true here, because this table receives events from more than one writer: `source_system`
-records which deployment wrote the row, and `imported_at` records when it was written as opposed to
-when the thing happened. The two differ for an event relayed from another service, and only
-`occurred_at` has meaning to an auditor. `source_version` and `source_timestamp` are genuinely unused
-and stay null.
+- Not `REQUIRES_NEW`: the trail would record changes that rolled back.
+- Not `MANDATORY`: observational events have no ambient transaction.
 
-**No foreign keys, to anything, ever.** Two reasons, both of which the outbox's and reconciliation's
-history tables already gave: an FK forces a key-share lock on the parent row on every insert,
-contending with the work being audited, and the trail has to outlive the rows it describes.
+For a mutation category, a failed insert marks the caller's transaction rollback-only, which is why
+`settings` uses `FAIL_OPERATION` (see audit-core). The failure surfaces as **503 Service Unavailable**.
 
-`attributes` is `jsonb` and deliberately **not** GIN-indexed. The attributes differ per action and are
-read as a whole rather than filtered on, so a child table of name/value pairs would turn every read
-into a join and every write into N inserts on the path of the work being audited - and a GIN index
-would cost write throughput on every audited operation to speed up a query an auditor runs monthly. A
-deployment that genuinely needs one can add it without this module's participation.
+### Reading the trail
 
-## Transactions, and why `SUPPORTS`
+```java
+List<AuditEventEntity> rows = auditEventQueryRepository.find(AuditTrailQuery.builder()
+        .actorSubject("u-123")
+        .from(Instant.parse("2026-10-20T00:00:00Z"))
+        .to(Instant.parse("2026-10-21T00:00:00Z"))
+        .limit(500)
+        .build());
+```
 
-`JpaAuditSink` is `Propagation.SUPPORTS`, so a write inside a business transaction commits with it and a
-write outside one gets the repository's own. That is the property worth having, and
-`SettingsAuditRecorder` already had it and said why:
+A criteria object, QueryDSL only, capped at `AuditTrailQuery.MAX_LIMIT` (1000) rows - a hard cap: a
+caller needing the whole trail needs an export, not a heap full of rows.
 
-> An audit trail written in a separate transaction is one that can record a change that was rolled
-> back, or miss one that was not, and either makes the whole trail something an auditor has to qualify
-> rather than rely on.
+**No HTTP endpoint ships.** Who may read the audit trail is the most consequential authorization decision
+in the subsystem and differs per deployment (compliance role, break-glass, separate internal service). A
+service that wants an endpoint injects the repository and mounts its own, under its own policy.
 
-Not `REQUIRES_NEW`, the tempting alternative: a separate transaction survives the caller's rollback, so
-the trail would record changes that never happened. Not `MANDATORY` either, because the observational
-categories genuinely have no ambient transaction - an authorization denial happens before any business
-method is entered.
+### Shipping to a SIEM
 
-The consequence to expect: for a mutation category this sink's failure marks the caller's transaction
-rollback-only, which is exactly why `FAIL_OPERATION` is the right policy there. Swallowing it would
-leave the caller committing a transaction the driver has already doomed.
+`OutboxAuditSink` writes each event to the outbox in the same transaction as the change it describes, so
+the SIEM is never told about a rolled-back change and never misses a committed one. The outbox event type
+is `audit.event` (payload `AuditEvent`), declared as an `OutboxEventTypes` bean so it appears in the
+AsyncAPI document. Route it with `ludwig.outbox.routes.*` like any other event.
 
-## Shipping the trail off-platform
+- `AuditEvent.id` is the **idempotency key** (redelivery is recognisable) and the **ordering key** (per
+  event, so a busy administrator's trail is not serialised onto one partition).
+- **Off by default, allow-listed by category.** The outbox requires a transaction; categories emitted
+  outside one (access denials, outbound calls) would fail on the business path. Defaults: `settings`,
+  `export`. An allow-list, so a new category is never shipped to a SIEM by accident.
 
-`OutboxAuditSink` is the answer to "a single place an auditor can be pointed at" when that place is a
-SIEM. Through the outbox and not straight onto a broker, for the reason the outbox exists and
-`OutboxReportEventPublisher` already argued about `report.ready`: the event and the change it describes
-are written in one transaction, so there is no window in which something happened and the SIEM will
-never be told, and none in which the SIEM is told about a change that rolled back.
+### Correlation
 
-`AuditEvent.id` is both the ordering key and the idempotency key. As the idempotency key it makes a
-redelivery recognisable as the same event rather than as a second thing that happened - the difference
-between an audit trail and a count of broker retries. As the ordering key it is per *event* rather than
-per actor, because audit events are independent facts and keying them by actor would serialise a busy
-administrator's whole trail behind one partition for no ordering anybody needs.
-
-**It is off by default and allow-listed by category**, because `OutboxEventPublisher` is
-`Propagation.MANDATORY`. Shipping a category whose events are emitted outside a transaction - an
-authorization denial, an outbound call record - would turn every one of those events into an
-`IllegalTransactionStateException` on the business path. `ludwig.audit.outbox.categories` defaults to
-`settings` and `export`, the two that always have one. An allow-list rather than a deny-list so that a
-category added to the platform later does not start being shipped to somebody's SIEM because nobody
-thought to exclude it.
-
-With the outbox sink on, the module declares `audit.event` → `AuditEvent` as an `OutboxEventTypes` bean, so the event appears in the service's AsyncAPI document and passes `ludwig.outbox.events.require-declared`.
-
-## Retention
-
-Modelled on `ExportRetentionPurge`: a `job-core` `SelfSchedulingLifecycle` under a leased `RunLock`, so
-every replica runs the schedule and exactly one does the work, and an instance that dies mid-purge does
-not stop the next one for good. It owns its own `TaskScheduler`, so it runs whether or not the service
-remembered `@EnableScheduling`.
-
-Defaults are measured in **years** - seven - because retention here is a compliance figure and not a
-disk-space one. Per category, because an access-denial record and a consent decision do not have the
-same legal basis.
-
-**The purge audits itself.** Every pass that removed anything writes an `audit.purged` event saying
-which category, what cutoff, and how many rows. An audit trail that can be silently shortened is not a
-trail: without that row, "nothing happened in that window" and "something removed the window" are the
-same observation. The event is emitted *after* the batch commits and carries the count actually
-removed, and is `PARTIAL` when the batch did not reach everything that had expired.
-
-Bounded batches, for the reason `UserSettingAuditQueryRepository` gave: a single unbounded delete over a
-year of rows takes a long lock and a large amount of WAL, on a table that is also on the write path of
-every audited operation.
-
-> **Without `job-core` on the classpath, nothing purges.** The purge is behind
-> `@ConditionalOnClass(RunLock.class)` so that a deployment wanting only the trail is not made to add a
-> scheduler and a lock table. The trade-off is real and it is the deployment's to notice: an audit table
-> that grows forever is a disclosure risk with nobody watching it.
-
-## Migration of the two legacy trails
-
-Three persistent audit stores existed before this module. Two migrate, one deliberately stays.
-
-| Was | Disposition |
-|---|---|
-| `user_setting_audit` | **Migrated** by `audit-0002`; its `[redacted]` marker rewritten by `audit-0004` |
-| `sync_audit_record` | **Migrated** by `audit-0003` |
-| `outbox_status_history` | **Stays.** See below |
-
-Both migrations move the **rows**, not just the schema. A consolidation that starts the new trail empty
-and leaves the history in tables nobody queries has moved the auditor's problem rather than solved it.
-The integration test asserts that the migrated count reconciles with the source count, which is the
-thing that would otherwise fail silently.
-
-Mapping notes worth knowing:
-
-- `user_setting_audit.subject` becomes `on_behalf_of` and `actor` becomes `actor_subject`. That is the
-  direction the old columns actually meant - `subject` was whose setting changed, not who changed it -
-  and an administrator editing somebody else's profile is what makes it visible.
-- `sync_audit_record.category` (the `RUN`/`RECORD`/`JOB`/`LEASE`/`OPERATOR` enum) becomes an
-  **attribute**, not `audit_event.category`. That column names the subsystem and these five name a kind
-  of event within it; collapsing them would make one column mean two different things depending on the
-  row.
-- Nothing in this repository ever *wrote* `sync_audit_record`: the entity and its repository existed and
-  the `PersistingReconciliationAuditLogger` its javadoc referred to did not. The migration runs anyway,
-  because a deployment may have written rows through a logger of its own and a migration that assumed
-  the table was empty would silently discard them.
-- Both changesets are guarded by a `tableExists` precondition with `onFail="MARK_RAN"`, so a service
-  using neither module is not broken by them. That guard has a consequence: **a changeset marked as ran
-  is never reconsidered**, so this changelog has to run *after* the modules whose tables it reads.
-  `AuditLiquibaseAutoConfiguration` names them in `@AutoConfigureAfter` by class name string, since this
-  module must not depend on either - `user-settings-spring-boot-starter` depends on *it*.
-- The legacy tables are **not dropped**. A deployment verifies the migration against them and drops them
-  itself; a changeset that deleted the only copy of the evidence would be the wrong default.
-
-### Why `outbox_status_history` stays
-
-It is the one place in this repository where two audit stores is the right answer, and the reason is
-written into `PersistingOutboxAuditLogger` as well as here, because without it somebody will eventually
-"finish the job".
-
-`user_setting_audit` and `sync_audit_record` were audit trails and nothing else.
-`outbox_status_history` is **operational state the dispatcher itself reads** - attempt counts, last
-failure, when a message was last tried - and folding it into a generic table would couple dispatch to
-audit retention, so a deployment shortening its audit window would shorten the dispatcher's memory with
-it. It *additionally* forwards every transition to the platform trail, so "who was never told what
-happened" is still answerable without knowing the outbox's schema.
+To record correlation ids, publish a `CorrelationProvider` bean (see
+[audit-core](../audit-core#correlation)).
 
 ## Configuration
 
-Every property is under `ludwig.audit` and bound by `audit-core`'s `AuditProperties`. The blocks this
-module implements:
+All properties are bound by `audit-core`'s `AuditProperties`. Blocks implemented here:
 
-```yaml
-ludwig:
-  audit:
-    jpa:
-      enabled: true                  # the audit_event table
-    outbox:
-      enabled: false                 # shipping to a SIEM is a data decision
-      categories: [ settings, export ]
-    retention:
-      enabled: true
-      default-period: P7Y
-      by-category:
-        access: P2Y
-      interval: PT6H
-      batch-size: 500
-      drain-timeout: PT30S
-    liquibase:
-      enabled: true                  # off to fold the changelog into your own master
-```
+| Property | Default | Meaning |
+|---|---|---|
+| `ludwig.audit.jpa.enabled` | `true` | Write the `audit_event` table |
+| `ludwig.audit.outbox.enabled` | `false` | Ship events through the outbox |
+| `ludwig.audit.outbox.categories` | `settings`, `export` | Categories shipped (allow-list) |
+| `ludwig.audit.retention.enabled` | `true` | Run the retention purge (needs `job-core`) |
+| `ludwig.audit.retention.default-period` | `P7Y` | Retention for categories not listed |
+| `ludwig.audit.retention.by-category.<category>` | none | Per-category retention, e.g. `access: P2Y` |
+| `ludwig.audit.retention.interval` | `PT6H` | Purge interval |
+| `ludwig.audit.retention.batch-size` | `500` | Rows per delete batch |
+| `ludwig.audit.retention.drain-timeout` | `PT30S` | Shutdown wait for a running purge |
+| `ludwig.audit.liquibase.enabled` | `true` | Apply the changelog as an own `SpringLiquibase` bean |
 
-## Correlation
+Retention is a compliance figure, set per category, because an access-denial record and a consent decision
+have different legal bases. Agree values with the compliance owner before changing them.
 
-`audit-core` ships `CorrelationProvider.none()`, because binding to
-`observability-spring-boot-starter` or `web-core` from a module with no in-repo dependencies is
-impossible and binding from this one would make an optional dependency mandatory in practice. A service
-with either publishes three lines:
+## Deployment
 
-```java
-@Bean
-CorrelationProvider auditCorrelationProvider(CorrelationContext context) {
-    return context::currentCorrelationId;
-}
-```
+**Schema (PostgreSQL).** `db/changelog/audit/audit-changelog.xml`:
 
-Worth the indirection because of what the id is for: it is the only thing that joins an audit event to
-the logs, traces and downstream calls of the same request. "Who changed this" is answerable without it;
-"what else happened in that request" is not.
+| Changeset | Effect |
+|---|---|
+| `audit-0001` | Creates `audit_event` with indexes on `(actor_subject, occurred_at)`, `(category, occurred_at)`, `occurred_at`, `(resource_type, resource_id)`, `correlation_id` |
+| `audit-0002` | If `user_setting_audit` exists: copies its rows into `audit_event` (`subject` → `on_behalf_of`, `actor` → `actor_subject`) |
+| `audit-0003` | If `sync_audit_record` exists: copies its rows (its `category` becomes an attribute) |
+| `audit-0004` | Rewrites the `[redacted]` marker in migrated rows to `***REDACTED***` |
 
-## Reading the trail
+`audit-0002`/`0003` are guarded by `tableExists` preconditions with `onFail="MARK_RAN"`; a changeset marked
+as ran is never reconsidered, so this changelog runs after the user-settings and reconciliation changelogs
+(`@AutoConfigureAfter`). The source tables are **not dropped**: verify the copied row counts, then drop
+them yourself.
 
-`AuditEventQueryRepository` with an `AuditTrailQuery` criteria object, QueryDSL only, capped at
-`AuditTrailQuery.MAX_LIMIT` (1000) rows per read. A criteria object rather than a row of nullable
-parameters, because the questions an auditor actually asks are combinations - "everything this person did
-last Tuesday", "every denied access to this resource this month" - and one finder method per combination is
-how a read side becomes twenty methods nobody can tell apart.
+**Table design.**
 
-The cap is hard rather than configurable. A caller that needs the whole trail wants an export, not a page of
-a hundred thousand rows assembled in the heap of a service that is also serving requests - and a deployment
-that could raise it would eventually raise it during the incident when the trail mattered most.
+| Column | Meaning |
+|---|---|
+| `occurred_at` | When it happened - the time an auditor uses |
+| `imported_at` | When the row was written (differs for relayed events) |
+| `source_system` | Which deployment wrote the row (`ludwig.audit.source-system`) |
+| `category`, `action`, `outcome`, `reason` | What happened and how it ended |
+| `actor_subject`, `actor_type`, `actor_display_name`, `on_behalf_of` | Who acted, for whom |
+| `resource_type`, `resource_id`, `resource_name` | What was touched |
+| `correlation_id`, `trace_id` | Join keys to logs and traces |
+| `attributes` (`jsonb`) | Module-specific details, already redacted; not GIN-indexed (read whole, rarely filtered) |
 
-**No HTTP endpoint ships.** That is a decision, not an omission: who may read an audit trail is the single
-most consequential authorization question in the whole subsystem, and it differs per deployment - a
-compliance role, a break-glass procedure, a separate internal-only service. A starter that mounted a
-`GET /admin/audit` behind a guessed role would either be too open somewhere or quietly unused everywhere.
-A service that wants one injects the repository and mounts its own, under its own policy.
+No foreign keys: an FK would lock the parent row on every insert, and the trail must outlive the rows it
+describes. `source_version` and `source_timestamp` are unused and stay null.
 
-## Not in scope, as a decision
+**Without `job-core` on the classpath nothing is purged** (the purge is `@ConditionalOnClass(RunLock.class)`).
+An audit table that grows forever is a disclosure risk; check that the purge runs.
 
-**Hash-chaining or signing for tamper evidence.** A real feature, deliberately not half-built: it needs
-key management and a verification tool to mean anything, and half of it - a chain nobody verifies - is
-worse than none, because it looks like a guarantee. What is claimed is enforced append-only, which is a
-smaller promise that is actually kept.
+## Observability
+
+**Metrics:**
+
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `ludwig.audit.events.written` | counter | `category`, `outcome` | Events recorded |
+| `ludwig.audit.sink.failures` | counter | `category`, `policy` | Sink failures, under either policy |
+| `ludwig.audit.events.purged` | counter | `category` (`all` for the default period) | Rows removed by retention |
+
+**Logs.** `INFO Audit retention purge removed <n> event(s) from category <c> older than <cutoff>
+(<expired> expired)`; `WARN Could not release the audit retention purge lock`.
+
+**Recommended alerts:**
+
+| Condition | Why |
+|---|---|
+| `increase(ludwig_audit_sink_failures_total[5m]) > 0` | Events are missing from the trail (or operations are failing, for `FAIL_OPERATION` categories) |
+| `ludwig_audit_events_purged_total` never increases while retention is enabled (check weekly) | Purge not running: missing `job-core`, or lock stuck |
+| `audit_event` table size growth (database monitoring) | Capacity planning; the table is on the write path of every audited operation |
+
+**Known gaps:** no gauge for the oldest row age per category, which would show directly whether retention
+is keeping up.
+
+## Audit
+
+The purge records itself, so "nothing happened in that window" and "something removed the window" are
+distinguishable:
+
+| Field | Value |
+|---|---|
+| category | `audit` |
+| action | `audit.purged` |
+| resource | the purged category (`audit-event` for the default period) |
+| outcome | `SUCCESS`, or `PARTIAL` when the batch did not reach every expired row |
+| attributes | category, cutoff, removed, expired |
+
+The event is emitted after the batch commits and carries the count actually removed.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Settings changes return 503 | `audit_event` insert fails (schema, disk, permissions) | Check the database error in the log; fix and retry. The changes were rolled back, nothing to clean up |
+| `ludwig_audit_sink_failures_total` increases for `LOG_AND_CONTINUE` categories | Same causes | Fix the sink. Events in the failure window exist only in the SLF4J log (if enabled); re-import from logs if the trail must be complete |
+| Audit table keeps growing past retention | Purge not running | Check the startup log for `AuditRetentionPurge`, `job-core` on the classpath, `ludwig.audit.retention.enabled`, and the lock: `SELECT * FROM job_run_lock WHERE lock_name = 'ludwig-audit-retention-purge';` |
+| Purge outcome `PARTIAL` repeatedly | Batch too small for the expiry rate | Increase `retention.batch-size` or decrease `retention.interval` |
+| SIEM receives nothing | `outbox.enabled=false`, category not in the allow-list, or no outbox route for `audit.event` | Check config; see the outbox runbook for delivery |
+| Startup fails with `IllegalTransactionStateException` on audit | A non-transactional category added to `outbox.categories` | Remove it from the allow-list |
+| Investigate a person's actions | - | `SELECT occurred_at, category, action, outcome, resource_type, resource_id FROM audit_event WHERE actor_subject = '<id>' AND occurred_at BETWEEN '<from>' AND '<to>' ORDER BY occurred_at;` |
+| Investigate a request | - | `SELECT * FROM audit_event WHERE correlation_id = '<id>' ORDER BY occurred_at;` |
+
+## Testing
+
+`AuditStoreIntegrationTest` (Docker, PostgreSQL): JPA sink in and out of transactions, rollback together
+with the business change, immutability, the read side and its cap, retention per category with the
+self-audit event, the outbox sink and its allow-list, and the legacy-table migrations with row counts
+reconciled against the source (`LegacyAuditTablesInitializer` creates the source tables).
+
+## Design decisions
+
+- **One flat table for every category.** "What happened around this, in order" is one query, not a merge
+  across per-subsystem tables.
+- **Append-only, enforced** by `SnapshotEntity` immutability, not by convention.
+- **`outbox_status_history` stays separate.** It is operational state the outbox dispatcher reads;
+  merging it would tie dispatch to audit retention. Its transitions are additionally recorded here.
+- **No tamper-evidence.** Append-only is the promise that is actually kept; see audit-core.

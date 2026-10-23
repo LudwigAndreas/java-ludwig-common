@@ -1,18 +1,26 @@
 # grpc-client-spring-boot-starter
 
-Именованные gRPC-клиенты как конфигурация. Объявите клиента в `ludwig.grpc.client.clients.<name>`,
-внедрите сгенерированный stub через `@LudwigGrpcClient("<name>")` - и каждый вызов несёт дедлайн,
-проходит через rate limiter, bulkhead и circuit breaker, повторяется только там, где контракт
-объявляет повтор безопасным, аутентифицируется как настроено, падает с типизированным исключением,
-измеряется, логируется без полезной нагрузки и - по желанию - аудируется. Своего `@Configuration`
-не нужно.
+*[English](README.md) · **Русский***
 
-Контракт и общий словарь (ключи метаданных, кодек статусов) - в [grpc-core](../grpc-core/README.ru.md);
-серверная сторона - [grpc-server-spring-boot-starter](../grpc-server-spring-boot-starter/README.ru.md).
-Форма повторяет [rest-client-spring-boot-starter](../rest-client-spring-boot-starter/README.ru.md)
-там, где у gRPC есть то же понятие, и только там.
+Именованные gRPC-клиенты как конфигурация. Объявите клиента в `ludwig.grpc.client.clients.<name>`, внедрите
+сгенерированный stub через `@LudwigGrpcClient("<name>")` - и каждый вызов несёт дедлайн, проходит через rate
+limiter, bulkhead и circuit breaker, повторяется только там, где контракт объявляет повтор безопасным,
+аутентифицируется как настроено, падает с типизированным исключением, измеряется, логируется без полезной
+нагрузки и по желанию аудируется. Своего `@Configuration` не нужно.
 
-## Быстрый старт
+| | |
+|---|---|
+| Роль | starter |
+| Зависит от (в репозитории) | [`audit-core`](../audit-core), [`grpc-core`](../grpc-core), [`observability`](../observability-spring-boot-starter), [`outbound-token-core`](../outbound-token-core), [`security`](../security-spring-boot-starter), [`web-core`](../web-core-spring-boot-starter) |
+| Используется | в этом репозитории никем (сервисы, вызывающие gRPC-партнёров) |
+| Поверхности | исходящий gRPC |
+
+Контракты и общий словарь - в [grpc-core](../grpc-core/README.ru.md); серверная сторона -
+[grpc-server-spring-boot-starter](../grpc-server-spring-boot-starter/README.ru.md). Форма повторяет
+[rest-client-spring-boot-starter](../rest-client-spring-boot-starter/README.ru.md) там, где у gRPC есть то же
+понятие.
+
+## Использование
 
 ```yaml
 ludwig:
@@ -52,7 +60,7 @@ class NotificationSender {
 
 Stub, привязанный к ненастроенному имени, валит старт с указанием точки внедрения.
 
-## Приоритет
+### Приоритет
 
 Встроенные значения, затем `defaults`, затем клиент. Скаляры переопределяются, если заданы; вложенные
 блоки сливаются поле за полем (клиент, задавший только `sliding-window-size`, сохраняет унаследованный
@@ -60,7 +68,7 @@ Stub, привязанный к ненастроенному имени, вал�
 адрес в `defaults` валит старт, а передача токена вызывающего решается для каждого клиента. Блок
 `bulkhead` или `rate-limiter`, записанный где угодно, включает политику; во встроенном слое их нет.
 
-## Конвейер и почему он фиксирован
+### Конвейер и почему он фиксирован
 
 ```
 observation -> correlation -> log/audit -> типизация ошибок
@@ -82,7 +90,7 @@ observation -> correlation -> log/audit -> типизация ошибок
 `grpc-<client>` в реестрах Resilience4j приложения (или в собственных, если их нет), поэтому
 REST- и gRPC-клиент с одним именем никогда не делят автомат.
 
-## Повтор определяется контрактом
+### Повтор определяется контрактом
 
 Метод повторяется, только если его `.proto` объявляет `idempotency_level = IDEMPOTENT` или
 `NO_SIDE_EFFECTS`, и только на `retry.retry-on` (встроенно `UNAVAILABLE`). Остальные методы получают
@@ -94,7 +102,7 @@ REST- и gRPC-клиент с одним именем никогда не дел
 Контракты стартер находит, сканируя `ru.ludwigandreas` на сгенерированные классы `<Service>Grpc`,
 которые туда помещает `check_protos.sh`.
 
-## Дедлайны
+### Дедлайны
 
 Каждый вызов получает самый ранний из: `deadline` клиента (встроенно 5s), дедлайна, заданного на
 месте вызова, и - его применяет сам gRPC из текущего `Context` - остатка входящего вызова, внутри
@@ -102,7 +110,7 @@ REST- и gRPC-клиент с одним именем никогда не дел
 ограничивает логический вызов вместе с повторами. Клиент с неположительным дедлайном валит старт;
 отключить дедлайны нельзя.
 
-## Аутентификация
+### Аутентификация
 
 | `auth.type` | |
 |---|---|
@@ -121,7 +129,7 @@ REST- и gRPC-клиент с одним именем никогда не дел
 
 Учётные данные открытым текстом на не-loopback адрес валят старт.
 
-### Откуда берутся токены
+#### Откуда берутся токены
 
 Кэш машинного токена, его выпуск по client credentials и чтение токена вызывающего - это
 [`outbound-token-core`](../outbound-token-core/README.ru.md), единственная реализация, общая для этого
@@ -129,7 +137,7 @@ REST- и gRPC-клиент с одним именем никогда не дел
 gRPC `CallCredentials`, на каждую попытку. `TokenOwnershipTest` валит сборку, если здесь появится второй
 кэш, выпуск или чтение токена.
 
-## Ошибки
+### Ошибки
 
 Stub бросает `StatusRuntimeException` без изменений, со статусом и трейлерами пира. Его причина -
 одно из этих исключений, каждое с именем клиента и correlation id; получить его можно через
@@ -145,22 +153,6 @@ Stub бросает `StatusRuntimeException` без изменений, со с�
 
 Отображение - это поставляемый `ExceptionProblemMapper`: своего advice в модуле нет, а реестр web-core
 находит типизированную причину, проходя по цепочке причин.
-
-## Наблюдаемость и аудит
-
-- `ludwig.grpcclient.requests{client,service,method,status}` - наблюдение gRPC из Micrometer,
-  переименованное; оно же клиентский span.
-- `ludwig.grpcclient.retries{client,method}` - считается stream tracer'ом на каждую попытку, потому что
-  повторы внутри канала перехватчику не видны.
-- `ludwig.grpcclient.calls.notpermitted{client,policy}` и `ludwig.grpcclient.auth.token.refreshes{client,type}`.
-- Одна строка INFO на вызов в `ludwig.grpcclient.<client>`: метод, статус, длительность, попытки,
-  correlation id. **Без полезной нагрузки.** `logging.level: payload` выводит сообщения как JSON
-  через `Redactor` из audit-core, обрезая до `max-payload-chars`, и запрещён при промышленном профиле.
-- Correlation id уходит как `x-correlation-id` (имя заголовка observability): входящего вызова, если он
-  есть, иначе текущий из observability; без observability - никакого.
-- `audit.enabled: true` пишет события `GrpcCallAudit` в единственный `AuditSink` с
-  `category=outbound-call`: каждую ошибку и отказ (отказ - как `DENIED`), успехи - по выборке
-  `audit.success-sampling`. Без полезной нагрузки и метаданных.
 
 ## Конфигурация
 
@@ -198,6 +190,60 @@ Stub бросает `StatusRuntimeException` без изменений, со с�
 ресурсов, автомат, который не может разомкнуться, логирование нагрузки в промышленной среде - валит
 старт **один раз** со списком всех проблем всех клиентов.
 
+## Развёртывание
+
+- **Цели**: указывайте в `target` **headless** `Service` Kubernetes (`dns:///<svc>-headless:9090`), чтобы
+  `round_robin` балансировал по вызовам.
+- **TLS**: хранилище доверия JDK или SSL bundle Spring Boot (`tls.bundle`), с ключом для mTLS.
+- **Машинные токены**: `spring.security.oauth2.client.registration.<id>` на каждого клиента с
+  `oauth2-client-credentials`; секрет клиента - из хранилища секретов.
+- **Keepalive**: `keepalive.time` не меньше `keepalive.permit-time` сервера (значения по умолчанию согласованы).
+
+## Наблюдаемость
+
+| Сигнал | Смысл |
+|---|---|
+| `ludwig.grpcclient.requests{client,service,method,status}` | gRPC observation Micrometer (timer) и клиентский span |
+| `ludwig.grpcclient.retries{client,method}` | Попытки сверх первой, считаются по попыткам stream tracer-ом |
+| `ludwig.grpcclient.calls.notpermitted{client,policy}` | Вызовы, отклонённые rate limiter, bulkhead или breaker этого клиента |
+| `ludwig.grpcclient.auth.token.refreshes{client,type}` | Повторные получения токена |
+| Метрики Resilience4j для экземпляров `grpc-<client>` | Состояние breaker, занятость bulkhead (реестры приложения) |
+| `INFO` в `ludwig.grpcclient.<client>` | Одна строка на вызов: метод, статус, длительность, попытки, correlation id. **Без payload** |
+
+`logging.level: payload` отрисовывает сообщения в JSON через `Redactor` audit-core с пределом
+`max-payload-chars` и запрещён в продакшен-профиле. Correlation id уходит как `x-correlation-id`: от входящего
+вызова, иначе текущий id observability.
+
+**Рекомендуемые алерты:**
+
+| Условие | Почему |
+|---|---|
+| `increase(ludwig_grpcclient_calls_notpermitted_total{policy="circuit-breaker"}[5m]) > 0` | Breaker открыт: партнёр отказывает |
+| Доля `status` ∈ {`UNAVAILABLE`, `DEADLINE_EXCEEDED`} > 5% | Партнёр деградировал или дедлайн слишком жёсткий |
+| Рост `rate(ludwig_grpcclient_retries_total[5m])` | Партнёр нестабилен |
+
+## Аудит
+
+`audit.enabled: true` записывает события `GrpcCallAudit` в `AuditSink`:
+
+| Поле | Значение |
+|---|---|
+| category | `outbound-call` |
+| outcome | `FAILURE` для ошибок, `DENIED` для отказов политик этого клиента, `SUCCESS` для выборки успехов (`audit.success-sampling`) |
+| содержимое | client, service, method, status, attempts, correlation id - без payload и метаданных |
+
+## Runbook
+
+| Симптом | Вероятная причина | Что делать |
+|---|---|---|
+| Старт падает со списком проблем клиентов | Недопустимая комбинация (нет target, target в defaults, правила plaintext, relay без resource server, ...) | Исправить каждый пункт |
+| `GrpcClientCallNotPermittedException` | Breaker открыт / bulkhead заполнен / rate limit | Проверить здоровье партнёра; breaker переходит в half-open через 30s |
+| `GrpcClientTimeoutException` | Дедлайн истёк - запрос **мог** быть обработан | Не повторять вслепую неидемпотентные вызовы; проверить партнёра; поднимать `deadline` только если позволяет входящий бюджет |
+| `GrpcClientAuthenticationException` | Не удалось получить токен или партнёр дважды отверг его | Проверить регистрацию OAuth2 и audience партнёра |
+| Метод никогда не повторяется | Его `idempotency_level` не `IDEMPOTENT`/`NO_SIDE_EFFECTS` | Так и должно быть - попросить владельца сервера объявить, если повтор безопасен |
+| Все вызовы идут в один под партнёра | Обычный (не headless) `Service` или `pick_first` | Использовать headless `Service` и `round_robin` |
+| Контроллер отдаёт 500 на `NOT_FOUND` партнёра | Коды стороны вызывающего значат, что этот сервис отправил неверный запрос | Обрабатывать `GrpcClientResponseException` там, где отсутствие сущности ожидаемо |
+
 ## Тестирование
 
 ```java
@@ -209,7 +255,7 @@ class NotificationSenderTest { ... }
 клиента на in-process сервер, запущенный тестом (`InProcessServerBuilder.forName("peer")`), и каждый
 вызов пройдёт промышленный конвейер.
 
-## Чего он намеренно не делает
+## Проектные решения
 
 - **Нет включения повтора на месте вызова** и нет hedging.
 - **Нет таймаута на попытку** - у gRPC нет стабильного, а дедлайн ограничивает логический вызов.

@@ -2,51 +2,19 @@
 
 ***English** · [Русский](README.ru.md)*
 
-One place for this platform's container images, the containers themselves, and the fixtures a container
-test needs. Added as a single test-scoped dependency, it gives every module a digest-pinned
-`DockerImageName`, a shared PostgreSQL/Kafka/LocalStack singleton per JVM, `@ServiceConnection`-based
-wiring, a truncate-between-tests helper, an in-process SMTP and HTTP stub, and a `Clock` a test can move
-by hand.
+The one place this platform's container images are written down, and the containers and fixtures a container test
+needs: digest-pinned `DockerImageName` constants loaded from `images.properties`, one shared
+PostgreSQL/Kafka/LocalStack/Redis singleton per JVM, `@ServiceConnection` wiring, composed test annotations, a
+truncate-between-tests helper, in-process SMTP and HTTP stubs, a movable `Clock`, and the published-API-document check.
 
-## Why
-
-Two problems, and the second is bigger than the first.
-
-**The digest was written down twenty-one times.** The platform's security policy is that every image is
-identified by name, version *and* `sha256` digest, and that policy is correct: a tag can be re-pointed at
-different content, so a test would silently change what it executes. The consequence nobody priced in is
-that the digest then has to appear wherever a container is started. One `postgres:16-alpine` literal
-appeared in twenty-one source files in **three different layouts** - on one line, split across two with a
-string concatenation, and split plus fully qualified. A `sed` for the full literal finds the first
-spelling and silently misses the other two, which leaves half the build on one digest and half on
-another. Every new module paid the tax again, by copying a neighbour.
-
-**Nineteen Postgres containers started per reactor build.** Nineteen separate
-`new PostgreSQLContainer<?>(...)` instantiations, most of them `static @Container` fields, one per test
-class. Container startup dominated the suite's wall clock, and three independent test bases -
-`NotificationTestBase`, `FileIngestTestBase` and `PostgresBackedTest`, 416 lines between them - had each
-invented a solution to the same problem, two of them having independently discovered the same subtle
-failure along the way.
-
-## What you get
-
-| Type | What it is |
+| | |
 |---|---|
-| `LudwigTestImages` | `POSTGRES`, `KAFKA`, `LOCALSTACK`, `REDIS` as `DockerImageName`, loaded from `images.properties`, with `asCompatibleSubstituteFor(...)` already applied |
-| `Containers` | One container per image per JVM, started lazily, and impossible to stop: `stop()` and `close()` do nothing |
-| `PostgresContainerConfiguration` | `@TestConfiguration` exposing Postgres via `@ServiceConnection` |
-| `KafkaPropertiesInitializer` | Points `spring.kafka.bootstrap-servers` at the shared broker |
-| `LocalStackS3Initializer` | Points `ludwig.storage.s3.*` at the shared LocalStack |
-| `LocalStackS3` | An SDK client onto it, plus idempotent bucket create/clear |
-| `Containers.redis()` | The shared Redis, for `cache-spring-boot-starter`'s shared tier. A `GenericContainer` and one exposed port, read from the container rather than assumed - `Containers.REDIS_PORT` is the port *inside* it |
-| `@LudwigPostgresTest`, `@LudwigKafkaTest`, `@LudwigLocalStackTest` | Composed annotations, each documenting what it turns on and when not to use it |
-| `DatabaseCleaner` | `TRUNCATE ... RESTART IDENTITY CASCADE` of every table but Liquibase's |
-| `GreenMailFixture`, `WireMockFixture` | In-process SMTP and HTTP stubs - no image, nothing to pin. For a stub wired to a `@LudwigRestClient` by name, with switchable faults, see [`test-support-local`](../test-support-local/README.md) |
-| `TestClock` | A mutable `Clock`: `advance(Duration)`, `set(Instant)`, plus a fixed factory |
+| Role | test support (test-scoped jar) |
+| Depends on (in-repo) | nothing - and must not |
+| Used by | nearly every module with integration tests (see `PROJECT_INDEX.md`) |
+| Surfaces | none |
 
-`ru.ludwigandreas.testsupport.docs.PublishedDocument` is the shared check behind every service's `ApiDocumentIT` and `AsyncApiDocumentIT`: it canonicalizes a generated document (members sorted, server addresses dropped for OpenAPI, each AsyncAPI server's host replaced by its name), writes `target/<kind>/`, and compares it with `docs/api/`, or overwrites it under `-Dludwig.apidocs.write=true`. Jackson and SnakeYAML are optional dependencies; a module that uses it has both.
-
-## Switching it on
+## Usage
 
 ```xml
 <dependency>
@@ -56,16 +24,14 @@ failure along the way.
 </dependency>
 ```
 
-The version comes from `ludwig-bom`. Then either take the composed annotation:
-
 ```java
 @LudwigPostgresTest
 class SomethingIntegrationTest {
-    // the context is already wired to a running, digest-pinned PostgreSQL
+    // the context is wired to a running, digest-pinned PostgreSQL
 }
 ```
 
-or import the configuration alongside a `@SpringBootTest` the module already has its own opinions about:
+or alongside an existing `@SpringBootTest`:
 
 ```java
 @SpringBootTest(classes = TestApplication.class)
@@ -73,31 +39,26 @@ or import the configuration alongside a `@SpringBootTest` the module already has
 class SomethingIntegrationTest { }
 ```
 
-Remember that surefire runs only what is *not* named `*IT` or `*IntegrationTest`, and failsafe runs only
-what is - so a container test named otherwise never runs at all.
+**Name container tests `*IT` or `*IntegrationTest`**: surefire excludes those names and failsafe runs only them, so a
+container test named otherwise runs in the wrong phase (and fails without Docker).
 
-## The upgrade path this was really for
+| Type | What it is |
+|---|---|
+| `LudwigTestImages` | `POSTGRES`, `KAFKA`, `LOCALSTACK`, `REDIS` as `DockerImageName` from `images.properties`, with `asCompatibleSubstituteFor(...)` applied |
+| `Containers` | One container per image per JVM, started lazily; `stop()` and `close()` do nothing |
+| `PostgresContainerConfiguration` | `@TestConfiguration` exposing PostgreSQL via `@ServiceConnection` |
+| `KafkaPropertiesInitializer` | Points `spring.kafka.bootstrap-servers` at the shared broker |
+| `LocalStackS3Initializer` / `LocalStackS3` | Points `ludwig.storage.s3.*` at LocalStack; SDK client plus idempotent bucket create/clear |
+| `Containers.redis()` | Shared Redis (cache shared tier); read the mapped port from the container (`REDIS_PORT` is the internal port) |
+| `@LudwigPostgresTest`, `@LudwigKafkaTest`, `@LudwigLocalStackTest` | Composed annotations |
+| `DatabaseCleaner` | `TRUNCATE ... RESTART IDENTITY CASCADE` of every table except Liquibase's |
+| `GreenMailFixture`, `WireMockFixture` | In-process SMTP and HTTP stubs (for stubs wired to a `@LudwigRestClient`, see [test-support-local](../test-support-local)) |
+| `TestClock` | Mutable `Clock`: `advance(Duration)`, `set(Instant)`, fixed factory |
+| `docs.PublishedDocument` | Behind every `ApiDocumentIT` / `AsyncApiDocumentIT`: canonicalises the generated document, writes `target/<kind>/`, compares with `docs/api/`, overwrites under `-Dludwig.apidocs.write=true` |
 
-`images.properties` carries `# renovate:` comments beside each pin:
+### Isolation with a shared container
 
-```properties
-# renovate: datasource=docker depName=postgres
-ludwig.test.image.postgres = postgres:16-alpine@sha256:cf78e766...
-```
-
-A dependency bot can raise a one-line pull request for the next digest. That is the point of putting the
-values in a properties resource rather than in constants in Java source: it turns the next CVE respin
-from "a twenty-one file edit somebody has to remember" into "review and merge".
-
-`LudwigTestImages` refuses to initialise if a pin lacks an `@sha256:` segment with a 64-character hex
-digest. A fixture that quietly fell back to a bare tag would reintroduce the exact policy violation this
-module exists to prevent, and every suite would still be green.
-
-## What sharing a container costs, and where that cost is paid
-
-A container per test class gave every class an empty database by construction. One shared container does
-not. That trade is made deliberately: per-test isolation becomes a **schema** concern rather than a
-container concern, and `DatabaseCleaner` makes paying it one line in a `@BeforeEach`.
+A shared container does not give each class an empty database. Clean in `@BeforeEach`:
 
 ```java
 @BeforeEach
@@ -106,50 +67,61 @@ void reset() {
 }
 ```
 
-This is not merely tidiness. When what a test exercises *is* shared cluster-wide state - a lease, a
-rate-limit window, an outbox row - a leftover row is not a tidy-up detail but a test that passes or fails
-depending on what ran before it. `LocalStackS3.clearBucket(...)` is the S3 counterpart.
+This matters most where the test exercises shared state (a lease, a rate-limit window, an outbox row).
+`LocalStackS3.clearBucket(...)` is the S3 counterpart. A test that must stop a container creates its own from
+`LudwigTestImages`.
 
-A shared container also cannot be *stopped* by one of the things sharing it. A container is
-`AutoCloseable`, so whatever is handed one feels entitled to close it: Spring Boot closes a container
-bean when its context closes (unless Testcontainers reuse is on, which it is not by default or in CI),
-JUnit stops a `@Container` field after its class, a `try`-with-resources closes what it was given. Any
-of them used to take the database away from every other context in the JVM - one test context failing
-to load turned into ninety-eight `connection refused` errors in the classes after it. The singletons
-therefore ignore `stop()` and `close()`; Ryuk removes them when the JVM exits. A test that really needs
-a container it can stop creates its own from `LudwigTestImages`.
+## Configuration
 
-## Fork configuration, checked rather than assumed
+Image pins in `src/main/resources/images.properties`, each with a `# renovate:` comment so a dependency bot can bump
+it:
 
-The speedup depends on several test classes sharing a JVM, so it was verified rather than asserted:
-neither the reactor root POM nor `ludwig-service-parent` sets `forkCount` or `reuseForks`, so Maven's
-defaults apply - **one fork per module, reused across test classes**. The singletons are therefore
-genuinely shared within a module's surefire run and within its failsafe run.
+```properties
+# renovate: datasource=docker depName=postgres
+ludwig.test.image.postgres = postgres:16-alpine@sha256:cf78e766...
+```
 
-They are *not* shared across modules: each module is a separate JVM, so a full reactor build starts one
-Postgres per module that needs one, not one for the whole build. A developer who sets
-`testcontainers.reuse.enable=true` in `~/.testcontainers.properties` gets that too, because every
-singleton is declared `withReuse(true)`; it is deliberately off by default and off in CI, since a reused
-container carries the previous run's rows.
+`LudwigTestImages` refuses to initialise if a pin lacks `@sha256:` with a 64-character hex digest. Optional:
+`testcontainers.reuse.enable=true` in `~/.testcontainers.properties` reuses containers across runs locally (every
+singleton is `withReuse(true)`); keep it off in CI (a reused container carries previous rows).
 
-## What this module deliberately does not do
+## Deployment
 
-- **It depends on nothing else in this repository, and must not start.** Maven builds its reactor DAG
-  from all declared dependencies regardless of scope, `test` and `optional` included. Eleven modules have
-  container tests, `db-core` and `audit-core` among them; one sibling dependency here closes a cycle that
-  fails the whole reactor. `architecture-rules` is the precedent this copies.
-- **It is not a `test-jar`.** An ordinary jar consumed at test scope is what this repository already does,
-  and it avoids the `test-jar` lifecycle entirely.
-- **It ships no security fixtures.** Those need `LudwigPrincipal`, so they live in
-  [`test-support-security`](../../sources/test-support-security/README.md) - see that module for why the split is not
-  over-engineering.
-- **It does not containerise GreenMail or WireMock.** Both are libraries, used in-process. There is no
-  image, so there is nothing to pin, and the in-process versions are faster.
-- **It creates no buckets and no topics.** Those names are the consuming module's vocabulary.
-- **It has no enforced coverage gate**, and sets no `-Djacoco.skip`. Its classes run in eleven other
-  modules' suites and in none of its own, so a gate measured here would measure the wrong thing. What it
-  has instead are tests for the two things that are genuinely its own: a unit test that a digest-less pin
-  is rejected, and `PostgresFixtureIntegrationTest`, which boots a context through
-  `@LudwigPostgresTest` - because whether `@ServiceConnection` resolves against a digest-pinned image
-  name is a fact about Spring's wiring, and shipping three composed annotations no test had ever started
-  would be worse than having no coverage number.
+Not applicable (test scope only). CI agents need a Docker daemon; with no daemon, container tests **error** (they do
+not skip).
+
+## Observability
+
+Not applicable.
+
+## Audit
+
+Not applicable.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `Could not find a valid Docker environment` | Docker not running | Start Docker (required for `mvn verify` / `mvn clean install`) |
+| `LudwigTestImages` fails to initialise | A pin without a digest | Add `@sha256:<64 hex>` to the pin |
+| Tests pass alone, fail together | Shared container state | Add `DatabaseCleaner` / bucket clear in `@BeforeEach` |
+| `connection refused` in later test classes | Something stopped a shared container (should be impossible) | Do not create containers with `@Container` from `Containers`; create your own from `LudwigTestImages` |
+| Updating an image | CVE respin or upgrade | Change the one line in `images.properties` (with digest), run `scripts/check_image_pins.sh` and the affected suites |
+
+## Testing
+
+A unit test that a digest-less pin is rejected, and `PostgresFixtureIntegrationTest`, which boots a context through
+`@LudwigPostgresTest` (proves `@ServiceConnection` resolves against a digest-pinned image name). No coverage gate:
+its classes are exercised by other modules' suites.
+
+## Design decisions
+
+- **Digests in one properties file**, not Java constants: one-line bot updates, one place to audit.
+- **One container per JVM per image**: Maven runs one reused fork per module, so classes in a module share it; modules
+  do not share across JVMs.
+- **Containers cannot be stopped by a borrower** (Spring, JUnit and try-with-resources all try); Ryuk removes them at
+  JVM exit.
+- **No in-repo dependencies**: Maven's reactor DAG includes test scope, and `db-core`/`audit-core` use this module.
+- **Not a `test-jar`**; an ordinary jar at test scope.
+- **No security fixtures** (they need `LudwigPrincipal`; see [test-support-security](../test-support-security)), no
+  containerised GreenMail/WireMock (in-process libraries), no bucket or topic creation (consumer vocabulary).

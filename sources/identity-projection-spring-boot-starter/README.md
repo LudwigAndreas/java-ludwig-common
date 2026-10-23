@@ -2,45 +2,39 @@
 
 ***English** · [Русский](README.ru.md)*
 
-The local, queryable answer to "who is this caller and what may they do here?", kept up to date from the
-OIDC provider's Kafka user stream — and the database-backed implementations of
-[`security-spring-boot-starter`](../../sources/security-spring-boot-starter/README.md)'s three SPIs that read from
-it.
+A local, queryable projection of the OIDC provider's Kafka user stream, plus the database-backed implementations of
+[`security-spring-boot-starter`](../security-spring-boot-starter)'s three SPIs that read from it: users, roles, a
+partner registry and time-boxed data grants in PostgreSQL; idempotent, order-tolerant consumption; authority-cache
+eviction after commit; and opt-in projection of verified contact data for the one service that writes to people.
 
-Add both modules and roles stop coming from token claims and start coming from your own tables:
+| | |
+|---|---|
+| Role | starter |
+| Depends on (in-repo) | [`db-core`](../db-core), [`messaging-spring-boot-starter`](../messaging-spring-boot-starter), [`security-spring-boot-starter`](../security-spring-boot-starter) |
+| Used by | `crud-service-example`, `notification-service` |
+| Surfaces | Kafka (inbound user stream) |
+
+| SPI | Implementation | Source |
+|---|---|---|
+| `AuthorityResolver` | `DatabaseAuthorityResolver` | `security_user` (Kafka), `security_partner` (table), `ludwig.identity.service-roles` (config) |
+| `DataScopeProvider` | `DatabaseDataScopeProvider` | `security_grant` - explicit, optionally time-boxed grants |
+| `PartnerIdentityResolver` | `DatabasePartnerIdentityResolver` | `security_partner` - onboard and suspend partners without a release |
+
+A local projection avoids a network hop to the identity provider on every authorization decision, and makes "every
+agent in this tenant" or "who still holds this role" a query.
+
+## Usage
 
 ```xml
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>identity-projection-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
 </dependency>
 ```
 
-The security module's fallbacks back off automatically (`@ConditionalOnMissingBean`); there is no wiring
-to write.
+The security starter's fallbacks back off (`@ConditionalOnMissingBean`); there is nothing to wire.
 
-| SPI | Implementation | Source |
-|---|---|---|
-| `AuthorityResolver` | `DatabaseAuthorityResolver` | `security_user` (Kafka), `security_partner` (table), `ludwig.identity.service-roles` (config) |
-| `DataScopeProvider` | `DatabaseDataScopeProvider` | `security_grant` — explicit, optionally time-boxed grants |
-| `PartnerIdentityResolver` | `DatabasePartnerIdentityResolver` | `security_partner` — onboard and suspend partners without a release |
-
----
-
-## Why a projection at all
-
-The alternative is calling the identity provider on every authorization decision, which puts a network
-hop and a third-party availability budget on your hottest path. The other alternative is putting roles in
-the token, which is what this whole design avoids — see the security module's README for why revocation
-latency is the argument that settles it.
-
-A projection gives you a local join. "Every agent in this tenant", "which users still hold this role" and
-"what did this subject look like at the time of that audit record" become queries, not API calls.
-
----
-
-## The event contract
+### The event contract
 
 ```json
 {
@@ -61,118 +55,35 @@ A projection gives you a local join. "Every agent in this tenant", "which users 
 }
 ```
 
-Three properties of this shape do the work:
+- **`roles` is the complete set, never a delta**: applying an event twice gives the same row; replaying the topic
+  converges.
+- **`occurredAt` is the ordering key**: an event older than the stored one is dropped (normal, not an error), so a
+  replay never restores a revoked role.
+- **Unknown fields are ignored**: the provider owns the schema.
+- `type` is `UPSERT`, `DISABLE` or `DELETE`. `DELETE` becomes a status, never a row deletion: audit records and
+  `created_by` references must keep resolving, and a re-created account must not inherit the old one's history.
 
-**`roles` is the complete set, never a delta.** Applying the same event twice produces the same row, and
-replaying the topic from the beginning converges on the correct state. Incremental "role added"/"role
-removed" events would leave the projection permanently wrong after a single lost or duplicated message —
-and "permanently wrong" here means someone keeps a role they no longer have.
+### Contact data (opt-in)
 
-**`occurredAt` is the ordering key, not the receipt time.** Kafka orders within a partition, and a user's
-events move between partitions when the topic is scaled or the key changes. An event older than what is
-stored is normal, not an error, and is dropped. Without that check, a replay silently restores a role that
-was revoked days ago — a delayed, invisible privilege escalation.
+Contact fields are stored **only** with `ludwig.identity.contact.enabled=true`, and cleared from a user's row on
+their next event when the flag is off. Turn it on only in the service that sends messages to people (this projection
+is replicated into every service using the module, and each copy is another place a deletion request must reach).
+No index on contact columns (lookups are by subject). `emailVerified` / `phoneVerified` are nullable: null means
+"the provider did not say", which differs from "not verified".
 
-**Unknown fields are ignored.** The provider owns this schema and will add to it. A consumer that fails on
-a new field turns an upstream release into an outage in every service on the topic.
-
-`type` is `UPSERT`, `DISABLE` or `DELETE`. `DELETE` is projected as a status change, never as a row
-deletion: audit records and `created_by` references pointing at that subject have to keep resolving, and a
-re-created account must not inherit the old one's history.
-
-### Contact data is opt-in, and off by default
-
-The contact fields are stored **only** when `ludwig.identity.contact.enabled` is set. They are absent
-from the projection otherwise, and cleared from rows an earlier configuration wrote — switching the
-flag off scrubs each user's row on their next event, rather than freezing what was already there.
-
-The reasoning cuts both ways and both halves matter. The OIDC provider is where verification happens,
-so it is the single source of truth for a person's addresses, and a service that writes to people
-should read the address from the directory rather than keep a copy nothing keeps in step. But this
-projection is replicated into *every* service that uses the module, and a contact column that was
-always populated would put a person's address in every service database in the estate — including the
-ones with no reason to have it, each another place a deletion request has to reach.
-
-So the flag: the service that actually sends messages to people turns it on, and nothing else does.
-There is no index on any of these columns, deliberately — every lookup here is by subject, so an index
-would buy nothing and would make *"which user has this address"* a cheap question against a replica of
-directory data.
-
-`emailVerified` and `phoneVerified` are nullable on purpose. Null means the provider did not say,
-which is a different fact from "it said no": a consumer deciding whether it may write to an address
-has to be able to tell them apart, and treating silence as unverified would stop every message the
-moment an older producer omitted the field.
-
----
-
-## Revocation latency
-
-```
-directory change -> Kafka -> projection commits -> authority cache evicted -> next request sees it
-```
-
-Eviction happens **after commit**, not during: evicting inside the transaction opens a window where
-another thread re-reads the old row and re-populates the cache with stale roles, and the eviction would
-have happened even if the transaction then rolled back.
-
-That discipline used to be a `TransactionSynchronization` this module registered by hand - which was the
-*second* copy of the same helper, `user-settings` having written the first. It is now one call,
-`cache.evictAfterCommit(ref)`, into
-[`cache-spring-boot-starter`](../../sources/cache-spring-boot-starter/README.md), where the reasoning is written down
-once and where the rollback case has a test.
-
-`ludwig.cache.caches.authorities.ttl` (default 30s, and `ludwig.security.authorities.cache.ttl` before the
-caching consolidation) is therefore the backstop for a *missed* event, not the normal path to consistency. In
-the normal path the change is visible on the next request. The cache is declared `purpose: security`, which
-is what puts a startup ceiling on that number - see `AuthorityCaches`.
-
----
-
-## Schema
-
-Shipped as a Liquibase changelog with namespaced changeset ids, applied either standalone or from your
-own master changelog (`ludwig.identity.liquibase.enabled=false` — see the example service).
-
-| Table | Holds | Owned by |
-|---|---|---|
-| `security_user` (+ `security_user_role`) | the projection; PK is the OIDC `sub` | the directory, via Kafka |
-| `security_partner` (+ `security_partner_role`) | partner registry: code, certificate identifiers, status, roles | you, audited |
-| `security_grant` | explicit data-scope grants, optionally expiring | you, audited |
-
-`security_user` extends db-core's `ExternalEntity` because that is exactly what it is — a record whose id
-and lifecycle belong to another system — and its `source_version`/`source_timestamp` columns are what the
-ordering guard compares. Only what authorization needs is stored *by default*: this is directory data
-replicated into every service that uses the module, so every extra column is another place a
-personal-data request has to reach. The contact columns are the one exception and they are opt-in — see
-[Contact data is opt-in](#contact-data-is-opt-in-and-off-by-default).
-
-`security_partner` and `security_grant` are `AuditedEntity` instead, because nothing projects them: they
-are granted, by someone, and *who granted what and when* is the first question an auditor asks.
-
----
-
-## Grants vs. policy
-
-Both widen a caller's data scope and they compose (`CompositeDataScopeProvider` unions them), but they
-exist for different lifecycles:
+### Grants vs. policy
 
 | | Role policy (`ludwig.security.data.policies`) | Grant row (`security_grant`) |
 |---|---|---|
 | Says | "agents see their own cases" | "Anna covers Berlin while Bob is on leave" |
 | Is | a rule about the system | data about a person |
-| Changes by | a pull request and a deploy | an admin action |
+| Changes by | pull request and deploy | an administrator action |
 | Expires | never | `expires_at`, enforced in the query |
 
-A grant can only ever **widen** what the policy allows. Narrowing is done by removing roles — which keeps
-"why can this person see this?" answerable by reading two places, not by tracing a chain of overrides.
+A grant can only **widen** what the policy allows; narrowing is done by removing roles. Time-boxing is enforced in
+the `WHERE` clause, so nothing has to come back and clean up.
 
-Time-boxing is the difference between a coverage arrangement and a permanent privilege nobody remembers
-granting, and it is enforced in the `WHERE` clause rather than by anything that has to come back and
-clean up.
-
----
-
-## Peer services
+### Peer services
 
 ```yaml
 ludwig:
@@ -182,78 +93,102 @@ ludwig:
         - ROLE_CATALOG_READER
 ```
 
-In configuration rather than in a table, deliberately: which service may call which is part of the
-deployment topology. It changes when code changes, and it should be reviewed in the same pull request as
-the call it authorizes. Nobody grants a service access at runtime.
+Configuration, not a table: which service may call which is deployment topology, reviewed with the code that makes
+the call.
 
----
+### Revocation latency
 
-## Consumer behaviour
+```
+directory change -> Kafka -> projection commits -> authority cache evicted (after commit) -> next request sees it
+```
 
-The listener container comes from `messaging-spring-boot-starter`: `ErrorHandlingDeserializer` around key
-and value, exponential backoff, and then a dead-letter topic.
-
-The listener takes the payload as a raw `String` and deserializes it itself rather than through a
-configured `JsonDeserializer`. One of the two original reasons for that no longer holds — the container
-factory is the platform's now, not this module's — and the other is now a choice rather than a necessity:
-
-- **Unparseable payload** → logged and committed here, inside application code. A container-level
-  deserialization failure would instead be classified non-retryable and dead-lettered on the first
-  attempt, which is arguably the better outcome; moving this listener onto the typed inbound envelope is a
-  change worth making and deliberately not bundled into the fix below.
-- **Failure while applying** (database down, constraint fired) → rethrown, so the offset is not committed
-  and the container retries with growing gaps, then dead-letters. Safe to retry, because applying an event
-  is idempotent.
-
-The payload itself is never logged. It is directory data about a person.
-
-Each service needs **its own consumer group** — sharing one would mean each service saw only a share of
-the events.
-
-### This module used to drop a record it could not process
-
-It declared **no container factory at all**, so the listener ran on Spring Boot's auto-configured one with
-Boot's default `DefaultErrorHandler`: ten attempts, no backoff, and then log the failure and move on. The
-record was dropped. The only trace was a log line in a service nobody tails, and the projection was
-silently missing one person's directory data — which presents, weeks later, as a notification that went to
-the wrong address.
-
-Boot's default is a reasonable default for an application that has thought about nothing. It is not a
-reasonable default for a projection, and this module never chose it — it inherited it by declaring
-nothing. That is why the replacement is enforced by an ArchUnit rule,
-`kafka.container-factories-set-an-error-handler`, rather than only fixed.
-
-Two consequences worth knowing before you deploy it:
-
-- **`oidc.users.dlt` has to be provisioned.** Whatever `ludwig.identity.kafka.topic` is set to, with
-  `.dlt` appended. A dead-letter topic that auto-creates in dev and does not exist in production is a
-  silent drop wearing a different hat — see `messaging-spring-boot-starter`'s README for the full
-  prerequisite, and alert on `ludwig.messaging.dead.lettered` and `ludwig.messaging.dropped`.
-- **`OidcUserEventListener` no longer takes an `Acknowledgment`.** It must not: Spring Kafka supplies one
-  only in a manual ack mode, and a listener that declares one under the platform's `AckMode.RECORD` has
-  that parameter resolved as its payload instead, failing every record with `Payload value must not be
-  empty`.
-
----
+Eviction uses `cache.evictAfterCommit(ref)` from [cache](../cache-spring-boot-starter). The authority cache TTL
+(`ludwig.cache.caches.authorities.ttl`, default 30s) is the backstop for a *missed* event.
 
 ## Configuration
 
-```yaml
-ludwig:
-  identity:
-    enabled: true
-    grants-enabled: true              # register the grant-table DataScopeProvider
-    partner-registry-enabled: true    # register the table-backed PartnerIdentityResolver
-    kafka:
-      enabled: true
-      topic: corp.identity.users
-      group-id: my-service-identity-projection
-    liquibase:
-      enabled: true                   # false when you include the changelog from your own master
-    contact:
-      enabled: false                  # project the provider's verified contact data; see above
-    service-roles: {}
-```
+| Property | Default | Meaning |
+|---|---|---|
+| `ludwig.identity.enabled` | `true` | Master switch |
+| `ludwig.identity.grants-enabled` | `true` | Register the grant-table `DataScopeProvider` |
+| `ludwig.identity.partner-registry-enabled` | `true` | Register the table-backed `PartnerIdentityResolver` |
+| `ludwig.identity.kafka.enabled` | `true` | Consume the user stream (off: tables still queried - admin service, tests) |
+| `ludwig.identity.kafka.topic` | `oidc.users` | User stream topic |
+| `ludwig.identity.kafka.group-id` | - | **Own consumer group per service** (a shared group would see only a share of events) |
+| `ludwig.identity.liquibase.enabled` | `true` | `false` when including the changelog from your own master |
+| `ludwig.identity.contact.enabled` | `false` | Project verified contact data |
+| `ludwig.identity.service-roles` | `{}` | Workload id → roles |
 
-Everything is optional. With `kafka.enabled=false` the tables are still there and still queried — useful
-for an admin service over the same schema, or a test.
+The listener's consumer settings (retry, dead letter, cluster) are under
+`ludwig.messaging.consumers.<identity consumer>.*` (see [messaging](../messaging-spring-boot-starter)).
+
+## Deployment
+
+- **Schema**: `db/changelog/identity/identity-changelog.xml` (namespaced changeset ids), standalone or included.
+
+  | Table | Holds | Owned by |
+  |---|---|---|
+  | `security_user` (+ `security_user_role`) | the projection; PK = OIDC `sub` (`ExternalEntity`) | the directory, via Kafka |
+  | `security_partner` (+ `security_partner_role`) | partner registry: code, certificate identifiers, status, roles | administrators (`AuditedEntity`) |
+  | `security_grant` | explicit data-scope grants, optionally expiring | administrators (`AuditedEntity`) |
+
+- **Topics**: the user topic and its dead-letter topic **`<topic>.dlt`** (default `oidc.users.dlt`) must exist.
+- **Consumer group**: a distinct `group-id` per service.
+- **Data protection**: `security_user` holds personal data; include it in deletion procedures. With contact data on,
+  it holds addresses.
+
+## Observability
+
+Consumption metrics come from [messaging](../messaging-spring-boot-starter#observability)
+(`ludwig.messaging.consumed`, `.retries`, `.dead.lettered`, `.dropped`, consumer lag, `silent`).
+
+**Logs.** `ERROR Discarding unparseable user event` (committed, not retried); `WARN Discarding user event with no
+subject`. Payloads are never logged (directory data about a person).
+
+**Recommended alerts:** messaging's dead-letter and drop alerts on the identity topic; `ludwig_messaging_silent` for
+the identity consumer (set a `silence-threshold` matching the directory's change rate).
+
+**Known gaps:**
+
+- Discarded events (unparseable, no subject) are only logged, not counted: a person's directory data can go missing
+  with no metric.
+- No metrics for applied events, stale events dropped by the ordering guard, or projection size.
+
+## Audit
+
+The projection records no audit events: it mirrors the provider's directory, which has its own audit trail.
+
+**Known gap:** changes to `security_partner` and `security_grant` (the administrator-owned tables) are stamped with
+`created_by` / `updated_by` but produce no `AuditEvent`, so "who granted what and when" has only the latest
+modification, not a history. A service that edits these tables should record an `AuditEvent` (category `access`) in
+the same transaction.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| New user has no roles | Event not consumed yet, consumer stuck, or wrong topic/group | Check lag and `silent` for the identity consumer; `SELECT subject, status, source_timestamp FROM security_user WHERE subject = '<sub>';` |
+| Role revoked in the directory still works | Event not consumed, or within the authority cache TTL | Check consumer lag; wait ≤ TTL |
+| Revoked role came back after a replay | Should not happen (ordering guard) | Compare `source_timestamp` with the event's `occurredAt`; report a bug |
+| `Discarding unparseable user event` | Provider schema change broke parsing | Fix parsing; ask the provider to republish affected users |
+| Records on `oidc.users.dlt` | Apply failed repeatedly (database down, constraint) | Fix the cause; replay the dead letters to the topic (applying is idempotent) |
+| Grant has no effect | Expired (`expires_at`), wrong resource/action, or `grants-enabled=false` | `SELECT * FROM security_grant WHERE subject = '<sub>';` |
+| Partner rejected | `security_partner` row missing, suspended, or certificate identifier changed | Update the row (status, identifiers) |
+
+## Testing
+
+`IdentityProjectionServiceTest` (apply, ordering, delete-as-status, contact scrubbing) and `IdentityKafkaOrderingTest`.
+
+**Known gap:** no integration test against a real PostgreSQL and Kafka for the projection, the SPIs or the
+changelog; consuming services cover it indirectly.
+
+## Design decisions
+
+- **A projection, not a remote call or token claims**: local joins, no third-party availability on the hot path,
+  revocation in seconds.
+- **Full role sets and `occurredAt` ordering**: replays converge and never re-grant.
+- **Only what authorization needs is stored by default**; contact data is opt-in.
+- **Service roles in configuration**, reviewed with code.
+- **The listener reads `String` payloads and parses them itself**: unparseable payloads are logged and committed;
+  apply failures are rethrown, retried with backoff and dead-lettered (applying is idempotent). The container factory
+  comes from messaging's builder; the listener declares no `Acknowledgment`.

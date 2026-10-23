@@ -6,6 +6,13 @@ The domain-free half of this platform's security test fixtures: a builder that m
 and wraps it in an authentication a `MockMvc` request can carry, and the `JwtDecoder` that lets a context
 start without OIDC discovery. Each service keeps its own constants naming its own roles and subjects.
 
+| | |
+|---|---|
+| Role | test support (test-scoped jar) |
+| Depends on (in-repo) | [`security-spring-boot-starter`](../security-spring-boot-starter), [`test-support`](../test-support) |
+| Used by | `file-action`, `grpc-client`, `grpc-server` starters; both services |
+| Surfaces | none |
+
 ## Why this is a second module
 
 It looks like over-engineering until you try the alternative.
@@ -18,10 +25,7 @@ the two halves were one artifact, that artifact would depend on `security-spring
 depended on by `db-core` - and any test-scoped container dependency added to the security starter would
 close a cycle that fails the entire reactor, not just the module that added it.
 
-A single merged module would in fact build today, because `security-spring-boot-starter` currently has
-only unit tests and so declares no dependency back. That is a coincidence, not a design: the cycle appears
-the first time somebody gives the security starter a container test, and the fix at that point is this
-same split, done under time pressure with a red reactor. So it is done now, while it is free.
+A merged module would put `security-spring-boot-starter` upstream of `db-core`'s tests, and the first container test in the security starter would close a reactor cycle.
 
 The split is also the honest description of the two halves. The container half is framework infrastructure
 that knows nothing about this platform's domain; this half knows what a principal is.
@@ -99,3 +103,15 @@ a test still passing while no longer asserting anything.
 So `DefaultCallerConfiguration` is separate, and the service that opts in states which caller it defaults
 to. A default request is applied first and a request's own `.with(...)` after it, so a test that names a
 narrower caller wins; that ordering is what makes the default safe to use at all.
+
+## Deployment, observability, audit
+
+Not applicable (test scope only).
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Context fails at startup with OIDC discovery errors in tests | No decoder replacement | `@Import(RejectingJwtDecoderConfiguration.class)` |
+| A test expecting 401/403 gets 200 | `DefaultCallerConfiguration` defaults every request to a privileged caller | Name the caller on the request, or do not import the default |
+| Bearer-token test gets 401 | Expected: the rejecting decoder refuses every token | Authenticate by injecting a principal (`postProcessor()`) |

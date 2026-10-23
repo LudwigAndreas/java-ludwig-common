@@ -2,55 +2,43 @@
 
 ***English** · [Русский](README.ru.md)*
 
-Authentication and authorization for Spring Boot microservices behind an nginx/Envoy edge, for a
-deployment where:
+Authentication and authorization for Spring Boot services behind an nginx/Envoy edge. One principal
+(`LudwigPrincipal`) for browser users (session cookie exchanged for a JWT at the edge), mTLS partners (Envoy
+`x-forwarded-client-cert`) and peer services; roles resolved per service from a local projection instead of from
+token claims; data-level authorization compiled into type-safe QueryDSL predicates plus a single-object check;
+personal access token attenuation; localized RFC 9457 401/403; audit and metrics. Every default fails closed.
 
-- browser users hold an **opaque session cookie**, never a JWT — the edge exchanges the session for a
-  short-lived token per request;
-- external partners call the REST API directly over **mTLS**, terminated by Envoy;
-- other services call in with their own **workload identity**;
-- the OIDC provider issues **identity only** — no roles in the token — and streams the user directory
-  over Kafka into each service's own database;
-- access has to be restricted **by resource** (may this caller call this endpoint) *and* **by data**
-  (which rows come back).
+| | |
+|---|---|
+| Role | starter |
+| Depends on (in-repo) | [`audit-core`](../audit-core), [`cache-spring-boot-starter`](../cache-spring-boot-starter), [`pat-core`](../pat-core), [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) |
+| Used by | `export`, `file-action`, `grpc-client`, `grpc-server`, `identity-projection`, `pat`, `user-settings` starters, `test-support-security`; both services |
+| Surfaces | REST (filter chain, method security); outbound introspection call (optional PAT filter) |
 
----
+Deployment model this module assumes:
 
-## The architecture question first: gateway or service?
+- browser users hold an **opaque session cookie**; the edge exchanges it for a short-lived JWT per request;
+- partners call the REST API over **mTLS**, terminated by Envoy;
+- peer services call with their own **workload identity**;
+- the OIDC provider issues **identity only** (no roles) and streams the user directory over Kafka into each
+  service's database ([identity-projection](../identity-projection-spring-boot-starter));
+- access is restricted **by resource** (may this caller call this endpoint) and **by data** (which rows).
 
-**Both, and the split is not negotiable if you want it to hold.**
+### Edge vs service
 
-| Concern | Where | Why there |
+| Concern | Where | Why |
 |---|---|---|
-| TLS/mTLS termination, client certificate chain validation | **Edge** | It is the only component holding the private keys and the partner trust bundle, and certificate validation is not something you want reimplemented per service. |
-| Session cookie → JWT exchange, CSRF, session revocation | **Edge** | The session store lives there. A service that never sees a cookie cannot be CSRF'd. |
-| Stripping client-supplied identity headers | **Edge**, and again in the service | One misconfigured route is otherwise a privilege escalation. Doing it twice costs a map lookup. |
-| Coarse routing denials (`/internal/**` unreachable from the internet), rate limits, request size caps | **Edge** | Cheap to enforce, and it keeps obvious abuse off the service entirely. |
-| Token validation (signature, issuer, **audience**, expiry) | **Service** | An audience check is per-service by definition, and a service must not assume it was only ever reached through the gateway. |
-| Role / permission checks — *may this caller call this?* | **Service** | The roles are the service's own vocabulary. |
-| Data scope — *which rows?* | **Service** | The gateway does not know what a row is. |
+| TLS/mTLS termination, client certificate validation | **Edge** | Holds the keys and the partner trust bundle |
+| Session cookie → JWT, CSRF, session revocation | **Edge** | The session store lives there; a service that never sees a cookie cannot be CSRF'd |
+| Stripping client-supplied identity headers | **Edge and service** | One misconfigured route would otherwise be privilege escalation |
+| Coarse routing denials, rate limits, size caps | **Edge** | Cheap; keeps abuse off the service |
+| Token validation (signature, issuer, **audience**, expiry) | **Service** | Audience is per service; a service must not assume it is only reached through the gateway |
+| Role / permission checks | **Service** | Roles are the service's own vocabulary |
+| Data scope (which rows) | **Service** | The gateway does not know what a row is |
 
-Three arguments for keeping authorization in the service, in order of how badly each one bites:
-
-**1. A gateway cannot do data-level authorization at all.** "Show only the orders this user created" is a
-predicate over a table the gateway has never heard of. If you put resource-level rules in the gateway and
-data-level rules in the service, you have split one policy across two systems owned by two teams, and the
-half that is easy to forget is the half that leaks rows.
-
-**2. A gateway-only model fails open for everything that does not traverse the gateway.** Service-to-service
-calls, Kafka consumers, scheduled jobs, an admin tool port-forwarded to a pod, a new ingress someone added
-for a demo. Each is a path where the only enforcement point is absent. The gateway is a *filter*, not a
-*boundary* — treat it as defence in depth, never as the decision point.
-
-**3. A shared gateway policy becomes a config file nobody owns.** Every service's rules, in one place,
-changed by every team, reviewed by none. Per-service policy lives next to the code it protects and is
-reviewed by the people who know what the endpoint does.
-
-What the gateway **is** essential for is authentication: it is where the session lives, where TLS is
-terminated, and where a client certificate becomes a verified fact. This module's job starts one step
-later — it takes those verified facts and decides what they are allowed to do.
-
-### Request flows
+A gateway cannot do row-level authorization, and gateway-only enforcement fails open for every path that does not
+traverse it (service-to-service calls, Kafka consumers, schedulers, port-forwards). The gateway is defence in depth,
+never the decision point.
 
 ```mermaid
 flowchart LR
@@ -76,11 +64,7 @@ flowchart LR
     E --> F --> A --> R --> D --> Q
 ```
 
-Both doors end at the same `LudwigPrincipal`, and every rule downstream is written against that one type.
-
----
-
-## The three callers
+### The three callers
 
 | | Browser user | Partner | Peer service |
 |---|---|---|---|
@@ -89,66 +73,36 @@ Both doors end at the same `LudwigPrincipal`, and every rule downstream is writt
 | Identity | OIDC `sub` | partner code | SPIFFE workload id |
 | `PrincipalType` | `USER` | `PARTNER` | `SERVICE` |
 | Roles from | local projection of the OIDC stream | partner registry (table or config) | configuration |
-| Typical data scope | `OWN`, `TENANT`, or `ALL` | `PARTNER` | `ALL` for its narrow purpose |
+| Typical data scope | `OWN`, `TENANT` or `ALL` | `PARTNER` | `ALL` for its narrow purpose |
 
-Keeping the type on the principal is what lets a policy say "partners never see this" without
-re-deriving that fact from the transport at every check — and it is what stops a peer service from
-picking up a data scope that was written for humans.
+### Why roles are not in the token
 
----
+The JWT carries `sub`, a name and maybe a tenant. Roles come from `AuthorityResolver`, implemented by
+identity-projection against the Kafka-fed user table:
 
-## Why roles are not in the token
+- **revocation is bounded by the authority cache TTL (seconds), not the token lifetime**;
+- tokens stay small; granting a role needs no re-issue;
+- each service owns its vocabulary;
+- a token carrying a `roles` claim is harmless - nothing reads it.
 
-The OIDC provider authenticates; this service authorizes. The JWT carries `sub`, a name and maybe a
-tenant. Roles come from `AuthorityResolver`, which
-[`identity-projection-spring-boot-starter`](../../sources/identity-projection-spring-boot-starter/README.md)
-implements against the Kafka-fed user table.
+The cost is a lookup per request; `AuthorityLookup` caches it in the platform cache `authorities`
+(`purpose: security`, see [cache](../cache-spring-boot-starter)), and identity-projection evicts on every user change.
 
-- **Revocation is bounded by the cache TTL (seconds), not by the token lifetime.** A JWT that carries its
-  roles keeps them until it expires, however fast the directory reacts. This is the argument that matters.
-- **Tokens stay small and stable.** A user in forty groups does not carry forty claims through every hop,
-  and granting a role does not require re-issuing tokens.
-- **Each service owns its own vocabulary.** No global, ever-growing role list that every team appends to
-  and nobody prunes.
-- **A token that arrives carrying a `roles` claim is harmless** — nothing reads it. Nobody widens their
-  access by influencing token issuance.
-
-The cost is a lookup per request, which is why `AuthorityLookup` caches and why the projection evicts the
-cache the moment a Kafka event changes a user.
-
-The cache itself is no longer this module's. It is the platform's `authorities` cache, declared here in
-`AuthorityCaches` and built by [`cache-spring-boot-starter`](../../sources/cache-spring-boot-starter/README.md) - which
-also replaced `user-settings`' independently written copy of the same three classes. What stayed here is the
-part that was never generic: **`purpose: security`**, meaning that this TTL is how long a revoked role keeps
-working. That declaration is what gets the number a startup ceiling
-(`ludwig.cache.security-ttl-ceiling`) and what refuses the stale-read affordances a throughput cache is
-allowed.
-
----
-
-## Quick start
+## Usage
 
 ```xml
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>security-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
 </dependency>
 <!-- roles and grants from the OIDC stream; without it nobody has any role -->
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>identity-projection-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
-</dependency>
-<!-- the platform's caching primitive; brought in transitively, listed here for clarity -->
-<dependency>
-    <groupId>ru.ludwigandreas</groupId>
-    <artifactId>cache-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
 </dependency>
 ```
 
-Resource level — an annotation on the endpoint:
+### Resource level
 
 ```java
 @GetMapping("/{id}")
@@ -156,7 +110,11 @@ Resource level — an annotation on the endpoint:
 public OrderResponse get(@PathVariable UUID id) { ... }
 ```
 
-Data level — declare once which columns carry which scope dimension:
+Method security is enabled by the module.
+
+### Data level
+
+Declare which columns carry which scope dimension:
 
 ```java
 @Bean
@@ -170,7 +128,7 @@ DataScopeMapping<OrderEntity> orderScopeMapping() {
 }
 ```
 
-…then write the policy in configuration:
+Write the policy in configuration:
 
 ```yaml
 ludwig:
@@ -189,7 +147,7 @@ ludwig:
             ROLE_ORDER_AGENT: OWN
 ```
 
-…and use it in the two places rows are reached:
+Use it where rows are reached:
 
 ```java
 // 1. Query time - the scope is part of the WHERE clause.
@@ -197,47 +155,38 @@ queryFactory.selectFrom(order)
         .where(guard.predicate("order", DataAction.READ).and(criteria))
         .fetch();
 
-// 2. Load time - the safety net for every path a query predicate never sees.
+// 2. Load time - the safety net for paths a query predicate never sees.
 OrderEntity entity = repository.getByIdOrThrow(id);
 guard.check("order", DataAction.READ, entity, OrderEntity::getId);
 ```
 
-Or, as an annotation, backed by the same mapping:
+or as an annotation backed by the same mapping: `@PostAuthorize("hasPermission(returnObject, 'read')")`.
 
-```java
-@PostAuthorize("hasPermission(returnObject, 'read')")
-public OrderEntity get(UUID id) { ... }
-```
+**Both halves are needed.** Pre-filtering alone misses loads by id, relations and objects rebuilt from events;
+post-checking alone breaks pagination and totals. The mapping declares a column (predicate) and an accessor (check)
+together, so they cannot drift.
 
-### Three shapes of rule
-
-Which binding you reach for depends on the shape of the rule, not on taste. Each declares a query-time
-half and a load-time half together, so the two cannot drift apart.
+**Three shapes of rule:**
 
 | Rule | Binding | Example |
 |---|---|---|
-| One column holds one value | `.owner(...)` / `.tenant(...)` / `.partner(...)` / `.bind(...)` | "orders this user created" |
-| The row relates to many values, any of which may match | `.bindCollection(...)` | "orders this user is **mentioned** on" |
-| Anything else | `.bindExpression(...)` | "mentioned, or the creator, and not revoked" |
+| One column holds one value | `.owner` / `.tenant` / `.partner` / `.bind` | orders this user created |
+| The row relates to many values, any may match | `.bindCollection` | orders this user is mentioned on |
+| Anything else | `.bindExpression` | mentioned or creator, and not revoked |
 
 ```java
-// "A LOADER sees every order they are mentioned on."
-QOrderEntity order = QOrderEntity.orderEntity;
-
 DataScopeMapping.forResource("order", OrderEntity.class)
         .owner(order.createdBy, OrderEntity::getCreatedBy)
         .bindCollection(ScopeDimension.of("mentioned"),
-                order.mentions.any().userId,                                   // query side
+                order.mentions.any().userId,                                   // query side: correlated EXISTS
                 e -> e.getMentions().stream().map(Mention::getUserId).toList()) // load side
         .build();
 ```
 
-`any()` is QueryDSL's to-many traversal and JPA renders it as a correlated `EXISTS`, not a join — which
-matters, because a join multiplies one order by its four mentions and inflates both the page and its
-total. On the load side the check is an intersection: the row matches when **any** value it relates to is
-allowed.
+`.bindExpression` is the escape hatch where nothing verifies that predicate and check agree; test them against each
+other (`ExpressionScopeBindingTest` shows how).
 
-The value itself comes from a `DataScopeProvider`, and that is where custom logic lives:
+**Custom values** come from a `DataScopeProvider`:
 
 ```java
 @Bean
@@ -251,318 +200,39 @@ DataScopeProvider loaderMentionScopeProvider() {
 }
 ```
 
-Providers are unioned, so this widens what the configured policy allows without touching it. The value
-side is entirely yours — a database lookup, a time window, a call to another service.
+**Composition**: values within a dimension are OR-ed (`IN`); dimensions within a grant are AND-ed (`OWN+TENANT`);
+grants are OR-ed; `ALL` beats everything; `NONE` contributes nothing. Providers are unioned
+(`CompositeDataScopeProvider`), so a provider can only **widen**; denial is no provider granting. A list endpoint
+for a caller entitled to nothing returns an **empty page**, not 403. The full model and worked examples are in
+[`docs/data-scope-configuration.md`](../../docs/data-scope-configuration.md).
 
-`.bindExpression(...)` is the escape hatch for rules no single path reaches (a condition spanning two
-attributes of the same child row, an `EXISTS` over an unmapped entity). It is the one shape where nothing
-verifies that your predicate and your check agree with each other, so test them against each other —
-`ExpressionScopeBindingTest` in this module shows the shape of such a test. Prefer the other two whenever
-either can express the rule.
+### Background work
 
-### Why both, and not one
+`SystemPrincipalTemplate` runs scheduler and listener code under an explicit system identity
+(`ludwig.security.system-principal.*`).
 
-**Pre-filtering alone misses** direct loads by id, entities reached through a relation, and objects
-rebuilt from an event. **Post-checking alone breaks lists**: a page of 20 filtered after the fetch returns
-fewer than 20 rows and a wrong total, the database still reads and ships rows the caller may not see, and
-every aggregate computed before the filter is simply wrong.
+### Personal access tokens
 
-So the mapping declares a **column** (for the predicate) and an **accessor** (for the check) for each
-dimension, together, in one place — they cannot drift apart, and renaming either field breaks the build.
-
-### How a scope is composed
-
-A caller usually holds several roles, each granting a slice:
-
-- values within one dimension are OR-ed (`IN`),
-- dimensions within one grant are AND-ed (`OWN+TENANT` = "my rows, in my tenant"),
-- grants are OR-ed (an agent who is also an auditor sees the union),
-- `ALL` beats everything, `NONE` contributes nothing.
-
-Providers compose the same way: `CompositeDataScopeProvider` unions the configuration-driven role policy
-with any lookup-driven provider (for example the grant table in the identity module). A provider can
-therefore only ever **widen** access. Denial is expressed by no provider granting — which is also what
-makes the empty configuration safe.
-
----
-
-## Fail-closed by construction
-
-Every default here is the paranoid one, because the failure mode of the other choice is invisible:
-
-| Situation | What happens | Why not the other way |
-|---|---|---|
-| Resource has no policy | Denied (`default-access: NONE`) | A new endpoint would otherwise ship unprotected. |
-| Policy names a resource with no `DataScopeMapping` | **Startup failure** | An unmapped resource would be treated as unrestricted — every row published. |
-| Policy names a dimension the mapping does not bind | **Startup failure** | An unenforceable clause must not be silently ignored. |
-| Policy grant is misspelled (`OWNN`, `ALL+TENANT`) | **Startup failure** | Otherwise it surfaces on the first request that happens to exercise that role — in production, on one endpoint, as a 500. |
-| Resource listed as both unscoped and policed | **Startup failure** | One of the two silently wins; which one is not obvious from either. |
-| `mtls.enabled` with `forward-headers-strategy=native` | **Startup failure** (overridable) | The peer address becomes client-controlled, defeating `trusted-proxies` — see below. |
-| Principal has no value for a required dimension (missing tenant claim) | Denied | Dropping the clause would turn "my tenant" into "all tenants". |
-| Grant value cannot be parsed into the column type | Denied | "Rows whose id is `not-a-uuid`" is an empty set, not an absent filter. |
-| Role store is unreachable | Request fails (500) | Substituting "no roles" turns a database blip into a fleet-wide outage — and, on any rule phrased as a denial, into a silent grant. |
-| `x-forwarded-client-cert` from an untrusted peer | Request rejected, metric incremented | Silently ignoring it hides a spoofing attempt. |
-| No `AuthorityResolver` registered | Startup failure when `authorities.require-resolver=true` | Otherwise the service runs with nobody holding any role, which looks like a permissions bug. |
-| No audience configured | Startup failure when `jwt.require-audience=true` | A token minted for any other service that trusts the same issuer would be accepted. |
-
-A list endpoint whose caller is entitled to nothing returns an **empty page**, not a 403 — a 403 on a
-search confirms that matching rows exist.
-
----
-
-## The mTLS / Envoy contract
-
-Envoy terminates client TLS, validates the chain against the partner trust bundle, and describes the
-result in `x-forwarded-client-cert`. The service does **not** re-verify the certificate: it either trusts
-the peer that produced the header or it must not read the header at all.
-
-That makes **one setting load-bearing**:
-
-```yaml
-ludwig:
-  security:
-    mtls:
-      enabled: true
-      trusted-proxies: 10.4.0.0/16     # the sidecar/ingress subnet, nothing wider
-      service-identity-prefix: spiffe://mesh/ns/
-```
-
-`x-forwarded-client-cert` is an ordinary HTTP header. Anything that can open a TCP connection to the
-service can send one claiming to be any partner. What makes it trustworthy is the certainty that only the
-proxy can reach this port, and `trusted-proxies` is where that certainty is asserted. `0.0.0.0/0` there is
-equivalent to having no partner authentication at all — the module refuses to start with it. The header
-arriving from anywhere else is **rejected**, not ignored, because it is a security event and should look
-like one.
-
-#### The trap next to it: `forward-headers-strategy`
-
-`trusted-proxies` compares against the request's peer address, and Spring Boot has two settings that
-rewrite that address from a header the client controls:
-
-- **`framework`** installs `ForwardedHeaderFilter`, which wraps the request so `getRemoteAddr()` answers
-  from `X-Forwarded-For`. The module unwraps past every request wrapper to the address the container
-  actually saw, so this is safe — and the unwrapping is the reason it is safe, not an accident.
-- **`native`** installs Tomcat's `RemoteIpValve`, which rewrites the address on the request object
-  itself, before any filter runs, and by default trusts `X-Forwarded-For` from **any private-range
-  peer**. Inside a cluster that means any workload can claim the sidecar's address, satisfy
-  `trusted-proxies`, and have a forged `x-forwarded-client-cert` believed — partner impersonation from an
-  unauthenticated request. The module refuses to start in that combination.
-
-If you need `native`, narrow `server.tomcat.remoteip.internal-proxies` to the proxies you actually trust
-and set `ludwig.security.mtls.trust-native-forward-headers=true` to acknowledge it.
-
-One more ordering detail, for the same reason: when mTLS is enabled the header-stripping filter
-deliberately leaves `x-forwarded-client-cert` alone, so the mTLS filter can see a forged one and
-**reject** it. Stripping it first would turn a spoofing attempt into an ordinary 401 with no warning and
-no metric.
-
-On the Envoy side, two settings matter:
-
-```yaml
-forward_client_cert_details: SANITIZE_SET   # replace any inbound XFCC; never append to a client's
-set_current_client_cert_details:
-  uri: true        # SPIFFE id - the identifier that survives renewal
-  dns: true
-  subject: true
-  cert: false      # the PEM would put kilobytes of certificate in every log line
-```
-
-`SANITIZE_SET` is the important one: `APPEND_FORWARD` would let a client prepend its own element to the
-chain.
-
-Partners are matched most-stable identifier first — SPIFFE URI, then DNS SAN, then exact subject DN — and
-optionally pinned to a certificate fingerprint. **Map to something that survives renewal.** A partner id
-derived from a serial number or an expiry-bearing DN silently revokes that partner's access the day their
-certificate is renewed.
-
-Reference edge configuration is in [`docs/envoy-partner-gateway.yaml`](docs/envoy-partner-gateway.yaml)
-and [`docs/nginx-edge.conf`](docs/nginx-edge.conf).
-
----
-
-## Why the filter chain is stateless and CSRF is off
-
-The browser's session cookie never reaches this service — the edge holds the session and exchanges it for
-a token per request. A service that receives no ambient credential cannot be the target of a cross-site
-request forgery: an attacker's page can make the browser issue a request, but it cannot make the edge
-attach a token to it.
-
-CSRF protection therefore belongs at the edge, on the cookie-to-token exchange, and duplicating it here
-would only break API clients. **This reasoning holds only as long as the cookie really does stop at the
-edge.** If you ever let the service accept the session cookie directly, turn CSRF protection back on in
-the same change.
-
----
-
-## What you get out of the box
-
-| Concern | Type | Notes |
-|---|---|---|
-| One principal for all three caller types | `LudwigPrincipal`, `SecurityPrincipals` | `subject`, `type`, `tenantId`, roles, permissions, grant attributes |
-| JWT → principal | `JwtPrincipalConverter` | identity from the token, entitlement from the resolver |
-| Audience enforcement | `AudienceValidator` (+ decoder post-processor) | keeps Boot's decoder, appends the check |
-| Partner/service mTLS | `MutualTlsAuthenticationFilter`, `XfccParser`, `TrustedProxies` | XFCC parsing that survives a comma in a subject DN; direct-termination fallback |
-| Role resolution | `AuthorityResolver`, `AuthorityLookup` | pluggable SPI, decorated with the cache and metrics |
-| The `authorities` cache | `AuthorityCaches` + `cache-spring-boot-starter` | declared here (`purpose: security`), built and governed there |
-| Resource-level rules | `@PreAuthorize` / `@PostAuthorize` | method security is enabled by the module |
-| Data-level rules | `DataAccessGuard`, `DataScopeMapping`, `DataScopePredicateFactory`, `DataScopePermissionEvaluator` | QueryDSL predicate + single-object check |
-| Localized RFC 9457 401/403 | `ProblemDetailAuthenticationEntryPoint`, `ProblemDetailAccessDeniedHandler`, `SecurityMessages` | your bundle first, the module's shipped one as fallback |
-| Header hygiene | `IdentityHeaderStrippingFilter` | strips XFCC and `x-forwarded-user`-style headers from untrusted peers |
-| Audit trail | `AccessAuditLogger`, `AccessDecision`, `AuthorizationDeniedAuditListener` | denials at WARN on a dedicated logger — role-level *and* row-level; no payloads, no tokens |
-| Startup validation | `DataScopePolicyValidator`, `ScopePolicies` | policies parsed and checked against the mappings before the first request |
-| Metrics | `SecurityMetrics` | bounded tag vocabulary only — nothing caller-controlled |
-| Background work | `SystemPrincipalTemplate` | explicit identity for schedulers and Kafka listeners |
-
-### Deliberately not here
-
-- **No session handling, login pages or token issuance.** That is the edge's job, and this module assumes
-  it is done.
-- **No Hibernate `@Filter` or Postgres row-level security.** Both are stronger containment, but they
-  bypass compile-time checking and are hard to reason about across a three-model-layer service. A QueryDSL
-  predicate over generated Q-types breaks the build when a column is renamed; a filter string does not.
-  If you need containment against a compromised service rather than against a bug, add RLS *underneath*
-  this — the two are not alternatives.
-- **No distributed authority cache, by default.** Authorities are cheap to recompute, and a shared cache
-  turns an authorization decision into a call to a store an attacker could poison. Eviction rides the Kafka
-  topic every instance already consumes. `cache-spring-boot-starter` *can* put the `authorities` cache on
-  Redis - `tiers: [local, shared]` - and the reasoning above is the argument for not doing it; a deployment
-  that does it anyway at least meets the caveat where it configures it, on `RedisSharedCacheTier`.
-
----
-
-## Errors a client sees
-
-Both are RFC 9457 (formerly RFC 7807) problems, localized, and deliberately uninformative:
-
-```json
-{ "type": "urn:ludwig:security:ludwig.security.error.forbidden",
-  "title": "Forbidden",
-  "detail": "You are not allowed to perform this operation.",
-  "code": "ludwig.security.error.forbidden" }
-```
-
-Which role was missing, which scope excluded the row, which partner the certificate mapped to — all of it
-is in the audit log keyed by subject, where support can find it and a caller cannot use it to map out the
-permission model. Override any message by defining the same key in your own bundle; `SecurityMessages`
-looks there first.
-
-`@PreAuthorize` and the data guard throw *inside* MVC dispatch, after the security filter chain has handed
-the request over, so the module's `AccessDeniedHandler` never sees them. Left unhandled, those denials
-surface as 500s. Two ways to cover them:
-
-- add [`web-core-spring-boot-starter`](../../sources/web-core-spring-boot-starter/README.md). Its advice handles
-  both types, and this module contributes a `SecurityProblemMapper` and its message bundle to that
-  pipeline, so an in-dispatch denial comes back under the *same* code shown above — a client never has
-  to know which layer denied it. Nothing to configure;
-- or, if your service renders problems from its own `@RestControllerAdvice`, add handlers for
-  `AccessDeniedException` and `AuthenticationException` there yourself.
-
----
-
-## Personal access tokens
-
-A personal access token is an **attenuation** of its owner's live authority. This module does not store,
-issue or verify one - that is `pat-spring-boot-starter`, running in the identity provider. What happens here
-is the part every service does: reading the `ludwig_pat` claim off an assertion the edge already exchanged,
-and narrowing the authorities it just resolved.
+A PAT is an **attenuation** of its owner's live authority. This module reads the `ludwig_pat` claim from the
+assertion the edge exchanged and narrows the authorities it resolved:
 
 ```
 effective = authoritiesOf(owner, now)  ∩  token.scopes()
 ```
 
-Never a union. Never a snapshot taken at issuance. The owner side goes through the same `AuthorityLookup`
-as every other caller, with the same cache and the same metrics - so this is the paragraph
-[Why roles are not in the token](#why-roles-are-not-in-the-token) already promised, extended to tokens
-rather than excepted for them. Three consequences:
+- A role revoked from the owner stops working for their tokens within the authority cache TTL, with no token
+  revocation. A token can stop working without being revoked; the denial record names the token and the missing
+  authority.
+- A token scoped to authority its owner never held grants nothing.
+- `PrincipalType` stays three values: a token caller is the same person with less authority. The presented
+  credential is on `LudwigAuthentication`, not the principal: `authentication.credential().isLongLived()`,
+  `.credentialId()`, `SecurityPrincipals.currentCredential()`.
+- A `ludwig_pat` claim whose scope list cannot be read is **rejected** (falling through to "no attenuation" would grant
+  full authority). A claim of the wrong *type* is ignored (it cannot come from the exchange).
+- Audience scoping needs no new code: `AudienceValidator` enforces the `aud` the exchange mints
+  (`PatAudienceScopingTest`).
 
-- A role revoked from the owner stops working for their tokens **within the authority cache's TTL, with no
-  token revocation and no call to the issuer**.
-- A token scoped to an authority its owner never held grants nothing. It is **inert rather than dangerous**.
-- A token **can stop working without being revoked.** That is the whole security argument, and it will read
-  as a bug to whoever is paged - which is why the denial record names both the token and the authority that
-  went away, so the first investigation ends at the demotion rather than at the token.
-
-### Nothing here is a new door
-
-`PrincipalType` still has exactly three values. A token-backed caller is the same person, through the same
-door, with less authority - so `isType(USER)` and every `USER`-keyed `DataScopeProvider` keep matching, which
-they would not if this had been a fourth principal type.
-
-What was presented is recorded on `LudwigAuthentication`, **not** on `LudwigPrincipal`:
-
-```java
-authentication.credential().isLongLived();                       // was a token presented?
-authentication.credential().credentialId();                      // which one
-SecurityPrincipals.currentCredential();                          // the same, ambiently
-```
-
-The principal is the identity model - who the caller is. A credential is a property of *how this request
-authenticated*, which is not part of who anybody is. An earlier design put it on the principal as a new
-record component and accepted breaking the canonical constructor for every consumer; that was the path of
-least resistance to the same category error as a fourth `PrincipalType`, one level further in. The
-constructor you already use is untouched.
-
-### A malformed claim is refused, not ignored
-
-An assertion that announces a token but whose scope list cannot be read is **rejected**. This is the one
-place where the usual lenient default would be catastrophic: falling through to "no attenuation" would hand
-that token its owner's entire authority, reachable by corrupting a list.
-
-A claim of the wrong *type* is different and is ignored - it cannot have come from the exchange, so treating
-it as a refusal would let anyone deny service to a user by adding a junk claim upstream.
-
-### The revocation window is computed for you
-
-TTLs compose into the one number that matters, and nobody multiplies them out in production. Startup
-computes **all three** paths, logs them, and refuses to start when any one exceeds the ceiling:
-
-```
-request/response:   assertion lifetime + edge cache lifetime + authority cache TTL
-long-lived:         revalidation interval + authority cache TTL
-direct filter:      introspection cache TTL + authority cache TTL
-```
-
-The third is computed and logged **whether or not the direct filter is enabled** (it is zero when it is
-not), so a deployment that turns it on later reads a number it has already seen rather than meeting it for
-the first time at the moment it matters.
-
-```yaml
-ludwig:
-  security:
-    pat:
-      assertion-lifetime: 5m      # match what the issuer actually mints
-      edge-cache-lifetime: 5m     # match what the edge actually caches
-      revalidation-interval: 1m
-      max-revocation-window: 15m
-```
-
-All three are computed on purpose. Computing only the first would log a correct-looking number while being
-false for exactly the callers whose window is largest. The mechanism is the same as the audience check, and so is
-the reasoning: a revoked credential that keeps working cannot be found by testing, because everything works.
-
-### Preconditions, including one this repository cannot check
-
-**The designed route requires an edge that performs the exchange.** A client presenting `Authorization:
-Bearer lpat_...` directly to a service is not authenticated unless the second path below is switched on -
-by default no service has a verifier for that format. That restriction is what buys the property that makes
-the topology worth having: a `curl` sends one static header and never calls a token endpoint, tracks an
-expiry or refreshes anything.
-
-The edge owes three things, none of which any build here can verify:
-
-1. Exchange per **destination audience**, and cache per `(secret digest, audience)` for the lifetime the
-   response declares. Without the caching, every service request becomes an issuer request by proxy.
-2. Mint `aud` naming one service. `AudienceValidator` then enforces it here with **no new code** - which is
-   checked by `PatAudienceScopingTest`, because "no code needed" is the kind of claim that is true when
-   written and false a release later.
-3. Render a failed exchange as `401` with `WWW-Authenticate: Bearer error="invalid_token"` and the
-   credential-rejected problem type from `pat-core`'s `PatProblemTypes` - disclosing no cause.
-
-### The second path: authenticating a PAT directly
-
-For a platform whose edge **cannot** exchange a token - a company-provided session gateway that does
-cookie-to-JWT only, cannot be extended, and redirects a request with no session to OIDC - a personal access
-token would otherwise be unusable. One property turns on a filter that authenticates it in-service:
+**Direct PAT authentication** (for an edge that cannot exchange):
 
 ```yaml
 ludwig:
@@ -570,70 +240,26 @@ ludwig:
     pat:
       filter:
         enabled: true                               # off by default
-        issuer-base-url: https://idp.internal       # where the token table lives
+        issuer-base-url: https://idp.internal
         introspection-path: /introspect
         timeout: 2s
 ```
 
-What it does: recognises the `lpat_` prefix, introspects the credential at the issuing service (RFC 7662),
-and builds the authentication through the same single construction site every other path uses - so the
-effective authority is still `authoritiesOf(owner, now) ∩ token.scopes()`, resolved live. It computes no
-authority of its own.
+The filter recognises `lpat_`, introspects at the issuer (RFC 7662) and builds the authentication through the same
+construction site, so the attenuation is identical. One token table and one revocation point remain. The resource
+server's bearer-token resolver reports no token for `lpat_` values, so the JWT filter does not reject them first.
+Trade-off: issuer availability is needed on each introspection cache miss (fails closed). Remove by setting
+`enabled: false` when the edge gains exchange support (`PatDirectAuthenticationIT` covers both configurations).
 
-**There is still exactly one token table and one revocation point.** No service holds a token row, a digest
-or a key id; a service asks. That is the property the direct path was designed around, and it is why this
-is not a second issuer: there is no second signing key, no second `issuer-uri`, and no new proxy.
+**Revocation window** - computed, logged and validated at startup (fails above `max-revocation-window`):
 
-#### What it costs
+```
+request/response:   assertion lifetime + edge cache lifetime + authority cache TTL
+long-lived:         revalidation interval + authority cache TTL
+direct filter:      introspection cache TTL + authority cache TTL   (computed even when disabled)
+```
 
-| | Edge exchange (designed) | Direct filter (this path) |
-|---|---|---|
-| Revocation window | assertion + edge cache + authority cache | introspection cache + authority cache (**shorter**) |
-| Issuer availability | needed at exchange, then cached for the assertion's life | needed on every introspection cache miss |
-| Edge requirement | must perform RFC 8693 exchange | none |
-
-The trade is availability for reach. When the issuer is unreachable, PATs stop authenticating within the
-introspection cache TTL - every failure fails closed, which is the only safe direction but is a real
-dependency the exchange route does not have. Everything else continues: ordinary JWT traffic is untouched.
-
-#### Why the resource server does not see the credential
-
-The bearer-token filter would otherwise try to decode `lpat_...` as a JWT, fail, and answer `401` before
-this filter ran - it authenticates unconditionally and does not continue the chain on failure. So when the
-filter is enabled, the resource server is given a bearer-token resolver that reports **no token** for an
-`lpat_` credential, which is true: it is not a JWT and is not addressed to it.
-
-This was originally written as "place the filter before the bearer filter", by analogy with the mTLS filter.
-That analogy is wrong, and the README says so because it reads as obviously right: an mTLS request carries
-no `Authorization` header at all, so the resolver finds nothing and the request passes through. A PAT
-request carries one. The test that found this asserts against `SecurityFilterChain.getFilters()`; one
-reading the configuration would have passed.
-
-#### It is scaffolding, and here is the removal
-
-Set `enabled: false`. The claim reader that handles the exchanged assertion is already shipped and tested,
-and `PatDirectAuthenticationIT` asserts both configurations in one suite - with the filter off, an `lpat_`
-credential is unauthenticated and an exchanged assertion authenticates with the same effective authority.
-What is deleted when the edge gains PAT support is one filter, one client, one endpoint and one property.
-What survives is the table, the management API, rotation, revocation, retention, every audit event, the
-attenuation and the whole of `pat-core`.
-
-**No check can assert that a deployment actually removed it.** That is recorded among the credential area's
-unmechanisable conventions in `build/architecture-rules/README.md`, and the property's own javadoc says it
-too; this paragraph is the whole mitigation.
-
-### What a future streaming transport owes
-
-Every guarantee above assumes authority is re-derived per request. A connection authenticated once at open -
-SSE, a streaming RPC, a websocket, an MCP transport - pins its attenuation for its lifetime, so a token
-revoked an hour into an eight-hour stream keeps working.
-
-`ludwig.security.pat.revalidation-interval` ships now so the knob exists before the first transport does, and
-the long-lived composition above is already in the startup computation. There is deliberately **no ArchUnit
-rule**: nothing in this repository holds a connection open, so a rule would have an empty matching set, pass
-vacuously, and read as coverage. Whoever adds the first transport owes this module the enforcing test.
-
-## Configuration reference
+## Configuration
 
 ```yaml
 spring:
@@ -641,17 +267,16 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          # issuer-uri performs OIDC discovery when the bean is created: the service will not start
-          # while the provider is unreachable. Use jwk-set-uri (fetched lazily) if that matters.
+          # issuer-uri performs OIDC discovery at startup: the service will not start while the provider is
+          # unreachable. Use jwk-set-uri (fetched lazily) if that matters.
           issuer-uri: https://login.example.internal/realms/corp
 
 ludwig:
   security:
     enabled: true
     problem-type-prefix: "urn:ludwig:security:"
-    public-paths: [/actuator/health, /actuator/health/**, /actuator/info]
+    public-paths: [/actuator/health, /actuator/health/**, /actuator/info]   # replaces the default list
     strip-identity-headers: true
-
     jwt:
       enabled: true
       subject-claim: sub
@@ -660,38 +285,31 @@ ludwig:
       service-client-claim: client_id   # presence marks the token as a peer service's
       audiences: [my-service]
       require-audience: true
-
     mtls:
       enabled: false
       trusted-proxies: []               # required when enabled; 0.0.0.0/0 is refused
-      trust-native-forward-headers: false  # acknowledge a narrowed RemoteIpValve; see above
+      trust-native-forward-headers: false
       service-identity-prefix: spiffe://mesh/ns/
-      partners:                         # or use the identity module's security_partner table
+      partners:                         # or identity-projection's security_partner table
         acme:
           display-name: ACME GmbH
           spiffe-id: spiffe://partners/acme
-          certificate-hash: 468ed3...   # optional pin; must be updated at every renewal
-
+          certificate-hash: 468ed3...   # optional pin; update at every renewal
     authorities:
       require-resolver: false           # set true in every deployed environment
-      # ludwig.security.authorities.cache is GONE. The authority cache is the platform's now:
-      #
-      #   ludwig.cache.caches.authorities:
-      #     enabled: true
-      #     ttl: 30s                    # the window in which a revoked role still works
-      #     maximum-size: 10000
-      #
-      # See cache-spring-boot-starter. purpose=security is declared in code, by AuthorityCaches, not
-      # here - a deployment can override it, and doing so is logged at WARN because it removes the TTL
-      # ceiling.
-
     data:
       enabled: true
       default-access: NONE
       strict-policy-tokens: true
       unscoped-resources: []            # reference data, deliberately exempt
       policies: {}
-
+    pat:
+      assertion-lifetime: 5m            # match the issuer
+      edge-cache-lifetime: 5m           # match the edge
+      revalidation-interval: 1m
+      max-revocation-window: 15m
+      validate-revocation-window: true
+      filter: { enabled: false, issuer-base-url: , introspection-path: /introspect, timeout: 2s }
     audit:
       enabled: true
       log-grants: false
@@ -702,81 +320,141 @@ ludwig:
       roles: []
 ```
 
-### Metrics
+The authority cache is configured under `ludwig.cache.caches.authorities.*` (TTL = how long a revoked role still
+works; `purpose: security` enforces a ceiling). The introspection cache is `ludwig.cache.caches.pat-introspection.*`.
 
-`ludwig.security.authentication{principal.type,outcome,reason}`,
-`ludwig.security.access.denied{resource,action}`,
-`ludwig.security.authorities.cache{principal.type,result}`,
-`ludwig.security.data.scope{resource,access}`.
+## Deployment
 
-Two worth alerting on: `authentication` with `reason=untrusted-proxy` means something is talking to the
-service directly instead of through the mesh; `data.scope` reporting `access=ALL` for a resource you
-believe is restricted means a policy is not matching.
+### Edge (Envoy) for mTLS partners
 
----
+```yaml
+forward_client_cert_details: SANITIZE_SET   # replace any inbound XFCC; never append to a client's
+set_current_client_cert_details:
+  uri: true        # SPIFFE id - survives renewal
+  dns: true
+  subject: true
+  cert: false      # the PEM would put kilobytes into every log line
+```
 
-## Rolling this into an existing fleet
+`APPEND_FORWARD` would let a client prepend its own element. Reference configurations:
+[`docs/envoy-partner-gateway.yaml`](docs/envoy-partner-gateway.yaml), [`docs/nginx-edge.conf`](docs/nginx-edge.conf).
 
-1. **Add the module with `data.default-access: ALL`.** Nothing is denied yet. Watch
-   `ludwig.security.data.scope` — every resource reporting `ALL` is one you have not written a policy for.
-2. **Write `DataScopeMapping` beans and policies** resource by resource, starting with the ones holding
-   data you would not want in the wrong response.
-3. **Flip `default-access` to `NONE`** once the metric shows no unexplained `ALL`. This is the change that
-   can break things; do it per service, not fleet-wide.
-4. **Turn on `authorities.require-resolver` and `jwt.require-audience`** in every deployed environment, so
-   a service can no longer start in a state where nothing is enforced.
-5. **Enable mTLS on the partner routes last**, after `trusted-proxies` is correct in each environment.
+**`trusted-proxies` is load-bearing**: `x-forwarded-client-cert` is an ordinary header, trustworthy only because only
+the proxy can reach the port. Set it to the sidecar/ingress subnet and nothing wider; `0.0.0.0/0` is refused. The
+header from any other peer is **rejected** (not ignored) and counted.
 
----
+**`server.forward-headers-strategy`**: `framework` is safe (the module unwraps to the container's peer address);
+`native` (Tomcat `RemoteIpValve`) trusts `X-Forwarded-For` from any private-range peer and lets any workload
+impersonate the sidecar - **startup fails** with mTLS enabled. If `native` is needed, narrow
+`server.tomcat.remoteip.internal-proxies` and set `ludwig.security.mtls.trust-native-forward-headers=true`.
 
-## Module layout
+Partners are matched by SPIFFE URI, then DNS SAN, then exact subject DN, optionally pinned to a fingerprint. Map to
+an identifier that survives certificate renewal.
 
-| Package | Contents |
+### CSRF and statelessness
+
+The filter chain is stateless and CSRF is off: the session cookie never reaches the service. **If a service ever
+accepts the session cookie directly, re-enable CSRF in the same change.**
+
+### Adoption procedure for an existing service
+
+1. Add the module with `data.default-access: ALL`. Watch `ludwig.security.data.scope`: every resource reporting
+   `ALL` has no policy yet.
+2. Write `DataScopeMapping` beans and policies, starting with the most sensitive data.
+3. Switch `default-access` to `NONE` once no unexplained `ALL` remains (per service, not fleet-wide).
+4. Turn on `authorities.require-resolver` and `jwt.require-audience` in every deployed environment.
+5. Enable mTLS on partner routes last, after `trusted-proxies` is correct in each environment.
+
+## Observability
+
+**Metrics:**
+
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `ludwig.security.authentication` | counter | `principal.type`, `outcome`, `reason` | Authentication results; `reason=untrusted-proxy` = something bypasses the mesh |
+| `ludwig.security.access.denied` | counter | `resource`, `action` | Denials (role and row level) |
+| `ludwig.security.authorities.cache` | counter | `principal.type`, `result` | Authority cache hits/misses |
+| `ludwig.security.data.scope` | counter | `resource`, `access` | Effective scope width; `access=ALL` on a restricted resource = a policy is not matching |
+
+Tags use a bounded vocabulary only; nothing caller-controlled.
+
+**Logs** (`WARN` unless noted): XFCC from an untrusted peer (rejected), certificate matched by identifier but
+fingerprint differs, no partner registered for a certificate, PAT introspection unreachable, unusable data-scope
+value, `hasPermission` without a mapping (denied), `public-paths` entry that permits a broad pattern,
+`validate-revocation-window=false`, failed denial audit. `INFO`: audience validation enabled, PAT revocation window
+values, resource with a mapping but no policy.
+
+**Recommended alerts:**
+
+| Condition | Why |
 |---|---|
-| `principal` | `LudwigPrincipal`, `PrincipalType`, `LudwigAuthentication`, `SecurityPrincipals`, `SystemPrincipalTemplate` |
-| `authn.jwt` | JWT → principal conversion, audience validation |
-| `authn.mtls` | XFCC parsing, partner resolution, trusted-proxy check, the filter |
-| `authz` | `AuthorityResolver` SPI, `AuthorityLookup`, caching, `Authorities` |
-| `data` | `DataScope`, mappings, providers, predicate factory, guard, permission evaluator |
-| `web` | header stripping, problem-detail handlers, MDC, i18n |
-| `audit`, `metrics` | decision trail and instrumentation |
-| `config` | properties and autoconfiguration |
+| `increase(ludwig_security_authentication_total{reason="untrusted-proxy"}[5m]) > 0` | Direct access bypassing the mesh, or spoofing |
+| Spike in `ludwig_security_access_denied_total` for one resource | Probing, or a broken client/role mapping |
+| `ludwig_security_data_scope_total{access="ALL"}` for a resource expected to be restricted | Policy not matching |
+| Log `Could not introspect a personal access token` | Issuer down: PATs failing closed |
 
-## Auditing
+## Audit
 
-This module no longer has an audit mechanism of its own. `AccessAuditLogger` and `Slf4jAccessAuditLogger` are gone. Its trail now goes through the
-platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
-SIEM through the transactional outbox, or several at once - see
-[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
+Decisions go through the platform `AuditSink`:
 
-`AccessDecision` stays and gained a `toAuditEvent()` - and it is the record the platform envelope was
-*derived from*, because it was already the closest thing in the repository to a universal one: actor,
-resource type, resource id, action, outcome, reason. A refusal is recorded as outcome `DENIED` and not
-`FAILURE`, which is the distinction an incident responder needs first: "we refused them" and "we
-broke" look identical in a `granted=false` column and lead to opposite investigations. `scopeAccess`
-becomes an attribute, because how wide a grant turned out is a fact about this platform's data-scope
-model rather than about auditing in general.
+| Field | Value |
+|---|---|
+| category | `access` |
+| action | `access.denied` (role-level via `AuthorizationDeniedAuditListener`, row-level via `DataAccessGuard`); `access.granted` only with `audit.log-grants: true` |
+| outcome | `DENIED` for refusals (not `FAILURE`) |
+| attributes | resource type and id, action, reason, `scopeAccess`, PAT id and missing authority for token denials |
 
-This module also publishes `PrincipalActorResolver`, which is what teaches the platform's single actor
-resolution about `LudwigPrincipal` and its `PrincipalType`. `audit-core` cannot know that type exists - it
-depends on nothing in this repository, which is what lets this module depend on it at all - so the richer
-resolver lives here and `audit-core`'s two plainer ones step aside by the *presence* of `LudwigPrincipal` on
-the classpath. Why it has to exist at all is concrete: `Authentication.getName()` on a token whose principal
-is a `LudwigPrincipal` answers with that object's `toString()`, not with its subject, so the trail would
-carry a rendered object where a joinable id belongs.
+No payloads, no tokens. `PrincipalActorResolver` (registered regardless of `ludwig.security.enabled` and
+`audit.enabled`) teaches the platform's actor resolution about `LudwigPrincipal`, so every `AuditEvent.actor` and
+`created_by` carry the subject.
 
-It lives in its own autoconfiguration, `SecurityAuditAutoConfiguration`, gated on **neither**
-`ludwig.security.audit.enabled` nor `ludwig.security.enabled`. Those govern whether access *decisions* are
-recorded and whether this module installs a filter chain; actor resolution is a different thing and feeds two
-consumers - every `AuditEvent.actor` and `db-core`'s `created_by` / `last_modified_by` stamping. Gating it
-would mean that switching the security starter off silently changed which name appears in every entity's
-audit columns and in every audit event, from the person's subject to `system`, with nothing to say so. A
-wrong value in a trail retained for years is a worse failure than a missing bean.
+**Known gap:** authentication failures (missing, invalid or expired tokens, rejected certificates) are counted in
+`ludwig.security.authentication` but not recorded in the audit trail.
 
-`ludwig.security.audit.log-grants` still works and now means what it says. It moved from the sink into
-`DataAccessGuard`, because the sink is shared: once a grant can reach an append-only table and a SIEM
-rather than only a log level somebody can turn down, "do not record them" has to mean "do not emit
-them" rather than "emit them quietly".
+## Runbook
 
-**What a deployment notices:** the `ru.ludwigandreas.security.audit` logger no longer exists; decisions are on
-`ru.ludwigandreas.audit` with `category=access`, denials at WARN and grants at INFO.
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| Service does not start: OIDC discovery | `issuer-uri` provider unreachable | Restore connectivity, or use `jwk-set-uri` |
+| Startup fails on a policy | Unmapped resource, unknown dimension, misspelled grant, resource both unscoped and policed | Fix as the message names |
+| Startup fails: `trusted-proxies` / `forward-headers-strategy=native` | Unsafe mTLS settings | Narrow proxies; see Deployment |
+| Startup fails: no audience / no resolver | `require-audience` / `require-resolver` with nothing configured | Configure `jwt.audiences`; add identity-projection |
+| All users get 403 | No `AuthorityResolver` data (projection empty), or policy `default-access: NONE` without entries | Check identity-projection consumption; check policies |
+| A user still has a revoked role | Authority cache TTL | Wait ≤ TTL (`ludwig.cache.caches.authorities.ttl`) |
+| Partner gets 401 after certificate renewal | Partner mapped by a non-stable identifier or pinned fingerprint | Map by SPIFFE URI/SAN; update `certificate-hash` |
+| `reason=untrusted-proxy` | Request reached the pod without the mesh proxy | Find the path (port-forward, extra ingress); fix network policy |
+| 500 instead of 403 inside controllers | Neither web-core nor own advice handles `AccessDeniedException` | Add web-core (recommended) |
+| "Why can't user X do Y?" | - | `SELECT occurred_at, action, resource_type, resource_id, reason, attributes FROM audit_event WHERE category = 'access' AND actor_subject = '<x>' ORDER BY occurred_at DESC LIMIT 50;` |
+| PATs fail in a service using the direct filter | Issuer unreachable, `issuer-base-url` wrong | Check the `Could not introspect` warning and connectivity |
+
+## Testing
+
+Unit tests for XFCC parsing, trusted proxies, the mTLS filter, audience validation, authority caching, scope
+composition and predicate building (including collection and expression bindings), the data guard and permission
+evaluator, method-security auditing, problem mapping, PAT attenuation, the PAT-aware bearer resolver, introspection
+client and cache, revocation window validation, auto-configuration. In a service, use
+[`test-support-security`](../test-support-security) to build principals for MockMvc.
+
+## Design decisions
+
+| Situation | Behaviour | Why not the other way |
+|---|---|---|
+| Resource has no policy | Denied (`default-access: NONE`) | A new endpoint would ship unprotected |
+| Policy names a resource with no mapping | Startup failure | It would be treated as unrestricted |
+| Policy names an unbound dimension | Startup failure | An unenforceable clause must not be ignored |
+| Misspelled grant (`OWNN`) | Startup failure | Otherwise a 500 on the first request using that role |
+| Resource both unscoped and policed | Startup failure | One silently wins |
+| Principal lacks a required dimension value | Denied | Dropping the clause turns "my tenant" into "all tenants" |
+| Grant value unparseable for the column type | Denied | An empty set, not an absent filter |
+| Role store unreachable | Request fails (500) | "No roles" on a blip is an outage and, on denial-phrased rules, a silent grant |
+| XFCC from an untrusted peer | Rejected and counted | Ignoring hides spoofing |
+
+- **No session handling, login pages or token issuance** - the edge's job.
+- **No Hibernate `@Filter` or PostgreSQL RLS**: QueryDSL predicates over generated Q-types break the build on a column
+  rename. Add RLS *underneath* for containment against a compromised service.
+- **No distributed authority cache by default**: authorities are cheap to recompute and a shared cache is a
+  poisoning target; eviction rides the Kafka topic every instance consumes.
+- **Uninformative 401/403 bodies**; specifics are in the audit trail. Messages are overridable by defining the same
+  key in the service's bundle.
+- **No streaming-transport enforcement yet**: `revalidation-interval` exists; the first long-lived transport must add
+  the enforcing test.

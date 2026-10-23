@@ -2,71 +2,66 @@
 
 ***English** · [Русский](README.ru.md)*
 
-Enterprise-ready base entity classes, auditing, soft delete, exceptions and QueryDSL/Spring Data JPA
-utilities for Java 17 + PostgreSQL + Spring Boot services. Add the dependency, extend a base entity,
-done - no boilerplate id/version/audit columns, no manual `AuditorAware` wiring.
+Base entity classes, row-level auditing (`created_by` / `last_modified_by`), soft delete, immutable
+snapshots, a base repository, QueryDSL helpers and mapped persistence exceptions for Spring Boot services
+on PostgreSQL. Extend a base entity and get id, version and audit columns without boilerplate.
 
-## Quick start
+| | |
+|---|---|
+| Role | library (with auto-configuration) |
+| Depends on (in-repo) | optional: [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) |
+| Used by | `audit`, `export`, `file-action`, `file-ingest`, `idempotency`, `identity-projection`, `outbox`, `pat`, `reconciliation`, `user-settings` starters; both services |
+| Surfaces | none (contributes problem mappings to web-core) |
+
+## Usage
 
 ```xml
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>db-core</artifactId>
-    <version>1.0.0</version>
 </dependency>
 ```
 
-Extend `AuditedEntity` for a typical application-owned entity - generated UUID id, optimistic
-locking, and full created/updated-by-and-at auditing, all wired automatically:
+A typical application-owned entity extends `AuditedEntity` - generated UUID id, optimistic locking and
+created/updated by/at, all wired automatically:
 
 ```java
 @Entity
 @Table(name = "orders")
 public class Order extends AuditedEntity<UUID> {
-
     private String description;
-    // ...
 }
 ```
 
-
-## Entity hierarchy
-
-Two families, both rooted at `AbstractEntity<ID>` (id contract + `equals`/`hashCode`/`toString`):
+### Entity hierarchy
 
 ```
-AbstractEntity<ID>
+AbstractEntity<ID>                       id contract + equals/hashCode/toString
 │
-├── JpaBaseEntity<ID>            plain, app/externally-assigned id ("inner", manual-id branch)
-│     ├── VersionedEntity<ID>          + @Version
-│     ├── DateAuditableEntity<ID>      + createdAt/updatedAt
-│     │     └── UserAuditableEntity<ID>    + createdBy/updatedBy
-│     ├── SoftDeleteEntity<ID>         + deleted/deletedAt
-│     └── ExternalEntity<ID>           "outer" family root: id/lifecycle owned by an external
-│           └── SnapshotEntity<ID>         system (Kafka/REST), ID never defaulted to UUID
+├── JpaBaseEntity<ID>                    application- or externally-assigned id
+│     ├── VersionedEntity<ID>            + @Version
+│     ├── DateAuditableEntity<ID>        + createdAt/updatedAt
+│     │     └── UserAuditableEntity<ID>  + createdBy/updatedBy
+│     ├── SoftDeleteEntity<ID>           + deleted/deletedAt
+│     └── ExternalEntity<ID>             data owned by another system; id type is the source's
+│           └── SnapshotEntity<ID>       immutable point-in-time copy
 │
-└── GeneratedEntity<ID>          generated UUID id (JPA 3.1 GenerationType.UUID)
-      └── AuditedEntity<ID>           + full audit + @Version - the class most entities extend
+└── GeneratedEntity<ID>                  generated UUID id (GenerationType.UUID)
+      └── AuditedEntity<ID>              + full audit + @Version - what most entities extend
 ```
 
-`GeneratedEntity`/`AuditedEntity` declare their own `id` field rather than extending
-`JpaBaseEntity`: JPA has no portable way to add `@GeneratedValue` on top of an `@Id` field already
-declared (without generation) further up a `@MappedSuperclass` chain, so the generated-id branch
-duplicates that handful of lines instead of risking undefined same-attribute-name behavior.
+- **Inner** entities (created by this application) extend `GeneratedEntity` / `AuditedEntity` /
+  `VersionedEntity` / ...
+- **Outer** entities (mirroring a Kafka event or another service's REST payload) extend `ExternalEntity`
+  or `SnapshotEntity`; their id type is whatever the source uses (`Long`, `String`, `UUID`).
 
-**Inner vs outer:** entities created by *this* application (orders, users, ...) extend
-`GeneratedEntity`/`AuditedEntity`/`VersionedEntity`/etc. Entities that mirror data owned by an
-*external* system (a Kafka event, a REST payload from another service) extend `ExternalEntity` or
-`SnapshotEntity` - their id type is whatever the source system uses (`Long`, `String`, `UUID`, ...),
-never forced to UUID.
+`GeneratedEntity` declares its own `id` instead of extending `JpaBaseEntity`, because JPA has no portable
+way to add `@GeneratedValue` to an `@Id` already declared higher in a `@MappedSuperclass` chain.
 
-### `ExternalEntity` provenance fields
+### `ExternalEntity`
 
-`ExternalEntity` carries `importedAt`/`sourceSystem`/`sourceVersion`/`sourceTimestamp`, shared by every
-outer entity - `importedAt` is filled in automatically on first persist and (like `sourceSystem`) never
-changes afterward; `sourceVersion`/`sourceTimestamp` stay mutable so a plain `ExternalEntity` subclass
-can be upserted in place each time a new version is fetched, without needing `SnapshotEntity`'s
-immutability:
+Carries `importedAt` (set on first persist, never changed), `sourceSystem` (never changed),
+`sourceVersion` and `sourceTimestamp` (mutable, so the row can be upserted on each fetch):
 
 ```java
 @Entity
@@ -75,7 +70,6 @@ public class Customer extends ExternalEntity<String> {  // id = the source syste
     private String name;
 }
 
-// on each fetch: load-or-create, update fields, save - an ordinary UPDATE
 Customer customer = customerRepository.findById(externalId).orElseGet(Customer::new);
 customer.setSourceVersion(newData.version());
 customer.setName(newData.name());
@@ -84,30 +78,15 @@ customerRepository.save(customer);
 
 ### `SnapshotEntity`
 
-An immutable point-in-time copy of externally-sourced data - adds nothing over `ExternalEntity` but the
-immutability guarantee:
-
-```java
-@Entity
-@Table(name = "customer_snapshots")
-public class CustomerSnapshot extends SnapshotEntity<String> {  // id = the source system's id
-    private String name;
-}
-```
-
-`SnapshotImmutabilityListener` (attached automatically) throws `IntegrityViolationException` on any
-`@PreUpdate` - snapshot rows are append-only.
-
-Note that since `ID` here is still the source system's id (per `ExternalEntity`), this shape supports
-exactly one row per external entity, immutable once written - suitable for "import once, never touched
-again" data. If you need to keep every fetched *version* of the same external entity as its own row
-(true version history), give the snapshot a generated surrogate id instead and keep the source id as a
-plain, non-unique column, so multiple rows can share it.
+An immutable copy: `SnapshotImmutabilityListener` (attached automatically) throws
+`IntegrityViolationException` on any `@PreUpdate`. With the source id as primary key this means one row
+per external entity, written once. For full version history, give the snapshot a generated surrogate id
+and keep the source id as a non-unique column.
 
 ### Soft delete
 
-`SoftDeleteEntity` only declares the `deleted`/`deletedAt` columns; because Hibernate's
-`@SQLDelete`/`@SQLRestriction` need the literal table name, each concrete entity adds them itself:
+`SoftDeleteEntity` declares `deleted` / `deletedAt`. Hibernate's `@SQLDelete` / `@SQLRestriction` need the
+literal table name, so each entity adds them:
 
 ```java
 @Entity
@@ -117,10 +96,10 @@ plain, non-unique column, so multiple rows can share it.
 public class Widget extends SoftDeleteEntity<UUID> { ... }
 ```
 
-With those in place, `repository.delete(entity)` becomes an `UPDATE`, and deleted rows are
-transparently excluded from normal finder/query methods (native queries bypass the restriction).
+`repository.delete(entity)` becomes an `UPDATE`, and deleted rows are excluded from derived and JPQL
+queries. **Native queries bypass the restriction.**
 
-## Repositories
+### Repositories
 
 ```java
 public interface OrderRepository extends BaseRepository<Order, UUID> {
@@ -128,38 +107,25 @@ public interface OrderRepository extends BaseRepository<Order, UUID> {
 ```
 
 `BaseRepository` = `JpaRepository` + `QuerydslPredicateExecutor` + `getByIdOrThrow(id)` (throws
-`EntityNotFoundException`). To get a real implementation of `getByIdOrThrow`, point Spring Data at
-`BaseRepositoryImpl` as the repository base class:
+`EntityNotFoundException`). Enable the implementation:
 
 ```java
 @EnableJpaRepositories(repositoryBaseClass = BaseRepositoryImpl.class)
 ```
 
-## Auditing
+### Row auditing
 
-Auto-configured out of the box: if Spring Security is on the classpath, the current auditor is the
-authenticated principal's name; otherwise it falls back to `"system"`. Override by providing your
-own `AuditorProvider<String>` bean, or implement `AuditorProvider<T>` directly for a non-`String`
-auditor type.
+`created_by` / `last_modified_by` are stamped automatically. The auditor comes from:
 
-**This is field stamping, and the audit consolidation deliberately left it alone.** `AuditedEntity` and
-`AuditorProvider` answer "who last touched this row" and put it in `created_by` / `last_modified_by`; an
-audit *trail* answers "what happened" and lives in `audit_event`, owned by
-[`audit-spring-boot-starter`](../audit-spring-boot-starter). Folding the two together would have changed
-the mapping of every entity in the platform for no gain, since they answer different questions.
+1. a service-defined `AuditorProvider` bean, if any;
+2. with [`audit-spring-boot-starter`](../audit-spring-boot-starter): `ActorResolverAuditorProvider`, backed
+   by the platform's single `ActorResolver`, so the row and its audit event name the same person;
+3. otherwise the Spring Security principal's name, or `"system"` without Spring Security.
 
-What *was* unified is the **resolution**. There used to be two paths to "who is acting" -
-`SpringSecurityAuditorProvider` here and `SecurityPrincipals.currentSubject()` in the settings module - and
-when two paths to one answer disagree, a row's `last_modified_by` and the audit event describing that
-modification name the same person differently, so the join an auditor needs does not exist. When the audit
-starter is present it publishes an `AuditorProvider` backed by the platform's single `ActorResolver`, which
-this module's own `@ConditionalOnMissingBean` then yields to, and the two agree by construction. A service
-that publishes its own provider still wins and is then responsible for keeping the two in step itself.
+This is "who last touched this row". "What happened" is the audit trail in `audit_event`
+([`audit-core`](../audit-core)); the two answer different questions and stay separate.
 
-`SnapshotImmutabilityListener` is also reused rather than duplicated: `audit_event` is a `SnapshotEntity`
-precisely so that the platform has one enforced-append-only mechanism rather than two.
-
-## Query helpers
+### Query helpers
 
 ```java
 BooleanExpression predicate = Predicates.allOf(
@@ -169,21 +135,13 @@ BooleanExpression predicate = Predicates.allOf(
 Pageable pageable = PageableUtils.of(page, size, properties.getMaxPageSize(), sort, defaultSort);
 ```
 
-`Predicates.allOf` filters out `null` expressions and always returns a safe, non-null predicate;
-`PageableUtils.of` clamps the page size and applies a default sort when none was requested.
+`Predicates.allOf` drops `null` expressions and always returns a non-null predicate; `PageableUtils.of`
+clamps the page size and applies a default sort.
 
-## Error responses
+### Error responses
 
-When [`web-core-spring-boot-starter`](../../sources/web-core-spring-boot-starter/README.md) is on the classpath,
-this module contributes a `DbCoreProblemMapper` and the `i18n/ludwig-db-messages` bundle to its shared
-problem pipeline, so its exceptions reach a client as localized RFC 9457 problems under
-`ludwig.db.error.*` instead of as 500s.
-
-`EntityNotFoundException` is the one that matters. `getByIdOrThrow` raises it, and a service layer
-normally converts a missing row into its own localized exception first — but only on the paths where
-someone remembered to. Everywhere else it reached the advice unmapped and was answered as a 500: a
-missing row reported as a server fault, on exactly the code paths nobody had reviewed. Mapped here, the
-safety net is the default:
+With [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) on the classpath, `DbCoreProblemMapper`
+and the `i18n/ludwig-db-messages` bundle turn persistence exceptions into localized RFC 9457 problems:
 
 | Exception | Status | Code |
 |---|---|---|
@@ -192,32 +150,64 @@ safety net is the default:
 | `IntegrityViolationException` | 409 | `ludwig.db.error.integrity-violation` |
 | `UnsupportedIdTypeException` | 500 | `ludwig.db.error.unsupported-id-type` |
 
-The text is deliberately generic — this module knows the entity class, not what the API calls it. A
-service wanting *"No product exists with id X"* throws its own `LocalizedException`, which takes
-precedence over this mapper.
+So a missing row is a 404 even on code paths where the service did not convert it. The text is generic
+(this module knows the entity class, not its API name); a service throwing its own `LocalizedException`
+takes precedence.
 
-Without that starter nothing changes: these exceptions are answered by whatever advice the service has.
-
-## Metrics
-
-Optional (only if Micrometer is on the classpath): `ludwig.db.auditor.resolved` counts every
-`AuditorAware` lookup, tagged `present=true/false` - a sustained run of `false` usually means Spring
-Security isn't wired the way this module expects. `ludwig.db.snapshot.mutation.blocked` counts rejected
-writes to an immutable `SnapshotEntity`, tagged by entity type - worth alerting on, since it means
-something in your system thinks it owns data that's actually owned by an external source.
-
-## Configuration (`ludwig.db.*`)
+## Configuration
 
 | Property | Default | Meaning |
 |---|---|---|
-| `ludwig.db.auditing-enabled` | `true` | Enables `@EnableJpaAuditing` wiring |
-| `ludwig.db.default-page-size` | `20` | Convention default for `PageableUtils` callers |
-| `ludwig.db.max-page-size` | `200` | Convention upper bound for `PageableUtils` callers |
-| `ludwig.db.metrics.enabled` | `true` | Emit Micrometer metrics (only if Micrometer is on the classpath) |
+| `ludwig.db.auditing-enabled` | `true` | Enable JPA auditing wiring |
+| `ludwig.db.default-page-size` | `20` | Default page size for `PageableUtils` callers |
+| `ludwig.db.max-page-size` | `200` | Upper bound for `PageableUtils` callers |
+| `ludwig.db.metrics.enabled` | `true` | Emit Micrometer metrics (when Micrometer is present) |
+
+## Deployment
+
+Nothing to deploy: the module ships no schema. Each entity's table is created by the owning service's
+Liquibase changelog, including the base-class columns (`id`, `version`, `created_at`, `created_by`,
+`updated_at`, `updated_by`, `deleted`, `deleted_at`, `imported_at`, `source_system`, `source_version`,
+`source_timestamp` as applicable). Services run with `spring.jpa.hibernate.ddl-auto=validate`.
+
+## Observability
+
+**Metrics** (when Micrometer is present):
+
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `ludwig.db.auditor.resolved` | counter | `present` | Auditor lookups. Sustained `present=false` for user requests means the principal is not reaching the auditor (security wiring) |
+| `ludwig.db.snapshot.mutation.blocked` | counter | `entityType` | Rejected updates to a `SnapshotEntity`: something treats externally-owned data as its own. **Alert on any** |
+
+**Logs.** None of its own. Hibernate SQL logging is controlled by the service.
+
+**Known gaps:** none at module level; connection pool and query metrics come from Spring Boot (Hikari,
+`spring.data.repository` observations) and are the service's responsibility.
+
+## Audit
+
+Not applicable: the module stamps `created_by` / `last_modified_by` on rows but records no audit events.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `created_by` is `system` for user requests; `ludwig_db_auditor_resolved_total{present="false"}` grows | No principal at stamp time (async thread, missing security context) | Check the code path runs in the request thread or propagates the security context |
+| `IntegrityViolationException` on update of a snapshot; `ludwig_db_snapshot_mutation_blocked_total` grows | Code modifies an immutable `SnapshotEntity` | Fix the code: insert a new snapshot or use `ExternalEntity` for upserts |
+| Soft-deleted rows appear in results | A native query | Add `deleted = false` to the native query |
+| `OptimisticLockException` / 409 under concurrent edits | Two writers updated the same version | Expected; the client retries with the fresh version |
+| `getByIdOrThrow` not implemented at runtime | `repositoryBaseClass` not set | Add `@EnableJpaRepositories(repositoryBaseClass = BaseRepositoryImpl.class)` |
 
 ## Testing
 
-`mvn test` runs the unit test suite (entity equality, predicate/pageable helpers) with no external
-dependencies. The integration tests additionally spin up a real PostgreSQL container via
-Testcontainers to exercise id generation, auditing, optimistic locking, soft delete and snapshot
-immutability end to end; they need a working Docker daemon.
+- `mvn test`: entity equality, predicate and pageable helpers.
+- `mvn verify` (Docker, PostgreSQL): id generation, auditing, optimistic locking, soft delete and snapshot
+  immutability end to end.
+
+## Design decisions
+
+- **Two entity families.** The id strategy and mutability rules differ between data this application owns
+  and data it mirrors; mixing them is how an external id gets overwritten by a generated one.
+- **Snapshot immutability is enforced by a listener**, and reused by the audit trail, so the platform has
+  one append-only mechanism.
+- **Generic error texts.** Domain wording belongs to the service.

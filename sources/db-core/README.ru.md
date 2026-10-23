@@ -2,85 +2,75 @@
 
 *[English](README.md) · **Русский***
 
-Промышленные базовые классы сущностей, аудит, мягкое удаление, исключения и утилиты QueryDSL /
-Spring Data JPA для сервисов на Java 17 + PostgreSQL + Spring Boot. Добавьте зависимость,
-унаследуйте базовую сущность — готово: никаких шаблонных колонок id/version/audit и никакой ручной
-проводки `AuditorAware`.
+Базовые классы сущностей, построчный аудит (`created_by` / `last_modified_by`), мягкое удаление,
+неизменяемые снимки, базовый репозиторий, хелперы QueryDSL и отображаемые исключения персистентности для
+сервисов Spring Boot на PostgreSQL. Наследуйтесь от базовой сущности и получите id, версию и колонки
+аудита без шаблонного кода.
 
-## Быстрый старт
+| | |
+|---|---|
+| Роль | library (с автоконфигурацией) |
+| Зависит от (в репозитории) | опционально: [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) |
+| Используется | стартерами `audit`, `export`, `file-action`, `file-ingest`, `idempotency`, `identity-projection`, `outbox`, `pat`, `reconciliation`, `user-settings`; обоими сервисами |
+| Поверхности | нет (добавляет отображения проблем в web-core) |
+
+## Использование
 
 ```xml
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>db-core</artifactId>
-    <version>1.0.0</version>
 </dependency>
 ```
 
-Унаследуйте `AuditedEntity` для типичной сущности, принадлежащей приложению, — генерируемый UUID,
-оптимистичная блокировка и полный аудит «кем и когда создано/изменено», всё подключается
-автоматически:
+Типичная сущность приложения наследует `AuditedEntity` - сгенерированный UUID id, оптимистическая
+блокировка и created/updated by/at, всё подключается автоматически:
 
 ```java
 @Entity
 @Table(name = "orders")
 public class Order extends AuditedEntity<UUID> {
-
     private String description;
-    // ...
 }
 ```
 
-## Иерархия сущностей
-
-Два семейства, оба с корнем в `AbstractEntity<ID>` (контракт идентификатора плюс
-`equals`/`hashCode`/`toString`):
+### Иерархия сущностей
 
 ```
-AbstractEntity<ID>
+AbstractEntity<ID>                       контракт id + equals/hashCode/toString
 │
-├── JpaBaseEntity<ID>            обычный, id назначает приложение или внешняя система
-│     ├── VersionedEntity<ID>          + @Version
-│     ├── DateAuditableEntity<ID>      + createdAt/updatedAt
-│     │     └── UserAuditableEntity<ID>    + createdBy/updatedBy
-│     ├── SoftDeleteEntity<ID>         + deleted/deletedAt
-│     └── ExternalEntity<ID>           корень «внешнего» семейства: id и жизненным циклом
-│           └── SnapshotEntity<ID>         владеет внешняя система (Kafka/REST), ID никогда
-│                                          не приводится к UUID по умолчанию
+├── JpaBaseEntity<ID>                    id назначает приложение или внешняя система
+│     ├── VersionedEntity<ID>            + @Version
+│     ├── DateAuditableEntity<ID>        + createdAt/updatedAt
+│     │     └── UserAuditableEntity<ID>  + createdBy/updatedBy
+│     ├── SoftDeleteEntity<ID>           + deleted/deletedAt
+│     └── ExternalEntity<ID>             данные другой системы; тип id - как у источника
+│           └── SnapshotEntity<ID>       неизменяемая копия на момент времени
 │
-└── GeneratedEntity<ID>          генерируемый UUID (JPA 3.1 GenerationType.UUID)
-      └── AuditedEntity<ID>           + полный аудит + @Version — класс, который наследует
-                                        большинство сущностей
+└── GeneratedEntity<ID>                  сгенерированный UUID id (GenerationType.UUID)
+      └── AuditedEntity<ID>              + полный аудит + @Version - от неё наследуется большинство
 ```
 
-`GeneratedEntity` и `AuditedEntity` объявляют собственное поле `id`, а не наследуют
-`JpaBaseEntity`: в JPA нет переносимого способа добавить `@GeneratedValue` поверх поля `@Id`, уже
-объявленного (без генерации) выше по цепочке `@MappedSuperclass`, поэтому ветка с генерируемым
-идентификатором дублирует эту горстку строк вместо того, чтобы полагаться на неопределённое
-поведение при совпадении имён атрибутов.
+- **Внутренние** сущности (создаются этим приложением) наследуют `GeneratedEntity` / `AuditedEntity` /
+  `VersionedEntity` / ...
+- **Внешние** сущности (зеркало Kafka-события или REST-payload другого сервиса) наследуют `ExternalEntity`
+  или `SnapshotEntity`; тип их id - как у источника (`Long`, `String`, `UUID`).
 
-**Внутренние против внешних:** сущности, созданные **этим** приложением (заказы, пользователи и
-т. д.), наследуют `GeneratedEntity`/`AuditedEntity`/`VersionedEntity` и подобные. Сущности,
-отражающие данные, которыми владеет **внешняя** система (событие Kafka, REST-payload другого
-сервиса), наследуют `ExternalEntity` или `SnapshotEntity` — тип их идентификатора такой, какой
-использует источник (`Long`, `String`, `UUID`, …), и никогда не навязывается UUID.
+`GeneratedEntity` объявляет собственный `id`, а не наследует `JpaBaseEntity`: в JPA нет переносимого способа
+добавить `@GeneratedValue` к `@Id`, уже объявленному выше в цепочке `@MappedSuperclass`.
 
-### Поля происхождения у `ExternalEntity`
+### `ExternalEntity`
 
-`ExternalEntity` несёт `importedAt`/`sourceSystem`/`sourceVersion`/`sourceTimestamp`, общие для любой
-внешней сущности. `importedAt` заполняется автоматически при первом сохранении и (как и
-`sourceSystem`) больше не меняется; `sourceVersion` и `sourceTimestamp` остаются изменяемыми, поэтому
-обычный наследник `ExternalEntity` можно обновлять на месте при каждом получении новой версии, не
-прибегая к неизменяемости `SnapshotEntity`:
+Несёт `importedAt` (ставится при первом сохранении и не меняется), `sourceSystem` (не меняется),
+`sourceVersion` и `sourceTimestamp` (изменяемые, чтобы строку можно было обновлять при каждой загрузке):
 
 ```java
 @Entity
 @Table(name = "customers")
-public class Customer extends ExternalEntity<String> {  // id = идентификатор системы-источника
+public class Customer extends ExternalEntity<String> {  // id = id в системе-источнике
     private String name;
 }
 
-// при каждом получении: найти или создать, обновить поля, сохранить — обычный UPDATE
 Customer customer = customerRepository.findById(externalId).orElseGet(Customer::new);
 customer.setSourceVersion(newData.version());
 customer.setName(newData.name());
@@ -89,32 +79,15 @@ customerRepository.save(customer);
 
 ### `SnapshotEntity`
 
-Неизменяемая копия внешних данных на момент времени — не добавляет к `ExternalEntity` ничего, кроме
-гарантии неизменяемости:
-
-```java
-@Entity
-@Table(name = "customer_snapshots")
-public class CustomerSnapshot extends SnapshotEntity<String> {  // id = идентификатор источника
-    private String name;
-}
-```
-
-`SnapshotImmutabilityListener` (подключается автоматически) бросает `IntegrityViolationException` на
-любой `@PreUpdate` — строки снимков доступны только на добавление.
-
-Обратите внимание: поскольку `ID` здесь по-прежнему идентификатор системы-источника (как у
-`ExternalEntity`), эта форма поддерживает ровно одну строку на внешнюю сущность, неизменяемую после
-записи, — она подходит для данных «импортировали один раз и больше не трогаем». Если нужно хранить
-каждую полученную **версию** одной и той же внешней сущности отдельной строкой (настоящую историю
-версий), дайте снимку генерируемый суррогатный идентификатор, а идентификатор источника оставьте
-обычной неуникальной колонкой, чтобы несколько строк могли его разделять.
+Неизменяемая копия: `SnapshotImmutabilityListener` (подключается автоматически) бросает
+`IntegrityViolationException` на любом `@PreUpdate`. С id источника в качестве первичного ключа это одна
+строка на внешнюю сущность, записанная один раз. Для полной истории версий дайте снимку сгенерированный
+суррогатный id, а id источника храните в неуникальной колонке.
 
 ### Мягкое удаление
 
-`SoftDeleteEntity` объявляет только колонки `deleted`/`deletedAt`; поскольку `@SQLDelete` и
-`@SQLRestriction` из Hibernate требуют буквального имени таблицы, каждая конкретная сущность
-добавляет их сама:
+`SoftDeleteEntity` объявляет `deleted` / `deletedAt`. `@SQLDelete` / `@SQLRestriction` Hibernate требуют
+буквального имени таблицы, поэтому их добавляет каждая сущность:
 
 ```java
 @Entity
@@ -124,10 +97,10 @@ public class CustomerSnapshot extends SnapshotEntity<String> {  // id = иден
 public class Widget extends SoftDeleteEntity<UUID> { ... }
 ```
 
-С ними `repository.delete(entity)` превращается в `UPDATE`, а удалённые строки прозрачно исключаются
-из обычных методов поиска и запросов (нативные запросы ограничение обходят).
+`repository.delete(entity)` превращается в `UPDATE`, а удалённые строки исключаются из производных и JPQL
+запросов. **Нативные запросы ограничение обходят.**
 
-## Репозитории
+### Репозитории
 
 ```java
 public interface OrderRepository extends BaseRepository<Order, UUID> {
@@ -135,40 +108,25 @@ public interface OrderRepository extends BaseRepository<Order, UUID> {
 ```
 
 `BaseRepository` = `JpaRepository` + `QuerydslPredicateExecutor` + `getByIdOrThrow(id)` (бросает
-`EntityNotFoundException`). Чтобы получить настоящую реализацию `getByIdOrThrow`, укажите Spring Data
-`BaseRepositoryImpl` в качестве базового класса репозиториев:
+`EntityNotFoundException`). Включите реализацию:
 
 ```java
 @EnableJpaRepositories(repositoryBaseClass = BaseRepositoryImpl.class)
 ```
 
-## Аудит
+### Построчный аудит
 
-Автоконфигурируется из коробки: если Spring Security есть в classpath, текущим аудитором становится
-имя аутентифицированного принципала, иначе используется `"system"`. Переопределяется собственным
-бином `AuditorProvider<String>` либо прямой реализацией `AuditorProvider<T>` для не-строкового типа
-аудитора.
+`created_by` / `last_modified_by` проставляются автоматически. Аудитор берётся из:
 
-**Это штамповка полей, и консолидация аудита сознательно её не тронула.** `AuditedEntity` и
-`AuditorProvider` отвечают на вопрос «кто последним тронул эту строку» и пишут его в `created_by` /
-`last_modified_by`; *журнал* аудита отвечает на вопрос «что произошло» и живёт в `audit_event`, которой
-владеет [`audit-spring-boot-starter`](../audit-spring-boot-starter). Складывание их вместе изменило бы
-маппинг каждой сущности платформы без выигрыша, потому что они отвечают на разные вопросы.
+1. бина `AuditorProvider` сервиса, если он есть;
+2. с [`audit-spring-boot-starter`](../audit-spring-boot-starter): `ActorResolverAuditorProvider` на основе
+   единого `ActorResolver` платформы, поэтому строка и её событие аудита называют одного человека;
+3. иначе имя принципала Spring Security или `"system"` без Spring Security.
 
-Что действительно унифицировано — это **разрешение субъекта**. Раньше путей к ответу «кто действует» было
-два: `SpringSecurityAuditorProvider` здесь и `SecurityPrincipals.currentSubject()` в модуле настроек; а
-когда два пути к одному ответу расходятся, `last_modified_by` строки и событие аудита, описывающее это же
-изменение, называют одного человека по-разному, и нужного аудитору соединения не существует. Когда стартер
-аудита присутствует, он публикует `AuditorProvider`, работающий через единственный в платформе
-`ActorResolver`, которому собственный `@ConditionalOnMissingBean` этого модуля уступает, — и они
-согласуются по построению. Сервис, публикующий свой провайдер, по-прежнему выигрывает и тогда сам отвечает
-за их согласованность.
+Это «кто последним трогал строку». «Что произошло» - аудиторский след в `audit_event`
+([`audit-core`](../audit-core)); это разные вопросы, и механизмы разделены.
 
-`SnapshotImmutabilityListener` тоже переиспользуется, а не дублируется: `audit_event` — это
-`SnapshotEntity` именно для того, чтобы в платформе был один принудительный механизм append-only, а не два.
-
-
-## Помощники для запросов
+### Хелперы запросов
 
 ```java
 BooleanExpression predicate = Predicates.allOf(
@@ -178,22 +136,13 @@ BooleanExpression predicate = Predicates.allOf(
 Pageable pageable = PageableUtils.of(page, size, properties.getMaxPageSize(), sort, defaultSort);
 ```
 
-`Predicates.allOf` отбрасывает `null`-выражения и всегда возвращает безопасный ненулевой предикат;
-`PageableUtils.of` ограничивает размер страницы и подставляет сортировку по умолчанию, если её не
-запросили.
+`Predicates.allOf` отбрасывает `null`-выражения и всегда возвращает не-null предикат; `PageableUtils.of`
+ограничивает размер страницы и применяет сортировку по умолчанию.
 
-## Ответы об ошибках
+### Ответы об ошибках
 
-Когда в classpath есть [`web-core-spring-boot-starter`](../../sources/web-core-spring-boot-starter/README.md),
-этот модуль отдаёт в его общий конвейер проблем `DbCoreProblemMapper` и bundle
-`i18n/ludwig-db-messages`, поэтому его исключения доходят до клиента локализованными проблемами
-RFC 9457 под кодами `ludwig.db.error.*`, а не пятисотками.
-
-Важнее всего `EntityNotFoundException`. Его бросает `getByIdOrThrow`, и сервисный слой обычно сначала
-превращает отсутствующую строку в собственное локализованное исключение — но только на тех путях, где
-об этом кто-то вспомнил. Везде остальном оно доходило до advice неотображённым и отвечалось
-пятисоткой: отсутствующая строка подавалась как отказ сервера — ровно на тех участках кода, которые
-никто не просматривал. Отображённое здесь, «страховочная сетка» становится поведением по умолчанию:
+С [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) в classpath `DbCoreProblemMapper` и бандл
+`i18n/ludwig-db-messages` превращают исключения персистентности в локализованные проблемы RFC 9457:
 
 | Исключение | Статус | Код |
 |---|---|---|
@@ -202,34 +151,63 @@ RFC 9457 под кодами `ludwig.db.error.*`, а не пятисотками
 | `IntegrityViolationException` | 409 | `ludwig.db.error.integrity-violation` |
 | `UnsupportedIdTypeException` | 500 | `ludwig.db.error.unsupported-id-type` |
 
-Текст намеренно общий — этот модуль знает класс сущности, но не то, как её называет API. Сервис,
-которому нужно *«Товара с идентификатором X не существует»*, бросает собственное
-`LocalizedException`, и оно имеет приоритет над этим маппером.
+Поэтому отсутствующая строка - 404 даже там, где сервис её не преобразовал. Текст общий (модуль знает класс
+сущности, а не её имя в API); собственное `LocalizedException` сервиса имеет приоритет.
 
-Без указанного стартера ничего не меняется: эти исключения обрабатывает та advice, которая есть у
-сервиса.
+## Конфигурация
 
-## Метрики
-
-Опционально (только при наличии Micrometer в classpath): `ludwig.db.auditor.resolved` считает каждое
-обращение к `AuditorAware` с тегом `present=true/false` — устойчивая серия `false` обычно означает,
-что Spring Security подключён не так, как ожидает этот модуль. `ludwig.db.snapshot.mutation.blocked`
-считает отклонённые записи в неизменяемую `SnapshotEntity` с тегом по типу сущности; на неё стоит
-поставить алерт, потому что она означает, что что-то в системе считает себя владельцем данных,
-которыми на самом деле владеет внешний источник.
-
-## Конфигурация (`ludwig.db.*`)
-
-| Свойство | По умолчанию | Значение |
+| Свойство | По умолчанию | Смысл |
 |---|---|---|
-| `ludwig.db.auditing-enabled` | `true` | Включает проводку `@EnableJpaAuditing` |
-| `ludwig.db.default-page-size` | `20` | Соглашение по умолчанию для вызывающих `PageableUtils` |
-| `ludwig.db.max-page-size` | `200` | Верхняя граница по соглашению для `PageableUtils` |
-| `ludwig.db.metrics.enabled` | `true` | Публиковать метрики Micrometer (только если он есть в classpath) |
+| `ludwig.db.auditing-enabled` | `true` | Включить подключение JPA-аудита |
+| `ludwig.db.default-page-size` | `20` | Размер страницы по умолчанию для вызывающих `PageableUtils` |
+| `ludwig.db.max-page-size` | `200` | Верхняя граница для вызывающих `PageableUtils` |
+| `ludwig.db.metrics.enabled` | `true` | Публиковать метрики Micrometer (если Micrometer есть) |
+
+## Развёртывание
+
+Развёртывать нечего: модуль не поставляет схему. Таблицу каждой сущности создаёт Liquibase changelog
+владеющего сервиса, включая колонки базовых классов (`id`, `version`, `created_at`, `created_by`,
+`updated_at`, `updated_by`, `deleted`, `deleted_at`, `imported_at`, `source_system`, `source_version`,
+`source_timestamp` - по необходимости). Сервисы работают с `spring.jpa.hibernate.ddl-auto=validate`.
+
+## Наблюдаемость
+
+**Метрики** (если есть Micrometer):
+
+| Метрика | Тип | Теги | Смысл |
+|---|---|---|---|
+| `ludwig.db.auditor.resolved` | counter | `present` | Запросы аудитора. Устойчивое `present=false` для пользовательских запросов значит, что принципал не доходит до аудитора (подключение security) |
+| `ludwig.db.snapshot.mutation.blocked` | counter | `entityType` | Отвергнутые изменения `SnapshotEntity`: что-то считает чужие данные своими. **Алерт на любое значение** |
+
+**Логи.** Собственных нет. SQL-логированием Hibernate управляет сервис.
+
+**Известные пробелы:** на уровне модуля нет; метрики пула соединений и запросов даёт Spring Boot (Hikari,
+наблюдения `spring.data.repository`), за них отвечает сервис.
+
+## Аудит
+
+Не применяется: модуль проставляет `created_by` / `last_modified_by`, но событий аудита не пишет.
+
+## Runbook
+
+| Симптом | Вероятная причина | Что делать |
+|---|---|---|
+| `created_by` = `system` для пользовательских запросов; растёт `ludwig_db_auditor_resolved_total{present="false"}` | Нет принципала в момент проставления (асинхронный поток, нет security-контекста) | Проверить, что путь кода выполняется в потоке запроса или передаёт security-контекст |
+| `IntegrityViolationException` при изменении снимка; растёт `ludwig_db_snapshot_mutation_blocked_total` | Код меняет неизменяемую `SnapshotEntity` | Исправить код: вставлять новый снимок или использовать `ExternalEntity` для upsert |
+| Мягко удалённые строки попадают в результаты | Нативный запрос | Добавить `deleted = false` в нативный запрос |
+| `OptimisticLockException` / 409 при параллельном редактировании | Два писателя обновили одну версию | Ожидаемо; клиент повторяет со свежей версией |
+| `getByIdOrThrow` не реализован во время выполнения | Не задан `repositoryBaseClass` | Добавить `@EnableJpaRepositories(repositoryBaseClass = BaseRepositoryImpl.class)` |
 
 ## Тестирование
 
-`mvn test` прогоняет модульные тесты (равенство сущностей, помощники предикатов и постраничности) без
-внешних зависимостей. Интеграционные тесты дополнительно поднимают настоящий контейнер PostgreSQL
-через Testcontainers, чтобы сквозь всё пройти генерацию идентификаторов, аудит, оптимистичную
-блокировку, мягкое удаление и неизменяемость снимков; им нужен работающий демон Docker.
+- `mvn test`: равенство сущностей, хелперы предикатов и страниц.
+- `mvn verify` (Docker, PostgreSQL): генерация id, аудит, оптимистическая блокировка, мягкое удаление и
+  неизменяемость снимков целиком.
+
+## Проектные решения
+
+- **Два семейства сущностей.** Стратегия id и правила изменяемости различаются для своих и отражённых
+  данных; их смешение - путь к перезаписи внешнего id сгенерированным.
+- **Неизменяемость снимков обеспечивает слушатель**, и его же использует аудиторский след, поэтому в
+  платформе один механизм только-добавления.
+- **Общие тексты ошибок.** Предметные формулировки принадлежат сервису.

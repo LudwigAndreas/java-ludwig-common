@@ -7,6 +7,13 @@ stand-in for each of its partners, and seed data - so that debugging any code pa
 breakpoint". The same stubs and fixtures serve the service's integration tests. Added as a single
 test-scoped dependency.
 
+| | |
+|---|---|
+| Role | test support (test-scoped jar) |
+| Depends on (in-repo) | [`rest-client-spring-boot-starter`](../rest-client-spring-boot-starter), [`test-support`](../test-support) |
+| Used by | `notification-service` |
+| Surfaces | none (starts HTTP stubs and a mail server locally) |
+
 **The API is provisional.** One service uses it so far. For a complete, working setup to copy, read
 [`notification-service`'s "Running locally"](../../services/notification-service/README.md#running-locally):
 a local application, three stand-ins, seed fixtures, the rules test, and a test that launches it.
@@ -24,12 +31,10 @@ configuration names.
 
 ## Why
 
-A laptop run used to mean an amputated service. `crud-service-example`'s `local` profile switches
-Kafka off, stops the outbox poller and has no partner to call, so the code under the breakpoint is not
-the code production runs. The primitives for a whole service already existed in
-[`test-support`](../test-support/README.md) - pinned containers, an HTTP stub server, a database
-cleaner - but nothing composed them into something runnable, and every partner stub was a private
-class in one integration-test package that could serve a test and nothing else.
+The code under the breakpoint should be the code production runs: the real `main`, Kafka on, the outbox poller
+running, and every partner answering. This module composes [`test-support`](../test-support)'s pinned containers
+and stub server into a runnable service, and keeps partner stubs in one catalogue that both the local run and the
+integration tests use.
 
 ## What you get
 
@@ -396,3 +401,16 @@ excludes test classes and has no in-repo dependencies, so it can see neither a s
   wrong; it waits for two real services.
 - **`test-support`, and anything `rest-client-spring-boot-starter` depends on, may never depend on
   it.** Maven builds its reactor graph from every scope, so that edge closes a cycle. See the POM.
+
+## Deployment, observability, audit
+
+Not applicable: test scope only, never in a deployed artifact.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `LocalRunRulesTest` fails naming a rest client | A `@LudwigRestClient` has neither a stub nor a pass-through, or a stub names a client that no longer exists | Add a `PartnerStub` to the catalogue, declare it pass-through, or remove the stale stub |
+| Local run cannot start a backing service | Docker not running | Start Docker |
+| A partner behaves differently in production | Stubs are beliefs, not contracts | Point that one client at a real environment (pass-through) and update the stub |
+| Seed data missing or duplicated | `FixtureMode` | `reset` re-seeds, `keep` keeps existing rows, `none` seeds nothing |

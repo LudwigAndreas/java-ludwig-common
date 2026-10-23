@@ -2,30 +2,28 @@
 
 ***English** · [Русский](README.ru.md)*
 
-Enterprise-ready transactional outbox for Java 17 + PostgreSQL + Spring Boot services. Add the
-dependency, include the shipped Liquibase changelog, call `OutboxEventPublisher.publish(...)` inside
-your existing `@Transactional` business methods, and events reach Kafka/REST/your own custom transport
-reliably - no message is ever published without the business change that produced it having committed,
-and no business change commits with its event silently lost.
+Transactional outbox for Spring Boot services on PostgreSQL. A service writes an event into the
+`outbox_message` table in the same transaction as the business change it describes; a background
+poller delivers it to Kafka, to a REST endpoint or to a custom transport. No event is sent for a change
+that rolled back, and no committed change loses its event.
 
-## Quick start
+| | |
+|---|---|
+| Role | starter |
+| Depends on (in-repo) | [`audit-core`](../audit-core), [`db-core`](../db-core), [`job-core`](../job-core), [`messaging-spring-boot-starter`](../messaging-spring-boot-starter) |
+| Used by | `asyncapi`, `audit`, `export`, `file-action`, `file-ingest`, `user-settings` starters; `crud-service-example`, `notification-service` |
+| Surfaces | Kafka and REST (outbound only) |
+
+## Usage
 
 ```xml
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>outbox-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
 </dependency>
 ```
 
-Include the shipped changelog in your own Liquibase master changelog (or let it run standalone - see
-[Schema](#schema-postgresql-only)):
-
-```xml
-<include file="classpath:db/changelog/outbox/outbox-changelog.xml" relativeToChangelogFile="false"/>
-```
-
-Publish from inside the transaction that makes the change the event describes:
+Publish from inside the transaction that makes the change:
 
 ```java
 @Service
@@ -47,57 +45,27 @@ class OrderService {
 }
 ```
 
-`OutboxEventPublisher.publish` requires an ambient transaction (`Propagation.MANDATORY`) - calling it
-outside one throws immediately rather than silently breaking the atomicity guarantee the pattern exists
-for.
+`publish` requires an ambient transaction (`Propagation.MANDATORY`). Called outside one it throws,
+because without the transaction the atomicity guarantee does not exist.
 
-## What happens next
+### What happens after `publish`
 
-A background poller (no configuration required - see [Scheduling](#scheduling)) claims due rows with
-`SELECT ... FOR UPDATE SKIP LOCKED`, so any number of application instances can run the poller
-concurrently and never double-process a row. Each claimed message is dispatched over the transport its
-route resolved to (Kafka, REST, or a custom transport you register), and the outcome is recorded:
-success moves it to `PUBLISHED`; failure schedules a retry with exponential backoff, or - once
-`ludwig.outbox.retry.max-attempts` is exhausted - moves it to `DEAD_LETTER`.
+A poller claims due rows with `SELECT ... FOR UPDATE SKIP LOCKED`, so any number of instances poll
+concurrently without processing a row twice. Each claimed message is dispatched over the transport its
+route resolves to, and the outcome is recorded:
 
-## Features and where they live
+```
+PENDING ──claim──> PROCESSING ──success──> PUBLISHED
+                       │
+                       ├──failure, attempts left──> PENDING (next_attempt_at = now + backoff)
+                       └──failure, budget spent───> DEAD_LETTER   (FAILED if dead-letter disabled)
+```
 
-| Feature | Package |
-|---|---|
-| Publishing API, filtering | `api`, `publisher`, `publisher.filter` |
-| JSON serialization | `serialization` (Jackson by default, pluggable) |
-| Multi-destination routing | `routing` (config-driven, or an explicit `OutboxEvent.route()` override) |
-| Kafka / REST dispatch, custom transports | `dispatch`, `dispatch.kafka`, `dispatch.rest` |
-| Retry backoff, dead-letter handling | `job-core`'s `BackoffCalculator`, `scheduler` (`OutboxOutcomeRecorder`) |
-| Ordering, idempotency | schema/query-level (`entity`, `repository` - no separate package) |
-| Scheduled publisher, stale-claim recovery | `scheduler` |
-| Audit trail | `audit` (structured logs by default, optional persisted history) |
-| Metrics | `metrics` (Micrometer, optional) |
-| Configuration | `config` (`OutboxProperties`, `ludwig.outbox.*`) |
+A `PROCESSING` row whose owner died is returned to `PENDING` by the stale-claim reclaimer after
+`processing.stale-timeout`. On shutdown the poller finishes the cycle in progress (up to
+`processing.drain-timeout`) instead of abandoning its claimed rows.
 
-## What this module shares with the rest of the platform
-
-The backoff curve, the self-scheduling lifecycle the poller and the stale-claim reclaimer are built
-on, the `FOR UPDATE SKIP LOCKED` claim statement and the instance identity written to `locked_by` all
-live in [`job-core`](../job-core), shared with
-[`reconciliation-spring-boot-starter`](../reconciliation-spring-boot-starter). They were extracted
-rather than copied for a specific reason: two divergent implementations of a retry curve is a bug
-that only shows up as "the other service recovers from a partner outage differently from this one",
-months later, with nothing to point at.
-
-Two things changed for this module in that extraction, both visible in configuration:
-
-- **`ludwig.outbox.retry.jitter` (default `0.2`).** Backoff intervals are now randomized by a fifth
-  either way. Without it, every message that failed during one destination's brief outage came due
-  again at exactly the same instant, on every instance at once, and the destination that had just
-  recovered was knocked over by its own backlog. Set it to `0` for a deterministic schedule.
-- **`ludwig.outbox.processing.drain-timeout` (default `20s`).** Shutdown now waits for a poll cycle
-  that is already running instead of cancelling it. Previously those rows stayed `PROCESSING`, owned
-  by a process that no longer existed, until the stale reclaimer noticed them up to
-  `stale-timeout + stale-reclaim-fixed-delay` later - so every rolling deploy delayed whatever was
-  in flight by minutes. Keep it comfortably below the container runtime's termination grace period.
-
-## Multi-destination routing
+### Routing
 
 ```properties
 ludwig.outbox.routes.order-events.transport=KAFKA
@@ -111,166 +79,240 @@ ludwig.outbox.default-route.transport=KAFKA
 ludwig.outbox.default-route.destination=default-topic
 ```
 
-Resolution order: `OutboxEvent.route()` (explicit override, by route name) -> the first
-`ludwig.outbox.routes.*` entry whose `event-types` contains the event's type -> `ludwig.outbox.default-route`.
-**One Kafka transport per cluster.** `KAFKA` writes to `spring.kafka.*`. Every cluster declared under
-`ludwig.kafka.clusters` (see messaging-spring-boot-starter, "Kafka clusters") adds `KAFKA:<name>`, so a
-route picks its cluster by transport:
+Resolution order:
+
+1. `OutboxEvent.route()` - an explicit route name set by the caller;
+2. the first `ludwig.outbox.routes.*` entry whose `event-types` contains the event type;
+3. `ludwig.outbox.default-route`.
+
+**One Kafka transport per cluster.** `KAFKA` writes through `spring.kafka.*`. Every cluster declared
+under `ludwig.kafka.clusters` (see [messaging](../messaging-spring-boot-starter#kafka-clusters)) adds a
+transport `KAFKA:<name>`:
 
 ```properties
 ludwig.outbox.routes.partner-invoices.transport=kafka:partner-a
 ludwig.outbox.routes.partner-invoices.destination=invoices
 ```
 
-A route naming an undeclared cluster fails startup. Every Kafka template the outbox uses comes from
-messaging's `KafkaClusterProducers`.
+A route naming an undeclared cluster fails startup. To add a transport beyond Kafka and REST, register
+an `OutboxDispatcher` bean (and an `OutboxRouteResolver` if routing needs to change).
 
-**Correlation id.** When an event is published, the request's correlation id is captured into the
-message's headers under `ludwig.messaging.correlation-header` (default `X-Correlation-Id`), unless the
-event already sets that header. The poller dispatches on its own thread, where no request context exists,
-so this is the only moment the id can be read. The id comes from audit-core's `CorrelationProvider`,
-which observability-spring-boot-starter provides.
+### Message envelope
 
-Register your own `OutboxRouteResolver`/`OutboxDispatcher` bean to add a transport beyond the built-in
-Kafka/REST ones.
+Kafka records carry the platform envelope headers from `messaging`'s `MessageHeaders`: event type and
+version, aggregate type and id, idempotency key, trace id, produced-at, and every header on the message.
+The record key is the ordering key when set, otherwise the aggregate id, so events of one aggregate land on one partition.
 
-## Declared event types
+The request's correlation id is captured into the message headers at `publish` time under
+`ludwig.messaging.correlation-header` (default `X-Correlation-Id`), unless the event already sets it.
+The poller runs on its own thread with no request context, so `publish` is the only moment the id can
+be read. The id comes from audit-core's `CorrelationProvider`, which
+[`observability-spring-boot-starter`](../observability-spring-boot-starter) provides.
 
-`OutboxEvent.payload` is `Object`, so the outbox alone cannot say what an event type carries. An
-`OutboxEventTypes` bean declares it, and several beans are merged:
+### Declared event types
+
+An `OutboxEventTypes` bean declares which payload class each event type carries. Several beans are
+merged:
 
 ```java
 @Bean
 OutboxEventTypes catalogEventTypes() {
     return OutboxEventTypes.merge(List.of(
             OutboxEventTypes.of(Map.of("ProductCreated", ProductEventPayload.class)),
-            // An event the code sends down a route by name declares that route.
+            // An event sent down a route by name declares that route.
             OutboxEventTypes.routed("NotifyProductCreated", ProductEventPayload.class, "product-notifications")));
 }
 ```
 
-A type declared twice with different classes or routes fails startup. `asyncapi-spring-boot-starter`
-reads the declarations to put each event in the service's AsyncAPI document, on the topic and cluster
-its route resolves to. The platform starters that publish (audit, export, file-ingest, user-settings)
-declare their own events.
+- A type declared twice with different classes or routes fails startup.
+- [`asyncapi-spring-boot-starter`](../asyncapi-spring-boot-starter) reads the declarations to describe
+  each event in the service's AsyncAPI document, on the topic and cluster its route resolves to.
+- With `ludwig.outbox.events.require-declared=true`, `publish` refuses an undeclared type, a payload of
+  the wrong class and an explicit route other than the declared one. Set it in every service's **test**
+  properties, so a producer nobody declared fails that service's own tests. Production keeps the default
+  `false`.
 
-With `ludwig.outbox.events.require-declared=true` the publisher refuses, before anything is written, an
-undeclared type, a payload that is not an instance of the declared class, and an explicit route other
-than the declared one. The default is `false`, so production is unaffected; set it in each service's test
-properties, so that a producer nobody declared fails that service's own tests. No static check can do
-this, because an event type is a runtime string.
+### Ordering
 
-## Ordering
+Events that share `OutboxEvent.orderingKey(...)` are dispatched in creation order: the poll query claims a
+message only when every earlier unresolved message with the same key is `PUBLISHED`. A `DEAD_LETTER`
+message no longer blocks its key, so one poison message cannot stall the key forever. Disable with
+`ludwig.outbox.ordering.enabled=false`.
 
-Set `OutboxEvent.orderingKey(...)` on events that must be dispatched in order relative to each other
-(e.g. all events for one aggregate). The poll query only claims a message once every earlier
-(lower `created_at`/`id`) unresolved message sharing its key has reached `PUBLISHED` - best-effort
-head-of-line blocking, not a global lock. A message that's exhausted retries and moved to `DEAD_LETTER`
-no longer blocks later messages on the same key (a permanently stuck message would otherwise jam the
-whole key). Disable globally with `ludwig.outbox.ordering.enabled=false`.
+### Idempotency
 
-## Idempotency
+`OutboxEvent.idempotencyKey(...)` makes `publish` return the existing row instead of inserting a
+duplicate (unique partial index). Two genuinely concurrent publishes of one key abort the losing
+caller's transaction with `DataIntegrityViolationException`; treat that as "already handled".
 
-Set `OutboxEvent.idempotencyKey(...)`; republishing the same key returns the already-persisted row
-instead of inserting a duplicate. Enforced by a unique partial index in the schema. A genuinely
-concurrent double-publish of the same key aborts the caller's transaction with
-`DataIntegrityViolationException` (standard Postgres/JDBC behavior for a constraint violation) - treat
-that as "duplicate, already handled" in an at-least-once handler's own error handling. See the Javadoc
-on `OutboxEventPublisher` for the full explanation.
-
-## Scheduling
-
-The poller and the stale-claim reclaimer run on a dedicated internal `TaskScheduler` this module
-creates itself - no `@EnableScheduling` or `TaskScheduler` bean required from the consuming application.
-Disable both with `ludwig.outbox.polling.enabled=false`.
-
-## Schema (PostgreSQL only)
-
-Ships as a Liquibase changelog at `classpath:db/changelog/outbox/outbox-changelog.xml`
-(`outbox_message` + `outbox_status_history` tables, JSONB payload/headers, partial indexes for the poll
-query, ordering key and idempotency key). Two ways to apply it:
-
-- **Include it in your own changelog** (shown above under Quick start) if you manage migrations yourself.
-- **Let it run standalone**: with `liquibase-core` on your classpath, `OutboxLiquibaseAutoConfiguration`
-  registers it as a second, independent `SpringLiquibase` bean against your primary `DataSource`,
-  separate from your own `spring.liquibase.change-log`. Disable with `ludwig.outbox.liquibase.enabled=false`.
-
-Changeset ids/author (`outbox-NNNN`/`ludwig-outbox`) are namespaced so they never collide with your own
-changesets in the shared `DATABASECHANGELOG` table.
-
-## Repositories
-
-`OutboxMessageRepository`/`OutboxStatusHistoryRepository` are scanned and given a real
-`getByIdOrThrow` implementation entirely by this module's own auto-configuration
-(`@EnableJpaRepositories(basePackageClasses = ..., repositoryBaseClass = BaseRepositoryImpl.class)`,
-scoped to this module's own packages) - no repository/entity scanning configuration needed in the
-consuming application.
-
-## Configuration (`ludwig.outbox.*`)
+## Configuration
 
 | Property | Default | Meaning |
 |---|---|---|
-| `ludwig.outbox.enabled` | `true` | Master switch for the module's autoconfiguration |
-| `ludwig.outbox.polling.enabled` | `true` | Enables the scheduled poller and stale-claim reclaimer |
+| `ludwig.outbox.enabled` | `true` | Master switch |
+| `ludwig.outbox.polling.enabled` | `true` | Run the poller and the stale-claim reclaimer |
 | `ludwig.outbox.polling.fixed-delay` | `5s` | Delay between poll cycles |
 | `ludwig.outbox.polling.initial-delay` | `5s` | Delay before the first poll cycle |
-| `ludwig.outbox.polling.batch-size` | `100` | Max rows claimed per poll cycle |
+| `ludwig.outbox.polling.batch-size` | `100` | Max rows claimed per cycle |
 | `ludwig.outbox.polling.lock-owner` | hostname + random suffix | Value written to `locked_by` |
 | `ludwig.outbox.processing.stale-timeout` | `5m` | A `PROCESSING` row older than this is reclaimed to `PENDING` |
-| `ludwig.outbox.processing.stale-reclaim-fixed-delay` | `1m` | How often the stale-reclaim task runs |
-| `ludwig.outbox.processing.drain-timeout` | `20s` | How long shutdown waits for an in-flight poll cycle rather than abandoning its claimed rows |
+| `ludwig.outbox.processing.stale-reclaim-fixed-delay` | `1m` | How often the reclaimer runs |
+| `ludwig.outbox.processing.drain-timeout` | `20s` | How long shutdown waits for the cycle in progress. Keep below the pod's termination grace period |
 | `ludwig.outbox.retry.max-attempts` | `10` | Attempts before dead-lettering |
 | `ludwig.outbox.retry.initial-interval` | `1s` | First backoff interval |
 | `ludwig.outbox.retry.multiplier` | `2.0` | Backoff growth factor |
 | `ludwig.outbox.retry.max-interval` | `5m` | Backoff cap |
-| `ludwig.outbox.retry.jitter` | `0.2` | Fraction each interval is randomized by, so messages that failed together do not all come due at the same instant |
-| `ludwig.outbox.ordering.enabled` | `true` | Honor `OutboxEvent.orderingKey` |
-| `ludwig.outbox.idempotency.enabled` | `true` | Honor `OutboxEvent.idempotencyKey` |
-| `ludwig.outbox.dead-letter.enabled` | `true` | Move exhausted messages to `DEAD_LETTER` (else they stay `FAILED`) |
-| `ludwig.outbox.audit.persist-history` | `false` | Additionally persist every transition to `outbox_status_history` |
-| `ludwig.outbox.metrics.enabled` | `true` | Emit Micrometer metrics (only if Micrometer is on the classpath) |
+| `ludwig.outbox.retry.jitter` | `0.2` | Each interval is randomized by ±20%, so messages that failed together do not all retry at the same instant. `0` = deterministic |
+| `ludwig.outbox.ordering.enabled` | `true` | Honour `orderingKey` |
+| `ludwig.outbox.idempotency.enabled` | `true` | Honour `idempotencyKey` |
+| `ludwig.outbox.dead-letter.enabled` | `true` | Move exhausted messages to `DEAD_LETTER`; otherwise they stay `FAILED` |
+| `ludwig.outbox.audit.persist-history` | `false` | Also persist every transition to `outbox_status_history` |
+| `ludwig.outbox.metrics.enabled` | `true` | Emit Micrometer metrics (when Micrometer is on the classpath) |
 | `ludwig.outbox.liquibase.enabled` | `true` | Apply the shipped changelog as a standalone `SpringLiquibase` bean |
-| `ludwig.outbox.rest.connect-timeout` / `read-timeout` | `5s` / `10s` | REST dispatcher HTTP client timeouts |
-| `ludwig.outbox.rest.endpoints.<key>` | - | Logical endpoint name -> URL, for destinations that aren't already a full URL |
-| `ludwig.outbox.kafka.send-timeout` | `10s` | Max time to wait for Kafka broker acknowledgement per message |
-| `ludwig.outbox.events.require-declared` | `false` | Refuse undeclared event types; see [Declared event types](#declared-event-types) |
-| `ludwig.outbox.routes.<name>.*` / `ludwig.outbox.default-route.*` | - | See [Multi-destination routing](#multi-destination-routing) |
+| `ludwig.outbox.rest.connect-timeout` / `read-timeout` | `5s` / `10s` | REST dispatcher timeouts |
+| `ludwig.outbox.rest.endpoints.<key>` | - | Logical endpoint name → URL, for destinations that are not a full URL |
+| `ludwig.outbox.kafka.send-timeout` | `10s` | Max wait for the broker acknowledgement per message |
+| `ludwig.outbox.events.require-declared` | `false` | Refuse undeclared event types (see [Declared event types](#declared-event-types)) |
+| `ludwig.outbox.routes.<name>.transport` / `.destination` / `.event-types` | - | A named route |
+| `ludwig.outbox.default-route.transport` / `.destination` | - | Route for events no named route matches |
 
-Beyond publish/filter/dispatch counts and dispatch-call duration, `ludwig.outbox.latency` records the
-full end-to-end time from `OutboxMessage.createdAt` to the moment it's recorded `PUBLISHED` - polling
-interval, retry backoff and queueing time included, not just the dispatch call itself. This is the metric
-worth an SLA/alert on.
+Backoff, scheduling and claiming come from [`job-core`](../job-core), shared with
+[`reconciliation-spring-boot-starter`](../reconciliation-spring-boot-starter), so every worker in the
+platform retries on the same curve.
+
+## Deployment
+
+**Schema (PostgreSQL only).** Liquibase changelog `classpath:db/changelog/outbox/outbox-changelog.xml`
+creates `outbox_message` and `outbox_status_history`. Apply it one of two ways:
+
+- include it from the service's own master changelog:
+  ```xml
+  <include file="classpath:db/changelog/outbox/outbox-changelog.xml" relativeToChangelogFile="false"/>
+  ```
+  and set `ludwig.outbox.liquibase.enabled=false`;
+- or let the starter run it as a second `SpringLiquibase` bean against the primary `DataSource`
+  (default, needs `liquibase-core` on the classpath).
+
+Changeset ids are namespaced (`outbox-NNNN`, author `ludwig-outbox`) and never collide with a service's
+own changesets.
+
+**Repositories** are registered by the starter for its own packages only; the service configures no
+entity or repository scanning for them.
+
+**Kafka/REST.** Topics and endpoints named in routes must exist and be reachable. Kafka credentials come
+from `spring.kafka.*` or the named cluster's configuration.
+
+**Scheduling.** The poller runs on a `TaskScheduler` owned by the starter; the service needs no
+`@EnableScheduling`.
+
+**Data growth.** `PUBLISHED` rows are not deleted by the starter. Plan a retention job (or partition
+`outbox_message`) appropriate to the event volume; see [Runbook](#runbook).
+
+## Observability
+
+**Metrics** (Micrometer; Prometheus names in brackets):
+
+| Metric | Type | Tags | Meaning |
+|---|---|---|---|
+| `ludwig.outbox.published` (`ludwig_outbox_published_total`) | counter | `eventType`, `transport` | Events written to the outbox |
+| `ludwig.outbox.filtered` | counter | `eventType` | Events an `OutboxPublishFilter` dropped |
+| `ludwig.outbox.dispatch.succeeded` | counter | `eventType`, `transport`, `destination` | Successful deliveries |
+| `ludwig.outbox.dispatch.failed` | counter | `eventType`, `transport`, `destination` | Failed delivery attempts (including ones that will be retried) |
+| `ludwig.outbox.deadlettered` | counter | `eventType`, `transport` | Messages moved to `DEAD_LETTER` |
+| `ludwig.outbox.dispatch.duration` | timer | `transport`, `destination` | Duration of one dispatch call |
+| `ludwig.outbox.latency` | timer | `eventType`, `transport` | End to end: `created_at` → `PUBLISHED`, including polling delay and backoff. **The metric to put an SLO on** |
+
+**Logs.** `WARN` when a dispatcher throws (message id, cause) and when stale `PROCESSING` rows are
+reclaimed (count). Payloads are never logged.
+
+**Traces.** The trace id of the publishing request is stored in `outbox_message.trace_id` and sent as
+the `ludwig-trace-id` header, so a consumer can link to the producing trace.
+
+**Health.** No health indicator.
+
+**Recommended alerts:**
+
+| Condition | Why |
+|---|---|
+| `increase(ludwig_outbox_deadlettered_total[15m]) > 0` | A downstream system will never receive these events without intervention |
+| `histogram_quantile(0.99, rate(ludwig_outbox_latency_seconds_bucket[5m]))` above the SLO (e.g. 60s) | Delivery is falling behind: destination slow, poller stalled, or backlog |
+| `rate(ludwig_outbox_dispatch_failed_total[5m]) / rate(ludwig_outbox_dispatch_succeeded_total[5m]) > 0.1` | A destination is failing; dead letters will follow |
+
+**Known gaps:**
+
+- No gauge for the backlog (`PENDING` count, age of the oldest due message). A poller that stopped
+  claiming emits *nothing*, so none of the alerts above fire. Until a gauge exists, monitor with SQL:
+  `SELECT count(*), min(next_attempt_at) FROM outbox_message WHERE status = 'PENDING' AND next_attempt_at < now();`
+- No health indicator reporting a stalled poller or a dead-letter backlog.
+
+## Audit
+
+Every status transition is recorded through the platform `AuditSink`
+([`audit-core`](../audit-core)):
+
+| Field | Value |
+|---|---|
+| category | `outbox` |
+| action | `outbox.<status>` (`outbox.processing`, `outbox.published`, `outbox.dead_letter`, ...) |
+| actor | `system` - the transition happens on a scheduler thread; the publishing user is on the business event itself |
+| resource | `outbox-message` / message id / event type |
+| outcome | `FAILURE` with the error for `DEAD_LETTER` and `FAILED`, `SUCCESS` otherwise |
+| attributes | `eventType`, `aggregateType`, `aggregateId`, `attempts`, `fromStatus`, `toStatus` |
+
+The payload is never included: it is the business event in full, and the audit trail is retained longer
+and read by more people than the outbox row.
+
+`outbox_status_history` (enabled by `audit.persist-history`) is **operational state**, not an audit
+trail: the dispatcher reads attempt counts and last failures from it. It is kept separate from the
+platform `audit_event` table so that a deployment shortening its audit retention does not shorten the
+dispatcher's memory.
+
+A service that registers its own `OutboxAuditLogger` replaces the shipped one and is responsible for
+forwarding to the platform trail.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `ludwig_outbox_deadlettered_total` increases | Destination rejects the payload, or was down longer than the retry budget (10 attempts over ≈ 8.5 min at defaults: 1s, 2s, 4s ... 256s, ±20%) | Find them: `SELECT destination, event_type, last_error, count(*) FROM outbox_message WHERE status = 'DEAD_LETTER' GROUP BY 1, 2, 3;` Fix the destination, then requeue (below) |
+| Events not arriving, no dispatch failures, no dead letters | Poller not running: `polling.enabled=false`, instance not started, or all instances stuck | Check backlog SQL in [Known gaps](#observability). If due rows exist, check the service log for the poller, then `ludwig.outbox.polling.*` config |
+| Many rows stuck in `PROCESSING` | An instance died holding claims | They return to `PENDING` within `stale-timeout + stale-reclaim-fixed-delay` (6 min at defaults); the `Reclaimed ... stale PROCESSING` warning confirms it. No action needed unless they stay |
+| Events for one aggregate stop, others flow | Ordering: an earlier message with the same `ordering_key` is not yet `PUBLISHED` (retrying) | `SELECT id, status, attempts, last_error FROM outbox_message WHERE ordering_key = '<key>' AND status <> 'PUBLISHED' ORDER BY created_at;` Fix the head message; it unblocks the key once published or dead-lettered |
+| Startup fails: route names an undeclared cluster | `transport=kafka:<name>` with no `ludwig.kafka.clusters.<name>` | Declare the cluster or fix the route |
+| Startup fails: event type declared twice | Two `OutboxEventTypes` beans disagree | Make the declarations agree |
+| Test fails: "undeclared event type" | `require-declared=true` and a new event type has no declaration | Add it to the service's `OutboxEventTypes` bean |
+| `outbox_message` grows without bound | No retention for `PUBLISHED` rows | Delete in batches, off-peak: `DELETE FROM outbox_message WHERE id IN (SELECT id FROM outbox_message WHERE status = 'PUBLISHED' AND published_at < now() - interval '7 days' LIMIT 10000);` |
+
+**Requeue dead letters** (after the cause is fixed):
+
+```sql
+UPDATE outbox_message
+   SET status = 'PENDING', attempts = 0, next_attempt_at = now(), locked_at = NULL, locked_by = NULL
+ WHERE status = 'DEAD_LETTER' AND destination = '<destination>';
+```
+
+The message is sent again with the same `ludwig-idempotency-key` header; a consumer using the
+[messaging](../messaging-spring-boot-starter#consumer-side-dedup) dedup filter drops a copy it already
+processed. A consumer without dedup receives it again.
 
 ## Testing
 
-`mvn test` runs the unit test suite (backoff calculation, route resolution, filtering, serialization,
-the publisher) with no external dependencies. The integration test additionally spins up a real
-PostgreSQL container via Testcontainers - applying the real Liquibase changelog and cross-checking it
-against the JPA mappings via `ddl-auto=validate` - to exercise `FOR UPDATE SKIP LOCKED` concurrent
-claiming, per-key ordering, idempotency, retry/dead-lettering and stale-claim recovery end to end; it
-needs a working Docker daemon.
+- `mvn test` - unit tests (backoff, routing, filtering, serialization, publisher); no Docker.
+- `mvn verify` - integration test against a real PostgreSQL in Testcontainers: applies the real
+  changelog, validates JPA mappings against it (`ddl-auto=validate`), and exercises concurrent
+  `SKIP LOCKED` claiming, per-key ordering, idempotency, retry and dead-lettering, and stale-claim
+  recovery. Needs Docker.
+- In a consuming service: set `ludwig.outbox.events.require-declared=true` in test properties.
 
-## Auditing
+## Design decisions
 
-This module no longer has an audit mechanism of its own. `Slf4jOutboxAuditLogger` is gone, replaced by `AuditSinkOutboxAuditLogger`. Its trail now goes through the
-platform's single `AuditSink`, which a deployment points at a log, the append-only `audit_event` table, a
-SIEM through the transactional outbox, or several at once - see
-[`audit-core`](../audit-core) and [`audit-spring-boot-starter`](../audit-spring-boot-starter).
-
-**`OutboxAuditLogger` and `PersistingOutboxAuditLogger` stay, and so does `outbox_status_history`.**
-It is the one place in this repository where two audit stores is the right answer, and the reason is
-written into `PersistingOutboxAuditLogger` itself so that nobody later "finishes the job":
-`user_setting_audit` and `sync_audit_record` were audit trails and nothing else, whereas this table is
-operational state *the dispatcher itself reads* - attempt counts, last failure, when a message was last
-tried. Folding it into a generic table would couple dispatch to audit retention, so a deployment that
-shortened its audit window would shorten the dispatcher's memory with it.
-
-Every transition now *additionally* reaches the platform trail through `OutboxTransitionAudit`, so
-"who was never told what happened" is answerable without knowing this module's schema.
-`DEAD_LETTER` and `FAILED` are recorded as outcome `FAILURE`; the payload is never included, for the
-reason every other module gives about bodies.
-
-**What a deployment notices:** the `ru.ludwigandreas.outbox.audit` logger no longer exists; transitions are on
-`ru.ludwigandreas.audit` with `category=outbox`. A service that published its own
-`OutboxAuditLogger` still wins, and is now responsible for forwarding to the trail itself - the
-shipped wiring composes the two rather than choosing.
+- **`Propagation.MANDATORY` on `publish`.** An outbox write outside the business transaction is a
+  dual write, which is the problem the pattern exists to remove.
+- **Backoff with jitter.** Messages that failed during one outage would otherwise all come due at the
+  same instant and knock over the destination that had just recovered.
+- **Drain on shutdown.** Abandoned claims wait for the stale reclaimer (minutes); draining makes a
+  rolling deploy cost nothing.
+- **A dead letter releases its ordering key.** Otherwise one poison message stalls its key forever.
+- **Payload never in audit or logs.** The event is business data with its own access rules.
+- **Shared mechanics in `job-core`.** One backoff curve, one claim statement, one scheduling base for
+  every worker, so every worker behaves the same during a partner outage.

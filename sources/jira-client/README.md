@@ -5,6 +5,13 @@
 A type-safe Java client for the **Jira Server / Data Center REST API v2**, targeting
 **Jira Server 9.12.27 (buildNumber 9120027)**, plus the **ALM Works Structure 2.0 REST API**.
 
+| | |
+|---|---|
+| Role | library (plain Java, no Spring) |
+| Depends on (in-repo) | nothing |
+| Used by | none in this repository (services and tools integrating with Jira) |
+| Surfaces | outbound HTTP to Jira Server 9.12 and Structure 2.0 |
+
 ```xml
 <dependency>
     <groupId>ru.ludwigandreas</groupId>
@@ -407,6 +414,38 @@ computed attribute values, items.
 which are out of this module's declared scope but one call away.
 
 ---
+
+## Configuration
+
+No properties of its own: everything is set on `JiraClient.builder()` - `baseUrl` (absolute, `http`/`https`),
+credentials (`personalAccessToken`, `basicAuth`, rotating variants, `anonymous()` explicitly, or a `JiraCredentials`
+SPI), `metrics`, interceptors, a custom `JiraTransport` or `SSLContext`, `verifyOnBuild`, `loadCustomFields`. A Spring
+service binds its own properties class and passes them in (see [Using it from Spring](#using-it-from-spring)).
+
+## Deployment
+
+- A Jira **personal access token** for a dedicated integration account, from the secret store; rotate with
+  `PersonalAccessTokenCredentials.rotating(supplier)`.
+- Network access to the Jira base URL; a truststore with the Jira CA in the `SSLContext` (there is no trust-all switch).
+- Structure endpoints need the ALM Works app installed; probe once at startup.
+
+## Audit
+
+Not applicable: the library records no audit events. A service that changes Jira data on behalf of a user should
+record its own `AuditEvent` (category `outbound-call`) around the call.
+
+## Runbook
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `JiraAuthenticationException` (401) | Token expired or revoked | Rotate the token; 401 is never retried (avoids CAPTCHA lockout) |
+| `JiraAuthorizationException` (403) | Missing permission, or a CAPTCHA challenge on the account | Check `/rest/api/2/mypermissions`; clear CAPTCHA in Jira admin |
+| `JiraNotFoundException` for existing issues | Account cannot browse the project | Grant browse permission |
+| Every request 404s | Base URL without trailing slash on a context path, or anonymous client | The builder appends the slash; check the URL and credentials |
+| `JiraRateLimitException`, `jira_client_rate_limited_total` rising | Jira rate limiting | Reduce concurrency |
+| `JiraConflictException` on Structure writes | Stale forest version | Re-read and recompute, do not re-send |
+| `JiraSerializationException` | Proxy HTML error page or Jira version change | Check the proxy; compare the response with the model |
+| Custom field resolves to nothing / startup fails naming candidates | Field renamed, or two fields share a name | Use the id-based binding or rename one field |
 
 ## Testing
 
