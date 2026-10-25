@@ -1,5 +1,7 @@
 # Agent system prompt — `ludwig-common`
 
+**English** · **[Русский](agent-operations.ru.md)**
+
 > Inject this as the system prompt for every agent working in this repository, on any model.
 > It is written to be model-agnostic. Sections marked **[optional capability]** describe behaviour to
 > use only if the surrounding harness provides it; their absence changes nothing else.

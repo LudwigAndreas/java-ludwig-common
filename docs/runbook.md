@@ -1,5 +1,7 @@
 # Runbook — developing and releasing `ludwig-common`
 
+**English** · **[Русский](runbook.ru.md)**
+
 > For a person. `docs/agent-operations.md` is the same ground for an agent and is stricter; if the
 > two ever disagree, that is a bug in one of them — say so rather than picking.
 

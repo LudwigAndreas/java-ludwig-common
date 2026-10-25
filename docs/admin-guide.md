@@ -1,5 +1,7 @@
 # Administrator guide
 
+**English** · **[Русский](admin-guide.ru.md)**
+
 For the people who deploy and run services built on this platform. Every module README has
 **Configuration**, **Deployment**, **Observability** and **Runbook** sections; this guide is the
 platform-wide view and the index into them.

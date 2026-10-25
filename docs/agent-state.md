@@ -1,5 +1,7 @@
 # Durable run state: `state.json` and `receipt.json`
 
+**English** · **[Русский](agent-state.ru.md)**
+
 The conversation is not the system of record. A context reset, a new session or a model swap must
 not lose what a change is for, what was already decided, or what was already tried and failed.
 

@@ -1,5 +1,7 @@
 # Configuring data scopes and role mappings
 
+**English** · **[Русский](data-scope-configuration.ru.md)**
+
 How to define data-level scopes in a service and map them onto roles in configuration, so that a
 role's access can be changed by editing configuration rather than code.
 

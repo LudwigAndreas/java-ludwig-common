@@ -5,93 +5,23 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LICENSE.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/admin-guide.ru.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/agent-operations.ru.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/agent-state.ru.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/data-scope-configuration.ru.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/developer-guide.ru.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/documentation-guide.ru.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/runbook.ru.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/architecture-rules/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/checkstyle-rules/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/checkstyle-rules/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/checkstyle-rules/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/checkstyle-rules/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/jacoco-aggregate/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/jacoco-aggregate/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/ludwig-bom/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-bom/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/ludwig-bom/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-bom/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/ludwig-service-parent/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-service-parent/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/ludwig-service-parent/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/build/ludwig-service-parent/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/admin-guide.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/admin-guide.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/agent-operations.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/agent-operations.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/code-index.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/code-index.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/harness-enforcement.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/harness-enforcement.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/agent-state.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/agent-state.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/data-scope-configuration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/data-scope-configuration.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/developer-guide.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/developer-guide.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/documentation-guide.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/documentation-guide.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/runbook.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/runbook.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/crud-service-example/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/asyncapi-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/asyncapi-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/asyncapi-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/asyncapi-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/audit-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/audit-core/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/audit-core/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/audit-core/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/audit-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/audit-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/audit-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/audit-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/cache-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/cache-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/cache-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/cache-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/db-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/db-core/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/db-core/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/db-core/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/export-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/export-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/export-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/export-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/file-action-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/file-action-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/file-action-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/file-action-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/file-ingest-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/file-ingest-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/file-ingest-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/file-ingest-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/grpc-client-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/grpc-client-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/grpc-client-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/grpc-client-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/grpc-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/grpc-core/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/grpc-core/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/grpc-core/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/grpc-server-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/grpc-server-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/grpc-server-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/grpc-server-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/hot-reload-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/hot-reload-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/hot-reload-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/hot-reload-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/idempotency-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/idempotency-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/idempotency-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/idempotency-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/identity-projection-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/jira-client/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/jira-client/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/jira-client/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/jira-client/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/job-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/job-core/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/job-core/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/job-core/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/messaging-db-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-db-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/messaging-db-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-db-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/messaging-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/object-storage-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/object-storage-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/object-storage-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/object-storage-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/observability-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/observability-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/observability-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/observability-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/odata-filter-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/outbound-token-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/outbound-token-core/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/outbound-token-core/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/outbound-token-core/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/outbox-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/outbox-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/outbox-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/outbox-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/pat-core/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/pat-core/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/pat-core/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/pat-core/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/pat-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/pat-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/pat-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/pat-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/reconciliation-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/reconciliation-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/reconciliation-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/reconciliation-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/rest-client-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/security-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support-local/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support-local/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support-local/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support-local/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support-security/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support-security/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support-security/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support-security/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/test-support/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/test-support/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/user-settings-spring-boot-starter/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/web-core-spring-boot-starter/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/web-core-spring-boot-starter/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sources/web-core-spring-boot-starter/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/sources/web-core-spring-boot-starter/README.ru.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -114,61 +44,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="5.645969807562134E-10" />
-      <entry key="MS500" value="0.02150881533457732" />
-      <entry key="S2" value="1.0073291503314312" />
-      <entry key="S5" value="2.7463126217469096" />
-      <entry key="S10" value="4.390653406631266" />
-      <entry key="S30" value="7.886490107983424" />
-      <entry key="S60" value="9.904588863705296" />
-      <entry key="M2" value="11.282585325981545" />
-      <entry key="M5" value="12.266707360124393" />
-      <entry key="M10" value="12.62511007586157" />
-      <entry key="M15" value="12.748200566329569" />
-      <entry key="M30" value="12.873153425476447" />
-      <entry key="H1" value="12.936338017877931" />
-      <entry key="H2" value="12.968109085789836" />
-      <entry key="H4" value="12.984039530810136" />
-      <entry key="D1" value="12.997337834127977" />
-      <entry key="W1" value="12.999619639428257" />
-    </decayedCancelled>
-    <decayedSelected>
       <entry key="MS100" value="1.0" />
       <entry key="MS500" value="1.0" />
-      <entry key="S2" value="1.0000067813314908" />
-      <entry key="S5" value="1.0085610294253726" />
-      <entry key="S10" value="1.092525831125003" />
-      <entry key="S30" value="1.4522941788538646" />
-      <entry key="S60" value="1.672528199300122" />
-      <entry key="M2" value="1.8200781665793335" />
-      <entry key="M5" value="1.9237237284170345" />
-      <entry key="M10" value="1.9611054720565453" />
-      <entry key="M15" value="1.9738992542450786" />
-      <entry key="M30" value="1.9868633412205958" />
-      <entry key="H1" value="1.9934099562721306" />
-      <entry key="H2" value="1.996699531590203" />
-      <entry key="H4" value="1.998348401906971" />
-      <entry key="D1" value="1.9997245440308382" />
-      <entry key="W1" value="1.9999606445010014" />
+      <entry key="S2" value="1.00000001376023" />
+      <entry key="S5" value="1.0013798151730071" />
+      <entry key="S10" value="1.0643527344811095" />
+      <entry key="S30" value="1.9393795423396045" />
+      <entry key="S60" value="3.4116304078271016" />
+      <entry key="M2" value="5.899950760242139" />
+      <entry key="M5" value="10.867838966742047" />
+      <entry key="M10" value="19.070220918705292" />
+      <entry key="M15" value="26.947545196499995" />
+      <entry key="M30" value="43.11976674873459" />
+      <entry key="H1" value="57.39576135454868" />
+      <entry key="H2" value="67.06236514740313" />
+      <entry key="H4" value="72.71376004882282" />
+      <entry key="D1" value="77.9623116806606" />
+      <entry key="W1" value="84.83194774832633" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="0.0" />
+      <entry key="S10" value="0.0" />
+      <entry key="S30" value="0.0" />
+      <entry key="S60" value="0.0" />
+      <entry key="M2" value="0.0" />
+      <entry key="M5" value="0.0" />
+      <entry key="M10" value="0.0" />
+      <entry key="M15" value="1.3934316589666193E-226" />
+      <entry key="M30" value="1.6693536158003319E-113" />
+      <entry key="H1" value="5.778123175411483E-57" />
+      <entry key="H2" value="1.074998361671787E-28" />
+      <entry key="H4" value="1.4662862117412583E-14" />
+      <entry key="D1" value="0.008815117405686364" />
+      <entry key="W1" value="0.9214820235487851" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.9557411670718467E-4" />
-      <entry key="MS500" value="0.19991808121396168" />
-      <entry key="S2" value="1.5121825354193903" />
-      <entry key="S5" value="3.341924381212822" />
-      <entry key="S10" value="5.155605012316837" />
-      <entry key="S30" value="9.131998020375029" />
-      <entry key="S60" value="11.443753164342882" />
-      <entry key="M2" value="13.025532402406053" />
-      <entry key="M5" value="14.156560021829899" />
-      <entry key="M10" value="14.568727286893594" />
-      <entry key="M15" value="14.710314191241542" />
-      <entry key="M30" value="14.854059538515841" />
-      <entry key="H1" value="14.9267530627844" />
-      <entry key="H2" value="14.963307062893481" />
-      <entry key="H4" value="14.981636127696657" />
-      <entry key="D1" value="14.996936934313416" />
-      <entry key="W1" value="14.999562359874242" />
+      <entry key="MS100" value="0.9012504626108302" />
+      <entry key="MS500" value="0.9794202975869268" />
+      <entry key="S2" value="0.9948148991878434" />
+      <entry key="S5" value="0.9992995153381" />
+      <entry key="S10" value="1.0632426896516856" />
+      <entry key="S30" value="1.9386944606665686" />
+      <entry key="S60" value="3.411044318692907" />
+      <entry key="M2" value="5.899445950846507" />
+      <entry key="M5" value="10.867197457047796" />
+      <entry key="M10" value="19.069438033517706" />
+      <entry key="M15" value="26.94679142748229" />
+      <entry key="M30" value="43.11920055378018" />
+      <entry key="H1" value="57.395408351234515" />
+      <entry key="H2" value="67.06216708268343" />
+      <entry key="H4" value="72.71365500214218" />
+      <entry key="D1" value="77.97110784267267" />
+      <entry key="W1" value="85.75341886171825" />
     </decayedShown>
   </component>
   <component name="ProblemsViewState">
@@ -183,46 +113,46 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Application.LocalNotificationApplication.executor&quot;: &quot;Debug&quot;,
-    &quot;JUnit.CatalogIntegrationTest.executor&quot;: &quot;Debug&quot;,
-    &quot;Maven.common [clean,install].executor&quot;: &quot;Run&quot;,
-    &quot;Maven.common [clean,verify,-pl...].executor&quot;: &quot;Run&quot;,
-    &quot;Maven.common [clean,verify].executor&quot;: &quot;Run&quot;,
-    &quot;Maven.common [verify,-DskipITs].executor&quot;: &quot;Run&quot;,
-    &quot;Maven.common [verify].executor&quot;: &quot;Run&quot;,
-    &quot;RequestMappingsPanelOrder0&quot;: &quot;0&quot;,
-    &quot;RequestMappingsPanelOrder1&quot;: &quot;1&quot;,
-    &quot;RequestMappingsPanelWidth0&quot;: &quot;75&quot;,
-    &quot;RequestMappingsPanelWidth1&quot;: &quot;75&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;Spring Boot.CatalogApplication.executor&quot;: &quot;Debug&quot;,
-    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/ludwig/vault/projects/ludwig-platform/src/java-ludwig-common&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
-    &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
-    &quot;project.structure.side.proportion&quot;: &quot;0.0&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Application.LocalNotificationApplication.executor": "Debug",
+    "JUnit.CatalogIntegrationTest.executor": "Debug",
+    "Maven.common [clean,install].executor": "Run",
+    "Maven.common [clean,verify,-pl...].executor": "Run",
+    "Maven.common [clean,verify].executor": "Run",
+    "Maven.common [verify,-DskipITs].executor": "Run",
+    "Maven.common [verify].executor": "Run",
+    "RequestMappingsPanelOrder0": "0",
+    "RequestMappingsPanelOrder1": "1",
+    "RequestMappingsPanelWidth0": "75",
+    "RequestMappingsPanelWidth1": "75",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "Spring Boot.CatalogApplication.executor": "Debug",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "master",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/Users/ludwig/vault/projects/ludwig-platform/src/java-ludwig-common",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "vue.rearranger.settings.migration": "true"
   },
-  &quot;keyToStringList&quot;: {
-    &quot;com.intellij.ide.scratch.ScratchImplUtil$2/New Scratch File&quot;: [
-      &quot;Markdown&quot;,
-      &quot;TEXT&quot;
+  "keyToStringList": {
+    "com.intellij.ide.scratch.ScratchImplUtil$2/New Scratch File": [
+      "TEXT",
+      "Markdown"
     ]
   }
-}</component>
+}]]></component>
   <component name="RunAnythingCache">
     <option name="myCommands">
       <command value="mvn verify " />
@@ -313,7 +243,7 @@
       <updated>1786817614729</updated>
       <workItem from="1786817616340" duration="102896000" />
       <workItem from="1791636263581" duration="45697000" />
-      <workItem from="1792176148669" duration="27413000" />
+      <workItem from="1792176148669" duration="34787000" />
     </task>
     <servers />
   </component>

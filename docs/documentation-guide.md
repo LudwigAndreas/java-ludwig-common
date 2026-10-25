@@ -1,5 +1,7 @@
 # Writing documentation for `ludwig-common`
 
+**English** · **[Русский](documentation-guide.ru.md)**
+
 Who this is for: anyone who adds a module, changes one, or writes a runbook. It says what a module
 README contains, in which order, and how it is kept true.
 

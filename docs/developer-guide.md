@@ -1,5 +1,7 @@
 # Developer guide
 
+**English** · **[Русский](developer-guide.ru.md)**
+
 For engineers who write platform modules or services on top of them. The process (branches, OpenSpec,
 the gate, versions, releases) is in [runbook.md](runbook.md) and is not repeated here; this guide covers
 what to build and how it must look. The authoritative rules for each module live in its own README.

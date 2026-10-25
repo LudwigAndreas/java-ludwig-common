@@ -1,5 +1,13 @@
 # ludwig-common
 
+[![GitHub top language](https://img.shields.io/github/languages/top/LudwigAndreas/java-ludwig-common)](https://www.java.com/ru/)
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=LudwigAndreas_java-ludwig-common&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=LudwigAndreas_java-ludwig-common)
+[![security rating](https://sonarcloud.io/api/project_badges/measure?project=LudwigAndreas_java-ludwig-common&metric=security_rating)](https://sonarcloud.io/summary/overall?id=Abblix_Oidc.Server)
+[![reliability rating](https://sonarcloud.io/api/project_badges/measure?project=LudwigAndreas_java-ludwig-common&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=Abblix_Oidc.Server)
+[![maintainability rating](https://sonarcloud.io/api/project_badges/measure?project=LudwigAndreas_java-ludwig-common&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=Abblix_Oidc.Server)
+[![GitHub release](https://img.shields.io/github/v/release/LudwigAndreas/java-ludwig-common)](https://github.com/LudwigAndreas/java-ludwig-common/releases/latest)
+[![GitHub last commit](https://img.shields.io/github/last-commit/LudwigAndreas/java-ludwig-common)](https://github.com/LudwigAndreas/java-ludwig-common/commits/master/)
+
 > The shared Java 17 / Spring Boot platform: libraries, starters, build artifacts and services
 
 ## 📦 Overview
@@ -11,6 +19,48 @@ security, observability, files and reports; two published build artifacts (`ludw
 **Documentation by audience** is indexed in [docs/README.md](docs/README.md): the
 [developer guide](docs/developer-guide.md), the [administrator guide](docs/admin-guide.md) and the
 [analyst guide](docs/analyst-guide.md).
+
+## 📚Table of content
+
+<!-- TOC -->
+* [ludwig-common](#ludwig-common)
+  * [📦 Overview](#-overview)
+  * [📚Table of content](#table-of-content)
+  * [📁 Project Structure](#-project-structure)
+  * [📚 Modules](#-modules)
+    * [Build and versioning](#build-and-versioning)
+    * [Persistence, jobs and audit](#persistence-jobs-and-audit)
+    * [Messaging and integration](#messaging-and-integration)
+    * [gRPC](#grpc)
+    * [Web, security and identity](#web-security-and-identity)
+    * [Files, reports and storage](#files-reports-and-storage)
+    * [Operations](#operations)
+    * [Test support](#test-support)
+    * [Services](#services)
+  * [🚀 Getting Started](#-getting-started)
+    * [Prerequisites](#prerequisites)
+    * [Cloning the Project](#cloning-the-project)
+    * [Building the Library](#building-the-library)
+    * [Using a Module in Your Project](#using-a-module-in-your-project)
+  * [Consuming the platform](#consuming-the-platform)
+    * [The usual case: a microservice](#the-usual-case-a-microservice)
+    * [The other case: a library, or a service that cannot change its parent](#the-other-case-a-library-or-a-service-that-cannot-change-its-parent)
+    * [Two artifacts, one release train](#two-artifacts-one-release-train)
+    * [Overriding a managed version](#overriding-a-managed-version)
+    * [Overriding the base image](#overriding-the-base-image)
+    * [Building images: local vs Jenkins](#building-images-local-vs-jenkins)
+    * [Credentials](#credentials)
+    * [Versions and releasing](#versions-and-releasing)
+    * [What a published library ships](#what-a-published-library-ships)
+    * [API compatibility](#api-compatibility)
+  * [Code style](#code-style)
+    * [Static analysis (SonarCloud)](#static-analysis-sonarcloud)
+  * [Testing](#testing)
+  * [Documentation](#documentation)
+  * [Contributing](#contributing)
+  * [License](#license)
+  * [Author](#author)
+<!-- TOC -->
 
 ## 📁 Project Structure
 
@@ -61,90 +111,90 @@ Every module's README follows one template: usage, configuration, deployment, ob
 
 ### Build and versioning
 
-| Module | What it is |
-|---|---|
-| [`ludwig-bom`](build/ludwig-bom/README.md) ([ru](build/ludwig-bom/README.ru.md)) | Version registry: every platform module and every third-party pin. Import it and name no versions |
-| [`ludwig-service-parent`](build/ludwig-service-parent/README.md) ([ru](build/ludwig-service-parent/README.ru.md)) | Parent POM of every service: compiler and annotation processors, surefire/failsafe, coverage gate, enforcer, Checkstyle, Jib |
-| [`ludwig-grpc-api-parent`](build/ludwig-grpc-api-parent/README.md) ([ru](build/ludwig-grpc-api-parent/README.ru.md)) | Parent POM of every `<service>-grpc-api` contract module: gRPC/protobuf dependencies, `grpc-core`, code generation |
-| [`architecture-rules`](build/architecture-rules/README.md) ([ru](build/architecture-rules/README.ru.md)) | Executable architecture conventions: toggleable ArchUnit rule sets with console and JSON reports |
-| [`checkstyle-rules`](build/checkstyle-rules/README.md) ([ru](build/checkstyle-rules/README.ru.md)) | The shared Checkstyle configuration, mirroring IntelliJ IDEA's formatter; runs at `validate` in every module |
-| [`jacoco-aggregate`](build/jacoco-aggregate/README.md) ([ru](build/jacoco-aggregate/README.ru.md)) | One coverage report across the reactor; the only coverage input of the SonarCloud analysis |
+| Module                                                                                                               | What it is                                                                                                                   |
+|----------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
+| [`ludwig-bom`](build/ludwig-bom/README.md) ([ru](build/ludwig-bom/README.ru.md))                                     | Version registry: every platform module and every third-party pin. Import it and name no versions                            |
+| [`ludwig-service-parent`](build/ludwig-service-parent/README.md) ([ru](build/ludwig-service-parent/README.ru.md))    | Parent POM of every service: compiler and annotation processors, surefire/failsafe, coverage gate, enforcer, Checkstyle, Jib |
+| [`ludwig-grpc-api-parent`](build/ludwig-grpc-api-parent/README.md) ([ru](build/ludwig-grpc-api-parent/README.ru.md)) | Parent POM of every `<service>-grpc-api` contract module: gRPC/protobuf dependencies, `grpc-core`, code generation           |
+| [`architecture-rules`](build/architecture-rules/README.md) ([ru](build/architecture-rules/README.ru.md))             | Executable architecture conventions: toggleable ArchUnit rule sets with console and JSON reports                             |
+| [`checkstyle-rules`](build/checkstyle-rules/README.md) ([ru](build/checkstyle-rules/README.ru.md))                   | The shared Checkstyle configuration, mirroring IntelliJ IDEA's formatter; runs at `validate` in every module                 |
+| [`jacoco-aggregate`](build/jacoco-aggregate/README.md) ([ru](build/jacoco-aggregate/README.ru.md))                   | One coverage report across the reactor; the only coverage input of the SonarCloud analysis                                   |
 
 ### Persistence, jobs and audit
 
-| Module | What it is |
-|---|---|
-| [`db-core`](sources/db-core/README.md) ([ru](sources/db-core/README.ru.md)) | Base entities, JPA auditing columns, soft delete, snapshot immutability, QueryDSL repository base, persistence exceptions |
-| [`job-core`](sources/job-core/README.md) ([ru](sources/job-core/README.ru.md)) | Worker mechanics: backoff with jitter, `SelfSchedulingLifecycle`, `SKIP LOCKED` claims, instance identity, the leased `RunLock` |
-| [`audit-core`](sources/audit-core/README.md) ([ru](sources/audit-core/README.ru.md)) | One `AuditEvent` envelope, the `AuditSink` with a configurable failure policy, redaction, `ActorResolver`; no in-repo dependencies |
-| [`audit-spring-boot-starter`](sources/audit-spring-boot-starter/README.md) ([ru](sources/audit-spring-boot-starter/README.ru.md)) | Durable audit trail: append-only `audit_event`, JPA and outbox sinks, per-category retention, a query side |
-| [`idempotency-spring-boot-starter`](sources/idempotency-spring-boot-starter/README.md) ([ru](sources/idempotency-spring-boot-starter/README.ru.md)) | Work dedup: atomic key claims in `TRANSACTIONAL` or `STANDALONE` mode, HTTP response replay, Kafka record filter, retention purge |
-| [`cache-spring-boot-starter`](sources/cache-spring-boot-starter/README.md) ([ru](sources/cache-spring-boot-starter/README.ru.md)) | Named, typed caches with a declared purpose (security or performance), Caffeine local tier, optional Redis shared tier, after-commit eviction |
+| Module                                                                                                                                              | What it is                                                                                                                                    |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| [`db-core`](sources/db-core/README.md) ([ru](sources/db-core/README.ru.md))                                                                         | Base entities, JPA auditing columns, soft delete, snapshot immutability, QueryDSL repository base, persistence exceptions                     |
+| [`job-core`](sources/job-core/README.md) ([ru](sources/job-core/README.ru.md))                                                                      | Worker mechanics: backoff with jitter, `SelfSchedulingLifecycle`, `SKIP LOCKED` claims, instance identity, the leased `RunLock`               |
+| [`audit-core`](sources/audit-core/README.md) ([ru](sources/audit-core/README.ru.md))                                                                | One `AuditEvent` envelope, the `AuditSink` with a configurable failure policy, redaction, `ActorResolver`; no in-repo dependencies            |
+| [`audit-spring-boot-starter`](sources/audit-spring-boot-starter/README.md) ([ru](sources/audit-spring-boot-starter/README.ru.md))                   | Durable audit trail: append-only `audit_event`, JPA and outbox sinks, per-category retention, a query side                                    |
+| [`idempotency-spring-boot-starter`](sources/idempotency-spring-boot-starter/README.md) ([ru](sources/idempotency-spring-boot-starter/README.ru.md)) | Work dedup: atomic key claims in `TRANSACTIONAL` or `STANDALONE` mode, HTTP response replay, Kafka record filter, retention purge             |
+| [`cache-spring-boot-starter`](sources/cache-spring-boot-starter/README.md) ([ru](sources/cache-spring-boot-starter/README.ru.md))                   | Named, typed caches with a declared purpose (security or performance), Caffeine local tier, optional Redis shared tier, after-commit eviction |
 
 ### Messaging and integration
 
-| Module | What it is |
-|---|---|
-| [`outbox-spring-boot-starter`](sources/outbox-spring-boot-starter/README.md) ([ru](sources/outbox-spring-boot-starter/README.ru.md)) | Transactional outbox: `SKIP LOCKED` relay, retry and dead-letter, ordering keys, Kafka/REST/DB routing, declared event types |
-| [`messaging-spring-boot-starter`](sources/messaging-spring-boot-starter/README.md) ([ru](sources/messaging-spring-boot-starter/README.ru.md)) | The consumer side of the outbox envelope: one container factory, backoff then DLT, typed inbound envelope, lag and silence metrics, multi-cluster Kafka |
-| [`messaging-db-spring-boot-starter`](sources/messaging-db-spring-boot-starter/README.md) ([ru](sources/messaging-db-spring-boot-starter/README.ru.md)) | A removable stand-in for a Kafka cluster: a Kafka-shaped log in the shared PostgreSQL; services keep using the outbox and `@KafkaListener` unchanged |
-| [`asyncapi-spring-boot-starter`](sources/asyncapi-spring-boot-starter/README.md) ([ru](sources/asyncapi-spring-boot-starter/README.ru.md)) | Generates the service's AsyncAPI document from declared event types and listeners |
-| [`reconciliation-spring-boot-starter`](sources/reconciliation-spring-boot-starter/README.md) ([ru](sources/reconciliation-spring-boot-starter/README.ru.md)) | Keeps local mirrors of externally owned state in sync: four fetch shapes, staging, quotas, leader election, freshness metrics |
-| [`rest-client-spring-boot-starter`](sources/rest-client-spring-boot-starter/README.md) ([ru](sources/rest-client-spring-boot-starter/README.ru.md)) | Named outbound HTTP clients from configuration: pools, timeouts, auth, Resilience4j, metrics, audit, `@LudwigRestClient` interfaces |
-| [`outbound-token-core`](sources/outbound-token-core/README.md) ([ru](sources/outbound-token-core/README.ru.md)) | Outbound credentials shared by both client starters: cached client-credentials tokens and bearer relay |
-| [`jira-client`](sources/jira-client/README.md) ([ru](sources/jira-client/README.ru.md)) | Framework-free client for Jira Server REST v2 and ALM Works Structure: typed JQL, field registry, streaming pagination |
+| Module                                                                                                                                                       | What it is                                                                                                                                              |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`outbox-spring-boot-starter`](sources/outbox-spring-boot-starter/README.md) ([ru](sources/outbox-spring-boot-starter/README.ru.md))                         | Transactional outbox: `SKIP LOCKED` relay, retry and dead-letter, ordering keys, Kafka/REST/DB routing, declared event types                            |
+| [`messaging-spring-boot-starter`](sources/messaging-spring-boot-starter/README.md) ([ru](sources/messaging-spring-boot-starter/README.ru.md))                | The consumer side of the outbox envelope: one container factory, backoff then DLT, typed inbound envelope, lag and silence metrics, multi-cluster Kafka |
+| [`messaging-db-spring-boot-starter`](sources/messaging-db-spring-boot-starter/README.md) ([ru](sources/messaging-db-spring-boot-starter/README.ru.md))       | A removable stand-in for a Kafka cluster: a Kafka-shaped log in the shared PostgreSQL; services keep using the outbox and `@KafkaListener` unchanged    |
+| [`asyncapi-spring-boot-starter`](sources/asyncapi-spring-boot-starter/README.md) ([ru](sources/asyncapi-spring-boot-starter/README.ru.md))                   | Generates the service's AsyncAPI document from declared event types and listeners                                                                       |
+| [`reconciliation-spring-boot-starter`](sources/reconciliation-spring-boot-starter/README.md) ([ru](sources/reconciliation-spring-boot-starter/README.ru.md)) | Keeps local mirrors of externally owned state in sync: four fetch shapes, staging, quotas, leader election, freshness metrics                           |
+| [`rest-client-spring-boot-starter`](sources/rest-client-spring-boot-starter/README.md) ([ru](sources/rest-client-spring-boot-starter/README.ru.md))          | Named outbound HTTP clients from configuration: pools, timeouts, auth, Resilience4j, metrics, audit, `@LudwigRestClient` interfaces                     |
+| [`outbound-token-core`](sources/outbound-token-core/README.md) ([ru](sources/outbound-token-core/README.ru.md))                                              | Outbound credentials shared by both client starters: cached client-credentials tokens and bearer relay                                                  |
+| [`jira-client`](sources/jira-client/README.md) ([ru](sources/jira-client/README.ru.md))                                                                      | Framework-free client for Jira Server REST v2 and ALM Works Structure: typed JQL, field registry, streaming pagination                                  |
 
 ### gRPC
 
-| Module | What it is |
-|---|---|
-| [`grpc-core`](sources/grpc-core/README.md) ([ru](sources/grpc-core/README.ru.md)) | Shared gRPC vocabulary: metadata keys, problem-to-status mapping, the `Operation` message, context propagation |
+| Module                                                                                                                                              | What it is                                                                                                        |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| [`grpc-core`](sources/grpc-core/README.md) ([ru](sources/grpc-core/README.ru.md))                                                                   | Shared gRPC vocabulary: metadata keys, problem-to-status mapping, the `Operation` message, context propagation    |
 | [`grpc-server-spring-boot-starter`](sources/grpc-server-spring-boot-starter/README.md) ([ru](sources/grpc-server-spring-boot-starter/README.ru.md)) | `@LudwigGrpcService` beans behind a fixed interceptor chain: auth, problem mapping, admission limits, TLS, health |
-| [`grpc-client-spring-boot-starter`](sources/grpc-client-spring-boot-starter/README.md) ([ru](sources/grpc-client-spring-boot-starter/README.ru.md)) | Named gRPC clients from configuration: deadlines, resilience, contract-aware retry, token relay, metrics |
-| [`catalog-grpc-api`](sources/catalog-grpc-api/README.md) ([ru](sources/catalog-grpc-api/README.ru.md)) | The product catalog's gRPC contract, served by `crud-service-example`; the reference contract module |
+| [`grpc-client-spring-boot-starter`](sources/grpc-client-spring-boot-starter/README.md) ([ru](sources/grpc-client-spring-boot-starter/README.ru.md)) | Named gRPC clients from configuration: deadlines, resilience, contract-aware retry, token relay, metrics          |
+| [`catalog-grpc-api`](sources/catalog-grpc-api/README.md) ([ru](sources/catalog-grpc-api/README.ru.md))                                              | The product catalog's gRPC contract, served by `crud-service-example`; the reference contract module              |
 
 ### Web, security and identity
 
-| Module | What it is |
-|---|---|
-| [`web-core-spring-boot-starter`](sources/web-core-spring-boot-starter/README.md) ([ru](sources/web-core-spring-boot-starter/README.ru.md)) | One localized RFC 9457 `ProblemDetail` pipeline, business exceptions, locale resolution, page envelope, the long-running operation contract |
-| [`security-spring-boot-starter`](sources/security-spring-boot-starter/README.md) ([ru](sources/security-spring-boot-starter/README.ru.md)) | Authentication (browser JWT, mTLS partners, peer services), per-service roles, data scopes compiled into QueryDSL predicates |
-| [`pat-core`](sources/pat-core/README.md) ([ru](sources/pat-core/README.ru.md)) | Personal access token format: wire format, masked secret, digest, scopes, the `ludwig_pat` claim; no Spring, no storage |
-| [`pat-spring-boot-starter`](sources/pat-spring-boot-starter/README.md) ([ru](sources/pat-spring-boot-starter/README.ru.md)) | The issuing half of PATs for the identity-provider service: `ludwig_pat` table, management API, token exchange, introspection (verification is in the security starter) |
-| [`identity-projection-spring-boot-starter`](sources/identity-projection-spring-boot-starter/README.md) ([ru](sources/identity-projection-spring-boot-starter/README.ru.md)) | Local projection of the OIDC provider's user stream backing role, data-scope and partner resolution |
-| [`odata-filter-spring-boot-starter`](sources/odata-filter-spring-boot-starter/README.md) ([ru](sources/odata-filter-spring-boot-starter/README.ru.md)) | OData `$filter`/`$top`/`$skip`/`$orderby` for Spring Data JPA REST APIs with a field allowlist |
-| [`user-settings-spring-boot-starter`](sources/user-settings-spring-boot-starter/README.md) ([ru](sources/user-settings-spring-boot-starter/README.ru.md)) | Per-user settings, preferences and consents with layered resolution, consent ledger and owner/projection modes |
+| Module                                                                                                                                                                      | What it is                                                                                                                                                              |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`web-core-spring-boot-starter`](sources/web-core-spring-boot-starter/README.md) ([ru](sources/web-core-spring-boot-starter/README.ru.md))                                  | One localized RFC 9457 `ProblemDetail` pipeline, business exceptions, locale resolution, page envelope, the long-running operation contract                             |
+| [`security-spring-boot-starter`](sources/security-spring-boot-starter/README.md) ([ru](sources/security-spring-boot-starter/README.ru.md))                                  | Authentication (browser JWT, mTLS partners, peer services), per-service roles, data scopes compiled into QueryDSL predicates                                            |
+| [`pat-core`](sources/pat-core/README.md) ([ru](sources/pat-core/README.ru.md))                                                                                              | Personal access token format: wire format, masked secret, digest, scopes, the `ludwig_pat` claim; no Spring, no storage                                                 |
+| [`pat-spring-boot-starter`](sources/pat-spring-boot-starter/README.md) ([ru](sources/pat-spring-boot-starter/README.ru.md))                                                 | The issuing half of PATs for the identity-provider service: `ludwig_pat` table, management API, token exchange, introspection (verification is in the security starter) |
+| [`identity-projection-spring-boot-starter`](sources/identity-projection-spring-boot-starter/README.md) ([ru](sources/identity-projection-spring-boot-starter/README.ru.md)) | Local projection of the OIDC provider's user stream backing role, data-scope and partner resolution                                                                     |
+| [`odata-filter-spring-boot-starter`](sources/odata-filter-spring-boot-starter/README.md) ([ru](sources/odata-filter-spring-boot-starter/README.ru.md))                      | OData `$filter`/`$top`/`$skip`/`$orderby` for Spring Data JPA REST APIs with a field allowlist                                                                          |
+| [`user-settings-spring-boot-starter`](sources/user-settings-spring-boot-starter/README.md) ([ru](sources/user-settings-spring-boot-starter/README.ru.md))                   | Per-user settings, preferences and consents with layered resolution, consent ledger and owner/projection modes                                                          |
 
 ### Files, reports and storage
 
-| Module | What it is |
-|---|---|
-| [`object-storage-spring-boot-starter`](sources/object-storage-spring-boot-starter/README.md) ([ru](sources/object-storage-spring-boot-starter/README.ru.md)) | One `ObjectStore` contract with ranged reads and lazy listing; S3 and filesystem implementations |
-| [`file-ingest-spring-boot-starter`](sources/file-ingest-spring-boot-starter/README.md) ([ru](sources/file-ingest-spring-boot-starter/README.ru.md)) | Daily bulk file ingest: arrival detection, checkpointed resumable parsing, quarantine, balance check, exactly-once per object version |
-| [`file-action-spring-boot-starter`](sources/file-action-spring-boot-starter/README.md) ([ru](sources/file-action-spring-boot-starter/README.ru.md)) | Interactive spreadsheet actions: upload XLSX/CSV, bounded parsing, confirm step, commit policy, reject report, retention and audit |
-| [`export-spring-boot-starter`](sources/export-spring-boot-starter/README.md) ([ru](sources/export-spring-boot-starter/README.ru.md)) | Tabular business reports: typed definitions, streaming XLSX/CSV, enrichment, run lifecycle, subscriptions, audit |
+| Module                                                                                                                                                       | What it is                                                                                                                            |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| [`object-storage-spring-boot-starter`](sources/object-storage-spring-boot-starter/README.md) ([ru](sources/object-storage-spring-boot-starter/README.ru.md)) | One `ObjectStore` contract with ranged reads and lazy listing; S3 and filesystem implementations                                      |
+| [`file-ingest-spring-boot-starter`](sources/file-ingest-spring-boot-starter/README.md) ([ru](sources/file-ingest-spring-boot-starter/README.ru.md))          | Daily bulk file ingest: arrival detection, checkpointed resumable parsing, quarantine, balance check, exactly-once per object version |
+| [`file-action-spring-boot-starter`](sources/file-action-spring-boot-starter/README.md) ([ru](sources/file-action-spring-boot-starter/README.ru.md))          | Interactive spreadsheet actions: upload XLSX/CSV, bounded parsing, confirm step, commit policy, reject report, retention and audit    |
+| [`export-spring-boot-starter`](sources/export-spring-boot-starter/README.md) ([ru](sources/export-spring-boot-starter/README.ru.md))                         | Tabular business reports: typed definitions, streaming XLSX/CSV, enrichment, run lifecycle, subscriptions, audit                      |
 
 ### Operations
 
-| Module | What it is |
-|---|---|
+| Module                                                                                                                                                    | What it is                                                                                                          |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
 | [`observability-spring-boot-starter`](sources/observability-spring-boot-starter/README.md) ([ru](sources/observability-spring-boot-starter/README.ru.md)) | Tracing over OTLP, correlation ids across HTTP and Kafka, structured JSON logs, RED metrics, probes, build identity |
-| [`hot-reload-spring-boot-starter`](sources/hot-reload-spring-boot-starter/README.md) ([ru](sources/hot-reload-spring-boot-starter/README.ru.md)) | Live reload of property/YAML files, FreeMarker templates and Vault secrets into typed configuration |
+| [`hot-reload-spring-boot-starter`](sources/hot-reload-spring-boot-starter/README.md) ([ru](sources/hot-reload-spring-boot-starter/README.ru.md))          | Live reload of property/YAML files, FreeMarker templates and Vault secrets into typed configuration                 |
 
 ### Test support
 
-| Module | What it is |
-|---|---|
-| [`test-support`](sources/test-support/README.md) ([ru](sources/test-support/README.ru.md)) | Digest-pinned container images, shared Testcontainers singletons, composed test annotations, fixtures, published-document check |
-| [`test-support-security`](sources/test-support-security/README.md) ([ru](sources/test-support-security/README.ru.md)) | Test principals and a reject-all `JwtDecoder` for security-aware tests |
-| [`test-support-local`](sources/test-support-local/README.md) ([ru](sources/test-support-local/README.ru.md)) | Run a whole service locally against real stand-ins (OIDC, SMTP, HTTP partners) from the IDE |
+| Module                                                                                                                | What it is                                                                                                                      |
+|-----------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| [`test-support`](sources/test-support/README.md) ([ru](sources/test-support/README.ru.md))                            | Digest-pinned container images, shared Testcontainers singletons, composed test annotations, fixtures, published-document check |
+| [`test-support-security`](sources/test-support-security/README.md) ([ru](sources/test-support-security/README.ru.md)) | Test principals and a reject-all `JwtDecoder` for security-aware tests                                                          |
+| [`test-support-local`](sources/test-support-local/README.md) ([ru](sources/test-support-local/README.ru.md))          | Run a whole service locally against real stand-ins (OIDC, SMTP, HTTP partners) from the IDE                                     |
 
 ### Services
 
-| Module | What it is |
-|---|---|
+| Module                                                                                                               | What it is                                                                                                                  |
+|----------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
 | [`notification-service`](services/notification-service/README.md) ([ru](services/notification-service/README.ru.md)) | The platform's notification service: REST/Kafka ingress, Postgres delivery queue, templates, channels, inbox, announcements |
-| [`crud-service-example`](services/crud-service-example/README.md) ([ru](services/crud-service-example/README.ru.md)) | Reference CRUD service (product catalog) showing how the modules fit together; the copy-from example |
+| [`crud-service-example`](services/crud-service-example/README.md) ([ru](services/crud-service-example/README.ru.md)) | Reference CRUD service (product catalog) showing how the modules fit together; the copy-from example                        |
 
 ## 🚀 Getting Started
 
@@ -179,11 +229,11 @@ versions at all.
 
 The build publishes three artifacts that a consumer cares about:
 
-| Artifact | Packaging | What it gives you |
-|---|---|---|
-| `ludwig-bom` | `pom` | Every version. Each `ru.ludwigandreas` module, plus every third-party dependency the platform pins on top of Spring Boot (QueryDSL, MapStruct, Olingo, Resilience4j, Testcontainers, Vault, FreeMarker, ArchUnit, springdoc, ...). Nothing else - no plugins, no build configuration. |
-| `ludwig-service-parent` | `pom` | Every build decision. Compiler + annotation processors in the right order, surefire/failsafe, the coverage gate, the enforcer gate, Checkstyle, and a fully configured jib. Imports `ludwig-bom`, so this one `<parent>` covers versions too. |
-| `common` | `pom` | The reactor root. Parent of the **library** modules only; a service never inherits it. |
+| Artifact                | Packaging | What it gives you                                                                                                                                                                                                                                                                     |
+|-------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ludwig-bom`            | `pom`     | Every version. Each `ru.ludwigandreas` module, plus every third-party dependency the platform pins on top of Spring Boot (QueryDSL, MapStruct, Olingo, Resilience4j, Testcontainers, Vault, FreeMarker, ArchUnit, springdoc, ...). Nothing else - no plugins, no build configuration. |
+| `ludwig-service-parent` | `pom`     | Every build decision. Compiler + annotation processors in the right order, surefire/failsafe, the coverage gate, the enforcer gate, Checkstyle, and a fully configured jib. Imports `ludwig-bom`, so this one `<parent>` covers versions too.                                         |
+| `common`                | `pom`     | The reactor root. Parent of the **library** modules only; a service never inherits it.                                                                                                                                                                                                |
 
 ### The usual case: a microservice
 
@@ -357,11 +407,11 @@ Other image knobs, all overridable: `ludwig.image.user` (default `1000:1000`, no
 to no lifecycle phase in the default build, so a local build needs no Docker daemon and never
 contacts a registry.
 
-| Goal | Command | Needs a daemon? |
-|---|---|---|
-| Local image, into your own Docker | `mvn package jib:dockerBuild` | yes |
-| Push to the registry | `mvn -Pci deploy` | **no** |
-| Push, without the full deploy | `mvn -Pci jib:build` | **no** |
+| Goal                              | Command                       | Needs a daemon? |
+|-----------------------------------|-------------------------------|-----------------|
+| Local image, into your own Docker | `mvn package jib:dockerBuild` | yes             |
+| Push to the registry              | `mvn -Pci deploy`             | **no**          |
+| Push, without the full deploy     | `mvn -Pci jib:build`          | **no**          |
 
 `jib:build` streams layers straight to the registry over HTTPS, which is why a CI agent needs no
 Docker daemon, no privileged container and no mounted daemon socket.
@@ -531,12 +581,8 @@ The short version:
 > Guidelines: follow clean code practices and keep modules focused. What the code must look like is
 > in [`CLAUDE.md`](CLAUDE.md) and each module's own README.
 
-## License
-
-This project is licensed under the MIT License – see the LICENSE file for details.
-
 ## Author
 
 Ludwig Andreas
 
-[GitHub]() • [LinkedIn]()
+[GitHub](https://github.com/LudwigAndreas) • [Telegram](https://t.me/ludwig_andreas) • 
