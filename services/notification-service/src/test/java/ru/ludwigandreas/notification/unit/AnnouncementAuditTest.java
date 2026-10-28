@@ -2,6 +2,7 @@ package ru.ludwigandreas.notification.unit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -104,6 +105,37 @@ class AnnouncementAuditTest {
         // map does not round-trip to the same type, and the resulting dirty check fails the whole
         // transaction at commit against AuditEventEntity's immutability listener.
         assertThat(event.attributes()).containsEntry("deliveriesAlreadyCreated", "4200");
+    }
+
+    @Test
+    @DisplayName("a withdrawal records its reason, and records none when none was given")
+    void withdrawalRecordsTheReason() {
+        AuditEvent withReason = AnnouncementAuditEvent.withdrawn(ID, "platform-release",
+                Audience.everyone(), Actor.of("announcer"), "wrong audience").toAuditEvent();
+        AuditEvent without = AnnouncementAuditEvent.withdrawn(ID, "platform-release",
+                Audience.everyone(), Actor.of("announcer"), null).toAuditEvent();
+
+        assertThat(withReason.action()).isEqualTo("config.announcement-withdrawn");
+        assertThat(withReason.attributes()).containsEntry("reason", "wrong audience");
+        assertThat(without.attributes()).doesNotContainKey("reason");
+    }
+
+    /** Both windows, as strings - the same immutability reason as the broadcast count above. */
+    @Test
+    @DisplayName("a window change records the previous and the new window")
+    void windowChangeRecordsBothWindows() {
+        Instant from = Instant.parse("2026-11-01T00:00:00Z");
+        AuditEvent event = AnnouncementAuditEvent.windowChanged(ID, "platform-release",
+                Audience.everyone(), Actor.of("announcer"), from,
+                Instant.parse("2026-11-05T00:00:00Z"), from,
+                Instant.parse("2026-11-10T00:00:00Z")).toAuditEvent();
+
+        assertThat(event.action()).isEqualTo("config.announcement-window-changed");
+        assertThat(event.attributes())
+                .containsEntry("previousVisibleFrom", "2026-11-01T00:00:00Z")
+                .containsEntry("previousVisibleUntil", "2026-11-05T00:00:00Z")
+                .containsEntry("visibleFrom", "2026-11-01T00:00:00Z")
+                .containsEntry("visibleUntil", "2026-11-10T00:00:00Z");
     }
 
     @Test

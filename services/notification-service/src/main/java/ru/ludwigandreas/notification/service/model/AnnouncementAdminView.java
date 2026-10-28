@@ -25,5 +25,8 @@ public record AnnouncementAdminView(
         Instant visibleFrom,
         Instant visibleUntil,
         Instant publishedAt,
-        String publishedBy) {
+        String publishedBy,
+        Instant withdrawnAt,
+        String withdrawnBy,
+        String withdrawalReason) {
 }

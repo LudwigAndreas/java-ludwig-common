@@ -92,7 +92,8 @@ class AnnouncementQueryRepositoryImpl implements AnnouncementQueryRepository {
     public long purgeExpiredBefore(Instant visibleUntilBefore, int batchSize) {
         List<UUID> expired = queryFactory.select(ANNOUNCEMENT.id)
                 .from(ANNOUNCEMENT)
-                .where(ANNOUNCEMENT.visibleUntil.lt(visibleUntilBefore))
+                .where(ANNOUNCEMENT.visibleUntil.lt(visibleUntilBefore)
+                        .or(ANNOUNCEMENT.withdrawnAt.lt(visibleUntilBefore)))
                 .limit(batchSize)
                 .fetch();
         if (expired.isEmpty()) {
@@ -128,8 +129,10 @@ class AnnouncementQueryRepositoryImpl implements AnnouncementQueryRepository {
      * either drop the term or produce a predicate matching everything, depending on the dialect.
      */
     private static BooleanExpression visibleTo(Collection<String> roles, Instant now) {
+        // Withdrawn is checked here, once, so the list, the count and the read by identifier all agree.
         BooleanExpression inWindow = ANNOUNCEMENT.visibleFrom.loe(now)
-                .and(ANNOUNCEMENT.visibleUntil.gt(now));
+                .and(ANNOUNCEMENT.visibleUntil.gt(now))
+                .and(ANNOUNCEMENT.withdrawnAt.isNull());
 
         BooleanExpression everyone = ANNOUNCEMENT.audienceKind.eq(AudienceKind.EVERYONE);
         if (roles == null || roles.isEmpty()) {

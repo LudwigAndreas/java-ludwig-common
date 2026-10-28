@@ -144,6 +144,30 @@ class AnnouncementSchemaIT extends NotificationTestBase {
                 .isLessThan(definition.indexOf("announcement_id"));
     }
 
+    /** Retention's withdrawn branch; partial, because almost no row is ever withdrawn. */
+    @Test
+    @DisplayName("the withdrawal index exists and covers only withdrawn rows")
+    void withdrawalIndexIsPartial() {
+        String definition = indexDefinitionOf("ix_notification_announcement_withdrawn");
+
+        assertThat(definition).isNotNull();
+        assertThat(definition).contains("withdrawn_at");
+        assertThat(definition).contains("WHERE (withdrawn_at IS NOT NULL)");
+    }
+
+    @Test
+    @DisplayName("a withdrawal can be recorded on a not-yet-open announcement")
+    void withdrawalOfFutureAnnouncementSatisfiesTheWindowCheck() {
+        Instant now = Instant.now();
+        UUID id = insertAnnouncement("EVERYONE", null, now.plusSeconds(3600), now.plusSeconds(7200));
+
+        int updated = jdbc.update("UPDATE notification_announcement SET withdrawn_at = ?, "
+                        + "withdrawn_by = ?, withdrawal_reason = ? WHERE id = ?",
+                java.sql.Timestamp.from(now), "publisher", "wrong audience", id);
+
+        assertThat(updated).isEqualTo(1);
+    }
+
     /**
      * No per-subject audience table exists, which is the schema-level statement of the property an
      * ArchUnit rule protects on the Java side. A table can be added by a changeset without any entity

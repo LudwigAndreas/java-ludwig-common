@@ -333,6 +333,39 @@ class AnnouncementEmailFanOutIT extends NotificationTestBase {
     }
 
     @Test
+    @DisplayName("withdrawing during a fan-out cancels it and keeps the deliveries it made")
+    void withdrawalCancelsTheFanOut() {
+        givenUsers(5);
+        UUID id = publish("platform-incident", AudienceType.EVERYONE, null);
+        UUID runId = broadcastService.runFor(id).orElseThrow().id();
+        broadcastService.advanceOneBatch(runId);
+        long created = emailDeliveries().size();
+
+        adminService.withdraw(id, "sent in error");
+        drain();
+
+        BroadcastRunView run = broadcastService.runFor(id).orElseThrow();
+        assertThat(run.status().name()).isEqualTo("CANCELLED");
+        assertThat(run.deliveriesCreated()).isEqualTo(created);
+        assertThat(emailDeliveries())
+                .as("a withdrawal cannot recall what was already sent")
+                .hasSize((int) created);
+    }
+
+    @Test
+    @DisplayName("withdrawing after the fan-out finished leaves the run as it was")
+    void withdrawalAfterTheFanOutLeavesItFinished() {
+        givenUsers(2);
+        UUID id = publish("platform-incident", AudienceType.EVERYONE, null);
+        drain();
+
+        adminService.withdraw(id, null);
+
+        assertThat(broadcastService.runFor(id).orElseThrow().status().name())
+                .isEqualTo("SUCCEEDED");
+    }
+
+    @Test
     @DisplayName("cancelling an already-finished run returns it rather than failing")
     void cancellingAFinishedRunIsNotAnError() {
         givenUsers(2);

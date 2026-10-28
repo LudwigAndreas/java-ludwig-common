@@ -73,6 +73,13 @@ components:
         visibleUntil:
           format: date-time
           type: string
+        withdrawalReason:
+          type: string
+        withdrawnAt:
+          format: date-time
+          type: string
+        withdrawnBy:
+          type: string
       title: AnnouncementAdminResponse
       type: object
     AnnouncementSummary:
@@ -141,6 +148,19 @@ components:
             $ref: '#/components/schemas/BatchItemResult'
           type: array
       title: BatchSendResponse
+      type: object
+    ChangeAnnouncementWindowRequest:
+      description: Replace an announcement's visibility window. The start can move only before the window opens; the end cannot be in the past.
+      properties:
+        visibleFrom:
+          format: date-time
+          type: string
+        visibleUntil:
+          format: date-time
+          type: string
+      required:
+      - visibleUntil
+      title: ChangeAnnouncementWindowRequest
       type: object
     DeliveryContentResponse:
       properties:
@@ -855,6 +875,15 @@ components:
           type: string
       title: SuppressionResponse
       type: object
+    WithdrawAnnouncementRequest:
+      description: Withdraw a published announcement. The reason is optional.
+      properties:
+        reason:
+          maxLength: 500
+          minLength: 0
+          type: string
+      title: WithdrawAnnouncementRequest
+      type: object
 info:
   description: |
     Submit notification requests, inspect delivery history, and manage
@@ -999,7 +1028,7 @@ paths:
       - Announcements
   /api/v1/announcements/{id}/corrections:
     post:
-      description: Re-renders every supported locale together, so the languages cannot drift apart. Dismissals are preserved - a typo fix does not un-dismiss anything. The audience and window cannot be changed.
+      description: Re-renders every supported locale together, so the languages cannot drift apart. Dismissals are preserved - a typo fix does not un-dismiss anything. The audience cannot be changed; the window is changed through its own endpoint.
       operationId: correct
       parameters:
       - in: path
@@ -1108,6 +1137,71 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       summary: Cancel an announcement's email fan-out
+      tags:
+      - Announcement administration
+  /api/v1/announcements/{id}/window:
+    put:
+      description: The end can move either way but not into the past. The start can move only before the window opens. The configured maximum length still applies.
+      operationId: changeWindow
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeAnnouncementWindowRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AnnouncementAdmin'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      summary: Change a published announcement's visibility window
+      tags:
+      - Announcement administration
+  /api/v1/announcements/{id}/withdrawal:
+    post:
+      description: Hides it from every recipient at once and cancels a running email fan-out. Emails already sent are not recalled. The announcement is kept, marked with who withdrew it, when and why, and can no longer be changed.
+      operationId: withdraw
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawAnnouncementRequest'
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AnnouncementAdmin'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      summary: Withdraw a published announcement
       tags:
       - Announcement administration
   /api/v1/filter-metadata/{entity}:
@@ -1795,13 +1889,13 @@ tags:
   name: Delivery receipts
 - description: Submit notification requests and preview templates
   name: Notifications
-- description: Publish and correct platform announcements
-  name: Announcement administration
 - description: Platform announcements addressed to the caller
   name: Announcements
 - description: The caller's own in-product notifications
   name: Inbox
 - description: Destinations that will not be written to
   name: Suppression list
+- description: Publish, correct, reschedule and withdraw platform announcements
+  name: Announcement administration
 - description: Inspect delivery history, retry and cancel
   name: Delivery administration

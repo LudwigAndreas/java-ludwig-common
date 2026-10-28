@@ -63,7 +63,8 @@ public interface AnnouncementQueryRepository {
      *
      * <p>Anchored on the end of visibility, not on creation: an announcement published for next
      * quarter has not started yet, and one still showing must never be purged out from under the
-     * people reading it.
+     * people reading it. A withdrawal also ends visibility, so a withdrawn announcement is
+     * measured from its withdrawal.
      */
     long purgeExpiredBefore(Instant visibleUntilBefore, int batchSize);
 }

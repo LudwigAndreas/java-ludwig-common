@@ -22,6 +22,7 @@ import ru.ludwigandreas.notification.repository.AnnouncementMarkerRepository;
 import ru.ludwigandreas.notification.repository.AnnouncementRepository;
 import ru.ludwigandreas.notification.repository.InboxItemContentRepository;
 import ru.ludwigandreas.notification.repository.InboxItemRepository;
+import ru.ludwigandreas.notification.repository.entity.AnnouncementEntity;
 import ru.ludwigandreas.notification.repository.entity.CategoryKind;
 import ru.ludwigandreas.notification.repository.entity.InboxItemEntity;
 import ru.ludwigandreas.notification.service.announcement.AnnouncementAdminService;
@@ -208,6 +209,38 @@ class AnnouncementVisibilityIT extends NotificationTestBase {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Withdrawal
+    // ---------------------------------------------------------------------------------------------
+
+    /** List, count and read by identifier share one predicate; all three are checked so they cannot drift. */
+    @Test
+    @DisplayName("a withdrawn announcement is absent from the list, the count and the read by id")
+    void withdrawnAnnouncementIsInvisibleEverywhere() throws Exception {
+        UUID id = publishToEveryone();
+        markWithdrawn(id, Instant.now());
+
+        mockMvc.perform(get("/api/v1/announcements")
+                        .with(TestPrincipals.recipient(SUBJECT)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(0));
+        assertThat(visibleCountFor()).isZero();
+        mockMvc.perform(get("/api/v1/announcements/{id}", id)
+                        .with(TestPrincipals.recipient(SUBJECT)))
+                .andExpect(status().isNotFound());
+        assertThat(announcements.findById(id)).as("withdrawal keeps the record").isPresent();
+    }
+
+    /** Withdrawn before its start, which has since passed: the window alone would now show it. */
+    @Test
+    @DisplayName("an announcement withdrawn before its window opened never becomes visible")
+    void withdrawnBeforeOpeningStaysInvisible() {
+        UUID id = publishToEveryone();
+        markWithdrawn(id, Instant.now().minus(1, ChronoUnit.HOURS));
+
+        assertThat(visibleCountFor()).isZero();
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Dismissal
     // ---------------------------------------------------------------------------------------------
 
@@ -353,6 +386,13 @@ class AnnouncementVisibilityIT extends NotificationTestBase {
                 .replace(id.toString(), "{id}")
                 .replaceAll("\"timestamp\":\"[^\"]+\"", "\"timestamp\":\"{t}\"")
                 .replaceAll(",?\"traceId\":\"[^\"]+\"", "");
+    }
+
+    private void markWithdrawn(UUID id, Instant at) {
+        AnnouncementEntity announcement = announcements.findById(id).orElseThrow();
+        announcement.setWithdrawnAt(at);
+        announcement.setWithdrawnBy("announcer");
+        announcements.save(announcement);
     }
 
     private UUID publishToEveryone() {

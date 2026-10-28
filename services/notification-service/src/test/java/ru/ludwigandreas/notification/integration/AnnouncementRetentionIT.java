@@ -15,6 +15,7 @@ import ru.ludwigandreas.notification.repository.AnnouncementContentRepository;
 import ru.ludwigandreas.notification.repository.AnnouncementEmailRunRepository;
 import ru.ludwigandreas.notification.repository.AnnouncementMarkerRepository;
 import ru.ludwigandreas.notification.repository.AnnouncementRepository;
+import ru.ludwigandreas.notification.repository.entity.AnnouncementEntity;
 import ru.ludwigandreas.notification.repository.entity.AnnouncementMarkerEntity;
 import ru.ludwigandreas.notification.repository.entity.AnnouncementMarkerId;
 import ru.ludwigandreas.notification.service.announcement.AnnouncementAdminService;
@@ -181,6 +182,36 @@ class AnnouncementRetentionIT extends NotificationTestBase {
         // assertion is that the step reports what it removed rather than that it looped.
         assertThat(retentionService.purgeAnnouncements(Instant.now())).isEqualTo(3L);
         assertThat(announcements.findAll()).isEmpty();
+    }
+
+    /** Its window would keep it for weeks; the withdrawal is what ended its visibility. */
+    @Test
+    @DisplayName("an announcement withdrawn long ago is purged before its original end")
+    void withdrawnAnnouncementIsPurgedFromItsWithdrawal() {
+        Instant now = Instant.now();
+        UUID id = adminService.publish("platform-release", AudienceType.EVERYONE, null,
+                        "platform-release", VARIABLES, now.minus(1, ChronoUnit.DAYS),
+                        now.plus(20, ChronoUnit.DAYS))
+                .announcement().id();
+        AnnouncementEntity announcement = announcements.findById(id).orElseThrow();
+        announcement.setWithdrawnAt(now.minus(properties.getRetention().getAnnouncementTtl())
+                .minus(Duration.ofDays(1)));
+        announcements.save(announcement);
+
+        assertThat(retentionService.purgeAnnouncements(now)).isEqualTo(1L);
+        assertThat(announcements.findById(id)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a recently withdrawn announcement is kept")
+    void recentlyWithdrawnAnnouncementIsKept() {
+        UUID id = publishEndingAgo(Duration.ofDays(1));
+        AnnouncementEntity announcement = announcements.findById(id).orElseThrow();
+        announcement.setWithdrawnAt(Instant.now());
+        announcements.save(announcement);
+
+        assertThat(retentionService.purgeAnnouncements(Instant.now())).isZero();
+        assertThat(announcements.findById(id)).isPresent();
     }
 
     /** Publishes an announcement whose visibility ended this long ago. */

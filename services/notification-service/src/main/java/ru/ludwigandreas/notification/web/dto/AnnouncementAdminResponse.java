@@ -14,6 +14,7 @@ import java.util.UUID;
  *
  * @param emailRunId the fan-out operation started by this publish, when its category sends email;
  *                   null otherwise, because there is then no operation to poll
+ * @param withdrawnAt when an announcer withdrew it; null while it stands
  */
 @Schema(name = "AnnouncementAdmin",
         description = "One announcement as its publisher sees it, audience included")
@@ -38,6 +39,12 @@ public record AnnouncementAdminResponse(
         Instant publishedAt,
 
         String publishedBy,
+
+        Instant withdrawnAt,
+
+        String withdrawnBy,
+
+        String withdrawalReason,
 
         UUID emailRunId) {
 }

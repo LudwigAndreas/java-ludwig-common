@@ -5,23 +5,26 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/LICENSE.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/admin-guide.ru.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/agent-operations.ru.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/agent-state.ru.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/data-scope-configuration.ru.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/developer-guide.ru.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/documentation-guide.ru.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/runbook.ru.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/admin-guide.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/admin-guide.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/agent-operations.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/agent-operations.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/agent-state.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/agent-state.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/data-scope-configuration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/data-scope-configuration.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/developer-guide.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/developer-guide.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/documentation-guide.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/documentation-guide.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/runbook.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/runbook.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/api/notification-service.openapi.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/docs/api/notification-service.openapi.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.ru.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepositoryImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepositoryImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAuditEvent.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAuditEvent.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/AnnouncementAdminView.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/AnnouncementAdminView.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/AnnouncementAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/AnnouncementAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AnnouncementAdminResponse.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AnnouncementAdminResponse.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages_ru.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages_ru.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementEmailFanOutIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementEmailFanOutIT.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementRetentionIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementRetentionIT.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementSchemaIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementSchemaIT.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementVisibilityIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementVisibilityIT.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/AnnouncementAuditTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/AnnouncementAuditTest.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -243,7 +246,7 @@
       <updated>1786817614729</updated>
       <workItem from="1786817616340" duration="102896000" />
       <workItem from="1791636263581" duration="45697000" />
-      <workItem from="1792176148669" duration="34787000" />
+      <workItem from="1792176148669" duration="38057000" />
     </task>
     <servers />
   </component>

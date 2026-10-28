@@ -22,6 +22,9 @@ import ru.ludwigandreas.notification.repository.entity.AnnouncementEntity;
 import ru.ludwigandreas.notification.repository.entity.AudienceKind;
 import ru.ludwigandreas.notification.repository.entity.CategoryKind;
 import ru.ludwigandreas.notification.service.exception.AnnouncementNotFoundException;
+import ru.ludwigandreas.notification.service.exception.AnnouncementWindowOpenedException;
+import ru.ludwigandreas.notification.service.exception.AnnouncementWithdrawnException;
+import ru.ludwigandreas.notification.service.exception.InvalidVisibilityWindowException;
 import ru.ludwigandreas.notification.service.exception.UnknownAnnouncementCategoryException;
 import ru.ludwigandreas.notification.service.exception.VisibilityWindowTooLongException;
 import ru.ludwigandreas.notification.service.model.Audience;
@@ -209,7 +212,10 @@ public class AnnouncementAdminService {
                 announcement.getVisibleFrom(),
                 announcement.getVisibleUntil(),
                 announcement.getCreatedAt(),
-                announcement.getCreatedBy());
+                announcement.getCreatedBy(),
+                announcement.getWithdrawnAt(),
+                announcement.getWithdrawnBy(),
+                announcement.getWithdrawalReason());
     }
 
     /**
@@ -223,6 +229,9 @@ public class AnnouncementAdminService {
     public AnnouncementAdminView correct(UUID announcementId, Map<String, Object> variables) {
         AnnouncementEntity announcement = announcements.findForAdministration(announcementId)
                 .orElseThrow(() -> new AnnouncementNotFoundException(announcementId));
+        if (announcement.getWithdrawnAt() != null) {
+            throw new AnnouncementWithdrawnException(announcementId);
+        }
 
         Map<String, RenderedTemplate> rendered =
                 renderEveryLocale(announcement.getTemplateKey(), variables);
@@ -232,6 +241,77 @@ public class AnnouncementAdminService {
                 announcement.getCategory(), audienceOf(announcement), currentActor()).toAuditEvent());
 
         log.info("Corrected announcement {} in {} locale(s)", announcementId, rendered.size());
+        return toAdminView(announcement);
+    }
+
+    /**
+     * Withdraws a published announcement: hidden from every recipient at once, kept as a record, and
+     * its email fan-out cancelled if it is still running. A repeat returns the first withdrawal.
+     *
+     * <p>Every read before the audit record, which is the last thing written - the ordering
+     * {@code AnnouncementEmailBroadcastService#requestCancellation} explains, and which that call
+     * itself relies on, since it reads and audits too.
+     */
+    @Transactional
+    public AnnouncementAdminView withdraw(UUID announcementId, String reason) {
+        AnnouncementEntity announcement = announcements.findForAdministration(announcementId)
+                .orElseThrow(() -> new AnnouncementNotFoundException(announcementId));
+        if (announcement.getWithdrawnAt() != null) {
+            return toAdminView(announcement);
+        }
+        boolean hasRun = broadcastService.runFor(announcementId).isPresent();
+
+        Actor actor = currentActor();
+        announcement.setWithdrawnAt(Instant.now());
+        announcement.setWithdrawnBy(actor.subject());
+        announcement.setWithdrawalReason(reason);
+        if (hasRun) {
+            broadcastService.requestCancellation(announcementId);
+        }
+
+        auditSink.record(AnnouncementAuditEvent.withdrawn(announcementId,
+                announcement.getCategory(), audienceOf(announcement), actor, reason).toAuditEvent());
+
+        log.info("Withdrew announcement {}", announcementId);
+        return toAdminView(announcement);
+    }
+
+    /**
+     * Changes a published announcement's window. The end moves either way but not into the past; the
+     * start moves only while the window has not opened, because once it has, recipients have seen it.
+     *
+     * @param visibleFrom null keeps the current start
+     */
+    @Transactional
+    public AnnouncementAdminView changeWindow(UUID announcementId, Instant visibleFrom,
+                                              Instant visibleUntil) {
+        AnnouncementEntity announcement = announcements.findForAdministration(announcementId)
+                .orElseThrow(() -> new AnnouncementNotFoundException(announcementId));
+        if (announcement.getWithdrawnAt() != null) {
+            throw new AnnouncementWithdrawnException(announcementId);
+        }
+
+        Instant now = Instant.now();
+        Instant previousFrom = announcement.getVisibleFrom();
+        Instant previousUntil = announcement.getVisibleUntil();
+        Instant from = visibleFrom == null ? previousFrom : visibleFrom;
+        boolean opened = !previousFrom.isAfter(now);
+        if (opened && !from.equals(previousFrom)) {
+            throw new AnnouncementWindowOpenedException(announcementId);
+        }
+        if (!visibleUntil.isAfter(now) || !opened && from.isBefore(now)) {
+            throw new InvalidVisibilityWindowException(from, visibleUntil);
+        }
+        requireWindowWithinLimit(from, visibleUntil);
+
+        announcement.setVisibleFrom(from);
+        announcement.setVisibleUntil(visibleUntil);
+
+        auditSink.record(AnnouncementAuditEvent.windowChanged(announcementId,
+                announcement.getCategory(), audienceOf(announcement), currentActor(), previousFrom,
+                previousUntil, from, visibleUntil).toAuditEvent());
+
+        log.info("Changed announcement {} window to {} - {}", announcementId, from, visibleUntil);
         return toAdminView(announcement);
     }
 

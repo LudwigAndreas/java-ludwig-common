@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,7 +24,9 @@ import ru.ludwigandreas.notification.service.model.AnnouncementAdminView;
 import ru.ludwigandreas.notification.service.model.AudienceType;
 import ru.ludwigandreas.notification.service.model.BroadcastRunView;
 import ru.ludwigandreas.notification.web.dto.AnnouncementAdminResponse;
+import ru.ludwigandreas.notification.web.dto.ChangeAnnouncementWindowRequest;
 import ru.ludwigandreas.notification.web.dto.PublishAnnouncementRequest;
+import ru.ludwigandreas.notification.web.dto.WithdrawAnnouncementRequest;
 import ru.ludwigandreas.notification.web.mapper.AnnouncementDtoMapper;
 import ru.ludwigandreas.notification.settings.NotificationProperties;
 import ru.ludwigandreas.webcore.operation.OperationLocationHeader;
@@ -53,7 +56,8 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
  * <p>There is no {@code channels} field and no flag asking for email - see
  * {@link PublishAnnouncementRequest}. The category decides both, from a catalogue somebody reviewed.
  */
-@Tag(name = "Announcement administration", description = "Publish and correct platform announcements")
+@Tag(name = "Announcement administration",
+        description = "Publish, correct, reschedule and withdraw platform announcements")
 @RestController
 @RequestMapping("/api/v1/announcements")
 @RequiredArgsConstructor
@@ -122,14 +126,15 @@ public class AnnouncementAdminController {
      *
      * <p>{@code POST} on a sub-resource rather than {@code PATCH} on the announcement, because it is
      * a named command - "render this again" - and not a partial edit of the document. The audience
-     * and the window are untouched and cannot be changed this way: part of the audience may already
-     * have been emailed, so moving an announcement between audiences would make the record of who was
-     * told untrue.
+     * and the window are untouched: the audience cannot be changed at all, because part of it may
+     * already have been emailed and moving it would make the record of who was told untrue, and the
+     * window has its own guarded endpoint.
      */
     @Operation(summary = "Correct a published announcement's content",
             description = "Re-renders every supported locale together, so the languages cannot drift "
                     + "apart. Dismissals are preserved - a typo fix does not un-dismiss anything. "
-                    + "The audience and window cannot be changed.")
+                    + "The audience cannot be changed; the window is changed through its own "
+                    + "endpoint.")
     @PostMapping("/{id}/corrections")
     @PreAuthorize("hasRole('NOTIFICATION_ANNOUNCER')")
     public AnnouncementAdminResponse correct(@PathVariable UUID id,
@@ -138,6 +143,49 @@ public class AnnouncementAdminController {
         AnnouncementAdminView corrected = adminService.correct(id,
                 request == null ? null : request.variables());
         return mapper.toAdminResponse(corrected,
+                broadcastService.runFor(id).map(BroadcastRunView::id).orElse(null));
+    }
+
+    /**
+     * Withdraws a published announcement.
+     *
+     * <p>A named command like {@code /email-run/cancellation}, and idempotent like it: a repeat
+     * answers with the first withdrawal. Not {@code DELETE}, because nothing is deleted - the record
+     * stays until retention, and the reason the announcement came down is part of it.
+     */
+    @Operation(summary = "Withdraw a published announcement",
+            description = "Hides it from every recipient at once and cancels a running email fan-out. "
+                    + "Emails already sent are not recalled. The announcement is kept, marked with "
+                    + "who withdrew it, when and why, and can no longer be changed.")
+    @PostMapping("/{id}/withdrawal")
+    @PreAuthorize("hasRole('NOTIFICATION_ANNOUNCER')")
+    public AnnouncementAdminResponse withdraw(@PathVariable UUID id,
+                                              @Valid @RequestBody(required = false)
+                                              WithdrawAnnouncementRequest request) {
+        AnnouncementAdminView withdrawn = adminService.withdraw(id,
+                request == null ? null : request.reason());
+        return mapper.toAdminResponse(withdrawn,
+                broadcastService.runFor(id).map(BroadcastRunView::id).orElse(null));
+    }
+
+    /**
+     * Replaces a published announcement's visibility window.
+     *
+     * <p>{@code PUT} on the window as a sub-resource, because the window is two values that are only
+     * valid together - a partial edit of one end would be validated against an end the caller did
+     * not look at.
+     */
+    @Operation(summary = "Change a published announcement's visibility window",
+            description = "The end can move either way but not into the past. The start can move "
+                    + "only before the window opens. The configured maximum length still applies.")
+    @PutMapping("/{id}/window")
+    @PreAuthorize("hasRole('NOTIFICATION_ANNOUNCER')")
+    public AnnouncementAdminResponse changeWindow(@PathVariable UUID id,
+                                                  @Valid @RequestBody
+                                                  ChangeAnnouncementWindowRequest request) {
+        AnnouncementAdminView changed = adminService.changeWindow(id, request.visibleFrom(),
+                request.visibleUntil());
+        return mapper.toAdminResponse(changed,
                 broadcastService.runFor(id).map(BroadcastRunView::id).orElse(null));
     }
 

@@ -52,6 +52,12 @@ public record AnnouncementAuditEvent(Instant at, String action, UUID announcemen
     /** An email broadcast was cancelled part way. */
     public static final String BROADCAST_CANCELLED = "announcement-broadcast-cancelled";
 
+    /** A published announcement was withdrawn. */
+    public static final String WITHDRAWN = "announcement-withdrawn";
+
+    /** A published announcement's visibility window was changed. */
+    public static final String WINDOW_CHANGED = "announcement-window-changed";
+
     /** The resource type this event's subject is recorded under. */
     public static final String RESOURCE_TYPE = "notification-announcement";
 
@@ -90,6 +96,28 @@ public record AnnouncementAuditEvent(Instant at, String action, UUID announcemen
                                                             long created) {
         return new AnnouncementAuditEvent(Instant.now(), BROADCAST_CANCELLED, id, category, audience,
                 actor, Map.of("deliveriesAlreadyCreated", String.valueOf(created)));
+    }
+
+    /** A withdrawal, carrying the reason when one was given. */
+    public static AnnouncementAuditEvent withdrawn(UUID id, String category, Audience audience,
+                                                   Actor actor, String reason) {
+        return new AnnouncementAuditEvent(Instant.now(), WITHDRAWN, id, category, audience, actor,
+                reason == null ? Map.of() : Map.of("reason", reason));
+    }
+
+    /**
+     * A window change, carrying both windows. Instants as strings, for the reason
+     * {@link #broadcastCancelled} gives.
+     */
+    public static AnnouncementAuditEvent windowChanged(UUID id, String category, Audience audience,
+                                                       Actor actor, Instant previousFrom,
+                                                       Instant previousUntil, Instant from,
+                                                       Instant until) {
+        return new AnnouncementAuditEvent(Instant.now(), WINDOW_CHANGED, id, category, audience,
+                actor, Map.of("previousVisibleFrom", previousFrom.toString(),
+                        "previousVisibleUntil", previousUntil.toString(),
+                        "visibleFrom", from.toString(),
+                        "visibleUntil", until.toString()));
     }
 
     /**

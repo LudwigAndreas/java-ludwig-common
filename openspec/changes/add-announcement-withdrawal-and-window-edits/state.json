@@ -1,0 +1,43 @@
+{
+  "change": "add-announcement-withdrawal-and-window-edits",
+  "contract": {
+    "goal": "announcers can withdraw a published announcement and change its visibility window within guards, as specified in specs/platform-announcement/spec.md",
+    "output": "notification-service: migration 0024, withdrawal + window endpoints, service logic, audit actions, ITs; refreshed docs/api/notification-service.openapi.yaml",
+    "constraints": [
+      "no hard delete; withdrawal keeps the row",
+      "audience stays immutable",
+      "reuse requestCancellation, AuditSink, LocalizedException/ProblemStatus - no second implementation",
+      "no new in-repo dependency, no POM change",
+      "QueryDSL only; migration in the one formatted-SQL shape"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_api_baseline.sh",
+      "scripts/check_migrations.sh",
+      "scripts/check_build_metadata.sh",
+      "scripts/check_protos.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :notification-service -am verify",
+      "openspec validate add-announcement-withdrawal-and-window-edits --strict"
+    ]
+  },
+  "current_task": "done",
+  "rollback_point": "4d2f9d29f0d8f925ab693f2194693036ccf79b03",
+  "decisions": [
+    "withdrawal is a withdrawn_at marker, not visible_until=now: ck_notification_announcement_window (visible_until > visible_from) forbids the latter for a not-yet-open announcement",
+    "scope addition before first edit: task 5.2 refreshes docs/api/notification-service.openapi.yaml, because the service's drift IT fails on new endpoints and tasks.md omitted it",
+    "audit-record scenarios (once on withdraw, none on repeat or on a refused change) are asserted in unit test AnnouncementLifecycleTest with RecordingAuditSink, not in AnnouncementLifecycleIT: the IT context's @Primary AuditSink cannot be substituted (RecordingAuditSink javadoc). Fan-out withdrawal scenarios live in AnnouncementEmailFanOutIT, which owns the users and scheduler"
+  ],
+  "failures": [
+    "gate step scripts/check_image_pins.sh FAILS at HEAD, independent of this change: openspec/changes/archive/2026-10-11-adopt-local-run-in-notification-service/proposal.md:78 (unmodified since 7abdcd4), apparently a false positive on prose 'no new image'",
+    "gate step scripts/check_api_baseline.sh FAILS: releases repository nexus.example.internal unreachable from this machine; library modules only, none touched by this change",
+    "scripts/check_migrations.sh reports E_INCLUDE_MISSING for 0024 only because it reads git ls-files and the file is untracked; the same checker over tracked+untracked files passes (100 changesets conforming). Passes once committed",
+    "gate step mvn -pl :notification-service -am verify FAILED 4 times upstream of notification-service, never reaching it: (1) test-support-local StubFaultIT.slow timing ConditionTimeoutException, twice, deterministic; (2) -rf resume dropped earlier reactor artifacts (operator error); (3) with StubFaultIT excluded, messaging-spring-boot-starter ArchitectureTest 'No classes were imported' - passed in run 1; (4) notification-only test filter, messaging failsafe verify failed. IntelliJ+Junie running on the checkout throughout and JaCoCo warns of class file major version 70; suspected concurrent writes into target/. Stopped at the retry cap",
+    "after IntelliJ was closed: run 5 failed in job-core JdbcRunLockIT (Postgres container connection attempt failed, transient Docker); run 6 `mvn -pl :notification-service -am verify` BUILD SUCCESS - notification-service 312 unit + 212 IT, 0 failures, coverage checks met. Confirms the earlier upstream failures were environmental"
+  ],
+  "open_questions": [],
+  "pending_human": [
+    "decide on the check_image_pins false positive in the archived 2026-10-11 proposal (gate step 1, pre-existing)"
+  ]
+}

@@ -999,6 +999,27 @@ announcement and is not emailed; somebody who loses it mid-run may or may not be
 walk had reached. Re-checking membership per row would make a long run send to a different audience
 than the one that was approved.
 
+### Withdrawing and rescheduling
+
+Content is corrected through `/corrections`; the other two things an announcer can change after
+publishing have endpoints of their own, both needing `ROLE_NOTIFICATION_ANNOUNCER`.
+
+```
+POST /api/v1/announcements/{id}/withdrawal   {"reason": "..."} optional; idempotent
+PUT  /api/v1/announcements/{id}/window       {"visibleFrom": ..., "visibleUntil": ...}
+```
+
+**Withdrawal hides, it does not delete.** The announcement disappears from every recipient's list,
+count and read by id at once, and stays as a record of who withdrew it, when and why — retention
+purges it later, measured from the withdrawal. It also cancels a running email fan-out; emails
+already sent cannot be recalled. A withdrawn announcement is final: its window and content answer
+409, and bringing it back is a new publish.
+
+**The window moves within guards.** The end may move either way but not into the past (422) —
+taking an announcement down now is a withdrawal, which leaves a record a past end would not. The
+start may move only before the window opens (409 afterwards: recipients have already seen it). The
+maximum window length still applies. The audience never changes.
+
 ### Retention
 
 | What | Property | Default | Anchor |
@@ -1494,6 +1515,8 @@ Announcements are the only audited actions; deliveries are recorded in
 | `config.announcement-published` | an announcement is published |
 | `config.announcement-corrected` | its content is corrected |
 | `config.announcement-broadcast-cancelled` | its email fan-out is cancelled |
+| `config.announcement-withdrawn` | it is withdrawn, with the reason when given |
+| `config.announcement-window-changed` | its window changes, with the old and new window |
 
 Category `config`, resource type `notification-announcement`. The audience is recorded as its kind and value,
 never as a resolved list of people. Idempotency claims are audited by `idempotency-spring-boot-starter`. This

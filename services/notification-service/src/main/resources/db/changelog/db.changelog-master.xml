@@ -103,6 +103,9 @@
     -->
     <include file="classpath:db/changelog/changes/0023-announcement-email-run.sql" relativeToChangelogFile="false"/>
 
+    <!-- An announcer's withdrawal, as a marker on the announcement rather than a delete. -->
+    <include file="classpath:db/changelog/changes/0024-announcement-withdrawal.sql" relativeToChangelogFile="false"/>
+
     <!--
         Same arrangement for the identity projection's tables (security_user, security_partner,
         security_grant and their role tables) - see ludwig.identity.liquibase.enabled=false. This

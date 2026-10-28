@@ -121,4 +121,19 @@ public class AnnouncementEntity extends AuditedEntity<UUID> {
     @Filterable(ops = {FilterOperator.GE, FilterOperator.LE, FilterOperator.GT, FilterOperator.LT})
     @Column(name = "visible_until", nullable = false)
     private Instant visibleUntil;
+
+    /**
+     * When an announcer withdrew it; null while it stands.
+     *
+     * <p>A marker rather than an end moved to now, because the window check forbids an end before a
+     * start, and the original window is part of the record. Retention also measures from here.
+     */
+    @Column(name = "withdrawn_at")
+    private Instant withdrawnAt;
+
+    @Column(name = "withdrawn_by")
+    private String withdrawnBy;
+
+    @Column(name = "withdrawal_reason", length = 500)
+    private String withdrawalReason;
 }

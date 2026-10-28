@@ -1,0 +1,35 @@
+{
+  "change": "add-announcement-withdrawal-and-window-edits",
+  "model": "claude-opus-5-5",
+  "index_version": "a5597e95e11d5770d93c71fc031fab37dee719d5168e4f76f4572df5b739b196",
+  "modules_touched": [
+    "notification-service"
+  ],
+  "gate": {
+    "check_image_pins": "fail (pre-existing, archived proposal; not touched)",
+    "check_api_baseline": "fail (releases repository unreachable; libraries only)",
+    "check_migrations": "fail on untracked file; pass over tracked+untracked",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api_docs_missing": "pass",
+    "api_docs_check": "pass",
+    "validate": "pass",
+    "verify": "pass (run 6, IDE closed): notification-service 312 unit + 212 IT, 0 failed, JaCoCo checks met",
+    "openspec_validate": "pass"
+  },
+  "tests": {
+    "added": 36,
+    "passed": 524,
+    "failed": 0,
+    "note": "notification-service full suite in the passing verify"
+  },
+  "retries": 6,
+  "human_corrections": 1,
+  "rollback_point": "4d2f9d29f0d8f925ab693f2194693036ccf79b03",
+  "unresolved": [
+    "check_image_pins false positive on archived 2026-10-11 proposal blocks gate step 1 (pre-existing)",
+    "check_api_baseline needs the releases repository, unreachable here (libraries only)",
+    "check_migrations passes only once 0024 is committed (reads git ls-files)",
+    "audit scenarios proven at unit level only; the IT context's audit sink is not observed"
+  ]
+}
