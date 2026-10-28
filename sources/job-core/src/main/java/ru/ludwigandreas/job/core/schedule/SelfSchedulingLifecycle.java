@@ -148,6 +148,32 @@ public abstract class SelfSchedulingLifecycle implements SmartLifecycle {
     }
 
     /**
+     * How this job is scheduled.
+     *
+     * @return the schedule it was created with
+     */
+    public ScheduleSpec schedule() {
+        return schedule;
+    }
+
+    /**
+     * Asks for a run as soon as the scheduler has a thread, without waiting for it.
+     *
+     * <p>For an operator's "run now", which must not hold an HTTP request thread for the length of a run. The run
+     * goes through the same non-reentrancy guard as a scheduled tick, so it is a logged no-op if one is already in
+     * progress on this instance; across instances, a job that serializes on a run lease still decides that itself.
+     *
+     * @return false when the job is shutting down and nothing was dispatched
+     */
+    public boolean runSoon() {
+        if (stopping) {
+            return false;
+        }
+        taskScheduler.schedule(this::tick, Instant.now());
+        return true;
+    }
+
+    /**
      * Executes one run under the non-reentrancy guard.
      *
      * @return whether this call actually ran the job

@@ -294,7 +294,7 @@ public class DatabaseQuota implements Quota {
         return oldest == null ? 0.0 : Duration.between(oldest, Instant.now()).toMillis() / MILLIS_PER_SECOND;
     }
 
-    /** The configured limit, for the saturation gauge and the actuator endpoint. */
+    /** The configured limit, for the saturation gauge and the administrative endpoints. */
     public int limit(String quotaName) {
         ReconciliationProperties.Quota settings = configured.get(quotaName);
         return settings == null ? 0 : settings.getMaxConcurrent();

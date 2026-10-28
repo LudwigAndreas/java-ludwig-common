@@ -1,0 +1,56 @@
+{
+  "change": "starter-admin-endpoints",
+  "model": "claude-opus-5-5",
+  "index_version": "56bcb258b69028d2874eb6110b18337740035d40b12759259325ae9b95dfa1cc",
+  "modules_touched": [
+    "audit-core",
+    "security-spring-boot-starter",
+    "job-core",
+    "outbox-spring-boot-starter",
+    "messaging-db-spring-boot-starter",
+    "reconciliation-spring-boot-starter",
+    "file-ingest-spring-boot-starter",
+    "audit-spring-boot-starter",
+    "identity-projection-spring-boot-starter",
+    "export-spring-boot-starter",
+    "file-action-spring-boot-starter",
+    "user-settings-spring-boot-starter",
+    "pat-spring-boot-starter",
+    "asyncapi-spring-boot-starter",
+    "web-core-spring-boot-starter",
+    "architecture-rules",
+    "notification-service",
+    "crud-service-example",
+    "common"
+  ],
+  "gate": {
+    "check_image_pins": "fail (pre-existing false positive: archived 2026-10-11 proposal line 78)",
+    "check_api_baseline": "fail (environmental: v2.0.0 baselines exist but nexus.example.internal is unreachable)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api_docs_missing": "pass",
+    "api_docs_check": "pass (after refresh of both service documents)",
+    "validate": "pass",
+    "verify": "pass for all 26 gate modules, as one reactor build resumed twice (-rf :asyncapi-spring-boot-starter after the scanner fix; -rf :test-support-local after a timing flake)",
+    "openspec_validate": "pass (--strict)"
+  },
+  "tests": {
+    "added": 86,
+    "passed": "all in the commands above",
+    "failed": 0,
+    "flaky_observed": [
+      "pat PatDirectAuthenticationIT$FilterEnabled.revokedTokenStopsWorking (known race, 1 fail / later passes)",
+      "test-support-local StubFaultIT.slow (timing, 1 fail / 1 pass; module untouched)"
+    ]
+  },
+  "human_corrections": 0,
+  "rollback_point": "44358a9 plus the uncommitted admin-authorization diff",
+  "unresolved": [
+    "Task 15.2 accepted by the owner with the two known gate exceptions (check_image_pins false positive, check_api_baseline unreachable repository); tracked in openspec/intents/admin-surface-follow-ups.md.",
+    "revapi.differences entries (20 added) were not exercised: the v2.0.0 baseline is unreachable.",
+    "A cancelled file-action submission is recorded APPLIED with zero rows (pre-existing; needs a lifecycle decision) - openspec/intents/admin-surface-follow-ups.md section 4.",
+    "The settings cross-tenant 404 is reachable only with a SettingsTenantResolver that knows a subject's tenant; the default resolver confines by construction instead. Spec scenario tightened accordingly.",
+    "Two regressions found and fixed at the source during verification: IdentityProjectionAutoConfiguration now declares its order before the security fallbacks; asyncapi-spring-boot-starter's IntrospectableComponentClassScanner skips classes whose signatures cannot be resolved."
+  ]
+}

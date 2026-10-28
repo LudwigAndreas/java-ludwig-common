@@ -12,7 +12,7 @@ public enum SettingsAccess {
     /** The caller is the subject. */
     SELF,
 
-    /** The caller holds the administrative authority and is acting on another subject. Audited. */
+    /** The caller is performing a settings administrative operation on another subject. Audited. */
     ADMIN,
 
     /**

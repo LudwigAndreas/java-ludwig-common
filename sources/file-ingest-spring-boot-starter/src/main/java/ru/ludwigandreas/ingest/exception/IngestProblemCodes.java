@@ -11,7 +11,7 @@ package ru.ludwigandreas.ingest.exception;
  * translated message would produce a set of bundle keys nothing ever renders - and a bundle key that
  * is never rendered is one nobody notices has gone stale.
  *
- * <p>The exception is the actuator endpoint, which does have a caller: a name that matches no
+ * <p>The exception is the administrative endpoints, which does have a caller: a name that matches no
  * configured task comes back as {@link UnknownIngestTaskException}, localized and rendered by
  * {@code web-core}'s one {@code ProblemDetail} pipeline like every other reachable failure in the
  * platform. The engine's own failures - a balance that does not reconcile, a quarantine rate past its

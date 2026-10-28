@@ -5,31 +5,41 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.admin.AdminOperation;
 import ru.ludwigandreas.security.authz.PrincipalRef;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
 import ru.ludwigandreas.usersettings.api.SettingsSubject;
 import ru.ludwigandreas.usersettings.exception.SettingsAccessDeniedException;
+import ru.ludwigandreas.usersettings.exception.SettingsSubjectNotFoundException;
 import ru.ludwigandreas.usersettings.resolve.SettingsAccess;
 import ru.ludwigandreas.usersettings.resolve.SettingsAccessPolicy;
 
 /**
- * "Your own settings, or the administrative authority - and never across a tenant boundary."
+ * "Your own settings, or a {@code settings} administrative operation - and never across a tenant boundary."
  *
- * <p>The cross-tenant case is the one worth having a test for: holding the authority is not enough,
- * and a policy that checked only the authority would let an administrator of one organization read
- * another organization's users by knowing a subject id.
+ * <p>The cross-tenant case is the one worth having a test for: being inside an administrative operation is not
+ * enough, and a policy that checked only that would let an administrator of one organization read another
+ * organization's users by knowing a subject id.
  */
 class SettingsAccessPolicyTest {
 
-    private static final String ADMIN_AUTHORITY = "ROLE_SETTINGS_ADMIN";
+    /** The administrative operation the current request performs, as the surface guard would have bound it. */
+    private Optional<AdminInvocation> invocation = Optional.empty();
 
-    private final SettingsAccessPolicy policy = new SettingsAccessPolicy(ADMIN_AUTHORITY, true, true);
+    private final SettingsAccessPolicy policy = new SettingsAccessPolicy(true, true, () -> invocation);
+
+    private void inOperation(String operationId) {
+        LudwigPrincipal principal = ru.ludwigandreas.security.principal.SecurityPrincipals.require();
+        invocation = Optional.of(new AdminInvocation(AdminOperation.of(operationId, "key"), principal, null));
+    }
 
     @AfterEach
     void clearContext() {
@@ -60,40 +70,42 @@ class SettingsAccessPolicyTest {
     }
 
     @Test
-    @DisplayName("an administrator in the same tenant is ADMIN")
+    @DisplayName("an administrator in the same tenant, inside a settings operation, is ADMIN")
     void administrator_in_the_same_tenant_is_allowed() {
-        authenticate("admin-1", "acme", ADMIN_AUTHORITY);
+        authenticate("admin-1", "acme");
+        inOperation("settings.read");
 
         assertThat(policy.check(subject("user-1", "acme"))).isEqualTo(SettingsAccess.ADMIN);
     }
 
     @Test
-    @DisplayName("an administrator of another tenant is refused")
+    @DisplayName("an administrator of another tenant is answered 404, not 403")
     void administrator_of_another_tenant_is_refused() {
-        authenticate("admin-1", "globex", ADMIN_AUTHORITY);
+        authenticate("admin-1", "globex");
+        inOperation("settings.read");
+
+        assertThatThrownBy(() -> policy.check(subject("user-1", "acme")))
+                .isInstanceOf(SettingsSubjectNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("outside an administrative operation nobody reads somebody else's settings, whatever their roles")
+    void other_subject_outside_an_operation_is_refused() {
+        // The role a library used to check is now the service's grant, checked by the surface guard.
+        authenticate("user-2", "acme", "ROLE_SETTINGS_ADMIN");
 
         assertThatThrownBy(() -> policy.check(subject("user-1", "acme")))
                 .isInstanceOf(SettingsAccessDeniedException.class);
     }
 
     @Test
-    @DisplayName("a caller without the authority cannot read somebody else's settings")
-    void other_subject_without_authority_is_refused() {
-        authenticate("user-2", "acme");
+    @DisplayName("another area's administrative operation does not reach settings")
+    void another_areas_operation_is_refused() {
+        authenticate("admin-1", "acme");
+        inOperation("jobs.read");
 
         assertThatThrownBy(() -> policy.check(subject("user-1", "acme")))
                 .isInstanceOf(SettingsAccessDeniedException.class);
-    }
-
-    @Test
-    @DisplayName("the authority is accepted whether or not the property carries the ROLE_ prefix")
-    void admin_authority_is_matched_with_or_without_the_role_prefix() {
-        // A property written as SETTINGS_ADMIN would otherwise match nothing, every administrative
-        // access would be refused, and it would read as a permissions bug.
-        SettingsAccessPolicy unprefixed = new SettingsAccessPolicy("SETTINGS_ADMIN", true, true);
-        authenticate("admin-1", "acme", "SETTINGS_ADMIN");
-
-        assertThat(unprefixed.check(subject("user-1", "acme"))).isEqualTo(SettingsAccess.ADMIN);
     }
 
     @Test
@@ -117,14 +129,14 @@ class SettingsAccessPolicyTest {
     @Test
     @DisplayName("in-process code is refused when unauthenticated access is switched off")
     void unauthenticated_is_refused_when_disallowed() {
-        SettingsAccessPolicy strict = new SettingsAccessPolicy(ADMIN_AUTHORITY, false, true);
+        SettingsAccessPolicy strict = new SettingsAccessPolicy(false, true, () -> invocation);
 
         assertThatThrownBy(() -> strict.check(subject("user-1", "acme")))
                 .isInstanceOf(SettingsAccessDeniedException.class);
     }
 
     @Test
-    @DisplayName("a peer service resolves any subject's settings without an administrative authority")
+    @DisplayName("a peer service resolves any subject's settings without an administrative operation")
     void service_principals_are_system_callers() {
         // The self-or-admin rule is about people. A notification service resolving a recipient's
         // locale while handling another service's request is not a user reading somebody else's
@@ -140,9 +152,9 @@ class SettingsAccessPolicyTest {
     }
 
     @Test
-    @DisplayName("a peer service is refused when the deployment holds peers to the admin authority")
+    @DisplayName("a peer service is refused when the deployment holds peers to the administrative surface")
     void service_principals_can_be_refused() {
-        SettingsAccessPolicy strict = new SettingsAccessPolicy(ADMIN_AUTHORITY, true, false);
+        SettingsAccessPolicy strict = new SettingsAccessPolicy(true, false, () -> invocation);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(LudwigPrincipal.builder()
                         .subject("spiffe://mesh/ns/orders/sa/orders")
@@ -162,7 +174,8 @@ class SettingsAccessPolicyTest {
         assertThatThrownBy(() -> policy.requireAdmin(subject("user-1", "acme")))
                 .isInstanceOf(SettingsAccessDeniedException.class);
 
-        authenticate("admin-1", "acme", ADMIN_AUTHORITY);
+        authenticate("admin-1", "acme");
+        inOperation("settings.operate");
         assertThatCode(() -> policy.requireAdmin(subject("admin-1", "acme"))).doesNotThrowAnyException();
     }
 }

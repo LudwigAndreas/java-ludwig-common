@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.HandlerInterceptor;
 import ru.ludwigandreas.security.principal.Credential;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
+import ru.ludwigandreas.security.web.PatCredentialNotPermittedException;
 
 /**
  * Refuses a token-backed caller on the token management surface, before authorization is evaluated.

@@ -40,7 +40,7 @@ import ru.ludwigandreas.testsupport.image.LudwigTestImages;
  * <ol>
  *   <li>an unauthenticated request is refused;</li>
  *   <li>a caller can issue a token for themselves, and the secret comes back exactly once;</li>
- *   <li>a caller without {@code pat:manage:any} cannot issue for somebody else;</li>
+ *   <li>no caller can issue for somebody else through this API, and the attempt is audited;</li>
  *   <li><b>a token-backed caller is refused on every endpoint</b>, whatever their scopes say.</li>
  * </ol>
  *
@@ -162,27 +162,27 @@ class PatManagementIT {
     }
 
     @Test
-    @DisplayName("issuing for another subject without pat:manage:any is refused")
+    @DisplayName("issuing for another subject is refused and audited, whatever the caller holds")
     void issuingForAnotherSubjectIsRefused() throws Exception {
-        asUser("alice", PatAuthorities.MANAGE_OWN);
+        // The former pat:manage:any is still a string a deployment may have granted; it must mean nothing now.
+        asUser("alice", PatAuthorities.MANAGE_OWN, "pat:manage:any");
+        auditSink.clear();
 
         mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(issueBody("bob")))
                 .andExpect(result -> assertThat(result.getResponse().getStatus()).isEqualTo(403));
+
+        AuditEvent refused = auditSink.lastOf("pat.issuance-refused");
+        assertThat(refused.attributes()).containsEntry("requestedOwner", "bob").containsEntry("requestedBy", "alice");
+        assertThat(auditSink.actions()).doesNotContain("pat.issued");
     }
 
     @Test
-    @DisplayName("issuing for another subject with pat:manage:any succeeds")
-    void issuingForAnotherSubjectIsAllowedWithTheAuthority() throws Exception {
-        asUser("admin", PatAuthorities.MANAGE_OWN, PatAuthorities.MANAGE_ANY);
+    @DisplayName("listing another subject's tokens is refused")
+    void listingAnotherSubjectIsRefused() throws Exception {
+        asUser("alice", PatAuthorities.MANAGE_OWN, "pat:manage:any");
 
-        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(issueBody("bob")))
-                .andExpect(result -> assertThat(result.getResponse().getStatus()).isEqualTo(201));
-
-        // The issuer is recorded even though it is not the owner, which is what makes "tokens minted on
-        // behalf of somebody else" a filter rather than a join against a separate source.
-        AuditEvent issued = auditSink.lastOf("pat.issued");
-        assertThat(issued.actor().subject()).isEqualTo("bob");
-        assertThat(issued.attributes()).containsEntry("issuedBy", "admin");
+        mockMvc.perform(get(BASE).param("owner", "bob"))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isEqualTo(403));
     }
 
     /**
@@ -202,7 +202,7 @@ class PatManagementIT {
                     .subject("alice")
                     .type(PrincipalType.USER)
                     .permissions(java.util.Set.of(
-                            PatAuthorities.MANAGE_OWN, PatAuthorities.MANAGE_ANY, "orders:read"))
+                            PatAuthorities.MANAGE_OWN, "orders:read"))
                     .build();
             return org.springframework.security.test.web.servlet.request
                     .SecurityMockMvcRequestPostProcessors.authentication(

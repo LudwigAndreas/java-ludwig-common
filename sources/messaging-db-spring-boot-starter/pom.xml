@@ -45,6 +45,22 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>messaging-spring-boot-starter</artifactId>
         </dependency>
+
+        <!--
+            Optional: the administrative endpoints (ru.ludwigandreas.messaging.db.admin) exist only where the
+            security starter's administrative surface does, behind @ConditionalOnBean(AdminOperationCatalog). web-core
+            is named because the security starter declares it optional, so it does not arrive transitively.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
         <!-- Test only: outbox writes reach the log through messaging's producer seam, which the outbox builds
              its templates from, so nothing here refers to the outbox. The ITs publish through it. -->
         <dependency>
@@ -154,6 +170,12 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestPrincipalBuilder, for the administrative endpoints' MockMvc tests. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

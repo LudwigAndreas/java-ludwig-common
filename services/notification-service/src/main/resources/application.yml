@@ -450,6 +450,27 @@ ludwig:
         destination: platform.notifications.events
         event-types: NotificationDelivered,NotificationFailed,NotificationSuppressed
 
+  # --- administrative surface (/admin/v1/) ------------------------------------------------------
+  # Which of this service's roles may perform each administrative operation of the starters it uses.
+  # The roles come from the authority resolver (the identity projection), never from token claims.
+  # Every tier goes to NOTIFICATION_ADMIN and the read tiers also to NOTIFICATION_SUPPORT. A key naming
+  # an area this service does not have fails startup, so the list is exactly the areas present: jobs
+  # (job-core), outbox, identity and audit. Bracketed because the operation ids contain a dot.
+  admin:
+    grants:
+      "[jobs.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[jobs.operate]": [NOTIFICATION_ADMIN]
+      "[jobs.privileged]": [NOTIFICATION_ADMIN]
+      "[outbox.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[outbox.operate]": [NOTIFICATION_ADMIN]
+      "[outbox.privileged]": [NOTIFICATION_ADMIN]
+      "[identity.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[identity.operate]": [NOTIFICATION_ADMIN]
+      "[identity.privileged]": [NOTIFICATION_ADMIN]
+      "[audit.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[audit.operate]": [NOTIFICATION_ADMIN]
+      "[audit.privileged]": [NOTIFICATION_ADMIN]
+
   # --- security ----------------------------------------------------------------------------------
   security:
     jwt:

@@ -4,3 +4,4 @@ ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration
 ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration
 ru.ludwigandreas.security.config.MutualTlsAutoConfiguration
 ru.ludwigandreas.security.config.ResourceServerAutoConfiguration
+ru.ludwigandreas.security.config.AdminAutoConfiguration

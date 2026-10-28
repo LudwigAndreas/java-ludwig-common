@@ -110,9 +110,15 @@ public class WebCoreLocalizationAutoConfiguration {
         }
     }
 
-    /** Nested for the same reason: {@code LocalValidatorFactoryBean} needs Bean Validation present. */
+    /**
+     * Nested for the same reason: {@code LocalValidatorFactoryBean} needs Bean Validation present - and, because
+     * {@code setValidationMessageSource} is implemented with Hibernate Validator's resource-bundle locator, Hibernate
+     * Validator itself. The API jar alone (which arrives transitively in modules that never asked for validation)
+     * used to satisfy this condition and then fail every context with a {@code NoClassDefFoundError}.
+     */
     @Configuration(proxyBeanMethods = false)
-    @ConditionalOnClass(name = {"jakarta.validation.Validator", "jakarta.validation.ValidatorFactory"})
+    @ConditionalOnClass(name = {"jakarta.validation.Validator", "jakarta.validation.ValidatorFactory",
+        "org.hibernate.validator.HibernateValidator"})
     @ConditionalOnProperty(prefix = "ludwig.web.i18n", name = "configure-validator", matchIfMissing = true)
     public static class ValidationMessageConfiguration {
 

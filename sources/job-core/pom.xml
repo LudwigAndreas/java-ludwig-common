@@ -102,6 +102,24 @@
             <optional>true</optional>
         </dependency>
 
+        <!--
+            Optional: the administrative endpoints (ru.ludwigandreas.job.core.admin) exist only where the
+            security starter's administrative surface does, and are registered behind
+            @ConditionalOnBean(AdminOperationCatalog). A consumer without the security starter keeps a job-core
+            with no web layer at all. web-core is named separately because the security starter declares it
+            optional too, so it does not arrive transitively.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -135,6 +153,17 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestPrincipalBuilder, for the administrative endpoints' MockMvc tests. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

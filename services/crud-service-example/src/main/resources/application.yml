@@ -358,6 +358,29 @@ ludwig:
             # queueing invisibly inside it.
             max-concurrent-calls: 16
 
+  # --- administrative surface (/admin/v1/) ------------------------------------------------------
+  # Which of this service's roles may perform each administrative operation of the starters it uses.
+  # The roles come from the authority resolver (the identity projection), never from token claims. A key
+  # naming an area this service does not have fails startup, so the list is exactly the areas present:
+  # exports, fileactions, identity, jobs (job-core) and outbox. Bracketed because the ids contain a dot.
+  admin:
+    grants:
+      "[exports.read]": [CATALOG_ADMIN]
+      "[exports.operate]": [CATALOG_ADMIN]
+      "[exports.privileged]": [CATALOG_ADMIN]
+      "[fileactions.read]": [CATALOG_ADMIN]
+      "[fileactions.operate]": [CATALOG_ADMIN]
+      "[fileactions.privileged]": [CATALOG_ADMIN]
+      "[identity.read]": [CATALOG_ADMIN]
+      "[identity.operate]": [CATALOG_ADMIN]
+      "[identity.privileged]": [CATALOG_ADMIN]
+      "[jobs.read]": [CATALOG_ADMIN]
+      "[jobs.operate]": [CATALOG_ADMIN]
+      "[jobs.privileged]": [CATALOG_ADMIN]
+      "[outbox.read]": [CATALOG_ADMIN]
+      "[outbox.operate]": [CATALOG_ADMIN]
+      "[outbox.privileged]": [CATALOG_ADMIN]
+
   # --- ludwig security -------------------------------------------------------------------------
   security:
     # Audience is what makes a token service-specific. Without it, any token the same issuer minted

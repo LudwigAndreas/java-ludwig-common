@@ -6,14 +6,14 @@ Keeps local records that mirror externally owned state in sync - the inbound twi
 [outbox](../outbox-spring-boot-starter). A service writes a demand query, a fetcher and a reconciler instead of a
 hand-rolled `@Scheduled` loop; scheduling, leader election, staging, retry with backoff and quarantine, stale-write
 protection, payload-hash idempotency, partner-scoped quotas and rate limits, asynchronous partner jobs, collection
-mirroring (enumeration tasks), a freshness SLO metric, audit and an operator actuator endpoint are the module's.
+mirroring (enumeration tasks), a freshness SLO metric, audit and the operator endpoints of the `reconciliation` administrative area are the module's.
 
 | | |
 |---|---|
 | Role | starter |
 | Depends on (in-repo) | [`audit-core`](../audit-core), [`db-core`](../db-core), [`job-core`](../job-core), [`observability`](../observability-spring-boot-starter), [`rest-client`](../rest-client-spring-boot-starter) |
 | Used by | none in this repository (services mirroring partner state) |
-| Surfaces | outbound REST (fetchers); actuator `reconciliation` |
+| Surfaces | outbound REST (fetchers); administrative area `/admin/v1/reconciliation` |
 
 | # | Stage | Owned by |
 |---|---|---|
@@ -333,14 +333,13 @@ Enumerations use `enumeration-defaults` the same way.
 `walk.max-scopes-per-run` (`50`), `sweep.confirm-after-misses` (`1`), `sweep.max-fraction` (`0.5`), `retry.*`,
 `audit.enabled`, `rest-client`, `rate-limit`.
 
-**Top level**: `ludwig.reconciliation.enabled`, `quotas.*`, `rate-limits.*`,
-`endpoint.allow-destructive-operations` (`false`), `liquibase.enabled` (`true`).
+**Top level**: `ludwig.reconciliation.enabled`, `quotas.*`, `rate-limits.*`, `liquibase.enabled` (`true`).
 
 `tasks.<name>.audit.persist` is still bound but has no effect (the trail goes through the platform `AuditSink`).
 
 | Refreshable (next pass) | Restart required |
 |---|---|
-| `retry.*`, `demand.max-records-per-run`, `demand.freshness-target`, `fetch.batch-size`, `fetch.page-size`, `fetch.max-concurrency`, `not-found`, `apply.batch-size`, `rate-limits.*`, `endpoint.allow-destructive-operations`; enumeration `walk`, `sweep`, `refresh`, `retry` | `fetch.shape`, `schedule.*`, `cold-schedule.*`, `apply.fixed-delay`, `mode`, `quotas.*`, enumeration `schedule.*`, `discovery.fixed-delay`, adding/removing tasks, enumerations, quotas or rate limits |
+| `retry.*`, `demand.max-records-per-run`, `demand.freshness-target`, `fetch.batch-size`, `fetch.page-size`, `fetch.max-concurrency`, `not-found`, `apply.batch-size`, `rate-limits.*`; enumeration `walk`, `sweep`, `refresh`, `retry` | `fetch.shape`, `schedule.*`, `cold-schedule.*`, `apply.fixed-delay`, `mode`, `quotas.*`, enumeration `schedule.*`, `discovery.fixed-delay`, adding/removing tasks, enumerations, quotas or rate limits |
 
 **Startup refuses** (all at once, each message saying what breaks): unknown quota/rate limit/REST client; `async-job`
 without a `job` block or `on-ambiguous-submit`; `run-timeout` shorter than the retry budget; `lease-ttl` < 2 ×
@@ -365,8 +364,8 @@ proportional to the backlog.
 | `sync_audit_record` | Created by the changelog; not written (the trail is `audit_event`) |
 | `job_run_lock` | From job-core: per-task run leases |
 
-**Actuator**: expose `reconciliation` only to operators (secure it like any endpoint); enable destructive operations
-only where intended. **Partners**: a `@LudwigRestClient` per fetcher; rate limits ÷ replicas.
+**Administration**: grant `reconciliation.*` to the service's operator roles in `ludwig.admin.grants`; grant
+`reconciliation.privileged` only where the destructive actions are intended. **Partners**: a `@LudwigRestClient` per fetcher; rate limits ÷ replicas.
 
 ## Observability
 
@@ -410,25 +409,48 @@ acquire/release/reclaim, enumeration walks, members leaving, quarantines, withhe
 with the calling principal**. Outcome is inferred from the event name (`.failed`, `.timed-out`, `.reclaimed` →
 `FAILURE`; `.quarantined`, `.skipped` → `PARTIAL`).
 
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}` | See reconciliation tasks, enumerations, scopes, quotas and what is stuck. |
+| `reconciliation.operate` | `POST /admin/v1/reconciliation/tasks/{task}/runs`<br>`POST /admin/v1/reconciliation/tasks/{task}/backfills`<br>`POST /admin/v1/reconciliation/tasks/{task}/cursor/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/discover`<br>`POST /admin/v1/reconciliation/tasks/{task}/members/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Run, backfill, requeue and reset reconciliation tasks and enumeration scopes. |
+| `reconciliation.privileged` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel`<br>`POST /admin/v1/reconciliation/leases/{leaseId}/release`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Cancel a remote job, release a quota lease or confirm a withheld sweep - actions that can make this system and the partner disagree. |
+
+**Removed:** the `reconciliation` actuator endpoint and `ludwig.reconciliation.endpoint.*`, including `allow-destructive-operations` and the `confirm` parameter. Whether a deployment permits the destructive actions is now whether any of its roles is granted `reconciliation.privileged`; adding `reconciliation` to the actuator exposure list exposes nothing.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[reconciliation.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[reconciliation.operate]": [ORDERS_ADMIN]
+      "[reconciliation.privileged]": [ORDERS_ADMIN]
+```
+
 ## Runbook
 
-**Actuator** `GET /actuator/reconciliation` (overview), `GET|POST /actuator/reconciliation/{task}`:
+Operator actions, all under `/admin/v1/reconciliation` (see [Administration](#administration) for the operations):
 
-| Action | Parameters | Effect |
+| Action | Endpoint | Effect |
 |---|---|---|
-| `run` | `tier` | Run a pass now (`ran: false` if one is running) |
-| `dry-run` | `tier` | Fetch and report per outcome, **writing nothing** |
-| `backfill` | `keys` | Fetch explicit keys, bypassing demand; guard rails kept; watermark not advanced |
-| `reset-cursor` | `tier` | Clear cursor and watermark |
-| `requeue-quarantined` | - | Requeue with **reset** attempt counters |
-| `requeue-job` | `jobId` | Requeue a job's collected records |
-| `cancel-job` | `jobId`, `confirm` | **Destructive**: expire a job; maintenance cancels remotely and frees its slot |
-| `release-lease` | `leaseId`, `confirm` | **Destructive**: force-release a quota slot (may exceed the partner's limit) |
+| run | `POST /tasks/{task}/runs` `{tier}` | Run a pass now; `409` if one is running |
+| dry run | `POST /tasks/{task}/runs` `{tier, dryRun: true}` | Fetch and report per outcome, **writing nothing** |
+| backfill | `POST /tasks/{task}/backfills` `{keys}` | Fetch explicit keys, bypassing demand; guard rails kept; watermark not advanced |
+| reset cursor | `POST /tasks/{task}/cursor/reset` `{tier}` | Clear cursor and watermark |
+| requeue quarantined | `POST /tasks/{task}/quarantine/requeue` | Requeue with **reset** attempt counters |
+| requeue job | `POST /tasks/{task}/remotejobs/{jobId}/requeue` | Requeue a job's collected records |
+| cancel job | `POST /tasks/{task}/remotejobs/{jobId}/cancel` | **Privileged**: expire a job; maintenance cancels remotely and frees its slot |
+| release lease | `POST /leases/{leaseId}/release` | **Privileged**: force-release a quota slot (may exceed the partner's limit) |
 
-Enumerations: `POST /actuator/reconciliation/{enumeration}` with `run` / `discover` / `requeue-members`;
-`GET|POST /actuator/reconciliation/{enumeration}/{scope}` with `walk` (`kind=full`), `preview` (writes nothing),
-`reset-scope`, `discard-sweep`, `confirm-sweep` (**destructive**). Percent-encode scope keys containing `/`.
-Destructive actions need `endpoint.allow-destructive-operations=true` **and** `confirm=true`.
+Enumerations: `POST /tasks/{enumeration}/discover`, `POST /tasks/{enumeration}/members/requeue`, and per scope
+`POST /tasks/{enumeration}/scopes/{scope}/walk` (`{kind}`), `.../preview` (writes nothing), `.../reset`,
+`.../sweep/discard`, `.../sweep/confirm` (**privileged**). Percent-encode scope keys containing `/`. A privileged
+action needs the `Admin-Reason` header.
 
 | Situation | What to do |
 |---|---|

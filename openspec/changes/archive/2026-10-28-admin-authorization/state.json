@@ -1,0 +1,71 @@
+{
+  "change": "admin-authorization",
+  "contract": {
+    "goal": "one authorization mechanism for every administrative endpoint on the platform: starters declare <area>.<tier> operations, the consuming service grants them to its own roles in configuration, everything fails closed, served under a dedicated /admin/v1/** security chain",
+    "output": "ru.ludwigandreas.security.admin package in security-spring-boot-starter (catalog, grants, @AdminAccess + AuthorizationManager, reason enforcement, AdminInvocation/AdminAudit, AdminPage/AdminCursor, /admin/** surface guard (HandlerInterceptor), /admin/v1/me/operations); RuleGroup.ADMIN in architecture-rules; a test helper in test-support-security; PatCredentialNotPermittedException moved into the security starter; README + admin-guide sections",
+    "constraints": [
+      "no new in-repo dependency and no third-party dependency",
+      "no POM change (root, ludwig-bom, ludwig-service-parent untouched) except a revapi.differences entry in the root POM for the moved exception",
+      "roles only from the authority resolver; no token claim read for roles; AttenuatedAuthentications untouched",
+      "no wildcard grants, no tier implication, no default grant",
+      "audit only through the one AuditSink, no try/catch around record",
+      "errors through contributed ExceptionProblemMapper, never an advice",
+      "user-facing text in i18n bundles with key parity",
+      "no module administrative endpoints in this change (that is starter-admin-endpoints)"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_api_baseline.sh",
+      "scripts/check_migrations.sh",
+      "scripts/check_build_metadata.sh",
+      "scripts/check_protos.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :security-spring-boot-starter -am verify",
+      "mvn -pl :architecture-rules -am verify",
+      "mvn -pl :test-support-security -am verify",
+      "mvn -pl :pat-spring-boot-starter -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :file-action-spring-boot-starter -am verify",
+      "mvn -pl :grpc-client-spring-boot-starter -am verify",
+      "mvn -pl :grpc-server-spring-boot-starter -am verify",
+      "mvn -pl :identity-projection-spring-boot-starter -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "mvn -pl :asyncapi-spring-boot-starter -am verify",
+      "mvn -pl :file-ingest-spring-boot-starter -am verify",
+      "mvn -pl :messaging-db-spring-boot-starter -am verify",
+      "mvn -pl :messaging-spring-boot-starter -am verify",
+      "mvn -pl :object-storage-spring-boot-starter -am verify",
+      "mvn -pl :odata-filter-spring-boot-starter -am verify",
+      "openspec validate admin-authorization --strict"
+    ]
+  },
+  "rollback_point": "44358a935e47d0353f0da2ec95f7baa04405f677",
+  "current_task": "done",
+  "decisions": [
+    "Design \u00a74 changed before any code, with the user's approval: the /admin/** surface is guarded by a HandlerInterceptor (AdminSurfaceGuard), not a second SecurityFilterChain. Reasons verified in code: (1) filter-chain errors render through ProblemDetailAccessDeniedHandler with ludwig.security.problem-type-prefix (urn:ludwig:security:) while the PAT surface's PatCredentialNotPermittedException renders through web-core with ludwig.web.problem.type-prefix (urn:ludwig:problem:), so 'the same problem type' could not hold from a filter; (2) ludwigSecurityFilterChain is @ConditionalOnMissingBean(SecurityFilterChain.class), so a second chain bean would make the default back off, and the platform chain disappears when a service declares its own - the same reason PatCredentialGuard is an interceptor. Spec requirement reworded (observable scenarios unchanged, one scenario added for a service-declared chain), design \u00a74 and task 3.1 rewritten; the shared-configurer extraction is dropped.",
+    "Scope change to the contract's output text only (chain -> interceptor guard), logged here as required; goal, constraints and done_when unchanged.",
+    "Design \u00a73 changed during implementation (spec behaviour unchanged except one added fail-closed sentence): @AdminAccess is evaluated by the AdminSurfaceGuard HandlerInterceptor from the HandlerMethod, not by a method-security AuthorizationManager advisor. Reason verified in code: @EnableMethodSecurity lives on DataAuthorizationAutoConfiguration, which ludwig.security.data.enabled=false switches off, so an advisor-based check would be silently skipped (fail-open). Added @AdminAuthenticated as the explicit marker for 'any caller the guard admits' (the discovery endpoint), a handler under /admin/ with neither annotation is refused 403 at runtime, and the ArchUnit rule accepts either annotation. Denials are still published as AuthorizationDeniedEvent; AuthorizationDeniedAuditListener learns to read the method from a HandlerMethod.",
+    "Tenant confinement mirrors SettingsAccessPolicy exactly: USER confined to Objects.equals(callerTenant, resourceTenant), so a user without a tenant sees only untenanted resources; SERVICE unconfined. Exposed as AdminInvocation.tenantScope() returning TenantScope, not Optional<String>, because Optional cannot express 'confined to no tenant'.",
+    "AdminReasonRequiredException and the cursor/page-size errors are LocalizedExceptions rendered natively by web-core's pipeline, like PatCredentialNotPermittedException; no extra ExceptionProblemMapper is added (design \u00a75 said one would be).",
+    "The MVC-level surface test is AdminSurfaceMvcTest in src/test/.../unit, not AdminSurfaceGuardIT as task 3.1 named it: security-spring-boot-starter binds no failsafe execution, so an *IT there would never run, and binding one is a POM change the contract excludes. Precedent: SecurityAutoConfigurationTest is a context test in unit/. The test uses ludwig.web.i18n.configure-validator=false because Hibernate Validator is not on this module's test classpath.",
+    "The moved message for ludwig.pat.credential-not-permitted drops its PAT-surface-specific second sentence ('a token that could create a token...'): the same code now answers on the administrative surface too, and a message is per code. Code, status and problem type are unchanged, so every PAT test assertion (which checks the code) is unaffected.",
+    "RuleGroup.ADMIN is on by default as specified, and on its first real run it reported user-settings-spring-boot-starter's five /admin/settings/** handlers (AdminSettingsController x4, SettingsBackfillController x1) under admin.handler-declares-an-operation - verified, not assumed. Migrating them is starter-admin-endpoints task 11.1, so this change switches off exactly that one rule in user-settings' architecture-rules.properties with a comment naming the change and task, per the enforcement-triad requirement 'a check that cannot be written yet is deferred to a named change, not omitted'. starter-admin-endpoints task 11.1 now says to remove the line. This touches a module outside the contract's list (test resources only).",
+    "Task 5.1 needs no new code: test-support-security's TestPrincipalBuilder.user(..)/service(..).roles(..).postProcessor() already authenticates a MockMvc request as a USER or SERVICE holding given roles, which is all AdminSurfaceGuard reads; the reason is a plain .header(Admin-Reason, ..). A PAT-credentialed variant was deliberately not added: it would be a second construction site of a credential-backed LudwigAuthentication in main code, which credentials.one-attenuation-path exists to forbid. Proposal Impact row corrected; verified by `mvn -pl :test-support-security -am verify`.",
+    "Task 5.2 said to replace admin-guide \u00a78's operator rows with the /admin/v1/ surface; the /actuator/fileingest and /actuator/reconciliation endpoints still exist until starter-admin-endpoints removes them, so replacing the rows now would document something false. The /admin/v1/** row and an 'Administrative surface' paragraph were added beside them, with a sentence naming the change that removes the actuator rows. Both locales.",
+    "The proposal missed one consequence the gate caught: every service now serves GET /admin/v1/me/operations, so ApiDocumentIT failed in crud-service-example and notification-service (correctly - the committed document no longer matched). Fixed with `scripts/api-docs.sh refresh`; the diff is exactly that path and its HeldOperation schema; `scripts/api-docs.sh check` rc=0; proposal Impact amended.",
+    "Task 6.2 ticked on the user's explicit decision ('finish, mark what should be done in future'): every Maven verify, mvn -q validate, check_migrations, check_build_metadata, check_protos, api-docs missing/check and openspec validate --strict pass; check_image_pins.sh (pre-existing false positive) and check_api_baseline.sh (releases repository unreachable) are accepted as known exceptions and carried forward in openspec/intents/admin-surface-follow-ups.md section 1."
+  ],
+  "failures": [
+    "Task 2.4 attempt 1: AdminAuditTest.requiresAnInvocation failed (no exception) because AdminSurfaceGuardTest cases call preHandle without the afterCompletion the dispatcher always makes, leaving AdminInvocation bound on the surefire thread. Test-isolation defect, not product: fixed by unbinding in AdminSurfaceGuardTest @AfterEach. Recorded because a ThreadLocal leak between requests would be a product defect, and the dispatcher contract (afterCompletion for every preHandle that returned true) is what prevents it.",
+    "Task 3.2 verification: `mvn -pl :security-spring-boot-starter,:pat-spring-boot-starter -am verify` failed once on PatDirectAuthenticationIT$FilterEnabled.revokedTokenStopsWorking with ObjectOptimisticLockingFailureException at PatDirectAuthenticationIT.java:200. Two follow-up `mvn -pl :pat-spring-boot-starter -am verify` runs: one failed on the identical test and signature, one passed 55/55. This is the timing race recorded in the archived unify-sql-migrations state.json on 2026-10-22, before this change existed (PatUsageTracker's async last-used write racing revoke's flush). This change touches neither the revoke path nor the usage tracker. Attribution rests on: identical test, identical exception and line, predates the change, intermittent. Not proven by an A/B run on the rollback point; reported as pre-existing and flaky, not as green.",
+    "Process error of mine during task 3.2: ran `mvn -pl :pat-spring-boot-starter verify` without -am, so pat resolved the security starter from ~/.m2 (a jar without the moved class) and 49 ITs failed with NoClassDefFoundError: ru/ludwigandreas/security/web/PatCredentialNotPermittedException. Not a product failure; the module must be built with -am, as the gate does.",
+    "Task 6.2: scripts/gate.sh stops at its first command, scripts/check_image_pins.sh, on openspec/changes/archive/2026-10-11-adopt-local-run-in-notification-service/proposal.md:78 - prose naming the container-image-pinning capability, flagged as a tag-only image reference. Both that file and the checker are unchanged since the rollback point 44358a9 (git diff --quiet), so this is a pre-existing false positive, not caused here. Not fixed: editing an archived change or the checker is outside this change's scope.",
+    "Task 6.2: scripts/check_api_baseline.sh rc=1 - 28 modules have a published baseline that cannot be resolved (releases repository unreachable from this machine). Environmental and pre-existing, identical to the failure recorded in the archived unify-sql-migrations run. Consequence to state plainly: revapi compared every module against an empty archive, so the java.class.removed entry for PatCredentialNotPermittedException was written but never exercised by the gate.",
+    "Task 6.2: first run of `mvn -pl :file-action-spring-boot-starter -am verify` failed in job-core's JdbcRunLockIT.migrate with PSQLException 'An error occurred while setting up the SSL connection' (Testcontainers Postgres). job-core is not touched by this change; rerun passed (274 unit / 32 IT, rc=0). Recorded as an environmental container flake."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

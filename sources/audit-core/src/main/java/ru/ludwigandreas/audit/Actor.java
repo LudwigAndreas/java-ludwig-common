@@ -17,29 +17,31 @@ package ru.ludwigandreas.audit;
  *                      identification, because display names are neither stable nor unique
  * @param onBehalfOf    the subject this action was taken for, when it differs from the actor - an
  *                      administrator editing someone else's settings, a service impersonating a user
+ * @param tenant        the organization the actor belongs to, when known; recorded so that a tenant's
+ *                      administrator can be shown their own tenant's trail and nobody else's
  */
-public record Actor(String subject, String principalType, String displayName, String onBehalfOf) {
+public record Actor(String subject, String principalType, String displayName, String onBehalfOf, String tenant) {
 
     /** The actor recorded when no principal could be resolved at all. */
     public static final String SYSTEM = "system";
 
     /** An actor identified by subject alone, which is the common case. */
     public static Actor of(String subject) {
-        return new Actor(subject, null, null, null);
+        return new Actor(subject, null, null, null, null);
     }
 
     /** An actor identified by subject and principal type. */
     public static Actor of(String subject, String principalType) {
-        return new Actor(subject, principalType, null, null);
+        return new Actor(subject, principalType, null, null, null);
     }
 
     /** The {@link #SYSTEM} actor, for work with no principal behind it. */
     public static Actor system() {
-        return new Actor(SYSTEM, "SYSTEM", null, null);
+        return new Actor(SYSTEM, "SYSTEM", null, null, null);
     }
 
     /** This actor, acting for {@code otherSubject}. */
     public Actor onBehalfOf(String otherSubject) {
-        return new Actor(subject, principalType, displayName, otherSubject);
+        return new Actor(subject, principalType, displayName, otherSubject, tenant);
     }
 }

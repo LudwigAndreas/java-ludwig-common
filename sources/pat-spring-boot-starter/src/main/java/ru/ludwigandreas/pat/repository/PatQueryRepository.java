@@ -3,6 +3,7 @@ package ru.ludwigandreas.pat.repository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import ru.ludwigandreas.pat.entity.PatEntity;
 
 /**
@@ -34,6 +35,37 @@ public interface PatQueryRepository {
 
     /** An owner's tokens, newest first, for the management API's list endpoint. */
     List<PatEntity> findByOwner(String ownerSubject);
+
+    /**
+     * Any owner's tokens, newest first, after a keyset position, for the administrative listing. Every filter is
+     * optional.
+     *
+     * @param ownerSubject     the owner, or null
+     * @param revoked          revoked or not, or null for either
+     * @param expired          past its expiry at {@code now} or not, or null for either
+     * @param now              the instant expiry is judged at
+     * @param afterCreatedAt   the last returned token's creation time, or null
+     * @param afterId          the last returned token's id, or null
+     * @param limit            at most this many
+     * @return the tokens
+     */
+    List<PatEntity> findForAdministration(String ownerSubject, Boolean revoked, Boolean expired, Instant now,
+                                          Instant afterCreatedAt, UUID afterId, int limit);
+
+    /**
+     * Records one verified use: the last-use time and source, and one more use.
+     *
+     * <p>Touches those three columns and nothing else, and not the entity version. The write is telemetry, run
+     * asynchronously after an exchange; as a read-modify-save it bumped the version, so a revoke or rotation that
+     * had read the row a moment earlier failed its own save - an operator's revoke answering 500 while the token
+     * kept working. Forward-only on the time, so a late write never moves the last use backwards.
+     *
+     * @param id       the token
+     * @param usedAt   when it was used
+     * @param sourceIp where it was used from
+     * @return the rows updated: 1, or 0 when the token is gone or a later use is already recorded
+     */
+    long recordUse(UUID id, Instant usedAt, String sourceIp);
 
     /** Live tokens whose expiry has passed, for the expiry sweep that clears their digests. */
     List<PatEntity> findExpiredButNotYetDestroyed(Instant now, int limit);

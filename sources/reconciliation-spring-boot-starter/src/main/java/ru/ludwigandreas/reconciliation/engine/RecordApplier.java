@@ -81,7 +81,7 @@ public class RecordApplier {
     /**
      * Applies one record.
      *
-     * <p>{@code REQUIRES_NEW} because the caller may itself be inside a transaction - an actuator
+     * <p>{@code REQUIRES_NEW} because the caller may itself be inside a transaction - an administrative
      * operation, a test - and this record's outcome must be committed on its own merits either way.
      * One record failing must never roll back another record's success.
      *

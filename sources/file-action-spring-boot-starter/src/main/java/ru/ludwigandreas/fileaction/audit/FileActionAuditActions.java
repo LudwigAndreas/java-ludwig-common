@@ -30,6 +30,9 @@ public final class FileActionAuditActions {
     /** Somebody asked a running submission to stop. */
     public static final String CANCELLATION_REQUESTED = "file-action.cancellation-requested";
 
+    /** A submission stopped on a cancel request and ended {@code CANCELLED}; recorded once. */
+    public static final String CANCELLED = "file-action.cancelled";
+
     /** Retention removed a submission's stored bytes. */
     public static final String EXPIRED = "file-action.expired";
 

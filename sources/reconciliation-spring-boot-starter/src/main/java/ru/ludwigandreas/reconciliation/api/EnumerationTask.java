@@ -47,7 +47,7 @@ public interface EnumerationTask<S, SK, M, MK> {
     ScopeSource<S, SK> scopes();
 
     /**
-     * How a scope key survives a round trip through the {@code scope_key} column and an actuator path.
+     * How a scope key survives a round trip through the {@code scope_key} column and an administrative path.
      *
      * @return the codec
      */

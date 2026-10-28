@@ -21,6 +21,26 @@ either.
 
 ### Added
 
+- **Administrative surface** (`admin-authorization`, `starter-admin-endpoints`). Every module's operator controls
+  live under `/admin/v1/<area>/`, authorized by operations of the form `<area>.<tier>`, where the tier is `read`,
+  `operate` or `privileged`. A service grants operations to its own roles in `ludwig.admin.grants`, for example
+  `"[outbox.operate]": [NOTIFICATION_ADMIN]`; a starter never names a role, and roles never come from token
+  claims. The surface fails closed:
+  - an ungranted operation is refused;
+  - a grant or handler naming an uncatalogued operation fails startup;
+  - partners and PAT-credentialed callers are refused.
+
+  A `privileged` call needs an `Admin-Reason` header. Every change and every denial is audited. Human callers are
+  confined to their tenant, and `GET /admin/v1/me/operations` lists the caller's operations.
+
+  The new areas are:
+  - `identity`: partners, data-scope grants, effective authorities;
+  - `audit`: trail search, tenant-confined, with the new `actor_tenant` column;
+  - `reconciliation`, `fileingest`, `outbox` (browse, retry, bulk retry, discard), `jobs` (leases, run now, forced
+    release), `messaging` (consumer lag), `exports`, `fileactions`, `settings` and `pat`.
+
+  `notification-service` grants them to `NOTIFICATION_ADMIN`, plus the read tier to `NOTIFICATION_SUPPORT`;
+  `crud-service-example` grants them to `CATALOG_ADMIN`.
 - **AsyncAPI documents** (`add-published-async-document`). New `asyncapi-spring-boot-starter` (Springwolf
   1.9.0) documents a service's Kafka surface: its consumers with their cluster and dead-letter channel,
   every outbox event type it publishes over Kafka, the platform envelope headers, and its clusters as
@@ -87,6 +107,24 @@ either.
 
 ### Changed
 
+- **BREAKING — a cancelled file-action submission ends `CANCELLED`** (`file-action-cancelled-state`).
+  `FileActionState` gains `CANCELLED`, mapped to `OperationStatus.CANCELLED`. A consumer switching over the enum or
+  over `OperationResponse.detail()` must handle it. A `VALIDATED` submission is cancelled at once (`200`), while a
+  queued or running one stops at its next checkpoint (`202`). `FileActionSubmissionQueryRepository` gains
+  `cancelIfValidated` and `startIfValidated`.
+- **BREAKING — administrative operation descriptions are required** (`admin-surface-polish`). Startup fails when an
+  operation in the administrative catalog has a description key that resolves in no bundle, naming every such
+  operation and key. A custom `AdminOperationContributor` must ship its keys in a bundle. Every in-repo area already
+  does. `AdminHandlerValidator` takes `ProblemMessages` as a third constructor argument.
+- **BREAKING — administrative surface** (`starter-admin-endpoints`, ships in the major release):
+  - Administrative settings endpoints moved from `/admin/settings/**` to `/admin/v1/settings/**`, and their `as-of`
+    parameter is now `asof`.
+  - Another tenant's subject now answers `404` instead of `403`.
+  - The self-service PAT API no longer accepts another owner; use `/admin/v1/pat/tokens` (`pat.privileged`).
+  - `OutboxStatus` gains `DISCARDED`.
+  - `audit-core`'s `Actor` gains a `tenant` component, which changes the canonical constructor.
+  - `IdentityProjectionAutoConfiguration` now runs before the security auto-configurations.
+  - `asyncapi-spring-boot-starter` scans with a classpath-tolerant `ComponentClassScanner`.
 - **Adding `asyncapi-spring-boot-starter` changes a service's OpenAPI document once:** Springwolf registers
   a schema-title converter in swagger's shared registry, so every schema gains `title:`. Refresh and
   review the document when adopting it. `DefaultOutboxEventPublisher` takes an `OutboxEventTypes` as its
@@ -122,6 +160,11 @@ either.
 
 ### Removed
 
+- **Actuator administration** (`starter-admin-endpoints`). The `reconciliation` and `fileingest` actuator
+  endpoints are removed, along with their auto-configurations and `ludwig.reconciliation.endpoint.*` /
+  `ludwig.ingest.endpoint.*`; use their `/admin/v1/` areas instead. Also removed:
+  `ludwig.user-settings.access.admin-authority`, `ludwig.user-settings.web.admin-base-path`, and
+  `PatAuthorities.MANAGE_ANY` (`pat:manage:any`).
 - **BREAKING - the reason the next release is 3.0.0.** `rest-client-spring-boot-starter`'s
   `ru.ludwigandreas.restclient.auth.CachedToken` and `CachingTokenSource` are removed **without a prior
   deprecation release**, by decision. They moved unchanged to `outbound-token-core`: import
@@ -153,6 +196,25 @@ either.
 
 ### Fixed
 
+- **A cancelled file-action submission is no longer recorded as applied** (`file-action-cancelled-state`). A pass that
+  stopped on a cancel was recorded `APPLIED` (envelope `SUCCEEDED`) with a successful `file-action.applied` event. It
+  is now `CANCELLED`, audited as `file-action.cancelled`. A cancel that arrived while the submission was queued or
+  being read is honoured before anything is applied, including `ALL_OR_NOTHING` and document actions. A cancel and a
+  confirm racing on one validated submission can no longer both take effect.
+- **`GET /admin/v1/me/operations` is published as `application/json`** (`admin-surface-polish`), not `*/*`, so a
+  client generated from the OpenAPI document has a response type.
+- **A PAT revoke no longer fails while the token is in use** (`gate-hygiene`). The asynchronous last-use write
+  saved the whole row and bumped its version, so a revoke or rotation overlapping a use failed with an
+  optimistic-lock conflict (`500`), and the token kept working. The write is now a version-less update of
+  `last_used_at`, `last_used_ip` and `use_count` only, which never moves the time backwards, and `PatEntity` writes
+  only changed columns. `PatQueryRepository` gains `recordUse`, and `PatUsageTracker` takes a `PatQueryRepository`
+  instead of a `PatRepository`.
+- **rest-client retries every timed-out attempt** (`gate-hygiene`). On the JDK transport the HttpClient's own
+  deadline (`java.net.http.HttpTimeoutException`) was not classified as retryable, so a timed-out GET was retried
+  only when Spring's future timeout happened to fire first. Both are now retryable timeouts.
+- **`scripts/check_image_pins.sh` checks code, not prose, in Markdown** (`gate-hygiene`). Only fenced blocks and
+  inline code are examined, so a sentence such as "no new image: the mail server" no longer fails the gate. A
+  `--self-test`, now run by `scripts/gate.sh`, proves each trigger still fires.
 - **Outbox records carry the publisher's `X-Correlation-Id`.** No outbox-produced record carried one
   before, on any transport: the poller thread has no request context, and audit-core's
   `CorrelationProvider` had only an empty fallback. observability-spring-boot-starter now provides the

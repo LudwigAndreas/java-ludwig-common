@@ -134,7 +134,7 @@ public interface SyncScopeMemberRepository
     }
 
     /**
-     * A sample of a task's members in a status, newest failure first, for the actuator.
+     * A sample of a task's members in a status, newest failure first, for the administrative endpoints.
      *
      * @param taskName the task
      * @param status   the status

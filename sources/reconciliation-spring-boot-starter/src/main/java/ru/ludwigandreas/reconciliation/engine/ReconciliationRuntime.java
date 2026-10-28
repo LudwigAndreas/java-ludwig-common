@@ -43,7 +43,7 @@ import java.util.Set;
  *
  * <p>That is a lot of small jobs rather than one big loop, and deliberately: each has its own cadence
  * for a reason that would be lost by merging it with any of the others, and each is separately
- * disableable, separately observable, and separately triggerable from the actuator endpoint.
+ * disableable, separately observable, and separately triggerable from the administrative endpoints.
  *
  * <h2>Gauges are registered here</h2>
  *
@@ -100,7 +100,7 @@ public class ReconciliationRuntime implements SmartLifecycle {
      * @param registry           the discovered tasks
      * @param runner             the fetch run
      * @param applyService       the apply pass
-     * @param taskState          cursor and watermark, for the actuator's task listing
+     * @param taskState          cursor and watermark, for the administrative task listing
      * @param records            the staging table, for the backlog gauges
      * @param submitService      the asynchronous-job submit pass
      * @param pollService        the asynchronous-job poll pass
@@ -299,7 +299,7 @@ public class ReconciliationRuntime implements SmartLifecycle {
     /**
      * How far behind a task's data is, in seconds - the same number the SLO gauge reports.
      *
-     * <p>Exposed so the actuator's listing shows the figure an operator is about to be alerted on,
+     * <p>Exposed so the administrative listing shows the figure an operator is about to be alerted on,
      * rather than making them correlate a dashboard with a task list by hand.
      *
      * @param taskName the task

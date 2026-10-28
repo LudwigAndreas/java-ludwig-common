@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import ru.ludwigandreas.fileaction.api.FileAction;
 import ru.ludwigandreas.fileaction.api.FileActionContext;
 import ru.ludwigandreas.fileaction.api.RowBinding;
@@ -38,6 +39,9 @@ public class RecordingOrderHandler implements RowHandler<OrderLineRow> {
     /** SKUs this handler refuses, so a test can produce a handler-level reject. */
     private volatile Set<String> refuse = Set.of();
 
+    /** A row to stop at, so a test can act while a batch is still open; null for none. */
+    private volatile Pause pause;
+
     @Override
     public RowBinding<OrderLineRow> binding() {
         return BINDING;
@@ -49,6 +53,15 @@ public class RecordingOrderHandler implements RowHandler<OrderLineRow> {
             return RowOutcome.rejected("file-action.constraint-violated", "SKU", "refused by the test");
         }
         applied.add(row);
+        Pause at = pause;
+        if (at != null && at.sku().equals(row.sku())) {
+            at.reached().countDown();
+            try {
+                at.release().await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
         return RowOutcome.applied();
     }
 
@@ -61,6 +74,21 @@ public class RecordingOrderHandler implements RowHandler<OrderLineRow> {
     public void reset() {
         applied.clear();
         refuse = Set.of();
+        pause = null;
+    }
+
+    /**
+     * Makes this handler stop after applying the named SKU, inside the open batch, until released.
+     *
+     * @param sku     the row to stop at
+     * @param reached counted down when the handler gets there
+     * @param release awaited before the handler returns
+     */
+    public void pauseAfter(String sku, CountDownLatch reached, CountDownLatch release) {
+        pause = new Pause(sku, reached, release);
+    }
+
+    private record Pause(String sku, CountDownLatch reached, CountDownLatch release) {
     }
 
     /**

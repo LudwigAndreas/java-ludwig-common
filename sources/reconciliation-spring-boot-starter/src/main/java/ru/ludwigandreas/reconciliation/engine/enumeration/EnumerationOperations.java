@@ -16,7 +16,7 @@ import java.util.Optional;
 /**
  * What an operator can see and do about enumerations, as plain maps.
  *
- * <p>The actuator endpoint's one collaborator for the second task kind. It exists so that the
+ * <p>The administrative endpoints' one collaborator for the second task kind. It exists so that the
  * endpoint can be handed enumerations through a single optional reference instead of a longer
  * constructor, and so that nothing in the endpoint has to know how a walk is driven.
  *

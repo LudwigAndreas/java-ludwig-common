@@ -70,6 +70,21 @@ class RetryPolicyTest {
     }
 
     @Test
+    @DisplayName("the JDK client's own timeout is retried like any other timeout, whichever timer fired first")
+    void retriesJdkClientTimeoutOnGet() {
+        // On the JDK transport the HttpClient's deadline and Spring's future timeout race on the same
+        // read-timeout. When the HttpClient's won, the GET was not retried; StubFaultIT.slow caught it.
+        AttemptOutcome jdkTimer = new AttemptOutcome(0,
+                new java.net.http.HttpTimeoutException("request timed out"), -1, ANY, 1);
+        AttemptOutcome springTimer = new AttemptOutcome(0,
+                new java.io.IOException("Request timed out", new java.util.concurrent.TimeoutException()),
+                -1, ANY, 1);
+        assertThat(policy().shouldRetry(jdkTimer, "GET", null, 0)).isTrue();
+        assertThat(policy().shouldRetry(springTimer, "GET", null, 0)).isTrue();
+        assertThat(policy().shouldRetry(jdkTimer, "POST", null, 0)).isFalse();
+    }
+
+    @Test
     @DisplayName("the attempt limit stops the loop")
     void stopsAtMaxAttempts() {
         assertThat(policy().shouldRetry(status(503, 3), "GET", null, 0)).isFalse();

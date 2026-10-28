@@ -121,7 +121,7 @@ public interface SyncScopeStateRepository extends BaseRepository<SyncScopeState,
     }
 
     /**
-     * A page of a task's scopes for the actuator's listing, least fresh first.
+     * A page of a task's scopes for the administrative listing, least fresh first.
      *
      * @param taskName the task
      * @param limit    how many to return

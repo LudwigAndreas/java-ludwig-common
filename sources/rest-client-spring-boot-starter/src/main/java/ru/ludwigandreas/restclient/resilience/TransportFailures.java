@@ -31,6 +31,10 @@ public final class TransportFailures {
                         || candidate instanceof NoRouteToHostException
                         || candidate instanceof SocketTimeoutException
                         || candidate instanceof TimeoutException
+                        // The JDK client's own deadline. It races Spring's future timeout on the same
+                        // read-timeout, and whichever fires first used to decide whether a timed-out GET
+                        // was retried; isTimeout already counted it, and the two must agree.
+                        || candidate instanceof java.net.http.HttpTimeoutException
                         // A reset or a "connection closed" mid-exchange is nearly always a pooled
                         // connection the peer had already discarded - the single most common
                         // transient failure in a service mesh, and the one a retry always fixes.

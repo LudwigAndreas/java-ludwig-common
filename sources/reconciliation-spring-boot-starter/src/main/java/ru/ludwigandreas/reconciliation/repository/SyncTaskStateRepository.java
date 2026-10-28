@@ -21,7 +21,7 @@ public interface SyncTaskStateRepository extends BaseRepository<SyncTaskState, U
     Optional<SyncTaskState> findByTaskNameAndTier(String taskName, DemandTier tier);
 
     /**
-     * Every state row for a task - both tiers - for the actuator's task listing.
+     * Every state row for a task - both tiers - for the administrative task listing.
      *
      * @param taskName the task
      * @return the rows

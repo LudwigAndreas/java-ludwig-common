@@ -38,7 +38,7 @@ public class FileIngestSchedules implements SmartLifecycle {
     }
 
     /**
-     * The schedules this owns, for the tests and for the actuator endpoint.
+     * The schedules this owns, for the tests and for the administrative endpoints.
      *
      * @return the schedules
      */

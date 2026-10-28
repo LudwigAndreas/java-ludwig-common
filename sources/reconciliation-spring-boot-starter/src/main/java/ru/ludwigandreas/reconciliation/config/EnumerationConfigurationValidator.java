@@ -131,7 +131,7 @@ public class EnumerationConfigurationValidator {
                 problems.add(String.format(
                         "\"%s\" is configured both under ludwig.reconciliation.tasks and under "
                                 + "ludwig.reconciliation.enumerations. The two kinds share run-lock "
-                                + "names and the actuator's task selector, so one would be operated "
+                                + "names and the administrative task path, so one would be operated "
                                 + "on when the other was meant. Rename one of them.", name));
             }
         }

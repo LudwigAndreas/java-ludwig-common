@@ -6,6 +6,8 @@ import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.pat.entity.PatEntity;
 import ru.ludwigandreas.pat.entity.QPatEntity;
 
@@ -52,6 +54,47 @@ public class PatQueryRepositoryImpl implements PatQueryRepository {
                 .where(PAT.ownerSubject.eq(ownerSubject))
                 .orderBy(PAT.createdAt.desc())
                 .fetch();
+    }
+
+    @Override
+    public List<PatEntity> findForAdministration(String ownerSubject, Boolean revoked, Boolean expired, Instant now,
+                                                 Instant afterCreatedAt, UUID afterId, int limit) {
+        BooleanBuilder where = new BooleanBuilder();
+        if (ownerSubject != null && !ownerSubject.isBlank()) {
+            where.and(PAT.ownerSubject.eq(ownerSubject));
+        }
+        if (revoked != null) {
+            where.and(revoked ? PAT.revokedAt.isNotNull() : PAT.revokedAt.isNull());
+        }
+        if (expired != null) {
+            where.and(expired ? PAT.expiresAt.loe(now)
+                    : PAT.expiresAt.isNull().or(PAT.expiresAt.gt(now)));
+        }
+        if (afterCreatedAt != null && afterId != null) {
+            where.and(PAT.createdAt.lt(afterCreatedAt)
+                    .or(PAT.createdAt.eq(afterCreatedAt).and(PAT.id.lt(afterId))));
+        }
+        return queryFactory.selectFrom(PAT)
+                .where(where)
+                .orderBy(PAT.createdAt.desc(), PAT.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Transactional here because its caller is an executor thread with no transaction of its own.
+     */
+    @Override
+    @Transactional
+    public long recordUse(UUID id, Instant usedAt, String sourceIp) {
+        return queryFactory.update(PAT)
+                .set(PAT.lastUsedAt, usedAt)
+                .set(PAT.lastUsedIp, sourceIp)
+                .set(PAT.useCount, PAT.useCount.add(1))
+                .where(PAT.id.eq(id), PAT.lastUsedAt.isNull().or(PAT.lastUsedAt.lt(usedAt)))
+                .execute();
     }
 
     @Override

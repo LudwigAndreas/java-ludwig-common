@@ -84,6 +84,10 @@ class JdbcRunLockIT {
         source.setUrl(Containers.postgres().getJdbcUrl());
         source.setUser(Containers.postgres().getUsername());
         source.setPassword(Containers.postgres().getPassword());
+        // The test container serves no TLS. pgjdbc's default (prefer) still opens with an SSL request, and
+        // the one recorded failure of this suite was "error occurred while setting up the SSL connection"
+        // on the first connection; asking for what the container actually offers removes that step.
+        source.setSslMode("disable");
         dataSource = source;
 
         SpringLiquibase liquibase = new SpringLiquibase();

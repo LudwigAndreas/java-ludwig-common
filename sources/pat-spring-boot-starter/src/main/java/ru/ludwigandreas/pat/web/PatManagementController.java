@@ -38,8 +38,8 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
  *       unauthenticated request gets that module's localized {@code 401}, not one invented here.</li>
  *   <li><b>The credential guard</b> ({@link PatCredentialGuard}), which refuses a token-backed caller
  *       before authorization is evaluated at all. A token may not mint, rotate or revoke a token.</li>
- *   <li><b>Authorization</b>, per method, distinguishing acting on your own tokens from acting on somebody
- *       else's.</li>
+ *   <li><b>Authorization</b>, per method: the management permission, and only ever on your own tokens.
+ *       Somebody else's are the {@code pat} administrative area's.</li>
  * </ol>
  *
  * <p>The middle one is the one that is easy to leave out and expensive to leave out. Without it a leaked
@@ -52,7 +52,7 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
  * <em>field of the request body</em> - the body is not bound when the expression is evaluated. Issuance
  * takes its owner from the body, so the self-versus-other decision for that endpoint has to happen after
  * binding. The annotation therefore states the floor (you need the management permission at all) and
- * {@link #requireAuthorityOver} states the specific rule, in one place that all five endpoints call.
+ * {@link #requireSelf} states the specific rule, in one place that the subject-naming endpoints call.
  *
  * <p>The alternative - an owner path variable so the annotation could do it - would mean a caller naming
  * themselves in a URL for the ordinary case, and a URL-shaped owner is a URL-shaped owner somebody will
@@ -68,26 +68,22 @@ public class PatManagementController {
 
     @PostMapping("${ludwig.pat.web.base-path:/api/v1/personal-access-tokens}")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')"
-            + " or hasAuthority('" + PatAuthorities.MANAGE_ANY + "')")
+    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')")
     public IssuedPatResponse issue(@Valid @RequestBody IssuePatRequest request) {
         LudwigPrincipal caller = SecurityPrincipals.require();
         String owner = request.ownerOr(caller.subject());
-        requireAuthorityOver(owner, caller);
-
-        // The owner's authorities are passed only when the owner IS the caller, because that is the only
-        // case where this service knows them: they are on the resolved principal. For another subject they
-        // would have to be looked up, and an issuer that cannot reach the authority projection must still
-        // be able to mint - the use-time intersection is what enforces, not this fail-fast.
-        Set<String> ownerAuthorities = owner.equals(caller.subject())
-                ? union(caller.roles(), caller.permissions())
-                : Set.of();
+        if (!owner.equals(caller.subject())) {
+            // Audited before refusing: a request to mint a credential for another identity is a security
+            // event whether it succeeds or not.
+            service.recordIssuanceForAnotherOwnerRefused(owner, caller.subject());
+        }
+        requireSelf(owner, caller);
 
         PatService.IssuedToken issued = service.issue(
                 new IssueTokenCommand(owner, request.name(), request.scopes(), request.audiences(),
                         request.lifetime(), request.allowedCidrs()),
                 caller.subject(),
-                ownerAuthorities);
+                union(caller.roles(), caller.permissions()));
 
         return new IssuedPatResponse(render(issued.token()), issued.rendered());
     }
@@ -100,19 +96,17 @@ public class PatManagementController {
      * that cannot be got wrong.
      */
     @GetMapping("${ludwig.pat.web.base-path:/api/v1/personal-access-tokens}")
-    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')"
-            + " or hasAuthority('" + PatAuthorities.MANAGE_ANY + "')")
+    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')")
     public List<PatResponse> list(@RequestParam(required = false) String owner) {
         LudwigPrincipal caller = SecurityPrincipals.require();
         String subject = owner == null || owner.isBlank() ? caller.subject() : owner;
-        requireAuthorityOver(subject, caller);
+        requireSelf(subject, caller);
 
         return service.list(subject).stream().map(this::render).toList();
     }
 
     @GetMapping("${ludwig.pat.web.base-path:/api/v1/personal-access-tokens}/{id}")
-    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')"
-            + " or hasAuthority('" + PatAuthorities.MANAGE_ANY + "')")
+    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')")
     public PatResponse get(@PathVariable UUID id) {
         return render(requireOwned(id));
     }
@@ -126,8 +120,7 @@ public class PatManagementController {
      */
     @PostMapping("${ludwig.pat.web.base-path:/api/v1/personal-access-tokens}/{id}/rotations")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')"
-            + " or hasAuthority('" + PatAuthorities.MANAGE_ANY + "')")
+    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')")
     public IssuedPatResponse rotate(@PathVariable UUID id) {
         requireOwned(id);
         LudwigPrincipal caller = SecurityPrincipals.require();
@@ -150,8 +143,7 @@ public class PatManagementController {
      */
     @DeleteMapping("${ludwig.pat.web.base-path:/api/v1/personal-access-tokens}/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')"
-            + " or hasAuthority('" + PatAuthorities.MANAGE_ANY + "')")
+    @PreAuthorize("hasAuthority('" + PatAuthorities.MANAGE_OWN + "')")
     public void revoke(@PathVariable UUID id) {
         requireOwned(id);
         LudwigPrincipal caller = SecurityPrincipals.require();
@@ -159,7 +151,7 @@ public class PatManagementController {
     }
 
     /**
-     * Loads a token and refuses it unless the caller may act on its owner.
+     * Loads a token and refuses it unless the caller owns it.
      *
      * <p>Throws the same not-found exception for "no such token" and for "somebody else's token", which is
      * deliberate: distinguishing them turns this endpoint into an oracle for whether a given token id
@@ -169,26 +161,25 @@ public class PatManagementController {
     private PatSnapshot requireOwned(UUID id) {
         LudwigPrincipal caller = SecurityPrincipals.require();
         PatSnapshot token = service.find(id).orElseThrow(PatException::notFound);
-        if (!token.ownerSubject().equals(caller.subject())
-                && !caller.hasPermission(PatAuthorities.MANAGE_ANY)) {
+        if (!token.ownerSubject().equals(caller.subject())) {
             throw PatException.notFound();
         }
         return token;
     }
 
     /**
-     * Refuses a caller acting on a subject that is not themselves without the broader authority.
+     * Refuses a caller acting on a subject that is not themselves.
      *
      * <p>{@code 403} rather than a not-found, unlike {@link #requireOwned}. The difference is what the
      * caller already knows: here they supplied the subject, so telling them they may not act for it reveals
      * nothing they did not bring with them - whereas a token id they guessed would be confirmed to exist.
      */
-    private void requireAuthorityOver(String owner, LudwigPrincipal caller) {
-        if (!owner.equals(caller.subject()) && !caller.hasPermission(PatAuthorities.MANAGE_ANY)) {
+    private void requireSelf(String owner, LudwigPrincipal caller) {
+        if (!owner.equals(caller.subject())) {
             throw new org.springframework.security.access.AccessDeniedException(
-                    "Acting on another subject's personal access tokens requires the "
-                            + PatAuthorities.MANAGE_ANY + " permission. Issuing a credential that acts as"
-                            + " somebody else is a different act from issuing one that acts as you.");
+                    "The self-service API acts only on the caller's own personal access tokens. Another"
+                            + " subject's are managed through the pat administrative area, under"
+                            + " /admin/v1/pat/tokens.");
         }
     }
 

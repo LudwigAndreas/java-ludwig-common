@@ -758,6 +758,142 @@
                                     },
                                     {
                                       "code": "java.class.removed",
+                                      "old": "class ru.ludwigandreas.pat.web.PatCredentialNotPermittedException",
+                                      "justification": "REMOVED FROM pat-spring-boot-starter IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change admin-authorization. The type moved, unchanged in behaviour and keeping its problem code ludwig.pat.credential-not-permitted, to security-spring-boot-starter as ru.ludwigandreas.security.web.PatCredentialNotPermittedException, because the administrative surface guard there must refuse a PAT credential with the very same problem type as the PAT management surface, and pat-spring-boot-starter depends on the security starter rather than the other way round. Migration: change the import."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.addedToInterface",
+                                      "new": "method long ru\\.ludwigandreas\\.pat\\.repository\\.PatQueryRepository::recordUse\\(.*\\)",
+                                      "justification": "ADDED IN THE NEXT MAJOR RELEASE, change gate-hygiene. The last-use write became a version-less update so that a revoke or rotation overlapping a token's use no longer fails with an optimistic-lock conflict. A custom PatQueryRepository implementation must add recordUse(id, usedAt, sourceIp): update last_used_at, last_used_ip and use_count + 1 for the id, only when the stored last use is null or earlier, without touching the version."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.parameterTypeChanged",
+                                      "old": "parameter void ru\\.ludwigandreas\\.pat\\.service\\.PatUsageTracker::<init>\\(===ru\\.ludwigandreas\\.pat\\.repository\\.PatRepository===,.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE, change gate-hygiene. PatUsageTracker used PatRepository only for the read-modify-save last-use write that raced revocation; it now takes PatQueryRepository and calls its version-less recordUse. Migration: pass the PatQueryRepository bean instead of PatRepository."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.numberOfParametersChanged",
+                                      "old": "method void ru\\.ludwigandreas\\.security\\.admin\\.AdminHandlerValidator::<init>\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE, change admin-surface-polish. AdminHandlerValidator now also fails startup when a catalogued administrative operation's description key resolves in no bundle, so it takes the ProblemMessages it resolves them through as a third constructor argument. Migration: pass the ProblemMessages bean; a service using AdminAutoConfiguration is unaffected."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.addedToInterface",
+                                      "new": "method long ru\\.ludwigandreas\\.fileaction\\.repository\\.FileActionSubmissionQueryRepository::(cancelIfValidated|startIfValidated)\\(.*\\)",
+                                      "justification": "ADDED IN THE NEXT MAJOR RELEASE, change file-action-cancelled-state. A cancel and a confirm racing on one VALIDATED submission are now two conditional updates on the same predicate, so exactly one wins. The interface is the module's own query fragment, implemented by FileActionSubmissionQueryRepositoryImpl; a custom implementation must add both, each a version-bumping update WHERE state = 'VALIDATED' that refreshes the copy the persistence context holds."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.reconciliation.actuator.ReconciliationEndpoint",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The reconciliation actuator endpoint is replaced by the reconciliation area of the administrative surface, /admin/v1/reconciliation/..., authorized by the service's ludwig.admin.grants and audited. Migration: point operator tooling at /admin/v1/reconciliation and grant reconciliation.read/operate/privileged."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.reconciliation.config.ReconciliationActuatorAutoConfiguration",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. Its only bean was the removed ReconciliationEndpoint; the administrative area is registered by ReconciliationAdminAutoConfiguration. Migration: none beyond the endpoint's."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.reconciliation.config.ReconciliationProperties.Endpoint",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. ludwig.reconciliation.endpoint.* configured the removed actuator endpoint, including allow-destructive-operations; whether a deployment permits the destructive actions is now whether any of its roles is granted reconciliation.privileged. Migration: delete the properties."
+                                    },
+                                    {
+                                        "regex": true,
+                                        "code": "java\\.method\\.removed",
+                                        "old": "method ru\\.ludwigandreas\\.reconciliation\\.config\\.ReconciliationProperties\\.Endpoint ru\\.ludwigandreas\\.reconciliation\\.config\\.ReconciliationProperties::getEndpoint\\(\\)",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The accessor of the removed ReconciliationProperties.Endpoint. Migration: delete ludwig.reconciliation.endpoint.*."
+                                    },
+                                    {
+                                        "code": "java.field.removed",
+                                        "old": "field ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category.OPERATOR",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. Only the removed actuator endpoint emitted it; operator actions are now administrative audit events of category admin whose action is the operation id. Migration: query the audit trail by category admin instead."
+                                    },
+                                    {
+                                        "regex": true,
+                                        "code": "java\\.field\\.enumConstantOrderChanged",
+                                        "old": "field ru\\.ludwigandreas\\.reconciliation\\.audit\\.ReconciliationAuditEvent\\.Category\\..*",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. Removing Category.OPERATOR shifts the ordinal of the constants declared after it. The category is persisted and compared by name, never by ordinal. Migration: none."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.ingest.actuator.FileIngestEndpoint",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The file-ingest actuator endpoint is replaced by the fileingest area of the administrative surface, /admin/v1/fileingest/..., authorized by ludwig.admin.grants and audited. Migration: point operator tooling at /admin/v1/fileingest and grant fileingest.read/operate."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.ingest.autoconfigure.FileIngestActuatorAutoConfiguration",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. Its only bean was the removed FileIngestEndpoint; the administrative area is registered by FileIngestAdminAutoConfiguration. Migration: none beyond the endpoint's."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.ingest.config.FileIngestProperties.Endpoint",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. ludwig.ingest.endpoint.* configured the removed actuator endpoint. Migration: delete the properties; grant the fileingest operations instead."
+                                    },
+                                    {
+                                        "regex": true,
+                                        "code": "java\\.method\\.removed",
+                                        "old": "method ru\\.ludwigandreas\\.ingest\\.config\\.FileIngestProperties\\.Endpoint ru\\.ludwigandreas\\.ingest\\.config\\.FileIngestProperties::getEndpoint\\(\\)",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The accessor of the removed FileIngestProperties.Endpoint. Migration: delete ludwig.ingest.endpoint.*."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.usersettings.web.AdminSettingsController",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. Moved to ru.ludwigandreas.usersettings.admin.web.AdminSettingsController and re-mapped under /admin/v1/settings (consents/as-of became consents/asof); authorized by the settings.read and settings.operate operations instead of ludwig.user-settings.access.admin-authority. Migration: change the import of any subclass or bean override, and the client paths."
+                                    },
+                                    {
+                                        "code": "java.class.removed",
+                                        "old": "class ru.ludwigandreas.usersettings.web.SettingsBackfillController",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. Moved to ru.ludwigandreas.usersettings.admin.web.SettingsBackfillController under /admin/v1/settings/backfill, authorized by settings.operate; its constructor no longer takes a SettingsAccessPolicy. Migration: change the import, and the client path."
+                                    },
+                                    {
+                                        "regex": true,
+                                        "code": "java\\.method\\.removed",
+                                        "old": "method .* ru\\.ludwigandreas\\.usersettings\\.config\\.UserSettingsWebAutoConfiguration::(adminSettingsController|settingsBackfillController)\\(.*\\)",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The two administrative controllers' bean methods moved to UserSettingsAdminAutoConfiguration, which registers them only where the administrative surface exists. Migration: none for a service; an override by bean name keeps working."
+                                    },
+                                    {
+                                        "regex": true,
+                                        "code": "java\\.method\\.removed",
+                                        "old": "method .* ru\\.ludwigandreas\\.usersettings\\.config\\.UserSettingsProperties\\.(Access::(get|set)AdminAuthority|Web::(get|set)AdminBasePath)\\(.*\\)",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. ludwig.user-settings.access.admin-authority and ludwig.user-settings.web.admin-base-path are gone: which roles administer settings is the service's ludwig.admin.grants, and the path is the fixed /admin/v1/settings. Migration: delete both properties and grant settings.read/settings.operate."
+                                    },
+                                    {
+                                        "regex": true,
+                                        "code": "java\\.method\\.(removed|numberOfParametersChanged|parameterTypeChanged)",
+                                        "old": "method void ru\\.ludwigandreas\\.usersettings\\.resolve\\.SettingsAccessPolicy::<init>\\(java\\.lang\\.String, boolean, boolean\\)",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The policy no longer takes an administrative authority: it recognises a settings administrative operation in progress, so the constructor is now (boolean allowUnauthenticated, boolean allowServicePrincipals, Supplier<Optional<AdminInvocation>>). Migration: a service constructing its own policy passes AdminInvocation::current."
+                                    },
+                                    {
+                                        "code": "java.field.removed",
+                                        "old": "field ru.ludwigandreas.pat.web.PatAuthorities.MANAGE_ANY",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. pat:manage:any is no longer an authority: the self-service API acts only on the caller's own tokens, and another owner's are managed through the pat area, /admin/v1/pat/tokens, under pat.read and pat.privileged. Migration: grant pat.privileged to the roles that held pat:manage:any and move their tooling to /admin/v1/pat/tokens."
+                                    },
+                                    {
+                                        "code": "java.field.removed",
+                                        "old": "field ru.ludwigandreas.export.web.ReportRunController.ADMIN_AUTHORITY",
+                                        "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. ROLE_EXPORT_ADMIN was a role a library named; administrators now use the exports area, /admin/v1/exports/..., under the service's ludwig.admin.grants. Migration: grant exports.read/exports.operate to the roles that held ROLE_EXPORT_ADMIN."
+                                    },
+                                    {
+                                        "regex": true,
+                                        "code": "java\\.method\\.(numberOfParametersChanged|removed)",
+                                        "old": "method void ru\\.ludwigandreas\\.audit\\.Actor::<init>\\(java\\.lang\\.String, java\\.lang\\.String, java\\.lang\\.String, java\\.lang\\.String\\)",
+                                        "justification": "CHANGED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. Actor gained a fifth component, tenant, so that the administrative audit search can confine a tenant's administrator to their own tenant's events. The factories (Actor.of and friends) are unchanged. Migration: a caller of the canonical constructor adds the tenant, or null."
+                                    },
+                                    {
+                                        "code": "java.method.addedToInterface",
+                                        "new": "method java.util.List<ru.ludwigandreas.audit.store.entity.AuditEventEntity> ru.ludwigandreas.audit.store.repository.AuditEventQueryRepository::findPage(ru.ludwigandreas.audit.store.repository.AuditTrailQuery, boolean, java.lang.String, java.time.Instant, java.util.UUID)",
+                                        "justification": "ADDED IN THE NEXT MAJOR RELEASE - change starter-admin-endpoints. The keyset, tenant-confined page the audit area reads with. A Spring Data fragment implemented by this module; nothing outside it implements the interface. Migration: none."
+                                    },
+                                    {
+                                        "code": "java.method.addedToInterface",
+                                        "new": "method java.util.List<ru.ludwigandreas.pat.entity.PatEntity> ru.ludwigandreas.pat.repository.PatQueryRepository::findForAdministration(java.lang.String, java.lang.Boolean, java.lang.Boolean, java.time.Instant, java.time.Instant, java.util.UUID, int)",
+                                        "justification": "ADDED IN THE NEXT MAJOR RELEASE - change starter-admin-endpoints. Any owner's tokens, for the pat administrative area. Implemented by this module's PatQueryRepositoryImpl; a service replacing that bean must implement it too. Migration: none for a service using the shipped bean."
+                                    },
+                                    {
+                                      "code": "java.class.removed",
                                       "old": "class ru.ludwigandreas.restclient.auth.CachedToken",
                                       "justification": "REMOVED IN 3.0.0 WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change consolidate-grpc-contracts-and-tokens. The api-evolution capability asks for a deprecating release before a removal; this release was declared breaking with no deprecation cycle, and the exception is recorded here rather than passing unremarked. The type moved, unchanged in behaviour, to outbound-token-core as ru.ludwigandreas.outboundtoken.CachedToken, the one token implementation shared with grpc-client-spring-boot-starter. Migration: change the import."
                                     },

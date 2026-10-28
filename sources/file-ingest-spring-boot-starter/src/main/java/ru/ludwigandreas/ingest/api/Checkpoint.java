@@ -28,7 +28,7 @@ public sealed interface Checkpoint permits Checkpoint.ByteOffset, Checkpoint.Rec
      * How many records have been committed so far, whichever shape this is.
      *
      * <p>Carried by both variants because the balance check needs it and because it is what an
-     * operator reads off the actuator endpoint to know whether a stuck run is stuck or slow. A byte
+     * operator reads off the administrative endpoints to know whether a stuck run is stuck or slow. A byte
      * offset alone answers neither question.
      *
      * @return the number of records the run has committed

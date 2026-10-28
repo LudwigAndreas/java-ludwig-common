@@ -622,6 +622,32 @@ not an apology.
 The content and placement of `.proto` files are deliberately not in this group: a `.proto` is a
 resource, which bytecode analysis cannot see, and `scripts/check_protos.sh` owns it.
 
+### `admin` - every handler under `/admin/` declares its operation, through one gate
+
+| Rule | What it requires |
+|------|------------------|
+| `admin.handler-declares-an-operation` | A handler method whose mapping (class path + method path, a `${key:default}` placeholder read as its default) begins with `/admin/` carries `@AdminAccess` or `@AdminAuthenticated` |
+| `admin.no-second-gate` | A class declaring administrative handlers, and those handlers, carry none of `@PreAuthorize`, `@PostAuthorize`, `@Secured`, `@RolesAllowed` |
+| `admin.mapped-under-the-versioned-prefix` | A handler carrying either annotation is mapped under `/admin/v1/` |
+| `admin.controller-is-a-thin-adapter` | A class declaring administrative handlers depends on no repository |
+
+On by default, and vacuous for a module with no handler under `/admin/`. A placeholder without a default cannot be
+resolved from bytecode; that method is skipped by the path-based rules rather than guessed at. Annotations are
+matched by name, so a module enabling the rules inherits neither Spring MVC nor the security starter from them.
+
+**Roles belong to the consuming service.** A library that writes `hasRole('ADMIN')` on an administrative endpoint
+has decided, for every service that will ever use it, which role administers it. The service decides that in
+`ludwig.admin.grants`; `@AdminAccess` names the operation and nothing else.
+
+#### The three rules in this area that no build can check
+
+1. **That an operation id is catalogued.** The catalog is assembled from beans at runtime; the security starter fails
+   startup on an uncatalogued id.
+2. **That an operation's tier matches what it does.** A judgement, reviewed against each module's README table of
+   operations.
+3. **That a module's endpoints are absent without the security starter.** A property of the assembled context,
+   tested by each declaring module's auto-configuration test.
+
 ## Configuring the conventions
 
 Nothing in the rules hardcodes a package name. A service maps its own layout onto the library's

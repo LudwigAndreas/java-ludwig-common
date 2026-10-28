@@ -6,7 +6,7 @@ import ru.ludwigandreas.webcore.problem.ProblemStatus;
 /**
  * Somebody named a task this service does not have.
  *
- * <p>The one failure in this module with a caller waiting on it: an actuator call with a typo in the
+ * <p>The one failure in this module with a caller waiting on it: an administrative call with a typo in the
  * task name. It is therefore the one that is localized and rendered by {@code web-core}'s pipeline,
  * while everything else here is a plain {@link IngestException} logged where the run happened.
  *

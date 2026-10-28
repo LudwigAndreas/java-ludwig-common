@@ -6,14 +6,14 @@
 [outbox](../outbox-spring-boot-starter). Сервис пишет запрос спроса, fetcher и reconciler вместо самодельного цикла
 `@Scheduled`; планирование, выбор лидера, staging, повторы с backoff и карантином, защита от устаревшей записи,
 идемпотентность по хэшу payload, квоты и rate limit партнёров, асинхронные задания партнёров, зеркалирование коллекций
-(задачи перечисления), SLO-метрика свежести, аудит и операторский эндпоинт actuator - забота модуля.
+(задачи перечисления), SLO-метрика свежести, аудит и эндпоинты оператора административной области `reconciliation` - забота модуля.
 
 | | |
 |---|---|
 | Роль | starter |
 | Зависит от (в репозитории) | [`audit-core`](../audit-core), [`db-core`](../db-core), [`job-core`](../job-core), [`observability`](../observability-spring-boot-starter), [`rest-client`](../rest-client-spring-boot-starter) |
 | Используется | в этом репозитории никем (сервисы, зеркалирующие состояние партнёров) |
-| Поверхности | исходящий REST (fetcher-ы); actuator `reconciliation` |
+| Поверхности | исходящий REST (fetcher-ы); административная область `/admin/v1/reconciliation` |
 
 | # | Стадия | Владелец |
 |---|---|---|
@@ -337,14 +337,13 @@ ludwig:
 `walk.max-concurrency` (`2`), `walk.max-scopes-per-run` (`50`), `sweep.confirm-after-misses` (`1`),
 `sweep.max-fraction` (`0.5`), `retry.*`, `audit.enabled`, `rest-client`, `rate-limit`.
 
-**Верхний уровень**: `ludwig.reconciliation.enabled`, `quotas.*`, `rate-limits.*`,
-`endpoint.allow-destructive-operations` (`false`), `liquibase.enabled` (`true`).
+**Верхний уровень**: `ludwig.reconciliation.enabled`, `quotas.*`, `rate-limits.*`, `liquibase.enabled` (`true`).
 
 `tasks.<name>.audit.persist` всё ещё связывается, но ни на что не влияет (след идёт через платформенный `AuditSink`).
 
 | Перечитывается (следующий проход) | Нужен перезапуск |
 |---|---|
-| `retry.*`, `demand.max-records-per-run`, `demand.freshness-target`, `fetch.batch-size`, `fetch.page-size`, `fetch.max-concurrency`, `not-found`, `apply.batch-size`, `rate-limits.*`, `endpoint.allow-destructive-operations`; у перечислений `walk`, `sweep`, `refresh`, `retry` | `fetch.shape`, `schedule.*`, `cold-schedule.*`, `apply.fixed-delay`, `mode`, `quotas.*`, у перечислений `schedule.*`, `discovery.fixed-delay`, добавление/удаление задач, перечислений, квот и rate limit |
+| `retry.*`, `demand.max-records-per-run`, `demand.freshness-target`, `fetch.batch-size`, `fetch.page-size`, `fetch.max-concurrency`, `not-found`, `apply.batch-size`, `rate-limits.*`; у перечислений `walk`, `sweep`, `refresh`, `retry` | `fetch.shape`, `schedule.*`, `cold-schedule.*`, `apply.fixed-delay`, `mode`, `quotas.*`, у перечислений `schedule.*`, `discovery.fixed-delay`, добавление/удаление задач, перечислений, квот и rate limit |
 
 **Старт отвергает** (всё сразу, каждое сообщение говорит, что сломается): неизвестные квота/rate limit/REST-клиент;
 `async-job` без блока `job` или `on-ambiguous-submit`; `run-timeout` короче бюджета повторов; `lease-ttl` < 2 ×
@@ -370,8 +369,8 @@ ludwig:
 | `sync_audit_record` | Создаётся changelog-ом; не пишется (след - `audit_event`) |
 | `job_run_lock` | Из job-core: аренды запусков задач |
 
-**Actuator**: открывайте `reconciliation` только операторам (защищайте как любой эндпоинт); разрушительные операции -
-только там, где они нужны. **Партнёры**: `@LudwigRestClient` на каждый fetcher; rate limit ÷ реплики.
+**Администрирование**: выдайте `reconciliation.*` операторским ролям сервиса в `ludwig.admin.grants`;
+`reconciliation.privileged` - только там, где разрушительные действия действительно нужны. **Партнёры**: `@LudwigRestClient` на каждый fetcher; rate limit ÷ реплики.
 
 ## Наблюдаемость
 
@@ -415,25 +414,48 @@ Gauge вычисляются из supplier-ов (остановившаяся з
 действие оператора с вызывающим принципалом**. Исход выводится из имени события (`.failed`, `.timed-out`,
 `.reclaimed` → `FAILURE`; `.quarantined`, `.skipped` → `PARTIAL`).
 
+## Администрирование
+
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+
+| Операция | Эндпоинты | Что разрешает |
+|---|---|---|
+| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}` | Просмотр задач сверки, перечислений, областей, квот и того, что застряло. |
+| `reconciliation.operate` | `POST /admin/v1/reconciliation/tasks/{task}/runs`<br>`POST /admin/v1/reconciliation/tasks/{task}/backfills`<br>`POST /admin/v1/reconciliation/tasks/{task}/cursor/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/discover`<br>`POST /admin/v1/reconciliation/tasks/{task}/members/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Запуск, дозагрузка, повторная постановка и сброс задач сверки и областей перечислений. |
+| `reconciliation.privileged` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel`<br>`POST /admin/v1/reconciliation/leases/{leaseId}/release`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Отмена удалённого задания, освобождение аренды квоты или подтверждение удержанной зачистки - действия, после которых эта система и партнёр могут разойтись. |
+
+**Удалено:** actuator-эндпоинт `reconciliation` и `ludwig.reconciliation.endpoint.*`, включая `allow-destructive-operations` и параметр `confirm`. Разрешены ли разрушающие действия, теперь определяется тем, выдана ли какой-либо роли сервиса операция `reconciliation.privileged`; `reconciliation` в списке экспозиции actuator ничего не открывает.
+
+Блок выдачи (имена ролей - собственные роли сервиса):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[reconciliation.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[reconciliation.operate]": [ORDERS_ADMIN]
+      "[reconciliation.privileged]": [ORDERS_ADMIN]
+```
+
 ## Runbook
 
-**Actuator** `GET /actuator/reconciliation` (обзор), `GET|POST /actuator/reconciliation/{task}`:
+Действия оператора, все под `/admin/v1/reconciliation` (операции - в разделе [Администрирование](#администрирование)):
 
-| Действие | Параметры | Эффект |
+| Действие | Эндпоинт | Эффект |
 |---|---|---|
-| `run` | `tier` | Выполнить проход сейчас (`ran: false`, если уже идёт) |
-| `dry-run` | `tier` | Получить и отчитаться по исходам, **ничего не записывая** |
-| `backfill` | `keys` | Получить указанные ключи в обход спроса; ограждения сохраняются; watermark не сдвигается |
-| `reset-cursor` | `tier` | Сбросить курсор и watermark |
-| `requeue-quarantined` | - | Вернуть в очередь со **сброшенными** счётчиками попыток |
-| `requeue-job` | `jobId` | Вернуть в очередь собранные заданием записи |
-| `cancel-job` | `jobId`, `confirm` | **Разрушительно**: завершить задание; обслуживание отменит у партнёра и освободит слот |
-| `release-lease` | `leaseId`, `confirm` | **Разрушительно**: принудительно освободить слот квоты (может превысить лимит партнёра) |
+| запуск | `POST /tasks/{task}/runs` `{tier}` | Выполнить проход сейчас; `409`, если уже идёт |
+| пробный запуск | `POST /tasks/{task}/runs` `{tier, dryRun: true}` | Получить и отчитаться по исходам, **ничего не записывая** |
+| backfill | `POST /tasks/{task}/backfills` `{keys}` | Получить указанные ключи в обход спроса; ограждения сохраняются; watermark не сдвигается |
+| сброс курсора | `POST /tasks/{task}/cursor/reset` `{tier}` | Сбросить курсор и watermark |
+| возврат карантина | `POST /tasks/{task}/quarantine/requeue` | Вернуть в очередь со **сброшенными** счётчиками попыток |
+| возврат задания | `POST /tasks/{task}/remotejobs/{jobId}/requeue` | Вернуть в очередь собранные заданием записи |
+| отмена задания | `POST /tasks/{task}/remotejobs/{jobId}/cancel` | **Privileged**: завершить задание; обслуживание отменит у партнёра и освободит слот |
+| освобождение аренды | `POST /leases/{leaseId}/release` | **Privileged**: принудительно освободить слот квоты (может превысить лимит партнёра) |
 
-Перечисления: `POST /actuator/reconciliation/{enumeration}` с `run` / `discover` / `requeue-members`;
-`GET|POST /actuator/reconciliation/{enumeration}/{scope}` с `walk` (`kind=full`), `preview` (ничего не пишет),
-`reset-scope`, `discard-sweep`, `confirm-sweep` (**разрушительно**). Ключи областей со `/` кодируйте процентами.
-Разрушительные действия требуют `endpoint.allow-destructive-operations=true` **и** `confirm=true`.
+Перечисления: `POST /tasks/{enumeration}/discover`, `POST /tasks/{enumeration}/members/requeue`, а по области
+`POST /tasks/{enumeration}/scopes/{scope}/walk` (`{kind}`), `.../preview` (ничего не пишет), `.../reset`,
+`.../sweep/discard`, `.../sweep/confirm` (**privileged**). Ключи областей со `/` кодируйте процентами. Действию уровня
+privileged нужен заголовок `Admin-Reason`.
 
 | Ситуация | Что делать |
 |---|---|

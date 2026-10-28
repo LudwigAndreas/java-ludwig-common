@@ -4,35 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/api/notification-service.openapi.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/docs/api/notification-service.openapi.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/README.ru.md" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/README.ru.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepository.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepositoryImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/AnnouncementQueryRepositoryImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/repository/entity/AnnouncementEntity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAdminService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAuditEvent.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/announcement/AnnouncementAuditEvent.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/AnnouncementAdminView.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/service/model/AnnouncementAdminView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/AnnouncementAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/AnnouncementAdminController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AnnouncementAdminResponse.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/java/ru/ludwigandreas/notification/web/dto/AnnouncementAdminResponse.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages_ru.properties" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/main/resources/i18n/notification-messages_ru.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementEmailFanOutIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementEmailFanOutIT.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementRetentionIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementRetentionIT.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementSchemaIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementSchemaIT.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementVisibilityIT.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/integration/AnnouncementVisibilityIT.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/AnnouncementAuditTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/services/notification-service/src/test/java/ru/ludwigandreas/notification/unit/AnnouncementAuditTest.java" afterDir="false" />
-    </list>
+    <list default="true" id="be717277-81c6-4807-b39e-214e6175bf7e" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="3583" />
+    <option name="cachedIndexableFilesCount" value="3743" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -116,46 +95,46 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Application.LocalNotificationApplication.executor": "Debug",
-    "JUnit.CatalogIntegrationTest.executor": "Debug",
-    "Maven.common [clean,install].executor": "Run",
-    "Maven.common [clean,verify,-pl...].executor": "Run",
-    "Maven.common [clean,verify].executor": "Run",
-    "Maven.common [verify,-DskipITs].executor": "Run",
-    "Maven.common [verify].executor": "Run",
-    "RequestMappingsPanelOrder0": "0",
-    "RequestMappingsPanelOrder1": "1",
-    "RequestMappingsPanelWidth0": "75",
-    "RequestMappingsPanelWidth1": "75",
-    "RunOnceActivity.MCP Project settings loaded": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "Spring Boot.CatalogApplication.executor": "Debug",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "master",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "/Users/ludwig/vault/projects/ludwig-platform/src/java-ludwig-common",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.0",
-    "project.structure.side.proportion": "0.0",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.LocalNotificationApplication.executor&quot;: &quot;Debug&quot;,
+    &quot;JUnit.CatalogIntegrationTest.executor&quot;: &quot;Debug&quot;,
+    &quot;Maven.common [clean,install].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [clean,verify,-pl...].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [clean,verify].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [verify,-DskipITs].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.common [verify].executor&quot;: &quot;Run&quot;,
+    &quot;RequestMappingsPanelOrder0&quot;: &quot;0&quot;,
+    &quot;RequestMappingsPanelOrder1&quot;: &quot;1&quot;,
+    &quot;RequestMappingsPanelWidth0&quot;: &quot;75&quot;,
+    &quot;RequestMappingsPanelWidth1&quot;: &quot;75&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;Spring Boot.CatalogApplication.executor&quot;: &quot;Debug&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/ludwig/vault/projects/ludwig-platform/src/java-ludwig-common&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.0&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   },
-  "keyToStringList": {
-    "com.intellij.ide.scratch.ScratchImplUtil$2/New Scratch File": [
-      "TEXT",
-      "Markdown"
+  &quot;keyToStringList&quot;: {
+    &quot;com.intellij.ide.scratch.ScratchImplUtil$2/New Scratch File&quot;: [
+      &quot;TEXT&quot;,
+      &quot;Markdown&quot;
     ]
   }
-}]]></component>
+}</component>
   <component name="RunAnythingCache">
     <option name="myCommands">
       <command value="mvn verify " />
@@ -247,6 +226,7 @@
       <workItem from="1786817616340" duration="102896000" />
       <workItem from="1791636263581" duration="45697000" />
       <workItem from="1792176148669" duration="38057000" />
+      <workItem from="1793178498227" duration="684000" />
     </task>
     <servers />
   </component>

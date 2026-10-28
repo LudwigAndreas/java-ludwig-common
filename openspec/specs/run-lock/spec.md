@@ -5,9 +5,7 @@
 "this runs on exactly one replica". It is a **lease**, not a lock, because a lock held by a
 process that has died is a lock held forever, and "the job silently stopped running after a pod
 was killed" is not something anything alerts on.
-
 ## Requirements
-
 ### Requirement: One distributed lock for the platform
 Anything needing single-replica execution SHALL take it from `job-core`'s `RunLock`. A module
 SHALL NOT declare a lock interface or a lock table of its own.
@@ -102,3 +100,24 @@ only when a `MeterRegistry` is present. The owner SHALL NOT be a meter tag.
 - **THEN** `ludwig.job.lock.lost` is incremented, tagged by lock name only. This is the meter to
   alert on: some work has been done twice or abandoned half done. The owner carries a random
   suffix and is unbounded in cardinality across restarts, so it belongs in a log line
+
+### Requirement: An administrator may force-release a lease, and the holder stops at its next renewal
+
+A forced release SHALL have exactly the effect of a release: the owner is nulled and `expires_at` moved to `now()`,
+in a statement outside any caller transaction. It SHALL NOT delete the row. Because renewal is conditional on
+`owner` and `run_id`, a holder that is still alive SHALL fail its next renewal and stop, as it would after losing the
+lease to expiry.
+
+#### Scenario: The holder is dead
+- **WHEN** a lease whose holder process no longer exists is force-released
+- **THEN** the next acquisition attempt by any instance succeeds without waiting for `expires_at`
+
+#### Scenario: The holder is alive
+- **WHEN** a lease is force-released while its holder is mid-run
+- **THEN** the holder's next `renew` returns false and the holder stops at once, and an instance that acquires the
+  lease meanwhile is the only one that continues
+
+#### Scenario: A lease that is not held
+- **WHEN** a lease with no owner is force-released
+- **THEN** the row is unchanged and the release reports that it held nothing
+

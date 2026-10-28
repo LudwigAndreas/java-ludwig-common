@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.security.authorization.event.AuthorizationDeniedEvent;
 import org.springframework.security.authorization.method.MethodInvocationResult;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.method.HandlerMethod;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
 import ru.ludwigandreas.security.principal.LudwigAuthentication;
@@ -60,13 +61,17 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
 
     /**
      * Both method-security event shapes carry the invocation: {@code @PreAuthorize} publishes the
-     * {@link MethodInvocation}, {@code @PostAuthorize} wraps it together with the returned value.
-     * Anything else (a request-level decision, a custom {@code AuthorizationManager}) has no method,
-     * and is recorded without one rather than dropped.
+     * {@link MethodInvocation}, {@code @PostAuthorize} wraps it together with the returned value. The
+     * administrative surface guard publishes the {@link HandlerMethod} it refused. Anything else (a
+     * request-level decision, a custom {@code AuthorizationManager}) has no method, and is recorded
+     * without one rather than dropped.
      */
     private Method methodOf(Object object) {
         if (object instanceof MethodInvocation invocation) {
             return invocation.getMethod();
+        }
+        if (object instanceof HandlerMethod handler) {
+            return handler.getMethod();
         }
         if (object instanceof MethodInvocationResult result) {
             return result.getMethodInvocation().getMethod();

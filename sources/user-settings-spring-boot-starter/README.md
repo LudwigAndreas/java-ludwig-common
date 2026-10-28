@@ -13,7 +13,7 @@ service supplies **what settings exist**, as typed constants in its own code.
 | Role | starter |
 | Depends on (in-repo) | `audit` starter, `cache`, `db-core`, `hot-reload`, `messaging`, `observability`, `odata-filter`, `outbox`, `security`, `web-core` (several optional at runtime) |
 | Used by | `notification-service` |
-| Surfaces | optional REST `/me/settings`, `/admin/settings`; Kafka (owner publishes, projection consumes) |
+| Surfaces | optional REST `/me/settings`, `/admin/v1/settings`; Kafka (owner publishes, projection consumes) |
 
 ## Usage
 
@@ -206,9 +206,9 @@ if (!result.complete()) { /* run it again; there is no cursor */ }
 - Keyset scan, one transaction per batch. `maxRows` is a budget shared by both scans (settings first) - with a budget,
   run settings and consents separately (`includeConsents(false)` / `includeSettings(false)`).
 - `tenantId == null` means every tenant (not expressible through REST).
-- `POST /admin/settings/backfill` (`{ "settingKeys": [...], "includeConsents": false, "maxRows": 50000 }` →
+- `POST /admin/v1/settings/backfill` (`{ "settingKeys": [...], "includeConsents": false, "maxRows": 50000 }` →
   `{ "settingRows": 41230, "consentRows": 0, "batches": 83, "complete": false }`) requires `web.enabled`,
-  `web.backfill-enabled` and owner mode, plus the admin authority; it pins the caller's tenant.
+  `web.backfill-enabled` and owner mode, plus the `settings.operate` operation; it pins the caller's tenant.
 - It cannot recover intermediate values a consumer missed - only current state (and the full consent ledger).
 
 ### Caching
@@ -255,9 +255,9 @@ three, so layers cannot mix a start from one layer with an end from another.
 | `POST` | `/me/settings/reset` | keys in the body (they contain dots) |
 | `GET` | `/me/settings/consents` | current state |
 | `POST` | `/me/settings/consents/grant` \| `/revoke` | evidence taken from the request, never the body |
-| `GET` | `/admin/settings/subjects/{subject}` | PII redacted; audited |
-| `PUT` | `/admin/settings/scopes/{scopeType}/{scopeId}` | owner mode only |
-| `GET` | `/admin/settings/subjects/{subject}/consents[/as-of?at=…]` | the ledger at any instant |
+| `GET` | `/admin/v1/settings/subjects/{subject}` | PII redacted; audited |
+| `PUT` | `/admin/v1/settings/scopes/{scopeType}/{scopeId}` | owner mode only |
+| `GET` | `/admin/v1/settings/subjects/{subject}/consents[/asof?at=…]` | the ledger at any instant |
 
 The self-service controller takes no subject from the request. Administrative OData search exposes no setting value
 (`value_text` and consent evidence are not `@Filterable`).
@@ -280,10 +280,9 @@ All `@ConditionalOnMissingBean`: `SettingScopeResolver` (inheritance via groups/
 | `ludwig.user-settings.projection.group-id` | `${spring.application.name}-user-settings-projection` | One group per replica service |
 | `ludwig.user-settings.projection.source-system` | `user-settings-owner` | `source_system` on projected consent rows |
 | `ludwig.cache.caches.settings.enabled` / `ttl` / `maximum-size` | `true` / `5m` / `10000` | The settings cache |
-| `ludwig.user-settings.access.admin-authority` | `ROLE_SETTINGS_ADMIN` | With or without `ROLE_` |
 | `ludwig.user-settings.access.allow-unauthenticated` | `true` | In-process callers without a principal (workers, jobs) |
 | `ludwig.user-settings.web.enabled` | `false` | Mount the REST controllers |
-| `ludwig.user-settings.web.base-path` / `admin-base-path` | `/me/settings` / `/admin/settings` | |
+| `ludwig.user-settings.web.base-path` | `/me/settings` | The administrative endpoints are at the fixed `/admin/v1/settings` |
 | `ludwig.user-settings.web.backfill-enabled` | `false` | Mount the backfill endpoint |
 | `ludwig.user-settings.retention.enabled` | `false` | Run the tombstone purge |
 | `ludwig.user-settings.retention.tombstones` | `30d` | Tombstone retention |
@@ -366,6 +365,29 @@ redaction. **Consents are evidenced by the `user_consent` ledger**, not by `audi
 | `audit_event` (`category=settings`) | 7 years | yes, by the audit starter |
 | `user_setting_value` tombstones | 30 days | when `retention.enabled=true` |
 | `user_consent` | - | **never** (`SettingsRetentionService.purgeConsents` exists for an operator acting on a written legal policy) |
+
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `settings.read` | `GET /admin/v1/settings/subjects/{subject}`<br>`GET /admin/v1/settings/subjects/{subject}/consents`<br>`GET /admin/v1/settings/subjects/{subject}/consents/asof` | Read another subject's resolved settings and consent history. |
+| `settings.operate` | `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}`<br>`POST /admin/v1/settings/backfill` | Write settings at a user, role or tenant scope, and run a backfill. |
+| `settings.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+
+**Removed:** `/admin/settings/**`, `ludwig.user-settings.access.admin-authority` and `ludwig.user-settings.web.admin-base-path`; `consents/as-of` is now `consents/asof`. Mounted only with `ludwig.user-settings.web.enabled=true` in owner mode (the backfill also needs `web.backfill-enabled=true`). Another tenant's subject is `404` (it was `403`); the self-service endpoints keep their `403`.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[settings.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[settings.operate]": [ORDERS_ADMIN]
+      "[settings.privileged]": [ORDERS_ADMIN]
+```
 
 ## Runbook
 

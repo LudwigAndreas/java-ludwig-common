@@ -3,6 +3,7 @@ package ru.ludwigandreas.audit.store.repository;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.store.entity.AuditEventEntity;
 
@@ -23,6 +24,19 @@ public interface AuditEventQueryRepository {
      * @return the events, at most {@code query.limit()} of them
      */
     List<AuditEventEntity> find(AuditTrailQuery query);
+
+    /**
+     * One keyset page of the trail, newest first, optionally confined to one actor tenant.
+     *
+     * @param query          the criteria; its limit is the page size to read
+     * @param tenantConfined whether to confine to {@code actorTenant}
+     * @param actorTenant    the tenant a confined search sees; null confines to events with no actor tenant
+     * @param afterOccurredAt the last returned event's time, or null for the first page
+     * @param afterId        the last returned event's id, or null for the first page
+     * @return the events, newest first, ties broken by id
+     */
+    List<AuditEventEntity> findPage(AuditTrailQuery query, boolean tenantConfined, String actorTenant,
+                                    Instant afterOccurredAt, UUID afterId);
 
     /**
      * How many events in {@code category} are older than {@code cutoff}.

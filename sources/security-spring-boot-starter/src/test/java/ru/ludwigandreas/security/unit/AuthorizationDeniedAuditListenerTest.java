@@ -85,6 +85,23 @@ class AuthorizationDeniedAuditListenerTest {
         verify(metrics).recordAccessDenied("OrderService", "approve");
     }
 
+    @Test
+    @DisplayName("an administrative surface denial names the refused handler, as a method-security one does")
+    void recordsAnAdministrativeDenial() throws Exception {
+        Authentication authentication = alice();
+        org.springframework.web.method.HandlerMethod handler = new org.springframework.web.method.HandlerMethod(
+                new AdminSurfaceGuardTest.Fixture(), AdminSurfaceGuardTest.Fixture.class.getMethod("operate"));
+
+        listener().onApplicationEvent(new AuthorizationDeniedEvent<>(
+                () -> authentication, handler, new AuthorizationDecision(false)));
+
+        ArgumentCaptor<AuditEvent> recorded = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(auditSink).record(recorded.capture());
+        assertThat(recorded.getValue().resource().type()).isEqualTo("Fixture");
+        assertThat(recorded.getValue().actor().subject()).isEqualTo("alice");
+        verify(metrics).recordAccessDenied("Fixture", "operate");
+    }
+
     /**
      * An exception escaping here would propagate into the authorization decision that published the
      * event - audit code must never be able to change the outcome it is observing.

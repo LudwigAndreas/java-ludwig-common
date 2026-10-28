@@ -39,7 +39,7 @@ says how the pieces fit together, how to operate them, and why they are shaped t
    order and say the same thing. A README updated in one locale only is an incomplete change
    (`openspec/config.yaml`, rule for module tasks). Each file starts with the language switch line.
 4. **Image references carry a digest.** `name:tag@sha256:...`, also in examples.
-   `scripts/check_image_pins.sh` scans READMEs.
+   `scripts/check_image_pins.sh` scans the code blocks and inline code of every README; prose is not checked.
 5. **Property tables state the default.** Every `ludwig.*` property the module binds appears in the
    Configuration table with its default and meaning. If a property is not in the table it is not
    supported.

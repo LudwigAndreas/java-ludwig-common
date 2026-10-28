@@ -143,6 +143,25 @@ class AuditEventQueryRepositoryImpl implements AuditEventQueryRepository {
      * optional, and an absent clause must contribute nothing rather than {@code true} - which is the
      * bug a hand-rolled {@code and} chain with nulls in it produces.
      */
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuditEventEntity> findPage(AuditTrailQuery query, boolean tenantConfined, String actorTenant,
+                                           Instant afterOccurredAt, UUID afterId) {
+        BooleanBuilder where = new BooleanBuilder(predicateFor(query));
+        if (tenantConfined) {
+            where.and(actorTenant == null ? EVENT.actorTenant.isNull() : EVENT.actorTenant.eq(actorTenant));
+        }
+        if (afterOccurredAt != null && afterId != null) {
+            where.and(EVENT.occurredAt.lt(afterOccurredAt)
+                    .or(EVENT.occurredAt.eq(afterOccurredAt).and(EVENT.id.gt(afterId))));
+        }
+        return queryFactory.selectFrom(EVENT)
+                .where(where)
+                .orderBy(EVENT.occurredAt.desc(), EVENT.id.asc())
+                .limit(query.limit())
+                .fetch();
+    }
+
     private Predicate predicateFor(AuditTrailQuery query) {
         BooleanBuilder predicate = new BooleanBuilder();
         if (query.actorSubject() != null) {

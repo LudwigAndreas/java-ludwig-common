@@ -212,6 +212,25 @@ public class LogStore {
     }
 
     /**
+     * Each group's position on each partition, with the partition's head and the group's retry state - what an
+     * operator reads to tell a slow consumer from a stuck one. The last error is deliberately not read: its text
+     * may quote a payload.
+     *
+     * @return one row per (group, topic, partition), ordered
+     */
+    public List<ConsumerPosition> positions() {
+        return inTransaction(jdbc -> jdbc.query("SELECT o.group_id, o.topic, o.log_partition, o.committed_offset,"
+                        + " h.next_offset - 1 AS head, GREATEST(h.next_offset - 1 - o.committed_offset, 0) AS lag,"
+                        + " o.attempts, o.next_attempt_at"
+                        + " FROM " + offsets + " o JOIN " + head + " h"
+                        + " ON h.topic = o.topic AND h.log_partition = o.log_partition"
+                        + " ORDER BY o.group_id, o.topic, o.log_partition",
+                (rs, row) -> new ConsumerPosition(rs.getString("group_id"), rs.getString("topic"),
+                        rs.getInt("log_partition"), rs.getLong("committed_offset"), rs.getLong("head"),
+                        rs.getLong("lag"), rs.getInt("attempts"), rs.getTimestamp("next_attempt_at").toInstant())));
+    }
+
+    /**
      * Counts, per (group, topic), the records older than the cutoff that the group has not consumed yet.
      *
      * @param cutoff records produced before this instant are due for purging
@@ -363,6 +382,22 @@ public class LogStore {
 
     /** One group's distance behind the heads of one topic. */
     public record Lag(String groupId, String topic, long records) {
+    }
+
+    /**
+     * One group's position on one partition.
+     *
+     * @param groupId         the consumer group
+     * @param topic           the topic
+     * @param partition       the log partition
+     * @param committedOffset the last offset the group committed
+     * @param headOffset      the partition's last written offset
+     * @param lag             how many records the group has not consumed
+     * @param attempts        how many times the record at the position has been attempted
+     * @param nextAttemptAt   when the group will next try it
+     */
+    public record ConsumerPosition(String groupId, String topic, int partition, long committedOffset, long headOffset,
+                                   long lag, int attempts, Instant nextAttemptAt) {
     }
 
     /** Decides what happens to the next record of a claimed partition. */

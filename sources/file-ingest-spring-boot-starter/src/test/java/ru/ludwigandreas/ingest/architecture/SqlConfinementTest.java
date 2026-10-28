@@ -138,7 +138,7 @@ class SqlConfinementTest {
                 .that().resideInAPackage(ROOT + ".api..")
                 .should().dependOnClassesThat()
                 .resideInAnyPackage(ROOT + ".engine..", ROOT + ".entity..", ROOT + ".repository..",
-                        ROOT + ".config..", ROOT + ".bulk..", ROOT + ".actuator..")
+                        ROOT + ".config..", ROOT + ".bulk..", ROOT + ".admin..")
                 .because("an ingest is written against the api package alone; a dependency on the"
                         + " engine would make every consumer compile against the implementation")
                 .check(CLASSES);

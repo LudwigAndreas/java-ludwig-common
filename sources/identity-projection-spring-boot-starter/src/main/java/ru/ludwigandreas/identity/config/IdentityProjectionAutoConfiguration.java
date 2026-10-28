@@ -26,6 +26,8 @@ import ru.ludwigandreas.cache.api.LudwigCache;
 import ru.ludwigandreas.security.authz.Authorities;
 import ru.ludwigandreas.security.authz.AuthorityResolver;
 import ru.ludwigandreas.security.authz.PrincipalRef;
+import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
+import ru.ludwigandreas.security.config.MutualTlsAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityProperties;
 import ru.ludwigandreas.security.data.DataScopeProvider;
 
@@ -35,8 +37,13 @@ import ru.ludwigandreas.security.data.DataScopeProvider;
  * <p>Because these are registered as the security module's SPI types, adding this dependency is all a
  * service has to do - {@code security-spring-boot-starter} backs its own fallbacks off automatically
  * ({@code @ConditionalOnMissingBean}) and starts resolving roles from the projection instead.
+ *
+ * <p>Ordered before the two configurations that hold those fallbacks, explicitly: a fallback's
+ * {@code @ConditionalOnMissingBean} only sees this module's bean if this class was processed first, and an
+ * order that merely happened to hold alphabetically broke as soon as other configurations added ordering
+ * constraints of their own.
  */
-@AutoConfiguration
+@AutoConfiguration(before = {LudwigSecurityAutoConfiguration.class, MutualTlsAutoConfiguration.class})
 @ConditionalOnClass(EntityManager.class)
 @ConditionalOnProperty(prefix = "ludwig.identity", name = "enabled", matchIfMissing = true)
 @EnableConfigurationProperties(IdentityProjectionProperties.class)

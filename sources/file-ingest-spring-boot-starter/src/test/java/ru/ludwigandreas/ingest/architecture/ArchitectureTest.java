@@ -9,7 +9,7 @@ import ru.ludwigandreas.archrules.junit.ArchitectureRulesTest;
  * <h2>What is switched off, and why</h2>
  *
  * <p>Most of the library describes a <em>service</em> - controllers over a service layer over
- * repositories. This is a library whose only inbound surface is an actuator endpoint, and its
+ * repositories. This is a library whose only inbound surface is an administrator endpoint, and its
  * packages are named for what they do ({@code engine}, {@code bulk}, {@code api}) rather than for a
  * layer. Those rules fail here because the module is arranged for something else, not because it is
  * arranged badly.
@@ -37,7 +37,7 @@ import ru.ludwigandreas.archrules.junit.ArchitectureRulesTest;
  *   <li>{@code exceptions.custom-exceptions-extend-the-base-exception} - almost every failure here
  *       happens in a scheduled job with no caller, no locale and no response, so it is a plain
  *       {@code IngestException} recorded on the run row. The one failure that <em>can</em> reach a
- *       caller, {@code UnknownIngestTaskException} from the actuator endpoint, does extend
+ *       caller, {@code UnknownIngestTaskException} from the administrative endpoints, does extend
  *       {@code LocalizedException}.</li>
  * </ul>
  *

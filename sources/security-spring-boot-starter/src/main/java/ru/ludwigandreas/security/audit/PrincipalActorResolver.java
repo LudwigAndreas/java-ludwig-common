@@ -31,7 +31,8 @@ public class PrincipalActorResolver implements ActorResolver {
         }
         if (authentication.getPrincipal() instanceof LudwigPrincipal principal) {
             return Optional.of(new Actor(principal.subject(),
-                    principal.type() == null ? null : principal.type().name(), null, null));
+                    principal.type() == null ? null : principal.type().name(), null, null,
+                    principal.tenant().orElse(null)));
         }
         return Optional.ofNullable(authentication.getName())
                 .filter(name -> !name.isBlank())

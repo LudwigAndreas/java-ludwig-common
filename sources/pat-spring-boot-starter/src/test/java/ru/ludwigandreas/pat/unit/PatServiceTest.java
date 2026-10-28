@@ -323,6 +323,11 @@ class PatServiceTest {
     private record FakeQueries(Map<UUID, PatEntity> stored) implements PatQueryRepository {
 
         @Override
+        public long recordUse(UUID id, Instant usedAt, String sourceIp) {
+            return 0;
+        }
+
+        @Override
         public Optional<PatEntity> findByAnyKeyId(String keyId) {
             return stored.values().stream()
                     .filter(e -> keyId.equals(e.getKeyId()) || keyId.equals(e.getPreviousKeyId()))
@@ -334,6 +339,13 @@ class PatServiceTest {
             return stored.values().stream()
                     .filter(e -> e.getOwnerSubject().equals(ownerSubject))
                     .toList();
+        }
+
+        @Override
+        public List<PatEntity> findForAdministration(String ownerSubject, Boolean revoked, Boolean expired,
+                                                     Instant now, Instant afterCreatedAt, java.util.UUID afterId,
+                                                     int limit) {
+            throw new UnsupportedOperationException("not used by PatService");
         }
 
         @Override

@@ -58,7 +58,7 @@ public interface SettingsWriter {
     /**
      * Sets a value at a scope other than the subject's own - a role, a tenant.
      *
-     * <p>Requires the administrative authority. The {@code userEditable} flag does not apply: it
+     * <p>Requires a settings administrative operation. The {@code userEditable} flag does not apply: it
      * governs whether a subject may edit their own value, not whether the setting can be managed.
      *
      * @param subject the tenant this write is confined to, and the administrator performing it

@@ -78,6 +78,22 @@
             <artifactId>messaging-spring-boot-starter</artifactId>
         </dependency>
 
+        <!--
+            Optional: the administrative endpoints (ru.ludwigandreas.outbox.admin) exist only where the security
+            starter's administrative surface does, behind @ConditionalOnBean(AdminOperationCatalog). web-core is
+            named because the security starter declares it optional, so it does not arrive transitively.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- job-core: backoff curve, self-scheduling lifecycle base, SKIP LOCKED claim, instance identity -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
@@ -213,6 +229,26 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            The optional security edge brings the Bean Validation API onto the test classpath, and this module's
+            @Validated properties then need a provider in every test context.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestPrincipalBuilder, for the administrative endpoints' MockMvc tests. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

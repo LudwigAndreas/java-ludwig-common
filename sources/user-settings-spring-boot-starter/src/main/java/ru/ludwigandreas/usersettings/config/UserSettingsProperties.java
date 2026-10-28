@@ -140,13 +140,6 @@ public class UserSettingsProperties {
     public static class Access {
 
         /**
-         * Authority that allows reading and writing another subject's settings. Accepted with or
-         * without the {@code ROLE_} prefix.
-         */
-        @NotBlank
-        private String adminAuthority = "ROLE_SETTINGS_ADMIN";
-
-        /**
          * Allow calls with no authenticated principal - queue workers, scheduled jobs, the projection
          * consumer.
          *
@@ -163,7 +156,7 @@ public class UserSettingsProperties {
          * <p>True by default. The self-or-admin rule is about people - it stops one user reading
          * another's preferences - and a service authenticated by its own workload identity is never
          * the subject of a setting. What authorizes such a call is the calling service's own policy
-         * for the endpoint it invoked. Set false to hold peers to the administrative authority too.
+         * for the endpoint it invoked. Set false to hold peers to the administrative surface too.
          */
         private boolean allowServicePrincipals = true;
     }
@@ -182,9 +175,6 @@ public class UserSettingsProperties {
 
         /** Where the self-service endpoints are mounted. */
         private String basePath = "/me/settings";
-
-        /** Where the administrative endpoints are mounted. */
-        private String adminBasePath = "/admin/settings";
 
         /**
          * Mounts the backfill endpoint. Off even when the other administrative endpoints are on.

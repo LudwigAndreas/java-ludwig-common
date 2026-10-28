@@ -43,7 +43,7 @@ class ReconciliationArchitectureTest {
                         "..reconciliation.repository..",
                         "..reconciliation.quota..",
                         "..reconciliation.job..",
-                        "..reconciliation.actuator..",
+                        "..reconciliation.admin..",
                         "..reconciliation.payload..",
                         "..reconciliation.metrics..")
                 .because("a task is written against the SPI, so the SPI must be implementable without "
@@ -91,7 +91,7 @@ class ReconciliationArchitectureTest {
     /**
      * Entities stay behind their repositories and the engine.
      *
-     * <p>The staging table's shape is this module's business. An actuator view or an SPI type that
+     * <p>The staging table's shape is this module's business. An administrative view or an SPI type that
      * exposed it would make every column a published contract.
      */
     @Test
@@ -104,7 +104,7 @@ class ReconciliationArchitectureTest {
                         "..reconciliation.engine..",
                         "..reconciliation.job..",
                         "..reconciliation.quota..",
-                        "..reconciliation.actuator..",
+                        "..reconciliation.admin..",
                         "..reconciliation.config..")
                 .because("the staging schema is an implementation detail, not part of the contract a "
                         + "task is written against");

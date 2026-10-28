@@ -19,7 +19,7 @@ import ru.ludwigandreas.ingest.entity.QFileIngestRun;
  * the repositories above are empty interfaces.
  *
  * <p>Gathering them in one class rather than inlining them at their call sites is a smaller decision:
- * several of them are used twice, once by the engine and once by the actuator endpoint, and two
+ * several of them are used twice, once by the engine and once by the administrative endpoints, and two
  * copies of "which runs count as recent" is how the endpoint comes to show something different from
  * what the scheduler acts on.
  */

@@ -17,6 +17,8 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
  *                           |                |
  *                        EXPIRED           APPLIED
  *                     (TTL elapsed)
+ *
+ *   CANCELLED - from UPLOADED or APPLYING at the next checkpoint after a cancel, from VALIDATED at once
  * </pre>
  *
  * <h2>Why this exists next to {@link OperationStatus} rather than instead of it</h2>
@@ -24,8 +26,9 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
  * <p>The platform has exactly one status vocabulary and no module may restate it - export's
  * {@code RunStatus} and file-ingest's {@code IngestRunStatus} were restatements, and reconciling them
  * cost a Liquibase changeset because {@code COMPLETED} had been persisted. This enum is deliberately
- * <em>not</em> that. None of its six values is a renaming of one of {@code OperationStatus}'s six:
- * every one of them carries information the core vocabulary cannot express.
+ * <em>not</em> that. Its non-terminal and success values carry information the core vocabulary cannot
+ * express; {@link #EXPIRED} and {@link #CANCELLED} share a name with the core state they map to, because a
+ * stop and an expiry are exactly what the core states say and nothing more.
  *
  * <ul>
  *   <li>{@link #UPLOADED} and {@link #VALIDATED} both map to {@link OperationStatus#PENDING}, and the
@@ -40,8 +43,9 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
  * <p>This is the same shape as {@code reconciliation}'s {@code RemoteJobState}, which the
  * {@code long-running-operations} capability names as the permitted case: a richer domain lifecycle
  * that maps onto the core and stays visible in {@code OperationResponse.detail()}.
- * {@code architecture-rules}' {@code RuleGroup.OPERATIONS} is what fails the build if somebody later
- * adds {@code COMPLETED}, {@code CANCELLED} or {@code FAILED} here.
+ * {@code architecture-rules}' {@code RuleGroup.OPERATIONS} fails the build for an enum made only of core
+ * vocabulary words; this one is not, because {@code UPLOADED}, {@code VALIDATED}, {@code APPLYING} and
+ * {@code APPLIED} are domain states.
  */
 public enum FileActionState {
 
@@ -80,7 +84,16 @@ public enum FileActionState {
      * causes are housekeeping working as designed, and a client that pages somebody for either has
      * branched on {@code != SUCCEEDED} instead of on {@code isFailure()}.
      */
-    EXPIRED(OperationStatus.EXPIRED);
+    EXPIRED(OperationStatus.EXPIRED),
+
+    /**
+     * A cancel was requested and the submission stopped before it finished.
+     *
+     * <p>Maps to {@link OperationStatus#CANCELLED}. Rows applied before the stop are kept - a stop happens
+     * between transactions, never inside one - and {@code rowsApplied} reports them. Not a failure: the
+     * caller asked for it.
+     */
+    CANCELLED(OperationStatus.CANCELLED);
 
     private final OperationStatus status;
 

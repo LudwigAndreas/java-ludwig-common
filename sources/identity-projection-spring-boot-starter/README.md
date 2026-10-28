@@ -158,10 +158,33 @@ the identity consumer (set a `silence-threshold` matching the directory's change
 
 The projection records no audit events: it mirrors the provider's directory, which has its own audit trail.
 
-**Known gap:** changes to `security_partner` and `security_grant` (the administrator-owned tables) are stamped with
-`created_by` / `updated_by` but produce no `AuditEvent`, so "who granted what and when" has only the latest
-modification, not a history. A service that edits these tables should record an `AuditEvent` (category `access`) in
-the same transaction.
+Changes to `security_partner` and `security_grant` made through the administrative endpoints
+(`/admin/v1/identity/`) are recorded in the audit trail (category `admin`) in the transaction that makes them, so
+"who granted what and when" has a history, not only the latest `updated_by`. A change made by hand in SQL still has
+only the stamps.
+
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `identity.read` | `GET /admin/v1/identity/partners`<br>`GET /admin/v1/identity/partners/{code}`<br>`GET /admin/v1/identity/grants`<br>`GET /admin/v1/identity/subjects/{subject}/authorities` | See partners, data-scope grants and what a subject is entitled to. |
+| `identity.operate` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+| `identity.privileged` | `POST /admin/v1/identity/partners`<br>`PUT /admin/v1/identity/partners/{code}`<br>`POST /admin/v1/identity/partners/{code}/suspend`<br>`POST /admin/v1/identity/partners/{code}/activate`<br>`POST /admin/v1/identity/grants`<br>`POST /admin/v1/identity/grants/{id}/revoke` | Onboard, change, suspend and reactivate partners, and grant and revoke data scopes. |
+
+`PUT .../partners/{code}` requires `If-Match` and answers `412` on a stale version. A `USER` caller is confined to subjects of their own tenant (another tenant's subject is `404`); the partner registry is not tenant-scoped.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[identity.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[identity.operate]": [ORDERS_ADMIN]
+      "[identity.privileged]": [ORDERS_ADMIN]
+```
 
 ## Runbook
 

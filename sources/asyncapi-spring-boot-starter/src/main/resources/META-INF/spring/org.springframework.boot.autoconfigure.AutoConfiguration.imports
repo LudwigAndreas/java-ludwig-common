@@ -1,1 +1,2 @@
 ru.ludwigandreas.asyncapi.config.AsyncApiAutoConfiguration
+ru.ludwigandreas.asyncapi.config.AsyncApiScannerAutoConfiguration

@@ -70,7 +70,8 @@ fi
 # Six file-only checks, before Maven, because they cost milliseconds and catch a class of defect
 # the build cannot see:
 #
-#   check_image_pins     a container image referenced by tag alone. Not a Java fact and not a POM
+#   check_image_pins     a container image referenced by tag alone (then its --self-test, which proves
+#                        each trigger still fires). Not a Java fact and not a POM
 #                        fact, so neither the three analysis tools nor the enforcer can see it.
 #   check_api_baseline   an API baseline that is UNRESOLVABLE rather than absent. revapi treats
 #                        both as the same warning; the distinction is the difference between "no
@@ -92,7 +93,7 @@ fi
 #                        listed there as having no such surface. A document is not bytecode or Java
 #                        source. Drift itself is each service's own IT, which runs when the gate
 #                        verifies that service.
-COMMANDS=("scripts/check_image_pins.sh" "scripts/check_api_baseline.sh" "scripts/check_migrations.sh" "scripts/check_build_metadata.sh" "scripts/check_protos.sh" "scripts/api-docs.sh missing" "mvn -q validate")
+COMMANDS=("scripts/check_image_pins.sh" "scripts/check_image_pins.sh --self-test" "scripts/check_api_baseline.sh" "scripts/check_migrations.sh" "scripts/check_build_metadata.sh" "scripts/check_protos.sh" "scripts/api-docs.sh missing" "mvn -q validate")
 
 if [ "$FULL" = 1 ]; then
   COMMANDS+=("mvn clean install")

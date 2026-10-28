@@ -164,6 +164,10 @@ registries, named after the client. **Retry is this module's own** (on Resilienc
 `Retry-After`, keeps a wall-clock budget, and shares decisions between blocking and reactive paths. So
 `resilience4j.retry.*` meters do not exist for these clients; `ludwig.restclient.retries` does.
 
+A timed-out attempt is retried (on an idempotent method) whichever timer expired: on the JDK transport the
+HttpClient's own deadline (`HttpTimeoutException`) and Spring's future timeout race on the same read timeout, and
+both are classified as retryable timeouts.
+
 ### Authentication
 
 | `auth.type` | Keys | Notes |

@@ -1,3 +1,4 @@
 ru.ludwigandreas.identity.config.IdentityProjectionAutoConfiguration
 ru.ludwigandreas.identity.config.IdentityKafkaAutoConfiguration
 ru.ludwigandreas.identity.config.IdentityLiquibaseAutoConfiguration
+ru.ludwigandreas.identity.config.IdentityAdminAutoConfiguration

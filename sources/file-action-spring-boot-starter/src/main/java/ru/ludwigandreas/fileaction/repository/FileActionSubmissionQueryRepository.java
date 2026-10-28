@@ -77,4 +77,27 @@ public interface FileActionSubmissionQueryRepository {
      * @return true when somebody has asked it to stop
      */
     boolean isCancellationRequested(UUID id);
+
+    /**
+     * Ends a submission {@code CANCELLED} if, and only if, it is still {@code VALIDATED}.
+     *
+     * <p>Conditional, and paired with {@link #startIfValidated}: a cancel and a confirm racing on one validated
+     * submission are two updates on the same predicate, so exactly one matches. Both bump the version, so a writer
+     * still holding the row as it was loaded fails instead of writing the old state back.
+     *
+     * @param id  the submission
+     * @param now when it ends
+     * @return 1 when it was cancelled, 0 when it had already left {@code VALIDATED}
+     */
+    long cancelIfValidated(UUID id, Instant now);
+
+    /**
+     * Moves a confirmed submission from {@code VALIDATED} to {@code APPLYING} if, and only if, it is still
+     * {@code VALIDATED}; see {@link #cancelIfValidated}.
+     *
+     * @param id  the submission
+     * @param now when the apply starts
+     * @return 1 when the apply may start, 0 when the submission is no longer validated
+     */
+    long startIfValidated(UUID id, Instant now);
 }

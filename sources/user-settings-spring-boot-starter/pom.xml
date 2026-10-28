@@ -298,6 +298,12 @@
             <artifactId>test-support</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- TestPrincipalBuilder, for the administrative endpoints' MockMvc tests. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

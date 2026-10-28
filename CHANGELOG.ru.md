@@ -19,6 +19,27 @@
 
 ### Added
 
+- **Административная поверхность** (`admin-authorization`, `starter-admin-endpoints`). Операторские
+  средства каждого модуля находятся под `/admin/v1/<area>/` и авторизуются операциями вида `<area>.<tier>`,
+  где уровень — `read`, `operate` или `privileged`. Сервис выдаёт операции своим ролям в
+  `ludwig.admin.grants`, например `"[outbox.operate]": [NOTIFICATION_ADMIN]`; стартер никогда не называет
+  роль, и роли никогда не берутся из claims токена. Поверхность закрыта по умолчанию:
+  - невыданная операция отклоняется;
+  - выдача или обработчик с неизвестной каталогу операцией валят запуск;
+  - партнёры и вызовы с PAT отклоняются.
+
+  Вызову `privileged` нужен заголовок `Admin-Reason`. Каждое изменение и каждый отказ аудируются.
+  Люди ограничены своим тенантом, а `GET /admin/v1/me/operations` перечисляет операции вызывающего.
+
+  Новые области:
+  - `identity`: партнёры, гранты области данных, эффективные полномочия;
+  - `audit`: поиск по журналу в пределах тенанта, с новой колонкой `actor_tenant`;
+  - `reconciliation`, `fileingest`, `outbox` (просмотр, повтор, массовый повтор, отбрасывание), `jobs`
+    (аренды, запуск сейчас, принудительное освобождение), `messaging` (отставание потребителей),
+    `exports`, `fileactions`, `settings` и `pat`.
+
+  `notification-service` выдаёт их `NOTIFICATION_ADMIN`, а уровень чтения ещё и `NOTIFICATION_SUPPORT`;
+  `crud-service-example` выдаёт их `CATALOG_ADMIN`.
 - **Документы AsyncAPI** (`add-published-async-document`). Новый `asyncapi-spring-boot-starter`
   (Springwolf 1.9.0) описывает Kafka-поверхность сервиса: его потребителей с кластером и dead-letter-каналом,
   каждый тип outbox-события, публикуемый через Kafka, заголовки платформенного конверта и кластеры как
@@ -87,6 +108,26 @@
 
 ### Changed
 
+- **BREAKING — отменённая отправка файлового действия завершается `CANCELLED`** (`file-action-cancelled-state`).
+  `FileActionState` получает `CANCELLED`, отображаемый на `OperationStatus.CANCELLED`. Потребитель, выполняющий
+  `switch` по перечислению или по `OperationResponse.detail()`, должен его обработать. Отправка в `VALIDATED`
+  отменяется сразу (`200`), а ожидающая или выполняемая останавливается на следующей контрольной точке (`202`).
+  `FileActionSubmissionQueryRepository` получает `cancelIfValidated` и `startIfValidated`.
+- **BREAKING — описания административных операций обязательны** (`admin-surface-polish`). Запуск завершается
+  ошибкой, если у операции из административного каталога ключ описания отсутствует во всех бандлах; в сообщении
+  перечислены все такие операции и ключи. Пользовательский `AdminOperationContributor` должен поставлять свои ключи в
+  бандле. Все области в репозитории это уже делают. `AdminHandlerValidator` принимает `ProblemMessages` третьим
+  аргументом конструктора.
+- **BREAKING — административная поверхность** (`starter-admin-endpoints`, выходит в мажорной версии):
+  - Административные эндпоинты настроек переехали с `/admin/settings/**` на `/admin/v1/settings/**`, а их
+    параметр `as-of` теперь называется `asof`.
+  - Субъект другого тенанта теперь даёт `404` вместо `403`.
+  - Self-service API PAT больше не принимает другого владельца; используйте `/admin/v1/pat/tokens`
+    (`pat.privileged`).
+  - `OutboxStatus` получает `DISCARDED`.
+  - `Actor` из `audit-core` получает компонент `tenant`, что меняет канонический конструктор.
+  - `IdentityProjectionAutoConfiguration` теперь выполняется до автоконфигураций безопасности.
+  - `asyncapi-spring-boot-starter` сканирует через устойчивый к classpath `ComponentClassScanner`.
 - **Подключение `asyncapi-spring-boot-starter` один раз меняет OpenAPI-документ сервиса:** Springwolf
   регистрирует конвертер заголовков схем в общем реестре swagger, и у каждой схемы появляется `title:`.
   При подключении обновите документ и просмотрите diff. `DefaultOutboxEventPublisher` принимает
@@ -122,6 +163,11 @@
 
 ### Removed
 
+- **Администрирование через actuator** (`starter-admin-endpoints`). Удалены actuator-эндпоинты
+  `reconciliation` и `fileingest` вместе с их автоконфигурациями и `ludwig.reconciliation.endpoint.*` /
+  `ludwig.ingest.endpoint.*`; вместо них используйте их области в `/admin/v1/`. Также удалены
+  `ludwig.user-settings.access.admin-authority`, `ludwig.user-settings.web.admin-base-path` и
+  `PatAuthorities.MANAGE_ANY` (`pat:manage:any`).
 - **Несовместимо - причина, по которой следующий выпуск - 3.0.0.** Из `rest-client-spring-boot-starter`
   удалены `ru.ludwigandreas.restclient.auth.CachedToken` и `CachingTokenSource` **без предварительного
   выпуска с пометкой устаревания** - это решение. Они без изменений переехали в `outbound-token-core`:
@@ -153,6 +199,26 @@
 
 ### Fixed
 
+- **Отменённая отправка файлового действия больше не записывается как применённая** (`file-action-cancelled-state`).
+  Проход, остановленный отменой, записывался как `APPLIED` (конверт `SUCCEEDED`) с успешным событием
+  `file-action.applied`. Теперь это `CANCELLED` с аудитом `file-action.cancelled`. Отмена, пришедшая, пока отправка
+  ждала очереди или читалась, учитывается до любого применения, в том числе для `ALL_OR_NOTHING` и действий над
+  документом. Отмена и подтверждение, одновременно пришедшие для одной проверенной отправки, больше не могут
+  сработать обе.
+- **`GET /admin/v1/me/operations` публикуется как `application/json`** (`admin-surface-polish`), а не `*/*`, поэтому у
+  клиента, сгенерированного из OpenAPI-документа, есть тип ответа.
+- **Отзыв PAT больше не падает, пока токен используется** (`gate-hygiene`). Асинхронная запись последнего
+  использования сохраняла всю строку и увеличивала её версию, поэтому отзыв или ротация, совпавшие с
+  использованием, падали с конфликтом оптимистической блокировки (`500`), а токен продолжал работать. Теперь это
+  обновление без версии только для `last_used_at`, `last_used_ip` и `use_count`, которое никогда не сдвигает время
+  назад, а `PatEntity` записывает только изменённые колонки. `PatQueryRepository` получает `recordUse`, а
+  `PatUsageTracker` принимает `PatQueryRepository` вместо `PatRepository`.
+- **rest-client повторяет каждую попытку, превысившую таймаут** (`gate-hygiene`). В JDK-транспорте собственный срок
+  HttpClient (`java.net.http.HttpTimeoutException`) не считался повторяемым, поэтому GET по таймауту повторялся,
+  только если таймаут future у Spring срабатывал первым. Теперь оба считаются повторяемыми таймаутами.
+- **`scripts/check_image_pins.sh` проверяет в Markdown код, а не текст** (`gate-hygiene`). Проверяются только
+  блоки кода и встроенный код, поэтому фраза вроде «no new image: the mail server» больше не валит gate.
+  `--self-test`, который теперь запускает `scripts/gate.sh`, доказывает, что каждый триггер срабатывает.
 - **Записи outbox несут `X-Correlation-Id` публикующего запроса.** Раньше ни одна запись outbox его не
   несла, ни на одном транспорте: у потока поллера нет контекста запроса, а у `CorrelationProvider` из
   audit-core была только пустая реализация по умолчанию. Теперь провайдер предоставляет

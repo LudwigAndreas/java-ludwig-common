@@ -22,6 +22,8 @@ public final class SettingProblemCodes {
     public static final String NOT_EDITABLE = PREFIX + "not-editable";
     /** The caller may only read or write their own settings, and this was someone else's. */
     public static final String ACCESS_DENIED = PREFIX + "access-denied";
+    /** An administrator named a subject or scope of another tenant. */
+    public static final String SUBJECT_NOT_FOUND = PREFIX + "subject-not-found";
     /** No tenant could be determined, so the lookup was refused rather than run unscoped. */
     public static final String TENANT_UNRESOLVABLE = PREFIX + "tenant-unresolvable";
     /** A stored value could not be converted back to the definition's type. */

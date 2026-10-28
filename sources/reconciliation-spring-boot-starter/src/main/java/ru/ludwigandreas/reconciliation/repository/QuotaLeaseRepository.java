@@ -29,7 +29,7 @@ public interface QuotaLeaseRepository extends BaseRepository<QuotaLease, UUID> {
     long countByQuotaNameAndExpiresAtGreaterThan(String quotaName, Instant now);
 
     /**
-     * Live leases of a quota, for the actuator's view and for the reclaim sweep's "is this one still
+     * Live leases of a quota, for the administrative view and for the reclaim sweep's "is this one still
      * doing anything" check.
      *
      * @param quotaName the quota

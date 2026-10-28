@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.DynamicUpdate;
 import ru.ludwigandreas.db.core.entity.AuditedEntity;
 
 /**
@@ -37,9 +38,17 @@ import ru.ludwigandreas.db.core.entity.AuditedEntity;
  * <p>Both pairs live on the <b>same row</b> rather than in a second row, which is what keeps the token's
  * identity, scopes, audiences and audit history continuous across a rotation. A second row would be a second
  * token wearing the first one's name, with its own id in every audit record written after the rotation.
+ *
+ * <h2>Why updates write only the changed columns</h2>
+ *
+ * <p>The last-use columns are written by a separate, version-less update on an executor thread
+ * ({@code PatQueryRepository.recordUse}). A full-row update from a revoke or rotation that loaded the row before
+ * that write would put the stale last use back; {@code @DynamicUpdate} keeps each writer to its own columns.
+ * {@code PatUsageRaceIT} forces exactly that interleaving.
  */
 @Entity
 @Table(name = "ludwig_pat")
+@DynamicUpdate
 @Getter
 @Setter
 public class PatEntity extends AuditedEntity<UUID> {

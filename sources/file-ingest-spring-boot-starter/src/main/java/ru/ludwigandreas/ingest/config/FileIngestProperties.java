@@ -49,9 +49,6 @@ public class FileIngestProperties {
     /** The Liquibase half; see {@code FileIngestLiquibaseAutoConfiguration}. */
     private final Liquibase liquibase = new Liquibase();
 
-    /** The actuator endpoint's own settings. */
-    private final Endpoint endpoint = new Endpoint();
-
     /** Whether Micrometer metrics are recorded, when Micrometer is present. */
     private final Metrics metrics = new Metrics();
 
@@ -76,29 +73,6 @@ public class FileIngestProperties {
          * at startup.
          */
         private boolean enabled = true;
-    }
-
-    /** The actuator endpoint. */
-    @Getter
-    @Setter
-    public static class Endpoint {
-
-        /** Whether the {@code fileingest} endpoint bean is created at all. */
-        private boolean enabled = true;
-
-        /** How many recent runs a listing shows per task. */
-        @Min(1)
-        private int recentRuns = 20;
-
-        /**
-         * Whether the endpoint may trigger a run outside the schedule.
-         *
-         * <p>Off by default. A manual run is not destructive - the identity constraint still refuses
-         * an object already ingested - but it does put load on the database at a time nobody planned
-         * for, and an endpoint that can start work is a different security proposition from one that
-         * only reads.
-         */
-        private boolean allowManualRun;
     }
 
     /** Metrics. */

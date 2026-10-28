@@ -1,0 +1,43 @@
+{
+  "change": "admin-authorization",
+  "model": "claude-opus-5-5",
+  "index_version": "9296a550c6c1d3fb74bea3985ea7862da51cfde3d046b2194eb7289b2f3b6b62",
+  "modules_touched": [
+    "security-spring-boot-starter",
+    "architecture-rules",
+    "pat-spring-boot-starter",
+    "user-settings-spring-boot-starter",
+    "common"
+  ],
+  "gate": {
+    "check_image_pins": "fail (pre-existing false positive: archived 2026-10-11 proposal line 78, unchanged since rollback point)",
+    "check_api_baseline": "fail (environmental: releases repository unreachable, 28 baselines unresolvable)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api_docs_missing": "pass",
+    "api_docs_check": "pass (after refresh)",
+    "validate": "pass",
+    "verify": "pass for all 18 modules (security 189+50, architecture-rules 100, test-support-security, pat 121/55, user-settings 172/223, crud 101/53 after doc refresh, export, file-action 274/32 on rerun, grpc-client, grpc-server, identity-projection, notification 316/212 after doc refresh, asyncapi, file-ingest, messaging-db, messaging, object-storage, odata-filter)",
+    "openspec_validate": "pass (--strict)"
+  },
+  "tests": {
+    "added": 53,
+    "passed": "all in the commands above",
+    "failed": 0,
+    "flaky_observed": [
+      "pat PatDirectAuthenticationIT$FilterEnabled.revokedTokenStopsWorking (pre-existing race, 1 fail / 2 passes)",
+      "job-core JdbcRunLockIT SSL setup (1 fail / 1 pass)"
+    ]
+  },
+  "retries": 12,
+  "human_corrections": 2,
+  "rollback_point": "44358a935e47d0353f0da2ec95f7baa04405f677",
+  "unresolved": [
+    "Task 6.2 accepted by the user with two known gate exceptions (check_image_pins false positive, check_api_baseline unreachable repository); tracked in openspec/intents/admin-surface-follow-ups.md.",
+    "The revapi.differences entry for the moved PatCredentialNotPermittedException was never exercised: no baseline was resolvable.",
+    "Design changed twice during implementation (surface guard is a HandlerInterceptor, not a second filter chain; @AdminAccess evaluated by the guard, not by a method-security advisor) - recorded in state.json decisions and in the change's design/spec/tasks.",
+    "user-settings carries a recorded deferral of admin.handler-declares-an-operation until starter-admin-endpoints task 11.1.",
+    "Two pre-existing flaky ITs (pat revoke race, job-core container SSL) were seen; neither is touched by this change, neither proven by an A/B run at the rollback point."
+  ]
+}

@@ -23,7 +23,7 @@
         the partner; stale-write protection, payload-hash idempotency, per-item transactions, retry with
         backoff and quarantine; partner-scoped distributed quotas and rate limits held as heartbeated
         leases; leader election, watermarks and priority tiers; Micrometer metrics, an audit SPI and a
-        secured actuator endpoint.
+        administrative endpoints on the platform's administrative surface.
     </description>
 
     <!--
@@ -141,10 +141,20 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Optional: the actuator endpoint -->
+        <!--
+            Optional: the administrative endpoints (ru.ludwigandreas.reconciliation.admin) exist only where the
+            security starter's administrative surface does, behind @ConditionalOnBean(AdminOperationCatalog). They
+            replace the reconciliation actuator endpoint. web-core is named because the security starter declares it
+            optional, so it does not arrive transitively.
+        -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-actuator</artifactId>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>web-core-spring-boot-starter</artifactId>
             <optional>true</optional>
         </dependency>
 
@@ -193,6 +203,17 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestPrincipalBuilder, for the administrative endpoints' MockMvc tests. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -74,7 +74,7 @@ public record HotReloadAuditEntry(String sourceId, Instant timestamp, String act
                 .category(AuditCategories.CONFIG)
                 .action(ACTION_APPLIED)
                 .occurredAt(timestamp)
-                .actor(new Actor(actor, PRINCIPAL_TYPE, null, null))
+                .actor(new Actor(actor, PRINCIPAL_TYPE, null, null, null))
                 .resource(Resource.ofType(sourceId))
                 .outcome(AuditOutcome.success())
                 .attributes(attributes)
@@ -100,7 +100,7 @@ public record HotReloadAuditEntry(String sourceId, Instant timestamp, String act
                 .category(AuditCategories.CONFIG)
                 .action(ACTION_FAILED)
                 .occurredAt(timestamp)
-                .actor(new Actor(actor, PRINCIPAL_TYPE, null, null))
+                .actor(new Actor(actor, PRINCIPAL_TYPE, null, null, null))
                 .resource(Resource.ofType(sourceId))
                 // The exception's message and not its stack trace: the trail records that the reload
                 // failed and the application log records how. A stack trace in a row retained for years

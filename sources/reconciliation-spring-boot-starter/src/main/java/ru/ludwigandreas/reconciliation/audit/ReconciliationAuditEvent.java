@@ -31,7 +31,7 @@ import ru.ludwigandreas.audit.Resource;
  * @param fromState     previous state, for a transition
  * @param toState       new state, for a transition
  * @param detail        free text: an error message, what changed, why an operator did it
- * @param principal     who triggered it, for events that came from the actuator endpoint
+ * @param principal     who triggered it, for events that came from the administrative endpoints
  * @param runId         the run it belongs to
  * @param correlationId the correlation id of the unit of work, from the observability starter
  * @param occurredAt    when
@@ -63,9 +63,6 @@ public record ReconciliationAuditEvent(String taskName,
         /** A quota lease was acquired, renewed, released or reclaimed. */
         LEASE,
 
-        /** A human did something through the actuator endpoint. */
-        OPERATOR,
-
         /**
          * An enumeration walked a scope, or a member left one. Last on purpose: appending keeps every
          * existing constant's ordinal, so adding it is not a change to anything already published.
@@ -89,8 +86,8 @@ public record ReconciliationAuditEvent(String taskName,
      * mean two different things depending on the row. The {@code audit-0003} migration of
      * {@code sync_audit_record} maps it the same way, so a migrated row and a new one are the same shape.
      *
-     * <p>The actor is the operator for an {@link Category#OPERATOR} event and {@code system} otherwise,
-     * which is the only place in this module where a person is behind an event at all.
+     * <p>The actor is {@code system} unless a principal is given. An operator's actions are not recorded here:
+     * they go through the administrative surface, which records each one once, in category {@code admin}.
      *
      * @return the event
      */

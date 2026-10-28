@@ -4,8 +4,9 @@ import ru.ludwigandreas.webcore.problem.LocalizedException;
 import ru.ludwigandreas.webcore.problem.ProblemStatus;
 
 /**
- * The caller asked for someone else's settings without holding the administrative authority that
- * allows it, or asked across a tenant boundary.
+ * The caller asked for someone else's settings outside a {@code settings} administrative operation.
+ * Across a tenant boundary on the administrative surface the answer is
+ * {@link SettingsSubjectNotFoundException} instead.
  *
  * <p>Enforced inside this module rather than left to each caller. The rule "a user may read and
  * write only their own settings" is the kind that is correct in every service and therefore gets

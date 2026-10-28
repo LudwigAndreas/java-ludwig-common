@@ -72,24 +72,26 @@ branch on which mode produced it.
 - **THEN** the application fails to start, naming the action and both values
 
 ### Requirement: The module's lifecycle is a domain lifecycle and does not restate OperationStatus
-`FileActionState` SHALL be `UPLOADED VALIDATED APPLYING APPLIED REJECTED EXPIRED`, SHALL map onto
-`OperationStatus`, and SHALL be published in `OperationResponse.detail()`. It SHALL NOT declare a value
-that restates any of the six core states.
+`FileActionState` SHALL be `UPLOADED VALIDATED APPLYING APPLIED REJECTED EXPIRED CANCELLED`, SHALL map onto
+`OperationStatus`, and SHALL be published in `OperationResponse.detail()`. Its non-terminal and success values SHALL
+carry domain information the core states cannot (`UPLOADED`, `VALIDATED`, `APPLYING`, `APPLIED`), so that the enum
+is a lifecycle that maps onto the core vocabulary rather than a restatement of it.
 
 #### Scenario: A submission is awaiting confirmation
 
 - **WHEN** a `CONFIRM`-mode submission has been validated and nobody has confirmed it
 - **THEN** a poll returns `status: PENDING` with `detail: VALIDATED`
 
-#### Scenario: Someone adds a core state to the domain enum
+#### Scenario: Someone declares an enum that only restates the core states
 
-- **WHEN** a change adds `COMPLETED`, `CANCELLED` or `FAILED` to `FileActionState`
+- **WHEN** a change declares an enum whose every constant is a core-vocabulary word, spanning a pending, a success,
+  a failure and a stop or expiry constant
 - **THEN** `RuleGroup.OPERATIONS` fails the build
 
 #### Scenario: A submission is cancelled after it has already been applied
 
 - **WHEN** `POST /file-actions/{action}/{id}/cancel` names a submission in `APPLIED`
-- **THEN** the response is `200` with the terminal envelope, not `409`
+- **THEN** the response is `200` with the terminal envelope, not `409`, and the submission stays `APPLIED`
 
 #### Scenario: A running submission is cancelled
 
@@ -415,3 +417,31 @@ one action, and a mismatch SHALL fail startup rather than the first upload.
 - **WHEN** an action declares `required-authority` and `security-spring-boot-starter` is not on the
   classpath
 - **THEN** startup fails rather than serving the endpoint unprotected
+
+### Requirement: A cancelled submission ends CANCELLED
+A submission whose cancellation was requested SHALL end in `CANCELLED` (envelope `status: CANCELLED`) unless it
+reached another terminal state first. It SHALL NOT end `APPLIED`. `rowsApplied` SHALL report the rows kept before
+the stop. The stop SHALL be audited as `file-action.cancelled`, and no `file-action.applied` event SHALL be
+recorded for it.
+
+#### Scenario: A deferred submission is cancelled before the worker applies it
+
+- **WHEN** a `DEFERRED` submission in `UPLOADED` is cancelled and the worker then claims it
+- **THEN** the handler is not called for any row, a poll returns `status: CANCELLED` with `detail: CANCELLED` and
+  `rowsApplied: 0`, and the audit trail holds `file-action.cancelled` and no `file-action.applied`
+
+#### Scenario: A PER_BATCH submission is cancelled between batches
+
+- **WHEN** a `PER_BATCH` submission is cancelled after its first batch committed and before its second started
+- **THEN** it ends `CANCELLED` with `rowsApplied` equal to the first batch's applied rows, and no later batch is
+  applied
+
+#### Scenario: A submission awaiting confirmation is cancelled
+
+- **WHEN** `POST /file-actions/{action}/{id}/cancel` names a submission in `VALIDATED`
+- **THEN** the response is `200` with `status: CANCELLED`, and a later confirm of it answers `409`
+
+#### Scenario: A cancelled submission is cancelled again
+
+- **WHEN** a cancel names a submission already in `CANCELLED`
+- **THEN** the response is `200` with the same terminal envelope and no further audit event of the stop

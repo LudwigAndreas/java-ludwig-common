@@ -175,7 +175,7 @@ public class ReconciliationEnumerationAutoConfiguration {
         return new EnumerationRuntime(registry, runner, states, members, metrics, scheduler);
     }
 
-    /** What the actuator endpoint is handed, when the actuator is on the classpath to ask for it. */
+    /** What the administrative endpoints act through for enumerations. */
     @Bean
     @ConditionalOnMissingBean(EnumerationOperations.class)
     public EnumerationOperations reconciliationEnumerationOperations(EnumerationRegistry registry,

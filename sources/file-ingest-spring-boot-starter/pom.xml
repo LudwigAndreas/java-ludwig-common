@@ -21,7 +21,7 @@
         first byte is read, ranged streaming with a checkpoint committed in the same transaction as
         the data it describes, batches bounded by count and by bytes, quarantine with a threshold
         policy, a balance check that gates COMPLETED, receipts, archival, metrics including the file
-        that never came, an audit SPI and an actuator endpoint.
+        that never came, an audit SPI and administrative endpoints.
     </description>
 
     <!--
@@ -161,19 +161,13 @@
         </dependency>
 
         <!--
-            Optional: the `fileingest` actuator endpoint. Both artifacts, because they carry different
-            halves of what an endpoint needs: `spring-boot-actuator` has @Endpoint and the operation
-            annotations, and `spring-boot-actuator-autoconfigure` has @ConditionalOnAvailableEndpoint,
-            which is what keeps the bean from being created for an endpoint the estate has not exposed.
+            Optional: the administrative endpoints (ru.ludwigandreas.ingest.admin), which replace the fileingest
+            actuator endpoint, exist only where the security starter's administrative surface does, behind
+            @ConditionalOnBean(AdminOperationCatalog).
         -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-actuator</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-actuator-autoconfigure</artifactId>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
             <optional>true</optional>
         </dependency>
 
@@ -239,6 +233,12 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestPrincipalBuilder, for the administrative endpoints' MockMvc tests. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
             <scope>test</scope>
         </dependency>
         <!--

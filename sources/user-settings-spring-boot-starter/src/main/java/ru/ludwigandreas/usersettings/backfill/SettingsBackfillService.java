@@ -51,7 +51,7 @@ import ru.ludwigandreas.usersettings.metrics.SettingsMetrics;
  * <p><b>No access check.</b> This is an operator entry point - a job, a runbook step, an admin
  * endpoint - and its tenant may legitimately be null, which is not a subject the access policy can
  * even be asked about. {@code SettingsBackfillController} is the guarded path: it pins the caller's
- * own tenant and requires the administrative authority before it ever reaches this class. Anything
+ * own tenant and requires the settings.operate operation before it ever reaches this class. Anything
  * else calling in is trusted code, on the same footing as {@code SettingsRetentionService}.
  *
  * <p><b>No audit rows.</b> A backfill changes nothing. Writing a change-trail entry per republished

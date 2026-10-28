@@ -182,6 +182,19 @@ public class PatService {
     }
 
     /**
+     * Records that the self-service API was asked to mint a credential for somebody other than the caller,
+     * which it refuses.
+     *
+     * @param ownerSubject the owner that was named
+     * @param requestedBy  who asked
+     */
+    @Transactional
+    public void recordIssuanceForAnotherOwnerRefused(String ownerSubject, String requestedBy) {
+        auditSink.record(new PatAuditEvents.IssuanceRefused(ownerSubject, requestedBy, "another-owner")
+                .toAuditEvent());
+    }
+
+    /**
      * An owner's tokens, newest first. Never includes a secret, because none is stored.
      *
      * <p>Returns snapshots rather than entities, so nothing detached crosses out of this transaction. See

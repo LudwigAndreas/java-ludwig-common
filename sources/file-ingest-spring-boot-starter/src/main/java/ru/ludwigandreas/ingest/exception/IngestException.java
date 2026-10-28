@@ -10,7 +10,7 @@ package ru.ludwigandreas.ingest.exception;
  *
  * <p>Almost everything in this module is this rather than localized, because almost nothing here has
  * a caller: a scheduled ingest runs at half past six with nobody waiting on it. The localized types
- * exist for the actuator endpoint, which does have one.
+ * exist for the administrative endpoints, which does have one.
  */
 public class IngestException extends RuntimeException {
 

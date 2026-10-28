@@ -21,6 +21,9 @@ class FileActionSubmissionQueryRepositoryImpl implements FileActionSubmissionQue
 
     private final JPAQueryFactory queryFactory;
 
+
+    private final EntityManager entityManager;
+
     /**
      * Builds its own {@link JPAQueryFactory} over the injected entity manager rather than taking one from the
      * context.
@@ -38,6 +41,7 @@ class FileActionSubmissionQueryRepositoryImpl implements FileActionSubmissionQue
      */
     FileActionSubmissionQueryRepositoryImpl(EntityManager entityManager) {
         this.queryFactory = new JPAQueryFactory(entityManager);
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -124,5 +128,47 @@ class FileActionSubmissionQueryRepositoryImpl implements FileActionSubmissionQue
                 .where(SUBMISSION.id.eq(id))
                 .fetchFirst();
         return Boolean.TRUE.equals(requested);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public long cancelIfValidated(UUID id, Instant now) {
+        long updated = queryFactory.update(SUBMISSION)
+                .set(SUBMISSION.state, FileActionState.CANCELLED)
+                .set(SUBMISSION.cancellationRequested, true)
+                .set(SUBMISSION.finishedAt, now)
+                .set(SUBMISSION.updatedAt, now)
+                .set(SUBMISSION.version, SUBMISSION.version.add(1))
+                .where(SUBMISSION.id.eq(id), SUBMISSION.state.eq(FileActionState.VALIDATED))
+                .execute();
+        return refreshed(id, updated);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public long startIfValidated(UUID id, Instant now) {
+        long updated = queryFactory.update(SUBMISSION)
+                .set(SUBMISSION.state, FileActionState.APPLYING)
+                .set(SUBMISSION.startedAt, now)
+                .set(SUBMISSION.updatedAt, now)
+                .set(SUBMISSION.version, SUBMISSION.version.add(1))
+                .where(SUBMISSION.id.eq(id), SUBMISSION.state.eq(FileActionState.VALIDATED))
+                .execute();
+        return refreshed(id, updated);
+    }
+
+    /**
+     * Brings a copy of the row the current persistence context already holds up to date with a bulk update.
+     *
+     * <p>A bulk update bypasses every persistence context. Under open-in-view a request keeps one context for its
+     * whole length, and a transaction started inside it - even {@code REQUIRES_NEW} - reuses that context, so the
+     * request would go on reading the row as it loaded it before the update.
+     */
+    private long refreshed(UUID id, long updated) {
+        FileActionSubmissionEntity held = entityManager.find(FileActionSubmissionEntity.class, id);
+        if (held != null) {
+            entityManager.refresh(held);
+        }
+        return updated;
     }
 }

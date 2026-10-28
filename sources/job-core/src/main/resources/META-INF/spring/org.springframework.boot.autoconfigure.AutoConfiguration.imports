@@ -1,2 +1,3 @@
 ru.ludwigandreas.job.core.config.JobCoreAutoConfiguration
 ru.ludwigandreas.job.core.config.JobCoreLiquibaseAutoConfiguration
+ru.ludwigandreas.job.core.config.JobAdminAutoConfiguration

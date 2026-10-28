@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +21,7 @@ import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.pat.config.PatProperties;
 import ru.ludwigandreas.pat.entity.PatEntity;
 import ru.ludwigandreas.pat.metrics.NoopPatMetrics;
-import ru.ludwigandreas.pat.repository.PatRepository;
+import ru.ludwigandreas.pat.repository.PatQueryRepository;
 import ru.ludwigandreas.pat.service.PatUsageTracker;
 
 /**
@@ -65,20 +64,26 @@ class LastUsedTrackingTest {
         return tracker(repositoryOver(stored));
     }
 
-    private PatUsageTracker tracker(PatRepository repository) {
+    private PatUsageTracker tracker(PatQueryRepository repository) {
         return new PatUsageTracker(repository, properties, audited::add, new NoopPatMetrics(),
                 Clock.fixed(NOW, ZoneOffset.UTC), sameThread);
     }
 
-    private static PatRepository repositoryOver(Map<UUID, PatEntity> stored) {
-        PatRepository repository = org.mockito.Mockito.mock(PatRepository.class);
-        org.mockito.Mockito.when(repository.findById(org.mockito.ArgumentMatchers.any(UUID.class)))
-                .thenAnswer(i -> Optional.ofNullable(stored.get(i.getArgument(0))));
-        org.mockito.Mockito.when(repository.save(org.mockito.ArgumentMatchers.any(PatEntity.class)))
+    /** The update {@code recordUse} performs, over a map: forward-only time, three columns, one more use. */
+    private static PatQueryRepository repositoryOver(Map<UUID, PatEntity> stored) {
+        PatQueryRepository repository = org.mockito.Mockito.mock(PatQueryRepository.class);
+        org.mockito.Mockito.when(repository.recordUse(org.mockito.ArgumentMatchers.any(UUID.class),
+                        org.mockito.ArgumentMatchers.any(Instant.class), org.mockito.ArgumentMatchers.any()))
                 .thenAnswer(i -> {
-                    PatEntity saved = i.getArgument(0);
-                    stored.put(saved.getId(), saved);
-                    return saved;
+                    PatEntity row = stored.get(i.getArgument(0));
+                    Instant usedAt = i.getArgument(1);
+                    if (row == null || row.getLastUsedAt() != null && !row.getLastUsedAt().isBefore(usedAt)) {
+                        return 0L;
+                    }
+                    row.setLastUsedAt(usedAt);
+                    row.setLastUsedIp(i.getArgument(2));
+                    row.setUseCount(row.getUseCount() + 1);
+                    return 1L;
                 });
         return repository;
     }
@@ -209,8 +214,9 @@ class LastUsedTrackingTest {
     @Test
     @DisplayName("a failed timestamp write is swallowed, so the exchange still succeeds")
     void writeFailureDoesNotPropagate() {
-        PatRepository failing = org.mockito.Mockito.mock(PatRepository.class);
-        org.mockito.Mockito.when(failing.findById(org.mockito.ArgumentMatchers.any(UUID.class)))
+        PatQueryRepository failing = org.mockito.Mockito.mock(PatQueryRepository.class);
+        org.mockito.Mockito.when(failing.recordUse(org.mockito.ArgumentMatchers.any(UUID.class),
+                        org.mockito.ArgumentMatchers.any(Instant.class), org.mockito.ArgumentMatchers.any()))
                 .thenThrow(new IllegalStateException("connection closed"));
 
         // The assertion the task exists for. A telemetry write must not be able to break a production
@@ -223,8 +229,9 @@ class LastUsedTrackingTest {
     @Test
     @DisplayName("the swallowed failure is metered, so it is not a failure nobody learns about")
     void writeFailureIsMetered() {
-        PatRepository failing = org.mockito.Mockito.mock(PatRepository.class);
-        org.mockito.Mockito.when(failing.findById(org.mockito.ArgumentMatchers.any(UUID.class)))
+        PatQueryRepository failing = org.mockito.Mockito.mock(PatQueryRepository.class);
+        org.mockito.Mockito.when(failing.recordUse(org.mockito.ArgumentMatchers.any(UUID.class),
+                        org.mockito.ArgumentMatchers.any(Instant.class), org.mockito.ArgumentMatchers.any()))
                 .thenThrow(new IllegalStateException("connection closed"));
 
         CountingMetrics metrics = new CountingMetrics();

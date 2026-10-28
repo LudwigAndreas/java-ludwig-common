@@ -14,7 +14,7 @@ OIDC-провайдер. Даёт хранилище, многоуровнево
 | Роль | starter |
 | Зависит от (в репозитории) | `audit`-стартер, `cache`, `db-core`, `hot-reload`, `messaging`, `observability`, `odata-filter`, `outbox`, `security`, `web-core` (часть опциональна во время выполнения) |
 | Используется | `notification-service` |
-| Поверхности | опционально REST `/me/settings`, `/admin/settings`; Kafka (владелец публикует, проекция потребляет) |
+| Поверхности | опционально REST `/me/settings`, `/admin/v1/settings`; Kafka (владелец публикует, проекция потребляет) |
 
 ## Использование
 
@@ -211,9 +211,9 @@ if (!result.complete()) { /* запустить снова; курсора не�
 - Keyset-обход, транзакция на пачку. `maxRows` - бюджет, общий для обоих обходов (сначала настройки) - при бюджете
   запускайте настройки и согласия отдельно (`includeConsents(false)` / `includeSettings(false)`).
 - `tenantId == null` означает все тенанты (через REST невыразимо).
-- `POST /admin/settings/backfill` (`{ "settingKeys": [...], "includeConsents": false, "maxRows": 50000 }` →
+- `POST /admin/v1/settings/backfill` (`{ "settingKeys": [...], "includeConsents": false, "maxRows": 50000 }` →
   `{ "settingRows": 41230, "consentRows": 0, "batches": 83, "complete": false }`) требует `web.enabled`,
-  `web.backfill-enabled` и режим владельца, плюс права администратора; тенант - тенант вызывающего.
+  `web.backfill-enabled` и режим владельца, плюс операцию `settings.operate`; тенант - тенант вызывающего.
 - Промежуточные значения, пропущенные потребителем, не восстанавливаются - только текущее состояние (и весь журнал
   согласий).
 
@@ -261,9 +261,9 @@ SettingDefinitionSource notificationOptOuts() {
 | `POST` | `/me/settings/reset` | ключи в теле (в них точки) |
 | `GET` | `/me/settings/consents` | текущее состояние |
 | `POST` | `/me/settings/consents/grant` \| `/revoke` | доказательства берутся из запроса, никогда из тела |
-| `GET` | `/admin/settings/subjects/{subject}` | ПДн отредактированы; аудируется |
-| `PUT` | `/admin/settings/scopes/{scopeType}/{scopeId}` | только режим владельца |
-| `GET` | `/admin/settings/subjects/{subject}/consents[/as-of?at=…]` | журнал на любой момент |
+| `GET` | `/admin/v1/settings/subjects/{subject}` | ПДн отредактированы; аудируется |
+| `PUT` | `/admin/v1/settings/scopes/{scopeType}/{scopeId}` | только режим владельца |
+| `GET` | `/admin/v1/settings/subjects/{subject}/consents[/asof?at=…]` | журнал на любой момент |
 
 Контроллер самообслуживания не берёт субъекта из запроса. Административный поиск OData не раскрывает значений
 (`value_text` и доказательства согласий не `@Filterable`).
@@ -286,10 +286,9 @@ SettingDefinitionSource notificationOptOuts() {
 | `ludwig.user-settings.projection.group-id` | `${spring.application.name}-user-settings-projection` | Своя группа для каждого сервиса-реплики |
 | `ludwig.user-settings.projection.source-system` | `user-settings-owner` | `source_system` в спроецированных согласиях |
 | `ludwig.cache.caches.settings.enabled` / `ttl` / `maximum-size` | `true` / `5m` / `10000` | Кэш настроек |
-| `ludwig.user-settings.access.admin-authority` | `ROLE_SETTINGS_ADMIN` | С префиксом `ROLE_` или без |
 | `ludwig.user-settings.access.allow-unauthenticated` | `true` | Внутрипроцессные вызовы без принципала (воркеры, задачи) |
 | `ludwig.user-settings.web.enabled` | `false` | Монтировать REST-контроллеры |
-| `ludwig.user-settings.web.base-path` / `admin-base-path` | `/me/settings` / `/admin/settings` | |
+| `ludwig.user-settings.web.base-path` | `/me/settings` | Административные эндпоинты - на фиксированном `/admin/v1/settings` |
 | `ludwig.user-settings.web.backfill-enabled` | `false` | Монтировать эндпоинт backfill |
 | `ludwig.user-settings.retention.enabled` | `false` | Очистка надгробий |
 | `ludwig.user-settings.retention.tombstones` | `30d` | Срок хранения надгробий |
@@ -372,6 +371,29 @@ ludwig:
 | `audit_event` (`category=settings`) | 7 лет | да, аудит-стартером |
 | надгробия `user_setting_value` | 30 дней | при `retention.enabled=true` |
 | `user_consent` | - | **никогда** (`SettingsRetentionService.purgeConsents` есть для оператора, действующего по письменной правовой политике) |
+
+## Администрирование
+
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+
+| Операция | Эндпоинты | Что разрешает |
+|---|---|---|
+| `settings.read` | `GET /admin/v1/settings/subjects/{subject}`<br>`GET /admin/v1/settings/subjects/{subject}/consents`<br>`GET /admin/v1/settings/subjects/{subject}/consents/asof` | Просмотр итоговых настроек и истории согласий другого субъекта. |
+| `settings.operate` | `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}`<br>`POST /admin/v1/settings/backfill` | Изменение настроек на уровне пользователя, роли или арендатора и запуск повторной публикации. |
+| `settings.privileged` | в этом выпуске нет | Операций пока нет; уровень зарезервирован, чтобы выдачи для этой области не менялись между выпусками. |
+
+**Удалено:** `/admin/settings/**`, `ludwig.user-settings.access.admin-authority` и `ludwig.user-settings.web.admin-base-path`; `consents/as-of` теперь `consents/asof`. Подключается только при `ludwig.user-settings.web.enabled=true` в режиме владельца (для повторной публикации также `web.backfill-enabled=true`). Субъект другого арендатора - `404` (было `403`); эндпоинты самообслуживания сохраняют `403`.
+
+Блок выдачи (имена ролей - собственные роли сервиса):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[settings.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[settings.operate]": [ORDERS_ADMIN]
+      "[settings.privileged]": [ORDERS_ADMIN]
+```
 
 ## Runbook
 

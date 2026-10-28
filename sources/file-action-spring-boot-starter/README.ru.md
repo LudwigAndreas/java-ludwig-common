@@ -110,7 +110,15 @@ POST /api/v1/file-actions/order-import   (multipart)
                            | (confirm)      |
                         EXPIRED           APPLIED
                      (истёк TTL)
+
+  CANCELLED  из VALIDATED сразу; из UPLOADED или APPLYING на следующей контрольной точке
 ```
+
+**Отмена завершается состоянием `CANCELLED`** (конверт `CANCELLED`), никогда `APPLIED`. Отправка в `VALIDATED`
+отменяется сразу (`200`); читаемая или применяемая останавливается на следующей контрольной точке - до начала
+применения или между пакетами - и отмена отвечает `202`. Строки, зафиксированные до остановки, сохраняются и
+учитываются в `rowsApplied`; пакет в работе никогда не прерывается. Остановка аудируется как `file-action.cancelled`.
+Отмена и подтверждение, одновременно пришедшие для одной проверенной отправки, не могут выиграть обе.
 
 `FileActionState` - доменный жизненный цикл в `OperationResponse.detail()` (`UPLOADED` и `VALIDATED` оба
 `PENDING`; разница - кнопка «Подтвердить»). Режимы: `CONFIRM` (по умолчанию - предпросмотр, затем применение),
@@ -242,7 +250,7 @@ ludwig:
 POST   /api/v1/file-actions/{action}                    multipart -> 200 | 202  SubmissionResponse
 GET    /api/v1/file-actions/{action}/{id}               -> SubmissionResponse (+ Retry-After, пока выполняется)
 POST   /api/v1/file-actions/{action}/{id}/confirm       -> 200 | 202
-POST   /api/v1/file-actions/{action}/{id}/cancel        -> 202 (кооперативно; завершённая -> её конверт)
+POST   /api/v1/file-actions/{action}/{id}/cancel        -> 202 (кооперативно) | 200 (VALIDATED или уже завершённая)
 GET    /api/v1/file-actions/{action}/{id}/rejects       -> PageResponse<RowRejectResponse>
 GET    /api/v1/file-actions/{action}/{id}/error-report  -> аннотированная книга или CSV отклонений
 GET    /api/v1/file-actions/{action}/template           -> пустая книга, сгенерированная из привязки
@@ -351,9 +359,33 @@ ludwig:
 | `file-action.confirmed` | Пользователь подтвердил |
 | `file-action.applied` | Строки применены |
 | `file-action.cancellation-requested` | Запрошена отмена |
+| `file-action.cancelled` | Отправка остановлена и завершилась `CANCELLED` |
 | `file-action.expired` | Очистка удалила артефакты (actor `system`) |
 
 Записывается: имя файла, хэш содержимого, размер, счётчики, ответ антивируса, исход - **никогда ячейки файла**.
+
+## Администрирование
+
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+
+| Операция | Эндпоинты | Что разрешает |
+|---|---|---|
+| `fileactions.read` | `GET /admin/v1/fileactions/submissions`<br>`GET /admin/v1/fileactions/submissions/{id}` | Просмотр загрузок файловых действий всех пользователей, без самого файла и его строк. |
+| `fileactions.operate` | `POST /admin/v1/fileactions/submissions/{id}/cancel` | Отменить загрузку файлового действия любого пользователя. |
+| `fileactions.privileged` | в этом выпуске нет | Операций пока нет; уровень зарезервирован, чтобы выдачи для этой области не менялись между выпусками. |
+
+Ответы не содержат ни файла, ни содержимого строк, ни ссылки на отчёт об ошибках. Отмена - та же отмена, что у отправителя: `202`, пока остановка ожидается, либо `200` с конвертом, если отправка завершена, в том числе если отмена сама завершила её `CANCELLED`, как отправку в `VALIDATED`.
+
+Блок выдачи (имена ролей - собственные роли сервиса):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[fileactions.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[fileactions.operate]": [ORDERS_ADMIN]
+      "[fileactions.privileged]": [ORDERS_ADMIN]
+```
 
 ## Runbook
 

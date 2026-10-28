@@ -40,7 +40,8 @@ public final class BuiltInRuleSets {
             new UploadRules(),
             new CredentialRules(),
             new LoggingRules(),
-            new GrpcRules());
+            new GrpcRules(),
+            new AdminRules());
 
     private BuiltInRuleSets() {
     }

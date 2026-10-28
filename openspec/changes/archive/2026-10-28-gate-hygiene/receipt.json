@@ -1,0 +1,54 @@
+{
+  "change": "gate-hygiene",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "pat-spring-boot-starter",
+    "rest-client-spring-boot-starter",
+    "job-core (test sources)",
+    "repository tooling: scripts/check_image_pins.{py,sh}, scripts/gate.sh, scripts/testdata/check_image_pins/"
+  ],
+  "unchanged_but_planned": [
+    "test-support-local (the StubFaultIT cause was in rest-client, not the test)"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "fail (releases repository unreachable; release-checklist item, not fixable here)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "maven reactor (14 gate modules -am, install)": "pass after one -rf resume; attempt 1 failed in file-ingest on a Testcontainers Ryuk connection error (environmental, module untouched)",
+    "openspec validate gate-hygiene": "pass"
+  },
+  "tests": {
+    "resumed reactor": "2280 run, 0 failures, 0 errors",
+    "attempt 1 before the Ryuk failure": "2458 run, 29 errors, all file-ingest container start-up",
+    "PatUsageRaceIT": "3/3",
+    "RetryPolicyTest": "16/16",
+    "pat unit": "123/123",
+    "loops": {
+      "PatDirectAuthenticationIT": "20/20",
+      "StubFaultIT unfixed": "failed run 1",
+      "StubFaultIT fixed": "30/30",
+      "JdbcRunLockIT unchanged": "30/30",
+      "JdbcRunLockIT sslMode=disable": "30/30"
+    }
+  },
+  "findings": [
+    "PAT last-use write bumped the version so a concurrent revoke failed (production defect) - fixed with a version-less QueryDSL update",
+    "a second lost update: the revoke's full-row UPDATE wrote back the stale last use - fixed with @DynamicUpdate on PatEntity",
+    "StubFaultIT.slow was a rest-client production defect: java.net.http.HttpTimeoutException was not retryable, so on the JDK transport a timed-out GET was retried only when Spring's timer beat the HttpClient's"
+  ],
+  "retries": [
+    "6.1 maven reactor: 1 resume (-rf) after an environmental Ryuk failure"
+  ],
+  "rollback_commit": "44358a9 (working tree also carries the uncommitted admin-authorization / starter-admin-endpoints changes)",
+  "unresolved": [
+    "JdbcRunLockIT SSL-setup failure not reproduced in 60 runs; sslMode=disable is hardening, not a proven fix",
+    "A/B run proving PatUsageRaceIT goes red on a version-bumping write was denied at the permission prompt; demonstrated red only for the stale-write variant",
+    "scope change: rest-client-spring-boot-starter was not named in the proposal",
+    "check_api_baseline cannot run without the releases repository"
+  ]
+}

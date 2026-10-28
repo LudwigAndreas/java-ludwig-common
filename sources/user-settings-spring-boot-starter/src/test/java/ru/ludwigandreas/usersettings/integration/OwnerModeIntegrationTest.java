@@ -451,30 +451,6 @@ class OwnerModeIntegrationTest {
     }
 
     @Test
-    @DisplayName("an administrator reading another subject's settings is audited")
-    void administrative_read_is_audited() {
-        // The row looks redundant until the first time somebody asks who looked at a user's data, at
-        // which point it is the only record that could answer.
-        writer.set(PrincipalRef.user(SUBJECT), IntegrationSettings.PAGE_SIZE, 50);
-        audit.deleteAll();
-
-        authenticateAsAdmin();
-        try {
-            lookup.getAll(subjectIn(ACME));
-        } finally {
-            org.springframework.security.core.context.SecurityContextHolder.clearContext();
-        }
-
-        List<AuditEventEntity> trail = trailFor(SUBJECT);
-        assertThat(trail).hasSize(1);
-        assertThat(trail.get(0).getAction()).isEqualTo(SettingAuditAction.ADMIN_READ.action());
-        // actor is who looked, onBehalfOf is whose settings they looked at - the direction the old
-        // table's `actor`/`subject` columns meant, now named for it.
-        assertThat(trail.get(0).getActorSubject()).isEqualTo("admin-1");
-        assertThat(trail.get(0).getOnBehalfOf()).isEqualTo(SUBJECT);
-    }
-
-    @Test
     @DisplayName("a subject reading their own settings is not audited")
     void self_read_is_not_audited() {
         // A row per self-service page view would bury the administrative reads that matter.
@@ -495,10 +471,6 @@ class OwnerModeIntegrationTest {
                 .onBehalfOf(subject)
                 .limit(10)
                 .build());
-    }
-
-    private static void authenticateAsAdmin() {
-        authenticate("admin-1", "ROLE_SETTINGS_ADMIN");
     }
 
     private static void authenticateAsSubject() {

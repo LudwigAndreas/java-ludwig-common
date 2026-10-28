@@ -86,6 +86,13 @@ public class AuditEventEntity extends SnapshotEntity<UUID> {
     @Column(name = "on_behalf_of", length = 255)
     private String onBehalfOf;
 
+    /**
+     * The organization the actor belonged to, when known. What lets a tenant's administrator be shown their own
+     * tenant's trail and nobody else's; null for a system actor, a service, and every row written before it existed.
+     */
+    @Column(name = "actor_tenant", length = 255)
+    private String actorTenant;
+
     @Column(name = "resource_type", length = 128)
     private String resourceType;
 
@@ -145,6 +152,7 @@ public class AuditEventEntity extends SnapshotEntity<UUID> {
         entity.setActorType(event.actor().principalType());
         entity.setActorDisplayName(event.actor().displayName());
         entity.setOnBehalfOf(event.actor().onBehalfOf());
+        entity.setActorTenant(event.actor().tenant());
         if (event.resource() != null) {
             entity.setResourceType(event.resource().type());
             entity.setResourceId(event.resource().id());

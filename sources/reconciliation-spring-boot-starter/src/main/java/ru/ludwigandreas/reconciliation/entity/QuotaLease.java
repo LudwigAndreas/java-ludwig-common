@@ -39,7 +39,7 @@ public class QuotaLease extends GeneratedEntity<UUID> {
     @Column(name = "quota_name", nullable = false, updatable = false)
     private String quotaName;
 
-    /** Which task is using the slot, for the per-task view in the actuator endpoint. */
+    /** Which task is using the slot, for the per-task view in the administrative endpoints. */
     @Column(name = "task_name", nullable = false, updatable = false)
     private String taskName;
 

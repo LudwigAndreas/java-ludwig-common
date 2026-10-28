@@ -1,5 +1,25 @@
 components:
   schemas:
+    AdminPageEventView:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/EventView'
+          type: array
+        next:
+          type: string
+      title: AdminPage
+      type: object
+    AdminPageMessageView:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/MessageView'
+          type: array
+        next:
+          type: string
+      title: AdminPage
+      type: object
     Announcement:
       description: One announcement visible to the caller
       properties:
@@ -149,6 +169,35 @@ components:
           type: array
       title: BatchSendResponse
       type: object
+    BulkRetryRequest:
+      properties:
+        createdBefore:
+          format: date-time
+          type: string
+        destination:
+          type: string
+        eventType:
+          type: string
+        status:
+          enum:
+          - PENDING
+          - PROCESSING
+          - PUBLISHED
+          - FAILED
+          - DEAD_LETTER
+          - DISCARDED
+          type: string
+      title: BulkRetryRequest
+      type: object
+    BulkRetryResult:
+      properties:
+        more:
+          type: boolean
+        moved:
+          format: int32
+          type: integer
+      title: BulkRetryResult
+      type: object
     ChangeAnnouncementWindowRequest:
       description: Replace an announcement's visibility window. The start can move only before the window opens; the end cannot be in the past.
       properties:
@@ -161,6 +210,24 @@ components:
       required:
       - visibleUntil
       title: ChangeAnnouncementWindowRequest
+      type: object
+    Count:
+      properties:
+        count:
+          format: int64
+          type: integer
+        destination:
+          type: string
+        status:
+          enum:
+          - PENDING
+          - PROCESSING
+          - PUBLISHED
+          - FAILED
+          - DEAD_LETTER
+          - DISCARDED
+          type: string
+      title: Count
       type: object
     DeliveryContentResponse:
       properties:
@@ -303,6 +370,63 @@ components:
           type: string
       title: DeliveryTransitionResponse
       type: object
+    EffectiveAuthorities:
+      properties:
+        attributes:
+          additionalProperties:
+            type: string
+          type: object
+        grants:
+          items:
+            $ref: '#/components/schemas/GrantView'
+          type: array
+        roles:
+          items:
+            type: string
+          type: array
+          uniqueItems: true
+        subject:
+          type: string
+        tenant:
+          type: string
+      title: EffectiveAuthorities
+      type: object
+    EventView:
+      properties:
+        action:
+          type: string
+        actorDisplayName:
+          type: string
+        actorSubject:
+          type: string
+        actorType:
+          type: string
+        attributes:
+          additionalProperties:
+            type: object
+          type: object
+        category:
+          type: string
+        correlationId:
+          type: string
+        id:
+          format: uuid
+          type: string
+        occurredAt:
+          format: date-time
+          type: string
+        onBehalfOf:
+          type: string
+        outcome:
+          type: string
+        reason:
+          type: string
+        resourceId:
+          type: string
+        resourceType:
+          type: string
+      title: EventView
+      type: object
     FilterMetadata:
       properties:
         defaultOrderBy:
@@ -340,6 +464,67 @@ components:
         type:
           type: string
       title: FilterPropertyMetadata
+      type: object
+    GrantRequest:
+      properties:
+        action:
+          type: string
+        dimension:
+          type: string
+        dimensionValue:
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        principalType:
+          enum:
+          - USER
+          - PARTNER
+          - SERVICE
+          type: string
+        resourceType:
+          type: string
+        subject:
+          type: string
+      title: GrantRequest
+      type: object
+    GrantView:
+      properties:
+        action:
+          type: string
+        dimension:
+          type: string
+        dimensionValue:
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        principalType:
+          enum:
+          - USER
+          - PARTNER
+          - SERVICE
+          type: string
+        resourceType:
+          type: string
+        subject:
+          type: string
+      title: GrantView
+      type: object
+    HeldOperation:
+      properties:
+        area:
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+        tier:
+          type: string
+      title: HeldOperation
       type: object
     InboxItem:
       description: One notification in the caller's own inbox
@@ -404,6 +589,88 @@ components:
           format: int64
           type: integer
       title: InboxSummaryResponse
+      type: object
+    JobView:
+      properties:
+        lease:
+          $ref: '#/components/schemas/LeaseView'
+        name:
+          type: string
+        schedule:
+          type: string
+      title: JobView
+      type: object
+    LeaseView:
+      properties:
+        acquiredAt:
+          format: date-time
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        heartbeatAt:
+          format: date-time
+          type: string
+        held:
+          type: boolean
+        name:
+          type: string
+        owner:
+          type: string
+      title: LeaseView
+      type: object
+    MessageDetail:
+      properties:
+        history:
+          items:
+            $ref: '#/components/schemas/Transition'
+          type: array
+        lastError:
+          type: string
+        message:
+          $ref: '#/components/schemas/MessageView'
+      title: MessageDetail
+      type: object
+    MessageView:
+      properties:
+        aggregateId:
+          type: string
+        aggregateType:
+          type: string
+        attempts:
+          format: int32
+          type: integer
+        createdAt:
+          format: date-time
+          type: string
+        destination:
+          type: string
+        eventType:
+          type: string
+        id:
+          format: uuid
+          type: string
+        maxAttempts:
+          format: int32
+          type: integer
+        nextAttemptAt:
+          format: date-time
+          type: string
+        publishedAt:
+          format: date-time
+          type: string
+        status:
+          enum:
+          - PENDING
+          - PROCESSING
+          - PUBLISHED
+          - FAILED
+          - DEAD_LETTER
+          - DISCARDED
+          type: string
+        transport:
+          type: string
+      title: MessageView
       type: object
     NotificationRequestResponse:
       properties:
@@ -609,6 +876,56 @@ components:
           format: int32
           type: integer
       title: PageResponse
+      type: object
+    PartnerRequest:
+      properties:
+        certificateHash:
+          type: string
+        code:
+          type: string
+        displayName:
+          type: string
+        dnsSan:
+          type: string
+        roles:
+          items:
+            type: string
+          type: array
+          uniqueItems: true
+        spiffeId:
+          type: string
+        subjectDn:
+          type: string
+      title: PartnerRequest
+      type: object
+    PartnerView:
+      properties:
+        certificateHash:
+          type: string
+        code:
+          type: string
+        displayName:
+          type: string
+        dnsSan:
+          type: string
+        roles:
+          items:
+            type: string
+          type: array
+          uniqueItems: true
+        spiffeId:
+          type: string
+        status:
+          enum:
+          - ACTIVE
+          - SUSPENDED
+          type: string
+        subjectDn:
+          type: string
+        version:
+          format: int64
+          type: integer
+      title: PartnerView
       type: object
     ProblemDetail:
       description: RFC 9457 problem document, as produced by web-core-spring-boot-starter.
@@ -875,6 +1192,27 @@ components:
           type: string
       title: SuppressionResponse
       type: object
+    Transition:
+      properties:
+        attemptNumber:
+          format: int32
+          type: integer
+        detail:
+          type: string
+        occurredAt:
+          format: date-time
+          type: string
+        status:
+          enum:
+          - PENDING
+          - PROCESSING
+          - PUBLISHED
+          - FAILED
+          - DEAD_LETTER
+          - DISCARDED
+          type: string
+      title: Transition
+      type: object
     WithdrawAnnouncementRequest:
       description: Withdraw a published announcement. The reason is optional.
       properties:
@@ -896,6 +1234,620 @@ info:
   version: v1
 openapi: 3.0.1
 paths:
+  /admin/v1/audit/events:
+    get:
+      operationId: events
+      parameters:
+      - in: query
+        name: category
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: action
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: actor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: resourceType
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: resourceId
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: outcome
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: from
+        required: false
+        schema:
+          format: date-time
+          type: string
+      - in: query
+        name: to
+        required: false
+        schema:
+          format: date-time
+          type: string
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          format: int32
+          type: integer
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdminPageEventView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - audit-trail-controller
+  /admin/v1/identity/grants:
+    get:
+      operationId: grants
+      parameters:
+      - in: query
+        name: subject
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: resource
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: active
+        required: false
+        schema:
+          type: boolean
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/GrantView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+    post:
+      operationId: grant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GrantView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+  /admin/v1/identity/grants/{id}/revoke:
+    post:
+      operationId: revoke
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GrantView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+  /admin/v1/identity/partners:
+    get:
+      operationId: partners
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/PartnerView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+    post:
+      operationId: onboard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PartnerView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+  /admin/v1/identity/partners/{code}:
+    get:
+      operationId: partner
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PartnerView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+    put:
+      operationId: replace
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          type: string
+      - in: header
+        name: If-Match
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PartnerView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+  /admin/v1/identity/partners/{code}/activate:
+    post:
+      operationId: activate
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PartnerView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+  /admin/v1/identity/partners/{code}/suspend:
+    post:
+      operationId: suspend
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PartnerView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+  /admin/v1/identity/subjects/{subject}/authorities:
+    get:
+      operationId: authorities
+      parameters:
+      - in: path
+        name: subject
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EffectiveAuthorities'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
+  /admin/v1/jobs:
+    get:
+      operationId: jobs
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/JobView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - job-admin-controller
+  /admin/v1/jobs/locks:
+    get:
+      operationId: leases
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/LeaseView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - job-admin-controller
+  /admin/v1/jobs/locks/{name}/release:
+    post:
+      operationId: release
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LeaseView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - job-admin-controller
+  /admin/v1/jobs/{name}/run:
+    post:
+      operationId: run
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/JobView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - job-admin-controller
+  /admin/v1/me/operations:
+    get:
+      operationId: operations
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/HeldOperation'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - admin-operations-controller
+  /admin/v1/outbox/messages:
+    get:
+      operationId: messages
+      parameters:
+      - in: query
+        name: status
+        required: false
+        schema:
+          enum:
+          - PENDING
+          - PROCESSING
+          - PUBLISHED
+          - FAILED
+          - DEAD_LETTER
+          - DISCARDED
+          type: string
+      - in: query
+        name: eventType
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: destination
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: createdBefore
+        required: false
+        schema:
+          format: date-time
+          type: string
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          format: int32
+          type: integer
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdminPageMessageView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - outbox-admin-controller
+  /admin/v1/outbox/messages/retry:
+    post:
+      operationId: retryAll
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkRetryRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BulkRetryResult'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - outbox-admin-controller
+  /admin/v1/outbox/messages/{id}:
+    get:
+      operationId: message
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MessageDetail'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - outbox-admin-controller
+  /admin/v1/outbox/messages/{id}/discard:
+    post:
+      operationId: discard
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MessageView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - outbox-admin-controller
+  /admin/v1/outbox/messages/{id}/retry:
+    post:
+      operationId: retry_1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MessageView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - outbox-admin-controller
+  /admin/v1/outbox/summary:
+    get:
+      operationId: summary
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/Count'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - outbox-admin-controller
   /api/v1/announcements:
     get:
       description: Newest first, dismissed ones excluded, and only those inside their visibility window. Visibility is resolved from the caller's CURRENT roles on every request, so a revoked role stops granting it immediately. Supports $filter/$orderby/$top/$skip over the published surface - the audience is deliberately not filterable.
@@ -1753,7 +2705,7 @@ paths:
   /api/v1/notifications/suppressions:
     delete:
       description: 'Admin only: this makes the service send to an address something previously judged undeliverable.'
-      operationId: release
+      operationId: release_1
       parameters:
       - in: query
         name: channel

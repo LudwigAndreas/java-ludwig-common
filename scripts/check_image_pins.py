@@ -8,6 +8,7 @@ regular expressions and the rule about which line is even a candidate, and that 
 written as ``grep -E`` pipelines - which is how a check nobody trusts gets disabled.
 """
 
+import os
 import re
 import sys
 
@@ -107,23 +108,77 @@ def unpinned(ref):
     return not DIGEST.search(ref)
 
 
-def main():
-    listing = sys.argv[1:2] == ["--list"]
-    paths = [p for p in sys.stdin.read().split("\0") if p]
+# In Markdown, an image reference a reader can copy is always in a fenced block or a code span. Prose
+# is not a candidate at all: "no new image: the mail server" reads exactly like a YAML image key, and
+# examining prose is how this checker came to stop the gate on an archived proposal's sentence.
+FENCE = re.compile(r"^\s*(```|~~~)")
+CODE_SPAN = re.compile(r"(`+)(.+?)\1")
 
+
+def candidate_lines(path, lines):
+    """Yield (line number, text to examine) for one file; for Markdown only its code."""
+    if not path.endswith(".md"):
+        for number, line in enumerate(lines, start=1):
+            yield number, line
+        return
+    fenced = False
+    for number, line in enumerate(lines, start=1):
+        if FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            yield number, line
+            continue
+        for match in CODE_SPAN.finditer(line):
+            yield number, match.group(2)
+
+
+def scan(paths):
+    """Every reference found in the given files, as (path, line, ref)."""
     found = []
-    problems = []
     for path in paths:
         try:
             with open(path, encoding="utf-8") as handle:
                 lines = handle.readlines()
         except (OSError, UnicodeDecodeError):
             continue
-        for number, line in enumerate(lines, start=1):
-            for ref in references(path, line):
+        for number, text in candidate_lines(path, lines):
+            for ref in references(path, text):
                 found.append((path, number, ref))
-                if unpinned(ref):
-                    problems.append((path, number, ref))
+    return found
+
+
+def self_test():
+    """Assert every good fixture is clean and every bad fixture is caught.
+
+    Each bad fixture exercises one trigger, so a trigger that stops firing fails here instead of
+    silently passing every real tree - the check on the checker, as check_migrations.py has.
+    """
+    root = os.path.join("scripts", "testdata", "check_image_pins")
+    status = 0
+    print("check_image_pins.sh --self-test")
+    for case in ("good", "bad"):
+        base = os.path.join(root, case)
+        for name in sorted(os.listdir(base)):
+            path = os.path.join(base, name)
+            unpinned_refs = [ref for _, _, ref in scan([path]) if unpinned(ref)]
+            ok = not unpinned_refs if case == "good" else bool(unpinned_refs)
+            print("  %-4s %-32s %s%s" % (case, name, "ok" if ok else "WRONG",
+                                          "" if not unpinned_refs else "  " + ", ".join(unpinned_refs)))
+            if not ok:
+                status = 1
+    print("  every fixture classified as expected." if status == 0 else "  FAILED.")
+    return status
+
+
+def main():
+    if sys.argv[1:2] == ["--self-test"]:
+        return self_test()
+    listing = sys.argv[1:2] == ["--list"]
+    paths = [p for p in sys.stdin.read().split("\0") if p]
+
+    found = scan(paths)
+    problems = [(path, number, ref) for path, number, ref in found if unpinned(ref)]
 
     if listing:
         for path, number, ref in found:

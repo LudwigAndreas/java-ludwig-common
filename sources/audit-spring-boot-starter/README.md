@@ -189,6 +189,29 @@ distinguishable:
 
 The event is emitted after the batch commits and carries the count actually removed.
 
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `audit.read` | `GET /admin/v1/audit/events` | Search the stored audit trail; every search is itself recorded. |
+| `audit.operate` | none in this release | No operation; the trail is append-only. |
+| `audit.privileged` | none in this release | No operation; the trail is append-only. |
+
+A search spans at most 30 days, a `USER` caller sees only their own tenant's events, and every search is itself recorded.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[audit.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[audit.operate]": [ORDERS_ADMIN]
+      "[audit.privileged]": [ORDERS_ADMIN]
+```
+
 ## Runbook
 
 | Symptom | Likely cause | What to do |

@@ -1,0 +1,59 @@
+{
+  "change": "admin-surface-polish",
+  "contract": {
+    "goal": "GET /admin/v1/me/operations is published as application/json, and startup fails when a catalogued operation has no description in the default locale, as specified in specs/admin-authorization",
+    "output": "AdminOperationsController produces=application/json; AdminHandlerValidator description pass; AdminStartupChecksTest and AdminSurfaceMvcTest cases; AdminDiscoveryIT in both services; regenerated docs/api/*.openapi.yaml; follow-ups list updated",
+    "constraints": [
+      "no POM changes",
+      "no new in-repo dependency",
+      "fail once naming every missing key",
+      "do not translate or reword descriptions"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_image_pins.sh --self-test",
+      "scripts/check_api_baseline.sh",
+      "scripts/check_migrations.sh",
+      "scripts/check_build_metadata.sh",
+      "scripts/check_protos.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :security-spring-boot-starter -am verify",
+      "mvn -pl :audit-spring-boot-starter -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :export-spring-boot-starter -am verify",
+      "mvn -pl :file-action-spring-boot-starter -am verify",
+      "mvn -pl :file-ingest-spring-boot-starter -am verify",
+      "mvn -pl :grpc-client-spring-boot-starter -am verify",
+      "mvn -pl :grpc-server-spring-boot-starter -am verify",
+      "mvn -pl :identity-projection-spring-boot-starter -am verify",
+      "mvn -pl :job-core -am verify",
+      "mvn -pl :messaging-db-spring-boot-starter -am verify",
+      "mvn -pl :notification-service -am verify",
+      "mvn -pl :outbox-spring-boot-starter -am verify",
+      "mvn -pl :pat-spring-boot-starter -am verify",
+      "mvn -pl :reconciliation-spring-boot-starter -am verify",
+      "mvn -pl :test-support-security -am verify",
+      "mvn -pl :user-settings-spring-boot-starter -am verify",
+      "openspec validate admin-surface-polish"
+    ]
+  },
+  "rollback_point": "44358a9 (plus uncommitted working tree)",
+  "current_task": "done",
+  "decisions": [
+    "1.1: produces=application/json on AdminOperationsController; AdminSurfaceMvcTest asserts the Content-Type. Note: MockMvc answers application/json without produces too, so that assertion is not discriminating; task 3.1's OpenAPI check is the proof.",
+    "2.1: AdminHandlerValidator takes ProblemMessages and, before the handler pass, resolves every catalogued descriptionKey at Locale.ROOT (the default bundle; ProblemMessages disables fallback to the system locale), failing once with every 'id (key)' missing. The security starter's own fixtures used keys in no bundle (k.r, test.fixture.*), so a test bundle i18n/admin-fixture-messages.properties is registered as a ProblemMessageBundle in AdminStartupChecksTest and AdminSurfaceMvcTest. New AdminStartupChecksTest.undescribedOperation. Module tests: 192 run, 0 failures.",
+    "2.2: AdminDiscoveryIT added to crud-service-example (its ServerInfoIT property set and imports, so it shares that context) and notification-service (extends NotificationTestBase). Each calls GET /admin/v1/me/operations as the service's admin and asserts a non-empty list where no description is blank or equal to its id. Both 1/1; both services start with the new description check, so every catalogued operation in them has a bundle key.",
+    "3.1: scripts/api-docs.sh refresh rc=0; in both docs/api/*.openapi.yaml the 200 of /admin/v1/me/operations is application/json and no */* entry remains near it (task grep: 2). scripts/api-docs.sh missing rc=0.",
+    "4.1: follow-ups \u00a73 replaced by a pointer to this change; the failsafe item reworded as conditional ('only if the module grows a test that needs a container'). openspec validate admin-surface-polish --strict: valid.",
+    "5.1: reworded those two scenarios in the main spec as prose (same meaning: a paragraph outside code with the words; a fenced block running postgres by tag alone). check_image_pins rc=0, openspec validate --specs --strict 66 passed. The same pattern in the UNTRACKED archive openspec/changes/archive/2026-10-28-gate-hygiene/ (tasks.md:4-5, design.md:21, specs/container-image-pinning/spec.md:10,14) was not edited: editing the archived change was denied at the permission prompt. Left for the owner; it will fail check_image_pins once those files are committed.",
+    "5.1: owner approved editing the archived gate-hygiene artifacts. Reworded tasks.md:4-5, design.md:21 and specs/container-image-pinning/spec.md:10,14 as prose. check_image_pins.py over every openspec/**/*.md (tracked or not): 0 references, rc=0.",
+    "5.1: gate. Scripts all rc=0 except check_api_baseline rc=1 (releases repository unreachable; release-checklist item). Maven: one reactor `mvn -o -pl <security + 16 dependents> -am install`: BUILD SUCCESS, 4718 tests, 0 failures, 0 errors. openspec validate --strict valid; manifest current.",
+    "archive: synced admin-authorization (MODIFIED 'A caller can discover the operations it holds' - application/json plus the media-type scenario, both original scenarios intact; ADDED 'Every catalogued operation has a description'); openspec validate --specs --strict 66 passed. security README EN+RU discovery paragraph; CHANGELOG EN+RU Changed (BREAKING: descriptions required, AdminHandlerValidator constructor) and Fixed (application/json). Root pom.xml revapi +1 (AdminHandlerValidator constructor numberOfParametersChanged), 40 entries, parses; manifest rebuilt, stale rc=0 before the move."
+  ],
+  "failures": [
+    "5.1 scripts: check_image_pins rc=1 on openspec/specs/container-image-pinning/spec.md:53,57 - the requirement synced by gate-hygiene's archive quotes its example references (the mail-server sentence, a tag-only postgres) inside code spans, which the checker examines by design. Pre-existing defect from gate-hygiene's archive step, not this change's code."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

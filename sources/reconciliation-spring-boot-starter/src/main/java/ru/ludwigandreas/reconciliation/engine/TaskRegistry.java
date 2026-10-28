@@ -12,7 +12,7 @@ import java.util.Optional;
  * <p>Populated once at startup, after the configuration validator has already refused any context
  * where the beans and the configuration disagree - so by the time anything reads this registry, every
  * entry is known to have both halves. Lookups that miss therefore indicate a name that was never
- * configured at all, which is what an actuator call with a typo looks like.
+ * configured at all, which is what an administrative call with a typo looks like.
  */
 public class TaskRegistry {
 

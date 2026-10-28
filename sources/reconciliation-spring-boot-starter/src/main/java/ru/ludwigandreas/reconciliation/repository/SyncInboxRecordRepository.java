@@ -134,7 +134,7 @@ public interface SyncInboxRecordRepository
                                  @Param("statuses") Collection<SyncRecordStatus> statuses);
 
     /**
-     * Records of a task in a given status, newest first - the actuator's quarantine listing.
+     * Records of a task in a given status, newest first - the administrative quarantine listing.
      *
      * @param taskName the task
      * @param status   the status

@@ -6,14 +6,14 @@ The scheduled bulk file ingest: reads a large object out of storage, parses it r
 into the database and reports completion - **without ever holding the file in memory and without ever losing a
 record**. A service writes a `RecordParser<R>` (bytes → records) and a `RecordApplier<R>` (records → staging rows);
 schedule, lock, discovery, arrival detection, ranged streaming, checkpointing, batching, quarantine, the balance
-check, receipts, archival, metrics, audit and the actuator endpoint are the module's.
+check, receipts, archival, metrics, audit and the `fileingest` administrative area are the module's.
 
 | | |
 |---|---|
 | Role | starter |
 | Depends on (in-repo) | [`audit-core`](../audit-core), [`db-core`](../db-core), [`job-core`](../job-core), [`object-storage`](../object-storage-spring-boot-starter), [`outbox`](../outbox-spring-boot-starter) (optional at runtime), [`web-core`](../web-core-spring-boot-starter) |
 | Used by | none in this repository (services importing partner files) |
-| Surfaces | object storage (read, receipt, archive); actuator `fileingest`; optional outbox event `ingest.completed` |
+| Surfaces | object storage (read, receipt, archive); administrative area `/admin/v1/fileingest`; optional outbox event `ingest.completed` |
 
 **Not reconciliation.** [`reconciliation`](../reconciliation-spring-boot-starter) is demand-driven (local rows ask for
 external state by key); a file is the authority and its keys are unknown until read. Reconciliation's per-record
@@ -135,7 +135,6 @@ ludwig:
 |---|---|
 | `ludwig.ingest.scheduler-enabled` | Run schedules on this instance |
 | `ludwig.ingest.drain-timeout` | Shutdown wait for a running pass |
-| `ludwig.ingest.endpoint.*` | Actuator endpoint; `allow-manual-run` enables the trigger operation |
 | `tasks.<t>.source.uri` / `pattern` / `compression` / `max-objects-per-pass` | What to read |
 | `tasks.<t>.arrival.sentinel` / `stability-window` / `expected-count-field` | Arrival detection and declared count |
 | `tasks.<t>.schedule.cron` / `run-timeout` | When, and the run budget |
@@ -175,8 +174,8 @@ makes every object wait on one marker, an unknown zone, an unparseable source ur
 `missing` is the signal for the file that never came: no run, no error, a quietly stale table. It counts only
 `SUCCEEDED` runs, and every instance runs the monitor without a lock (so it cannot stop with a lock holder).
 
-**Actuator** `fileingest`: recent runs with counts, `operation` envelope and **checkpoints** (a moving checkpoint = a
-large file; a static one = a problem). Optional write operation to trigger a task (`allow-manual-run`).
+**Administrative area** `/admin/v1/fileingest`: recent runs with counts, `operation` envelope and **checkpoints** (a
+moving checkpoint = a large file; a static one = a problem); starting a task's run is `fileingest.operate`.
 
 **Logs.** `INFO`: configuration validated, schedules started, staging writer chosen, already-ingested skips, "not
 reading yet" (arrival), manual trigger, receipt written, archive done. `WARN`: no completed run by the deadline, no
@@ -205,11 +204,34 @@ Category `ingest`; resource `ingest-task` / task name (the task outlives runs; t
 
 "Did anything go wrong overnight" is a query on the outcome column.
 
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `fileingest.read` | `GET /admin/v1/fileingest/tasks`<br>`GET /admin/v1/fileingest/tasks/{task}`<br>`GET /admin/v1/fileingest/tasks/{task}/runs/{runId}` | See ingest tasks and their runs, with each run's checkpoint and counts. |
+| `fileingest.operate` | `POST /admin/v1/fileingest/tasks/{task}/runs` | Trigger an ingest pass now. |
+| `fileingest.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+
+**Removed:** the `fileingest` actuator endpoint and `ludwig.ingest.endpoint.*` (including `allow-manual-run`); starting a run is `fileingest.operate`. A run requested while one is in progress is `409`.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[fileingest.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[fileingest.operate]": [ORDERS_ADMIN]
+      "[fileingest.privileged]": [ORDERS_ADMIN]
+```
+
 ## Runbook
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| `ludwig_ingest_missing == 1` | File not delivered, sentinel missing, pattern mismatch, or run failed | Check the bucket for the object and `{name}.done`; the log line `is not reading ... yet` names the reason; check the last run in the actuator |
+| `ludwig_ingest_missing == 1` | File not delivered, sentinel missing, pattern mismatch, or run failed | Check the bucket for the object and `{name}.done`; the log line `is not reading ... yet` names the reason; check the last run at `GET /admin/v1/fileingest/tasks/{task}` |
 | Run `FAILED`: balance mismatch | Truncated file (declared count differs), staging writer lost rows, or parser bug | Message carries all four numbers; target is untouched. Ask the partner for the full file; re-upload (new etag) to rerun |
 | Run `FAILED`: quarantine threshold | Partner changed format | `SELECT stage, error, count(*) FROM file_ingest_quarantine WHERE run_id = '<id>' GROUP BY 1, 2;` fix parser or ask partner |
 | `RUNNING` with a static checkpoint | Stuck I/O or database | `SELECT id, checkpoint_position, records_read, locked_by, started_at FROM file_ingest_run WHERE status = 'RUNNING';` thread dump; the lease expires and the next pass resumes from the checkpoint |

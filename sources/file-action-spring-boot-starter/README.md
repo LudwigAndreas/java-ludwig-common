@@ -110,7 +110,15 @@ no client change; an `INLINE` action above `inline.max-rows` does not start.
                            | (confirm)      |
                         EXPIRED           APPLIED
                      (TTL elapsed)
+
+  CANCELLED  from VALIDATED at once; from UPLOADED or APPLYING at the next checkpoint
 ```
+
+**Cancel ends `CANCELLED`** (envelope `CANCELLED`), never `APPLIED`. A `VALIDATED` submission is cancelled at once
+(`200`); one being read or applied stops at its next checkpoint - before the apply starts, or between batches - and
+the cancel answers `202`. Rows committed before the stop are kept and reported in `rowsApplied`; a batch in flight
+is never interrupted. A stop is audited as `file-action.cancelled`. A cancel and a confirm racing on one validated
+submission cannot both win.
 
 `FileActionState` is a domain lifecycle in `OperationResponse.detail()` (`UPLOADED` and `VALIDATED` are both
 `PENDING`; the difference is the Confirm button). Modes: `CONFIRM` (default - preview, then apply), `DIRECT`
@@ -241,7 +249,7 @@ Per-file problems are RFC 9457 documents through web-core. Row rejects are an **
 POST   /api/v1/file-actions/{action}                    multipart -> 200 | 202  SubmissionResponse
 GET    /api/v1/file-actions/{action}/{id}               -> SubmissionResponse (+ Retry-After while running)
 POST   /api/v1/file-actions/{action}/{id}/confirm       -> 200 | 202
-POST   /api/v1/file-actions/{action}/{id}/cancel        -> 202 (cooperative; finished -> its envelope)
+POST   /api/v1/file-actions/{action}/{id}/cancel        -> 202 (cooperative) | 200 (VALIDATED, or already finished)
 GET    /api/v1/file-actions/{action}/{id}/rejects       -> PageResponse<RowRejectResponse>
 GET    /api/v1/file-actions/{action}/{id}/error-report  -> annotated workbook or reject CSV
 GET    /api/v1/file-actions/{action}/template           -> blank workbook generated from the binding
@@ -348,9 +356,33 @@ Category `file-action`:
 | `file-action.confirmed` | User confirmed |
 | `file-action.applied` | Rows applied |
 | `file-action.cancellation-requested` | Cancel requested |
+| `file-action.cancelled` | The submission stopped and ended `CANCELLED` |
 | `file-action.expired` | Retention removed artifacts (actor `system`) |
 
 Recorded: filename, content hash, size, counts, scanner answer, outcome - **never a cell of the file**.
+
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `fileactions.read` | `GET /admin/v1/fileactions/submissions`<br>`GET /admin/v1/fileactions/submissions/{id}` | See every submitter's file-action submissions, without the file or any row. |
+| `fileactions.operate` | `POST /admin/v1/fileactions/submissions/{id}/cancel` | Cancel anybody's file-action submission. |
+| `fileactions.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+
+Responses carry no file, no row content and no error-report link. Cancel is the submitter's own cancel: `202` while the stop is pending, or `200` with the envelope when the submission is terminal - including one it ended `CANCELLED` itself, as a `VALIDATED` one is.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[fileactions.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[fileactions.operate]": [ORDERS_ADMIN]
+      "[fileactions.privileged]": [ORDERS_ADMIN]
+```
 
 ## Runbook
 

@@ -69,7 +69,7 @@ public class ReconciliationProperties {
     /**
      * The enumerations. Each key must match a {@code @ReconciliationEnumeration} bean's value, and
      * must not also be a key under {@link #tasks}: the two kinds share run-lock names and the
-     * actuator's task selector.
+     * administrative task path.
      */
     @Valid
     private Map<String, Enumeration> enumerations = new LinkedHashMap<>();
@@ -81,10 +81,6 @@ public class ReconciliationProperties {
     /** Whether Micrometer instrumentation is registered. */
     @Valid
     private final Metrics metrics = new Metrics();
-
-    /** The actuator endpoint's own settings. */
-    @Valid
-    private final Endpoint endpoint = new Endpoint();
 
     /** Recovery of rows and jobs left behind by an instance that died. */
     @Valid
@@ -542,21 +538,6 @@ public class ReconciliationProperties {
     public static class Metrics {
 
         private boolean enabled = true;
-    }
-
-    /** The actuator endpoint's own settings. */
-    @Getter
-    @Setter
-    public static class Endpoint {
-
-        /**
-         * Whether destructive operations - force-releasing a lease, cancelling a remote job - are
-         * available at all.
-         *
-         * <p>Off by default. Both can make the partner's view and this system's view disagree, and an
-         * environment where nobody should be doing that by hand should not offer the button.
-         */
-        private boolean allowDestructiveOperations;
     }
 
     /** Recovery of rows and jobs left behind by an instance that died. */

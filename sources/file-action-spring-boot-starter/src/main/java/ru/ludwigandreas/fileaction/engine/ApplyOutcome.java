@@ -1,6 +1,8 @@
 package ru.ludwigandreas.fileaction.engine;
 
+import ru.ludwigandreas.fileaction.api.FileActionState;
 import ru.ludwigandreas.fileaction.api.RowOutcome;
+import ru.ludwigandreas.fileaction.exception.FileActionProblemCodes;
 
 /**
  * What the apply pass did.
@@ -43,5 +45,36 @@ public record ApplyOutcome(long rowsApplied, boolean cancelled, Integer failedBa
     /** Whether a batch rolled back. */
     public boolean hadFailedBatch() {
         return failedBatch != null;
+    }
+
+    /**
+     * The state a submission ends in after this pass.
+     *
+     * <p>A stop wins over everything else: a pass that stopped on a cancel request is {@code CANCELLED} whatever it
+     * applied before the stop. Recording it {@code APPLIED} told the caller, the audit trail and support that an
+     * action happened that the caller had asked to stop.
+     */
+    public FileActionState endState() {
+        if (cancelled) {
+            return FileActionState.CANCELLED;
+        }
+        if (documentCode != null || hadFailedBatch() && rowsApplied == 0) {
+            return FileActionState.REJECTED;
+        }
+        // A submission that applied some rows and rejected others is APPLIED with a reject count: from the caller's
+        // point of view the action happened, and reporting it as a failure would make every client treat a partial
+        // import as an error.
+        return FileActionState.APPLIED;
+    }
+
+    /** The failure code to record, or null - always null for a stop, which is not a failure. */
+    public String failureCode() {
+        if (cancelled) {
+            return null;
+        }
+        if (documentCode != null) {
+            return documentCode;
+        }
+        return hadFailedBatch() && rowsApplied == 0 ? FileActionProblemCodes.CONSTRAINT_VIOLATED : null;
     }
 }

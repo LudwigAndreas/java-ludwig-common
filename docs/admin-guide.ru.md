@@ -113,15 +113,60 @@ UPDATE job_run_lock SET owner = NULL, run_id = NULL, expires_at = now() WHERE lo
 - Значения атрибутов, классифицированных как чувствительные, заменяются на `***REDACTED***` до передачи в любой sink.
 - В таблице категорий audit-core указано, какой модуль отправляет каждую категорию и действие.
 
-## 8. Actuator и операционные эндпоинты
+## 8. Actuator, операционные и административные эндпоинты
 
 | Эндпоинт | Предоставляется | Доступ |
 |---|---|---|
 | `/actuator/health/liveness`, `/actuator/health/readiness` | observability starter + Boot | публичный (пробы) |
 | `/actuator/info`, `/server/info` | observability starter | публичный |
 | `/actuator/prometheus`, `/actuator/metrics` | Micrometer | только внутренняя сеть |
-| `/actuator/fileingest` | file-ingest | только операторы: эндпоинт нужно явно открыть и защитить |
-| `/actuator/reconciliation` | reconciliation | только операторы; деструктивные операции включаются явно |
+| `/admin/v1/**` | стартер безопасности + каждый модуль | аутентифицированные пользователи и сервисы с выданной операцией; см. ниже |
+
+**Административная поверхность.** Все административные эндпоинты находятся под `/admin/v1/`. Модули объявляют
+операции `<area>.<tier>`; каждый сервис выдаёт их своим ролям в `ludwig.admin.grants` - выдачи по умолчанию нет,
+поэтому обновлённый сервис отклоняет все административные вызовы, пока блока нет, а журнал старта перечисляет
+невыданные операции. Административные микросервисы получают роли из `ludwig.identity.service-roles`. Партнёры и
+персональные токены доступа отклоняются; вызову `privileged` нужен заголовок `Admin-Reason`; каждое изменение
+аудируется в категории `admin`. `GET /admin/v1/me/operations` сообщает UI, что есть у вызывающего. Подробности:
+[security](../sources/security-spring-boot-starter/README.ru.md#административная-поверхность). Операторских эндпоинтов actuator у
+модулей больше нет: то, что делали `/actuator/fileingest` и `/actuator/reconciliation`, - в областях `fileingest` и
+`reconciliation` ниже.
+
+| Область | Модуль | Чтение | Управление | Привилегированное |
+|---|---|---|---|---|
+| `jobs` | job-core | задачи, аренды запусков | запустить задачу сейчас | принудительно освободить аренду |
+| `outbox` | outbox | сообщения (без содержимого), сводка | повторить одно или многие | отбросить |
+| `messaging` | messaging-db | отставание потребителей | - | - |
+| `reconciliation` | reconciliation | задачи, области, карантин | запуски, backfill, возвраты в очередь, обходы | отмена задания у партнёра, освобождение аренды, подтверждение очистки |
+| `fileingest` | file-ingest | задачи, запуски, контрольные точки | запустить прогон | - |
+| `audit` | хранилище аудита | поиск по журналу (окно 30 дней) | - | - |
+| `identity` | проекция идентичности | партнёры, выдачи, полномочия субъекта | - | изменения партнёров и выдач |
+| `exports` | export | запуски, подписки (без результата) | отменить запуск | - |
+| `fileactions` | file-action | отправки (без файла и строк) | отменить отправку | - |
+| `settings` | user-settings | настройки и согласия субъекта | запись на уровне области, повторная публикация | - |
+| `pat` | pat | метаданные токенов | - | выпуск для другого владельца, отзыв любого |
+
+Полная таблица операций и эндпоинтов - в разделе «Администрирование» README каждого модуля. Сервис выдаёт только те
+области, что у него есть: ключ с отсутствующей областью не даёт сервису стартовать:
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[jobs.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[jobs.operate]": [NOTIFICATION_ADMIN]
+      "[jobs.privileged]": [NOTIFICATION_ADMIN]
+      # ... по строке на каждую операцию каждой имеющейся области
+```
+
+**Переход на этот выпуск.** В каждом сервисе: добавить блок `ludwig.admin.grants` (строка журнала старта
+"Administrative operations no role of this service holds" перечисляет, что осталось); административным микросервисам
+добавить `ludwig.identity.service-roles`; убрать `reconciliation` и `fileingest` из
+`management.endpoints.web.exposure.include`; удалить `ludwig.reconciliation.endpoint.*`, `ludwig.ingest.endpoint.*`,
+`ludwig.user-settings.access.admin-authority` и `ludwig.user-settings.web.admin-base-path`; перенести обладателей
+`pat:manage:any` и `ROLE_EXPORT_ADMIN` на выдачи `pat.*` и `exports.*`; направить административные UI на `/admin/v1/`
+(`consents/as-of` настроек теперь `consents/asof`). Изменение схемы - один аддитивный changeset,
+`audit_event.actor_tenant`; откат выпуска - предыдущая мажорная версия.
 
 `ludwig.security.public-paths` заменяет список путей по умолчанию, а не дополняет его. Добавляя путь, повторно укажите эндпоинты actuator, иначе для проб потребуется аутентификация.
 

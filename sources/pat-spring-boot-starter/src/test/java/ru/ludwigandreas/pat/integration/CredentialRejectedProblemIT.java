@@ -103,7 +103,7 @@ class CredentialRejectedProblemIT {
     void credentialNotPermittedIsItsOwnDocument() throws Exception {
         String body = mockMvc.perform(get(MANAGEMENT)
                         .with(as(Credential.personalAccessToken("pat-leaked"),
-                                PatAuthorities.MANAGE_OWN, PatAuthorities.MANAGE_ANY)))
+                                PatAuthorities.MANAGE_OWN)))
                 .andExpect(result -> assertThat(result.getResponse().getStatus()).isEqualTo(403))
                 .andReturn().getResponse().getContentAsString();
 

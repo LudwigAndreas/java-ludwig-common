@@ -147,7 +147,7 @@ public class SweepService {
             states.holdSweep(stateId, (int) Math.min(candidates, Integer.MAX_VALUE));
             log.warn("Enumeration '{}' withheld a sweep of scope {}: {} of {} member(s) were not "
                             + "listed, more than sweep.max-fraction ({}) allows without an operator. "
-                            + "Confirm or discard it through the reconciliation endpoint.",
+                            + "Confirm or discard it through the reconciliation administrative endpoints.",
                     name, scopeKey, candidates, total, settings.sweepMaxFraction());
             if (settings.auditEnabled()) {
                 auditSink.record(ReconciliationAuditEvent.builder(name, Category.SCOPE, "scope.sweep.held")

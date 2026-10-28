@@ -146,15 +146,59 @@ The authoritative list per service is its AsyncAPI document in [docs/api/](api/R
 - Attribute values classified as sensitive are replaced by `***REDACTED***` before any sink sees them.
 - Which module emits which category and action is in audit-core's category table.
 
-## 8. Actuator and operational endpoints
+## 8. Actuator, operational and administrative endpoints
 
 | Endpoint | Provided by | Exposure |
 |---|---|---|
 | `/actuator/health/liveness`, `/actuator/health/readiness` | observability starter + Boot | public (probes) |
 | `/actuator/info`, `/server/info` | observability starter | public |
 | `/actuator/prometheus`, `/actuator/metrics` | Micrometer | internal network only |
-| `/actuator/fileingest` | file-ingest | operators only: expose and secure it explicitly |
-| `/actuator/reconciliation` | reconciliation | operators only; destructive operations are opt-in |
+| `/admin/v1/**` | security starter + each module | authenticated users and services holding a granted operation; see below |
+
+**Administrative surface.** Every administrative endpoint lives under `/admin/v1/`. Modules declare `<area>.<tier>`
+operations; each service grants them to its own roles under `ludwig.admin.grants` - there is no default grant, so an
+upgraded service refuses every administrative call until the block exists, and its startup log lists the ungranted
+operations. Administrative microservices get their roles from `ludwig.identity.service-roles`. Partners and personal
+access tokens are refused; a `privileged` call needs an `Admin-Reason` header; every change is audited in category
+`admin`. `GET /admin/v1/me/operations` tells a UI what the caller holds. Details: [security](../sources/security-spring-boot-starter/README.md#administrative-surface).
+No module exposes an operator actuator endpoint any more: what `/actuator/fileingest` and `/actuator/reconciliation`
+did is in the `fileingest` and `reconciliation` areas below.
+
+| Area | Module | Read | Operate | Privileged |
+|---|---|---|---|---|
+| `jobs` | job-core | jobs, run leases | run a job now | force-release a run lease |
+| `outbox` | outbox | messages (no payload), summary | retry one or many | discard |
+| `messaging` | messaging-db | consumer lag | - | - |
+| `reconciliation` | reconciliation | tasks, scopes, quarantine | runs, backfills, requeues, walks | cancel remote job, release lease, confirm sweep |
+| `fileingest` | file-ingest | tasks, runs, checkpoints | start a run | - |
+| `audit` | audit store | search the trail (30-day window) | - | - |
+| `identity` | identity projection | partners, grants, a subject's authorities | - | partner and grant changes |
+| `exports` | export | runs, subscriptions (no output) | cancel a run | - |
+| `fileactions` | file-action | submissions (no file, no rows) | cancel a submission | - |
+| `settings` | user-settings | a subject's settings and consents | scope writes, backfill | - |
+| `pat` | pat | tokens' metadata | - | issue for another owner, revoke anybody's |
+
+Each module's README has the full table of operations and endpoints under "Administration". A service grants only
+the areas it has - a key naming an absent area fails startup:
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[jobs.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[jobs.operate]": [NOTIFICATION_ADMIN]
+      "[jobs.privileged]": [NOTIFICATION_ADMIN]
+      # ... one line per operation of every area present
+```
+
+**Upgrading to this release.** In each service: add the `ludwig.admin.grants` block (the startup log line
+"Administrative operations no role of this service holds" lists what is left); for administrative microservices add
+`ludwig.identity.service-roles`; remove `reconciliation` and `fileingest` from `management.endpoints.web.exposure.include`;
+delete `ludwig.reconciliation.endpoint.*`, `ludwig.ingest.endpoint.*`, `ludwig.user-settings.access.admin-authority` and
+`ludwig.user-settings.web.admin-base-path`; move holders of `pat:manage:any` and `ROLE_EXPORT_ADMIN` to grants of
+`pat.*` and `exports.*`; point administrative UIs at `/admin/v1/` (settings' `consents/as-of` is now `consents/asof`).
+The schema change is one additive changeset, `audit_event.actor_tenant`; rolling back the release means the previous
+major.
 
 `ludwig.security.public-paths` replaces the default list rather than extending it: when adding a path,
 restate the actuator entries or the probes will require authentication.

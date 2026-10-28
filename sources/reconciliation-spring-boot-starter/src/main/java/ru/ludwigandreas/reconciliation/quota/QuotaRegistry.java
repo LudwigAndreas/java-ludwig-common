@@ -51,7 +51,7 @@ public class QuotaRegistry {
         return leaseId == null ? Optional.of(unlimited()) : quota.adopt(leaseId);
     }
 
-    /** The underlying quota, for the reclaim sweep and the actuator endpoint. */
+    /** The underlying quota, for the reclaim sweep and the administrative endpoints. */
     public DatabaseQuota quota() {
         return quota;
     }

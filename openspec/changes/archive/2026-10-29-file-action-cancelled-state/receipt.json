@@ -1,0 +1,42 @@
+{
+  "change": "file-action-cancelled-state",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "file-action-spring-boot-starter",
+    "docs/api/crud-service-example.openapi.yaml (enum value CANCELLED, regenerated)"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "fail (releases repository unreachable)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "maven reactor (file-action + crud-service-example, -am install)": "pass after regenerating the crud OpenAPI document and resuming -rf :crud-service-example",
+    "openspec validate": "pass"
+  },
+  "tests": {
+    "attempt 1": "2976 run, 1 failure (ApiDocumentIT drift)",
+    "resumed": "155 run, 0 failures",
+    "FileActionCancelIT": "5/5",
+    "FileActionAdminIT": "7/7",
+    "ApplyOutcomeTest": "3/3",
+    "file-action unit": "281/281"
+  },
+  "findings": [
+    "the confirm path's fresh-load-and-save transition could overwrite a concurrent CANCELLED: both sides are now conditional updates on state = VALIDATED",
+    "under open-in-view a QueryDSL bulk update left the request's EntityManager stale even through REQUIRES_NEW: the repository refreshes its held copy after the conditional updates"
+  ],
+  "retries": [
+    "3.1: three attempts (stale read diagnosed, REQUIRES_NEW read did not help, refresh fixed it)",
+    "5.1: one -rf resume after regenerating the API document"
+  ],
+  "rollback_commit": "44358a9 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "historical submissions recorded APPLIED after a cancel are not relabelled (non-goal)",
+    "the existing claimForProcessing bulk update has the same open-in-view staleness pattern; it runs on the worker thread outside a request, so it is not affected today, but it is not refreshed",
+    "check_api_baseline cannot run without the releases repository"
+  ]
+}

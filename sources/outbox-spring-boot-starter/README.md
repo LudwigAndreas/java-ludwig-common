@@ -61,6 +61,12 @@ PENDING ──claim──> PROCESSING ──success──> PUBLISHED
                        └──failure, budget spent───> DEAD_LETTER   (FAILED if dead-letter disabled)
 ```
 
+An administrator can retry a `FAILED` or `DEAD_LETTER` message (back to `PENDING`, attempts reset) or discard a
+`PENDING`, `FAILED` or `DEAD_LETTER` one to `DISCARDED`, which is terminal and never claimed - see
+[Administrative endpoints](#administrative-endpoints). `DISCARDED` needed no migration: `status` is a `VARCHAR(20)`
+with no check constraint, and the poll index's predicate (`status IN ('PENDING', 'FAILED')`) already excludes it.
+This module has no retention purge, so discarded rows are kept like dead-lettered ones.
+
 A `PROCESSING` row whose owner died is returned to `PENDING` by the stale-claim reclaimer after
 `processing.stale-timeout`. On shutdown the poller finishes the cycle in progress (up to
 `processing.drain-timeout`) instead of abandoning its claimed rows.
@@ -269,6 +275,27 @@ dispatcher's memory.
 
 A service that registers its own `OutboxAuditLogger` replaces the shipped one and is responsible for
 forwarding to the platform trail.
+
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `outbox.read` | `GET /admin/v1/outbox/messages`<br>`GET /admin/v1/outbox/messages/{id}`<br>`GET /admin/v1/outbox/summary` | See outbox messages by state, without their payloads. |
+| `outbox.operate` | `POST /admin/v1/outbox/messages/{id}/retry`<br>`POST /admin/v1/outbox/messages/retry` | Retry failed and dead-lettered outbox messages. |
+| `outbox.privileged` | `POST /admin/v1/outbox/messages/{id}/discard` | Discard an outbox message so that it is never sent. |
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[outbox.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[outbox.operate]": [ORDERS_ADMIN]
+      "[outbox.privileged]": [ORDERS_ADMIN]
+```
 
 ## Runbook
 

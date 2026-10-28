@@ -47,8 +47,12 @@ public final class RestPathRules implements ArchitectureRuleSet {
 
     @Override
     public List<ArchitectureRule> rules(RuleContext context) {
+        // Administrative controllers live under /admin/v1/ by design, and their path shape is RuleGroup.ADMIN's
+        // to check (mapped-under-the-versioned-prefix); judging them here too would be two owners for one rule.
         DescribedPredicate<JavaClass> restControllers =
-                ConventionPredicates.annotatedAs(context, AnnotationRole.REST_CONTROLLER).as("REST controllers");
+                ConventionPredicates.annotatedAs(context, AnnotationRole.REST_CONTROLLER)
+                        .and(DescribedPredicate.not(AdminRules.administrativeControllers()))
+                        .as("REST controllers");
         Optional<String> configuredPattern = context.setting(ConventionSetting.REST_BASE_PATH_PATTERN);
         if (configuredPattern.isEmpty()) {
             // Cleared rather than customized. Fail the controllers this would have checked, with the

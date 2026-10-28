@@ -136,7 +136,7 @@ class AuditSinkConformanceTest {
                 .occurredAt(Instant.parse("2026-01-02T03:04:05Z"))
                 .category(AuditCategories.SETTINGS)
                 .action("setting.set")
-                .actor(new Actor("alice", "USER", "Alice", "bob"))
+                .actor(new Actor("alice", "USER", "Alice", "bob", null))
                 .resource(new Resource("setting", "ui.page-size", "Page size"))
                 .outcome(AuditOutcome.success())
                 .correlationId("corr-1")

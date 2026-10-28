@@ -204,6 +204,15 @@ public enum RuleGroup {
      */
     GRPC("grpc", true),
 
+    /**
+     * The administrative surface: every handler under {@code /admin/} declares its operation with
+     * {@code @AdminAccess} (or {@code @AdminAuthenticated}), carries no second authorization annotation, is mapped
+     * under {@code /admin/v1/}, and delegates to a service rather than a repository. See
+     * {@link ru.ludwigandreas.archrules.rules.AdminRules} for the rules and for the three things in this area no
+     * bytecode rule can see. Vacuous for a module with no handler under {@code /admin/}.
+     */
+    ADMIN("admin", true),
+
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);
 

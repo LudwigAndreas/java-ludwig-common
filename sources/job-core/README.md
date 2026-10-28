@@ -83,11 +83,12 @@ service::pollOnce)`.
 |---|---|
 | **Not `@Scheduled`** | A starter must work without the service enabling `@EnableScheduling`; a forgotten annotation would otherwise mean a silent backlog |
 | **Fixed delay, never fixed rate** | A slow run delays the next one instead of piling up overlapping runs when the system is already under stress |
-| **Non-reentrant** | A second entry (cron overlap, actuator "run now" mid-run) is a logged no-op, not a second concurrent claimer |
+| **Non-reentrant** | A second entry (cron overlap, an administrative run mid-run) is a logged no-op, not a second concurrent claimer |
 | **Drains on stop** | `stop()` cancels without interrupting, then waits up to `drainTimeout`, so claimed rows are not stranded until a stale reclaimer finds them. Keep `drainTimeout` below the pod's termination grace period |
 
-`runNow()` shares the non-reentrancy guard and returns whether it ran; actuator "trigger" operations call
-it and report the result.
+`runNow()` shares the non-reentrancy guard and returns whether it ran. The administrative run,
+`POST /admin/v1/jobs/{name}/run`, does not call it on the request thread: it uses `runSoon()`, which brings the next
+scheduled run forward on the job's own scheduler and answers `409` while any replica holds the job's run lease.
 
 ### Claiming
 
@@ -232,6 +233,27 @@ platform inherits this gap; a per-job timer and a "last success" gauge here woul
 
 Not applicable: the module performs no business state changes. Modules built on it audit their own
 operations.
+
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `jobs.read` | `GET /admin/v1/jobs`<br>`GET /admin/v1/jobs/locks` | See the scheduled jobs and who holds each run lease. |
+| `jobs.operate` | `POST /admin/v1/jobs/{name}/run` | Run a scheduled job now. |
+| `jobs.privileged` | `POST /admin/v1/jobs/locks/{name}/release` | Force-release a run lease whose holder is gone. |
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[jobs.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[jobs.operate]": [ORDERS_ADMIN]
+      "[jobs.privileged]": [ORDERS_ADMIN]
+```
 
 ## Runbook
 

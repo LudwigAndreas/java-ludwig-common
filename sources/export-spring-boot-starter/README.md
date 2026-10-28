@@ -316,6 +316,29 @@ Category `export`; every lifecycle transition emits an `ExportAuditEvent`:
 Reports are the widest bulk read in the estate; the trail is always on. `settings` and `export` are the default
 categories shipped to a SIEM by the audit starter's outbox sink.
 
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `exports.read` | `GET /admin/v1/exports/runs`<br>`GET /admin/v1/exports/runs/{runId}`<br>`GET /admin/v1/exports/subscriptions` | See every requester's export runs and every report subscription, without any output. |
+| `exports.operate` | `POST /admin/v1/exports/runs/{runId}/cancel` | Cancel anybody's export run. |
+| `exports.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+
+**Removed:** `ROLE_EXPORT_ADMIN` (`ReportRunController.ADMIN_AUTHORITY`) no longer reaches other requesters' runs on the requester API, which answers `404` for them; administrators use this area. No administrative response carries an output link.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[exports.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[exports.operate]": [ORDERS_ADMIN]
+      "[exports.privileged]": [ORDERS_ADMIN]
+```
+
 ## Runbook
 
 **Runs pile up in `PENDING`.** `SELECT status, count(*) FROM export_report_run GROUP BY status;` then
@@ -367,7 +390,7 @@ A growing **sink** means the retention purge is not running: check its `RunLock`
 |---|---|
 | `purged_at` set | Retention expired: `output-expired` |
 | `expires_at` past, `purged_at` null | Expired, not yet swept; refused |
-| 404 instead of 403 | Caller is not the requester and not an admin (intentional) |
+| 404 instead of 403 | Caller is not the requester (intentional); administrators use `/admin/v1/exports/` |
 | `X-Report-Sha256` mismatch with a recipient's copy | File replaced or corrupted in transit |
 
 Problem codes (`ludwig.export.error.*`): `unknown-definition` 404, `unknown-format` / `format-not-allowed` /

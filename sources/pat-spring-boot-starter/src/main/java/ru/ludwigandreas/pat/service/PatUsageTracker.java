@@ -12,7 +12,7 @@ import ru.ludwigandreas.pat.audit.PatAuditEvents;
 import ru.ludwigandreas.pat.config.PatProperties;
 import ru.ludwigandreas.pat.entity.PatEntity;
 import ru.ludwigandreas.pat.metrics.PatMetrics;
-import ru.ludwigandreas.pat.repository.PatRepository;
+import ru.ludwigandreas.pat.repository.PatQueryRepository;
 
 /**
  * Records that a token was used, splitting the rare security signals from the high-volume timestamp.
@@ -63,7 +63,7 @@ import ru.ludwigandreas.pat.repository.PatRepository;
 @Slf4j
 public class PatUsageTracker {
 
-    private final PatRepository repository;
+    private final PatQueryRepository repository;
 
     private final PatProperties properties;
 
@@ -86,7 +86,7 @@ public class PatUsageTracker {
     // storage, configuration, the audit sink, metrics, the clock and the executor. Grouping any of them
     // into a holder would hide which of them a test has to substitute.
     @SuppressWarnings("checkstyle:ParameterNumber")
-    public PatUsageTracker(PatRepository repository, PatProperties properties, AuditSink auditSink,
+    public PatUsageTracker(PatQueryRepository repository, PatProperties properties, AuditSink auditSink,
                            PatMetrics metrics, Clock clock, Executor executor) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.properties = Objects.requireNonNull(properties, "properties");
@@ -180,18 +180,12 @@ public class PatUsageTracker {
     private void scheduleLastUsedWrite(UUID patId, String sourceIp, Instant now) {
         executor.execute(() -> {
             try {
-                repository.findById(patId).ifPresent(row -> {
-                    row.setLastUsedAt(now);
-                    row.setLastUsedIp(sourceIp);
-                    row.setUseCount(row.getUseCount() + 1);
-                    repository.save(row);
-                });
+                repository.recordUse(patId, now, sourceIp);
             } catch (RuntimeException failure) {
                 // CHECKSTYLE.OFF: IllegalCatch - a best-effort telemetry write must not propagate. Any
-                // runtime failure here - a closed connection, a lock timeout, an optimistic-locking
-                // conflict with a concurrent rotation - has to end in a counter rather than in a failed
-                // exchange, and enumerating the ones a driver might throw would be a list that falls behind
-                // the driver.
+                // runtime failure here - a closed connection, a lock timeout - has to end in a counter
+                // rather than in a failed exchange, and enumerating the ones a driver might throw would be a
+                // list that falls behind the driver.
                 metrics.recordLastUsedWriteFailed();
                 log.warn("Could not record last use of personal access token {} - the exchange succeeded"
                         + " and this is best-effort, but a dormancy report over this token will be"

@@ -77,7 +77,7 @@ public class RateLimitRegistry {
         }
     }
 
-    /** The configured names, for the startup validator and the actuator endpoint. */
+    /** The configured names, for the startup validator and the administrative endpoints. */
     public java.util.Set<String> names() {
         return configured.keySet();
     }

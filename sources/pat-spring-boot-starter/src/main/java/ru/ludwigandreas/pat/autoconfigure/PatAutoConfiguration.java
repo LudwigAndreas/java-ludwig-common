@@ -137,7 +137,7 @@ public class PatAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public PatUsageTracker ludwigPatUsageTracker(
-            PatRepository repository, PatProperties properties, AuditSink auditSink, PatMetrics metrics,
+            PatQueryRepository repository, PatProperties properties, AuditSink auditSink, PatMetrics metrics,
             Clock clock,
             @org.springframework.beans.factory.annotation.Qualifier("ludwigPatUsageExecutor")
             Executor executor) {

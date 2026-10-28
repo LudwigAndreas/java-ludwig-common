@@ -24,8 +24,8 @@ import ru.ludwigandreas.usersettings.exception.UnknownSettingException;
  *
  * <h2>Access</h2>
  *
- * <p>A caller may read their own settings. Reading another subject's requires the configured
- * administrative authority and the same tenant, and is audited. Enforced here rather than in each
+ * <p>A caller may read their own settings. Reading another subject's requires a {@code settings}
+ * administrative operation and the same tenant, and is audited. Enforced here rather than in each
  * caller, because a rule reimplemented per endpoint is a rule one endpoint will get wrong.
  */
 public interface SettingsLookup {

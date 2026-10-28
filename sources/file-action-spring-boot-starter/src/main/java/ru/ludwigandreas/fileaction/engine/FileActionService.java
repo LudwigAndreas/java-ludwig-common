@@ -275,6 +275,25 @@ public class FileActionService {
     }
 
     /**
+     * Requests cancellation of anybody's submission, for the administrative surface.
+     *
+     * <p>Exactly the submitter's cancel, minus the check that the caller holds the action's own authority: an
+     * administrator is authorized by the service's grant of {@code fileactions.operate}, which the surface has already
+     * checked. The submission's lifecycle record is written the same way, naming the administrator as the actor.
+     *
+     * @param id the submission
+     * @return the submission as it now stands; unchanged when it was already terminal
+     */
+    public SubmissionSnapshot cancelByAdministrator(UUID id) {
+        FileActionSubmissionEntity submission = submissions.findById(id)
+                .orElseThrow(() -> new SubmissionNotFoundException("*", id));
+        if (submission.isTerminal()) {
+            return SubmissionSnapshot.of(submission);
+        }
+        return requestCancellation(registry.require(submission.getAction()), submission);
+    }
+
+    /**
      * Asks a running submission to stop.
      *
      * <p>Sets a flag the apply checks between batches. A submission that has already finished is returned as it
@@ -292,10 +311,26 @@ public class FileActionService {
         if (submission.isTerminal()) {
             return SubmissionSnapshot.of(submission);
         }
-        FileActionSubmissionEntity cancelled = store.requestCancellation(submission.getId());
-        record(FileActionAuditActions.CANCELLATION_REQUESTED, action, cancelled,
-                actors.currentActorOrSystem(), null, null, true, null);
-        return SubmissionSnapshot.of(cancelled);
+        return requestCancellation(action, submission);
+    }
+
+    /**
+     * Records a cancel request, and ends the submission at once when nothing is working on it.
+     *
+     * <p>A {@code VALIDATED} submission is waiting for a person, so a checkpoint would never come: it would sit until
+     * its confirmation window closed and end {@code EXPIRED}. It is ended {@code CANCELLED} by a conditional update
+     * that a concurrent confirm cannot also win. Anything else gets the flag the worker checks at its checkpoints.
+     */
+    private SubmissionSnapshot requestCancellation(ResolvedAction<?> action, FileActionSubmissionEntity submission) {
+        Actor actor = actors.currentActorOrSystem();
+        record(FileActionAuditActions.CANCELLATION_REQUESTED, action, submission, actor, null, null, true, null);
+        if (submission.getState() == FileActionState.VALIDATED
+                && submissions.cancelIfValidated(submission.getId(), clock.instant()) == 1) {
+            FileActionSubmissionEntity cancelled = reload(submission.getId());
+            record(FileActionAuditActions.CANCELLED, action, cancelled, actor, null, null, true, null);
+            return SubmissionSnapshot.of(cancelled);
+        }
+        return SubmissionSnapshot.of(store.requestCancellation(submission.getId()));
     }
 
     /**
@@ -426,6 +461,13 @@ public class FileActionService {
             return reload(submission.getId());
         }
 
+        // The checkpoint before anything takes effect. A cancel that arrived while the submission was queued or
+        // being read would otherwise be seen only between batches - which an ALL_OR_NOTHING or document action
+        // never has - or not at all on the validate and confirm paths.
+        if (submissions.isCancellationRequested(submission.getId())) {
+            return endCancelled(action, submission, counts(bound, 0), bound, actor);
+        }
+
         if (action.mode() == ActionMode.VALIDATE_ONLY || action.mode().requiresConfirmation()) {
             String boundUri = uploadBoundRows(action, submission, bound);
             Instant expires = action.mode().requiresConfirmation()
@@ -459,7 +501,10 @@ public class FileActionService {
             try (InputStream stored = objectStore.open(submission.getBoundRowsUri())) {
                 Files.copy(stored, local, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
-            store.transition(submission.getId(), FileActionState.APPLYING);
+            if (submissions.startIfValidated(submission.getId(), clock.instant()) == 0) {
+                // A cancel won the race for the VALIDATED row; it has already ended CANCELLED and been audited.
+                return reload(submission.getId());
+            }
             CoercionContext coercion = coercionFor(submission);
             RejectCollector collected = new RejectCollector(action.rejectSample());
             ApplyOutcome outcome = applyPass.apply(action, local,
@@ -471,10 +516,10 @@ public class FileActionService {
             // Added, not replaced: the cell-level rejects the user was shown at validation are already stored, and
             // replacing them here would delete the detail the confirmation was approved against.
             store.addRejects(reload(submission.getId()), collected.sample());
-            FileActionState state = stateFor(outcome);
-            store.complete(submission.getId(), state, counts, failureCodeFor(outcome), null);
-            record(FileActionAuditActions.APPLIED, action, submission, actors.currentActorOrSystem(), null,
-                    null, state == FileActionState.APPLIED, failureCodeFor(outcome));
+            FileActionState state = outcome.endState();
+            store.complete(submission.getId(), state, counts, outcome.failureCode(), null);
+            record(auditActionFor(state), action, submission, actors.currentActorOrSystem(), null,
+                    null, state != FileActionState.REJECTED, outcome.failureCode());
             return reload(submission.getId());
         } catch (IOException failed) {
             throw new UncheckedIOException("the bound rows could not be read back for confirmation", failed);
@@ -486,34 +531,27 @@ public class FileActionService {
     private FileActionSubmissionEntity finish(ResolvedAction<?> action,
                                               FileActionSubmissionEntity submission, BindOutcome bound,
                                               ApplyOutcome outcome, String reportUri, Actor actor) {
-        FileActionState state = stateFor(outcome);
+        FileActionState state = outcome.endState();
         store.complete(submission.getId(), state, counts(bound, outcome.rowsApplied()),
-                failureCodeFor(outcome), null);
+                outcome.failureCode(), null);
         store.recordArtifacts(submission.getId(), null, reportUri, retentionFrom(action));
-        record(FileActionAuditActions.APPLIED, action, submission, actor, null, bound,
-                state == FileActionState.APPLIED, failureCodeFor(outcome));
+        record(auditActionFor(state), action, submission, actor, null, bound,
+                state != FileActionState.REJECTED, outcome.failureCode());
         return reload(submission.getId());
     }
 
-    private static FileActionState stateFor(ApplyOutcome outcome) {
-        if (outcome.documentCode() != null) {
-            return FileActionState.REJECTED;
-        }
-        if (outcome.hadFailedBatch() && outcome.rowsApplied() == 0) {
-            return FileActionState.REJECTED;
-        }
-        // A submission that applied some rows and rejected others is APPLIED with a reject count: from the
-        // caller's point of view the action happened, and reporting it as a failure would make every client
-        // treat a partial import as an error.
-        return FileActionState.APPLIED;
+    /** Ends a submission {@code CANCELLED} before anything was applied, and records the stop. */
+    private FileActionSubmissionEntity endCancelled(ResolvedAction<?> action, FileActionSubmissionEntity submission,
+                                                    SubmissionStore.RowCounts counts, BindOutcome bound,
+                                                    Actor actor) {
+        store.complete(submission.getId(), FileActionState.CANCELLED, counts, null, null);
+        record(FileActionAuditActions.CANCELLED, action, submission, actor, null, bound, true, null);
+        return reload(submission.getId());
     }
 
-    private static String failureCodeFor(ApplyOutcome outcome) {
-        if (outcome.documentCode() != null) {
-            return outcome.documentCode();
-        }
-        return outcome.hadFailedBatch() && outcome.rowsApplied() == 0
-                ? FileActionProblemCodes.CONSTRAINT_VIOLATED : null;
+    /** The audit action for a finished pass: a stop is recorded as one, never as an apply. */
+    private static String auditActionFor(FileActionState state) {
+        return state == FileActionState.CANCELLED ? FileActionAuditActions.CANCELLED : FileActionAuditActions.APPLIED;
     }
 
     private static SubmissionStore.RowCounts counts(BindOutcome bound, long applied) {

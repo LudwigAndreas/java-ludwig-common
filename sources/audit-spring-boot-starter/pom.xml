@@ -96,6 +96,16 @@
             <optional>true</optional>
         </dependency>
 
+        <!--
+            Optional: trail search (ru.ludwigandreas.audit.store.admin) exists only where the security starter's
+            administrative surface does, behind @ConditionalOnBean(AdminOperationCatalog).
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Optional: Spring Security is one way, not the only way, to resolve the actor. -->
         <dependency>
             <groupId>org.springframework.security</groupId>
@@ -150,6 +160,17 @@
         <dependency>
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestPrincipalBuilder, for the trail search's MockMvc tests. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

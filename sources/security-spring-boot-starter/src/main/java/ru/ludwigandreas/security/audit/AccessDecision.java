@@ -85,7 +85,7 @@ public record AccessDecision(
         return AuditEvent.builder()
                 .category(AuditCategories.ACCESS)
                 .action(granted ? ACTION_GRANTED : ACTION_DENIED)
-                .actor(new Actor(subject, principalType == null ? null : principalType.name(), null, null))
+                .actor(new Actor(subject, principalType == null ? null : principalType.name(), null, null, null))
                 .resource(new Resource(resourceType, resourceId, null))
                 .outcome(granted ? AuditOutcome.success() : AuditOutcome.denied(reason))
                 .attributes(attributes)

@@ -25,6 +25,7 @@ import ru.ludwigandreas.cache.api.CacheDefinition;
 import ru.ludwigandreas.cache.api.LudwigCache;
 import ru.ludwigandreas.cache.api.LudwigCacheRegistry;
 import ru.ludwigandreas.db.core.repository.BaseRepositoryImpl;
+import ru.ludwigandreas.security.admin.AdminInvocation;
 import ru.ludwigandreas.security.authz.AuthorityLookup;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
 import ru.ludwigandreas.usersettings.api.SettingDefinition;
@@ -205,9 +206,9 @@ public class UserSettingsAutoConfiguration {
     @ConditionalOnMissingBean
     public SettingsAccessPolicy settingsAccessPolicy(UserSettingsProperties properties) {
         return new SettingsAccessPolicy(
-                properties.getAccess().getAdminAuthority(),
                 properties.getAccess().isAllowUnauthenticated(),
-                properties.getAccess().isAllowServicePrincipals());
+                properties.getAccess().isAllowServicePrincipals(),
+                AdminInvocation::current);
     }
 
     @Bean

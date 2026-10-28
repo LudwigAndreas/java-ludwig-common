@@ -1,33 +1,37 @@
 package ru.ludwigandreas.usersettings.resolve;
 
 import java.util.Optional;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
-import ru.ludwigandreas.security.authz.Authorities;
+import ru.ludwigandreas.security.admin.AdminInvocation;
 import ru.ludwigandreas.security.authz.PrincipalRef;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
 import ru.ludwigandreas.usersettings.api.SettingsSubject;
+import ru.ludwigandreas.usersettings.admin.SettingsAdminOperations;
 import ru.ludwigandreas.usersettings.exception.SettingsAccessDeniedException;
+import ru.ludwigandreas.usersettings.exception.SettingsSubjectNotFoundException;
 
 /**
- * "You may read and write your own settings; somebody else's needs the administrative authority."
+ * "You may read and write your own settings; somebody else's needs an administrative operation of the
+ * {@code settings} area."
  *
  * <p>Enforced here, once, rather than in each caller. The rule is the same in every service that
  * uses this module, which is exactly why leaving it to callers does not work: it gets reimplemented
  * per endpoint, and the endpoint that gets it wrong is the one that takes a subject id from the path
  * and passes it through without looking at it.
  *
- * <p>Two conditions have to hold for an administrative access, not one. Holding the authority is not
- * enough - the administrator's own tenant must also match the tenant the lookup is confined to.
- * Without the second check, an administrator of one organization could read another organization's
- * users simply by knowing a subject id, and the authority check would have passed.
+ * <p>Which callers may administer settings is not decided here: the administrative surface guard has
+ * already checked the service's {@code ludwig.admin.grants} before a {@code settings.*} handler runs,
+ * and this policy only recognises that such a handler is running. What it still decides is the tenant:
+ * the administrator's own tenant must match the tenant the lookup is confined to, or an administrator
+ * of one organization could read another organization's users simply by knowing a subject id. That
+ * refusal is a {@code 404}, as the administrative surface answers for another tenant's resource.
  */
 @Slf4j
 public class SettingsAccessPolicy {
 
-    private final String adminAuthority;
-    private final String adminRole;
     private final boolean allowUnauthenticated;
 
     /**
@@ -42,29 +46,26 @@ public class SettingsAccessPolicy {
      *
      * <p>What authorizes such a call is the calling service's own policy for the endpoint it invoked,
      * which the security module has already applied by the time this runs. A deployment that wants
-     * peers held to the administrative authority anyway sets this false and grants it to them.
+     * peers held to the administrative surface anyway sets this false and grants them a
+     * {@code settings} operation.
      */
     private final boolean allowServicePrincipals;
+
+    private final Supplier<Optional<AdminInvocation>> invocation;
 
     /**
      * Builds the policy.
      *
-     * @param adminAuthority accepted with or without the {@code ROLE_} prefix; see the field below
+     * @param allowUnauthenticated   whether in-process code with no principal is a system caller
+     * @param allowServicePrincipals whether a peer service is a system caller
+     * @param invocation             the administrative operation the current request performs;
+     *                               {@code AdminInvocation::current} outside tests
      */
-    public SettingsAccessPolicy(String adminAuthority, boolean allowUnauthenticated,
-                                boolean allowServicePrincipals) {
-        if (adminAuthority == null || adminAuthority.isBlank()) {
-            throw new IllegalArgumentException(
-                    "An administrative authority must be configured; without one, every access to another"
-                            + " subject's settings would be refused and no administrative screen could work");
-        }
-        this.adminAuthority = adminAuthority;
-        // Spring Security's hasRole('X') tests for ROLE_X, and LudwigPrincipal stores the prefixed
-        // form - so a property written as SETTINGS_ADMIN would match nothing and every administrative
-        // access would be refused, which reads as a permissions bug and gets "fixed" by granting more.
-        this.adminRole = Authorities.normalizeRole(adminAuthority);
+    public SettingsAccessPolicy(boolean allowUnauthenticated, boolean allowServicePrincipals,
+                                Supplier<Optional<AdminInvocation>> invocation) {
         this.allowUnauthenticated = allowUnauthenticated;
         this.allowServicePrincipals = allowServicePrincipals;
+        this.invocation = invocation;
     }
 
     /**
@@ -88,20 +89,12 @@ public class SettingsAccessPolicy {
         if (isTrustedService(principal)) {
             return SettingsAccess.SYSTEM;
         }
-        if (!hasAdminAuthority(principal)) {
-            throw new SettingsAccessDeniedException();
-        }
-        // The authority says "may administer settings"; it does not say "in every organization".
-        if (!subject.tenantId().equals(principal.tenantId())) {
-            log.warn("Refusing cross-tenant settings access by {} (tenant {}) into tenant {}",
-                    principal.subject(), principal.tenantId(), subject.tenantId());
-            throw new SettingsAccessDeniedException();
-        }
+        requireAdministrativeAccess(principal, subject);
         return SettingsAccess.ADMIN;
     }
 
     /**
-     * Requires the administrative authority outright - for writes at a role, tenant or platform
+     * Requires an administrative operation outright - for writes at a role, tenant or platform
      * scope, which are never self-service however the subject is named.
      */
     public void requireAdmin(SettingsSubject subject) {
@@ -116,8 +109,25 @@ public class SettingsAccessPolicy {
         if (isTrustedService(principal)) {
             return;
         }
-        if (!hasAdminAuthority(principal) || !subject.tenantId().equals(principal.tenantId())) {
+        requireAdministrativeAccess(principal, subject);
+    }
+
+    /**
+     * Outside a {@code settings} handler, a {@code 403} as self-service has always answered. Inside
+     * one, the grant has been checked and only the tenant is left: the operation says "may administer
+     * settings"; it does not say "in every organization".
+     */
+    private void requireAdministrativeAccess(LudwigPrincipal principal, SettingsSubject subject) {
+        boolean administrative = invocation.get()
+                .filter(current -> SettingsAdminOperations.AREA.equals(current.operation().area()))
+                .isPresent();
+        if (!administrative) {
             throw new SettingsAccessDeniedException();
+        }
+        if (!subject.tenantId().equals(principal.tenantId())) {
+            log.warn("Refusing cross-tenant settings access by {} (tenant {}) into tenant {}",
+                    principal.subject(), principal.tenantId(), subject.tenantId());
+            throw new SettingsSubjectNotFoundException();
         }
     }
 
@@ -141,9 +151,5 @@ public class SettingsAccessPolicy {
      */
     private boolean isSelf(LudwigPrincipal principal, PrincipalRef ref) {
         return principal.type() == ref.type() && principal.subject().equals(ref.subject());
-    }
-
-    private boolean hasAdminAuthority(LudwigPrincipal principal) {
-        return principal.hasRole(adminRole) || principal.hasPermission(adminAuthority);
     }
 }

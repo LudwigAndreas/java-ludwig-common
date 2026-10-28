@@ -77,9 +77,6 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
 @Tag(name = "Reports", description = "Produce, poll and download tabular reports")
 public class ReportRunController {
 
-    /** The authority that may download and cancel somebody else's run. */
-    public static final String ADMIN_AUTHORITY = "ROLE_EXPORT_ADMIN";
-
     /**
      * The configured base path, as a property placeholder for the mappings below.
      *
@@ -264,10 +261,9 @@ public class ReportRunController {
         ExportReportRun run = runs.findById(runId)
                 .orElseThrow(() -> new UnknownReportDefinitionException(runId.toString()));
         String principalId = caller.principalId();
+        // Only the requester. An administrator sees and cancels other people's runs through the exports area of
+        // the administrative surface, under the service's own grant - this module names no role.
         if (run.getRequester().equals(principalId)) {
-            return run;
-        }
-        if (authorities.forPrincipal(principalId).contains(ADMIN_AUTHORITY)) {
             return run;
         }
         throw new UnknownReportDefinitionException(runId.toString());

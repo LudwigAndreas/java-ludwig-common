@@ -259,6 +259,60 @@ long-lived:         revalidation interval + authority cache TTL
 direct filter:      introspection cache TTL + authority cache TTL   (computed even when disabled)
 ```
 
+### Administrative surface
+
+Every administrative endpoint on the platform is served under `/admin/v1/` and authorized one way. A module
+**declares operations**, never roles; the consuming service **grants them to its own roles**.
+
+| Piece | What it is |
+|---|---|
+| Operation id | `<area>.<tier>`, e.g. `outbox.operate`. A module declaring any tier of an area declares all three |
+| Tiers | `read` (changes nothing), `operate` (safe to repeat, cannot desynchronize or change access), `privileged` (changes access, can desynchronize from an external system, or discards work) |
+| `@AdminAccess(<Module>AdminOperations.OPERATE)` | On the handler; the only gate. Never combined with `@PreAuthorize` or a role check |
+| `@AdminAuthenticated` | A handler any admitted caller may use (the discovery endpoint) |
+| `AdminAudit` | Records the change through the one `AuditSink`, category `admin`, from the module service inside its transaction |
+| `AdminInvocation.require()` | The current operation, caller and reason; `tenantScope()` for tenant-carrying tables |
+| `AdminPage` / `AdminCursor` | Keyset pages; at most 200 rows; an undecodable cursor is `400` |
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      outbox.read:       [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      outbox.operate:    [NOTIFICATION_ADMIN]
+      outbox.privileged: [NOTIFICATION_ADMIN]
+```
+
+In a `.properties` file a dotted key needs the bracket form: `ludwig.admin.grants[outbox.read]=NOTIFICATION_ADMIN`.
+Roles are this service's resolved roles - the identity projection for people, `ludwig.identity.service-roles`
+for administrative services - never a token claim, and the PAT intersection still applies.
+
+What the guard on `/admin/**` (a `HandlerInterceptor`, so it holds whatever filter chain the service runs)
+refuses, in order:
+
+| Caller | Answer |
+|---|---|
+| unauthenticated | `401` |
+| a partner | `403` |
+| a personal access token, unless `ludwig.admin.allow-personal-access-tokens=true` | `403`, `ludwig.pat.credential-not-permitted` - the PAT surface's own type |
+| an operation it does not hold | `403`, published as an authorization denial and audited |
+| a `privileged` operation without `Admin-Reason` (1-500 characters) | `400`, `ludwig.admin.reason-required` - only after the grant check |
+| a handler under `/admin/` with neither annotation | `403` |
+
+Fails closed everywhere: there is **no default grant**, no wildcard and no tier implication; an operation
+nobody holds is refused and listed once at startup; a misspelled grant key, an empty role list, a handler naming an
+uncatalogued id, an area missing a tier and a `public-paths` entry matching `/admin/v1/` each fail startup. The
+surface exists only with web-core's problem pipeline present, and is independent of method security
+(`ludwig.security.data.enabled=false` does not turn it off). `ludwig.admin.enabled=false` removes it.
+
+Tenant confinement: a `USER` reaches only resources of exactly their own tenant (a user without one, only untenanted
+resources); a `SERVICE` is not confined. Modules apply `tenantScope()` to tables that carry a tenant.
+
+`GET /admin/v1/me/operations` lists the operations the caller holds, as `application/json`, with descriptions in the
+caller's locale, so an administrative UI knows which controls to show. Startup fails when a catalogued operation's
+description key is in no bundle, naming every such operation and key: a module adding an area adds its keys to its own
+bundle.
+
 ## Configuration
 
 ```yaml

@@ -4,6 +4,7 @@
 #
 #   scripts/check_image_pins.sh            check the tracked tree
 #   scripts/check_image_pins.sh --list     print every reference found, pinned or not
+#   scripts/check_image_pins.sh --self-test  check the checker against its own fixtures
 #
 # WHY THIS EXISTS
 #
@@ -48,11 +49,14 @@ command -v python3 >/dev/null 2>&1 || { printf 'check_image_pins.sh: python3 is 
 command -v git >/dev/null 2>&1 || { printf 'check_image_pins.sh: git is not on PATH\n' >&2; exit 3; }
 
 case "${1:-}" in
+  --self-test) exec python3 scripts/check_image_pins.py --self-test ;;
   --list|"") ;;
   -h|--help) sed -n '3,6p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) printf 'check_image_pins.sh: unknown option %s\n' "$1" >&2; exit 3 ;;
 esac
 
+# scripts/testdata/ is excluded because the --self-test fixtures deliberately carry unpinned images.
 git ls-files -z -- \
   '*.md' '*.yml' '*.yaml' '*.properties' 'Jenkinsfile' '**/Dockerfile' '**/Dockerfile.*' \
+  ':(exclude)scripts/testdata/*' \
   | python3 scripts/check_image_pins.py "${1:-}"

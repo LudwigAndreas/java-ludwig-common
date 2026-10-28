@@ -179,6 +179,29 @@ Not applicable on its own: dead-lettering is audited by messaging's recoverer
 (`messaging.dead-lettered`, `messaging.dropped`). Appending to and purging the log are transport
 operations, not state changes of business data.
 
+## Administration
+
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+
+| Operation | Endpoints | Allows |
+|---|---|---|
+| `messaging.read` | `GET /admin/v1/messaging/consumers` | See how far each consumer group is behind on each partition of the database log. |
+| `messaging.operate` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+| `messaging.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+
+No endpoint moves an offset; any other method on `/admin/v1/messaging/consumers` is `405`.
+
+Grant block (the role names are the service's own):
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[messaging.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
+      "[messaging.operate]": [ORDERS_ADMIN]
+      "[messaging.privileged]": [ORDERS_ADMIN]
+```
+
 ## Runbook
 
 | Symptom | Likely cause | What to do |

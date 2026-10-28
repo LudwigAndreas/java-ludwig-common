@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-22T12:24:19.941185Z",
+    "generatedAt": "2026-10-28T21:36:07.686902Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 42,
-    "commit": "818564501abab0ad47269179e6391e9f1298112a",
-    "commitShort": "8185645",
+    "commit": "44358a935e47d0353f0da2ec95f7baa04405f677",
+    "commitShort": "44358a9",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "a5597e95e11d5770d93c71fc031fab37dee719d5168e4f76f4572df5b739b196",
-      "newestPom": "sources/messaging-db-spring-boot-starter/pom.xml",
-      "newestPomModified": "2026-10-22T12:11:47.124650Z"
+      "pomSetSha": "1910601726bd432fbc45dddafaf0b6a572e73316549159eba1a24b9ffe250910",
+      "newestPom": "pom.xml",
+      "newestPomModified": "2026-10-28T21:35:59.743424Z"
     }
   },
   "modules": [
@@ -92,8 +92,8 @@
         "failsafe": 0
       },
       "pom": "build/ludwig-grpc-api-parent/pom.xml",
-      "readme": null,
-      "readmeRu": null
+      "readme": "build/ludwig-grpc-api-parent/README.md",
+      "readmeRu": "build/ludwig-grpc-api-parent/README.ru.md"
     },
     {
       "name": "odata-filter-spring-boot-starter",
@@ -249,7 +249,7 @@
         "unit": "sources/audit-core/src/test/java/ru/ludwigandreas/audit/unit"
       },
       "testClasses": {
-        "surefire": 6,
+        "surefire": 7,
         "failsafe": 0
       },
       "pom": "sources/audit-core/pom.xml",
@@ -360,6 +360,11 @@
       "packageRoot": "ru.ludwigandreas.audit.store",
       "inRepoDependencies": [
         {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
           "artifactId": "audit-core",
           "scope": "compile",
           "optional": false
@@ -380,7 +385,17 @@
           "optional": true
         },
         {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
           "scope": "test",
           "optional": false
         },
@@ -402,6 +417,7 @@
         "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0002-migrate-user-setting-audit.sql",
         "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0003-migrate-sync-audit-record.sql",
         "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0004-normalise-redaction-marker.sql",
+        "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/0005-actor-tenant.sql",
         "sources/audit-spring-boot-starter/src/main/resources/db/changelog/audit/audit-changelog.xml"
       ],
       "i18nBundles": [
@@ -412,11 +428,13 @@
         "rest"
       ],
       "testDirs": {
-        "integration": "sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration"
+        "unit": "sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/unit",
+        "integration": "sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/integration",
+        "architecture": "sources/audit-spring-boot-starter/src/test/java/ru/ludwigandreas/audit/store/architecture"
       },
       "testClasses": {
-        "surefire": 0,
-        "failsafe": 1
+        "surefire": 2,
+        "failsafe": 2
       },
       "pom": "sources/audit-spring-boot-starter/pom.xml",
       "readme": "sources/audit-spring-boot-starter/README.md",
@@ -434,9 +452,29 @@
       "packageRoot": "ru.ludwigandreas.job.core",
       "inRepoDependencies": [
         {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "test-support",
           "scope": "test",
           "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
         }
       ],
       "inRepoDependents": [
@@ -482,17 +520,21 @@
         "sources/job-core/src/main/resources/db/changelog/job-core/0001-create-run-lock.sql",
         "sources/job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml"
       ],
-      "i18nBundles": [],
+      "i18nBundles": [
+        "sources/job-core/src/main/resources/i18n/ludwig-job-core-messages.properties",
+        "sources/job-core/src/main/resources/i18n/ludwig-job-core-messages_ru.properties"
+      ],
       "surfaces": [
-        "none"
+        "rest"
       ],
       "testDirs": {
         "unit": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/unit",
-        "integration": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/integration"
+        "integration": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/integration",
+        "architecture": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/architecture"
       },
       "testClasses": {
-        "surefire": 3,
-        "failsafe": 1
+        "surefire": 5,
+        "failsafe": 3
       },
       "pom": "sources/job-core/pom.xml",
       "readme": "sources/job-core/README.md",
@@ -726,6 +768,11 @@
       "packageRoot": "ru.ludwigandreas.export",
       "inRepoDependencies": [
         {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
           "artifactId": "audit-core",
           "scope": "compile",
           "optional": false
@@ -781,6 +828,11 @@
           "optional": false
         },
         {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
           "artifactId": "web-core-spring-boot-starter",
           "scope": "compile",
           "optional": false
@@ -823,8 +875,8 @@
         "architecture": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/architecture"
       },
       "testClasses": {
-        "surefire": 17,
-        "failsafe": 2
+        "surefire": 19,
+        "failsafe": 3
       },
       "pom": "sources/export-spring-boot-starter/pom.xml",
       "readme": "sources/export-spring-boot-starter/README.md",
@@ -935,7 +987,17 @@
           "optional": true
         },
         {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
           "scope": "test",
           "optional": false
         },
@@ -959,7 +1021,7 @@
         "sources/file-ingest-spring-boot-starter/src/main/resources/i18n/ludwig-ingest-messages_ru.properties"
       ],
       "surfaces": [
-        "actuator"
+        "rest"
       ],
       "testDirs": {
         "unit": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/unit",
@@ -967,8 +1029,8 @@
         "architecture": "sources/file-ingest-spring-boot-starter/src/test/java/ru/ludwigandreas/ingest/architecture"
       },
       "testClasses": {
-        "surefire": 8,
-        "failsafe": 9
+        "surefire": 9,
+        "failsafe": 10
       },
       "pom": "sources/file-ingest-spring-boot-starter/pom.xml",
       "readme": "sources/file-ingest-spring-boot-starter/README.md",
@@ -1071,8 +1133,8 @@
         "architecture": "sources/file-action-spring-boot-starter/src/test/java/ru/ludwigandreas/fileaction/architecture"
       },
       "testClasses": {
-        "surefire": 26,
-        "failsafe": 6
+        "surefire": 28,
+        "failsafe": 8
       },
       "pom": "sources/file-action-spring-boot-starter/pom.xml",
       "readme": "sources/file-action-spring-boot-starter/README.md",
@@ -1089,6 +1151,11 @@
       "importsLudwigBom": true,
       "packageRoot": "ru.ludwigandreas.outbox",
       "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
         {
           "artifactId": "audit-core",
           "scope": "compile",
@@ -1110,9 +1177,24 @@
           "optional": false
         },
         {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "test-support",
           "scope": "test",
           "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
         }
       ],
       "inRepoDependents": [
@@ -1162,17 +1244,21 @@
         "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/0005-create-status-history.sql",
         "sources/outbox-spring-boot-starter/src/main/resources/db/changelog/outbox/outbox-changelog.xml"
       ],
-      "i18nBundles": [],
+      "i18nBundles": [
+        "sources/outbox-spring-boot-starter/src/main/resources/i18n/ludwig-outbox-messages.properties",
+        "sources/outbox-spring-boot-starter/src/main/resources/i18n/ludwig-outbox-messages_ru.properties"
+      ],
       "surfaces": [
-        "none"
+        "rest"
       ],
       "testDirs": {
         "unit": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/unit",
-        "integration": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration"
+        "integration": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/integration",
+        "architecture": "sources/outbox-spring-boot-starter/src/test/java/ru/ludwigandreas/outbox/architecture"
       },
       "testClasses": {
-        "surefire": 9,
-        "failsafe": 1
+        "surefire": 11,
+        "failsafe": 2
       },
       "pom": "sources/outbox-spring-boot-starter/pom.xml",
       "readme": "sources/outbox-spring-boot-starter/README.md",
@@ -1210,9 +1296,24 @@
           "optional": false
         },
         {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "test-support",
           "scope": "test",
           "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
         }
       ],
       "inRepoDependents": [],
@@ -1224,9 +1325,12 @@
         "sources/messaging-db-spring-boot-starter/src/main/resources/db/changelog/messaging-db/0004-create-consumer-offset.sql",
         "sources/messaging-db-spring-boot-starter/src/main/resources/db/changelog/messaging-db/messaging-db-changelog.xml"
       ],
-      "i18nBundles": [],
+      "i18nBundles": [
+        "sources/messaging-db-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-db-messages.properties",
+        "sources/messaging-db-spring-boot-starter/src/main/resources/i18n/ludwig-messaging-db-messages_ru.properties"
+      ],
       "surfaces": [
-        "none"
+        "rest"
       ],
       "testDirs": {
         "unit": "sources/messaging-db-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/db/unit",
@@ -1234,8 +1338,8 @@
         "architecture": "sources/messaging-db-spring-boot-starter/src/test/java/ru/ludwigandreas/messaging/db/architecture"
       },
       "testClasses": {
-        "surefire": 3,
-        "failsafe": 5
+        "surefire": 4,
+        "failsafe": 6
       },
       "pom": "sources/messaging-db-spring-boot-starter/pom.xml",
       "readme": "sources/messaging-db-spring-boot-starter/README.md",
@@ -1313,6 +1417,11 @@
       "packageRoot": "ru.ludwigandreas.reconciliation",
       "inRepoDependencies": [
         {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
           "artifactId": "audit-core",
           "scope": "compile",
           "optional": false
@@ -1338,9 +1447,24 @@
           "optional": true
         },
         {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "test-support",
           "scope": "test",
           "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
         }
       ],
       "inRepoDependents": [],
@@ -1362,16 +1486,20 @@
         "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/0014-index-scope-state-due.sql",
         "sources/reconciliation-spring-boot-starter/src/main/resources/db/changelog/reconciliation/reconciliation-changelog.xml"
       ],
-      "i18nBundles": [],
+      "i18nBundles": [
+        "sources/reconciliation-spring-boot-starter/src/main/resources/i18n/ludwig-reconciliation-messages.properties",
+        "sources/reconciliation-spring-boot-starter/src/main/resources/i18n/ludwig-reconciliation-messages_ru.properties"
+      ],
       "surfaces": [
-        "actuator"
+        "rest"
       ],
       "testDirs": {
         "unit": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/unit",
-        "integration": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration"
+        "integration": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/integration",
+        "architecture": "sources/reconciliation-spring-boot-starter/src/test/java/ru/ludwigandreas/reconciliation/architecture"
       },
       "testClasses": {
-        "surefire": 15,
+        "surefire": 17,
         "failsafe": 14
       },
       "pom": "sources/reconciliation-spring-boot-starter/pom.xml",
@@ -1450,6 +1578,10 @@
       ],
       "inRepoDependents": [
         {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "crud-service-example",
           "scope": "compile"
         },
@@ -1459,6 +1591,10 @@
         },
         {
           "artifactId": "file-action-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1474,11 +1610,27 @@
           "scope": "compile"
         },
         {
+          "artifactId": "job-core",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "messaging-db-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "notification-service",
           "scope": "compile"
         },
         {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "pat-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -1497,13 +1649,13 @@
         "sources/security-spring-boot-starter/src/main/resources/i18n/ludwig-security-messages_ru.properties"
       ],
       "surfaces": [
-        "none"
+        "rest"
       ],
       "testDirs": {
         "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
       },
       "testClasses": {
-        "surefire": 25,
+        "surefire": 33,
         "failsafe": 0
       },
       "pom": "sources/security-spring-boot-starter/pom.xml",
@@ -1583,8 +1735,8 @@
         "architecture": "sources/pat-spring-boot-starter/src/test/java/ru/ludwigandreas/pat/architecture"
       },
       "testClasses": {
-        "surefire": 7,
-        "failsafe": 10
+        "surefire": 8,
+        "failsafe": 12
       },
       "pom": "sources/pat-spring-boot-starter/pom.xml",
       "readme": "sources/pat-spring-boot-starter/README.md",
@@ -1602,6 +1754,11 @@
       "packageRoot": "ru.ludwigandreas.identity",
       "inRepoDependencies": [
         {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
           "artifactId": "db-core",
           "scope": "compile",
           "optional": false
@@ -1615,6 +1772,21 @@
           "artifactId": "security-spring-boot-starter",
           "scope": "compile",
           "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
         }
       ],
       "inRepoDependents": [
@@ -1638,16 +1810,21 @@
         "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0007-security-user-contact.sql",
         "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml"
       ],
-      "i18nBundles": [],
+      "i18nBundles": [
+        "sources/identity-projection-spring-boot-starter/src/main/resources/i18n/ludwig-identity-messages.properties",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/i18n/ludwig-identity-messages_ru.properties"
+      ],
       "surfaces": [
-        "none"
+        "rest"
       ],
       "testDirs": {
-        "unit": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit"
+        "unit": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/unit",
+        "integration": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/integration",
+        "architecture": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/architecture"
       },
       "testClasses": {
-        "surefire": 2,
-        "failsafe": 0
+        "surefire": 4,
+        "failsafe": 1
       },
       "pom": "sources/identity-projection-spring-boot-starter/pom.xml",
       "readme": "sources/identity-projection-spring-boot-starter/README.md",
@@ -1756,6 +1933,18 @@
           "scope": "compile"
         },
         {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "messaging-db-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "messaging-spring-boot-starter",
           "scope": "compile"
         },
@@ -1776,7 +1965,15 @@
           "scope": "compile"
         },
         {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "pat-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -2079,8 +2276,8 @@
         "failsafe": 0
       },
       "pom": "sources/catalog-grpc-api/pom.xml",
-      "readme": null,
-      "readmeRu": null
+      "readme": "sources/catalog-grpc-api/README.md",
+      "readmeRu": "sources/catalog-grpc-api/README.ru.md"
     },
     {
       "name": "grpc-server-spring-boot-starter",
@@ -2318,6 +2515,11 @@
           "optional": false
         },
         {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
           "artifactId": "web-core-spring-boot-starter",
           "scope": "compile",
           "optional": false
@@ -2351,8 +2553,8 @@
         "architecture": "sources/user-settings-spring-boot-starter/src/test/java/ru/ludwigandreas/usersettings/architecture"
       },
       "testClasses": {
-        "surefire": 15,
-        "failsafe": 3
+        "surefire": 16,
+        "failsafe": 4
       },
       "pom": "sources/user-settings-spring-boot-starter/pom.xml",
       "readme": "sources/user-settings-spring-boot-starter/README.md",
@@ -2375,7 +2577,15 @@
           "scope": "test"
         },
         {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "crud-service-example",
+          "scope": "test"
+        },
+        {
+          "artifactId": "export-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2392,6 +2602,14 @@
         },
         {
           "artifactId": "grpc-server-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "job-core",
           "scope": "test"
         },
         {
@@ -2415,7 +2633,15 @@
           "scope": "test"
         },
         {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "pat-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2431,7 +2657,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 14,
+        "surefire": 15,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",
@@ -2488,6 +2714,10 @@
         },
         {
           "artifactId": "idempotency-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2577,11 +2807,23 @@
       ],
       "inRepoDependents": [
         {
+          "artifactId": "audit-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "crud-service-example",
           "scope": "test"
         },
         {
+          "artifactId": "export-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "file-action-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "file-ingest-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2593,7 +2835,31 @@
           "scope": "test"
         },
         {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "test"
+        },
+        {
+          "artifactId": "messaging-db-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "notification-service",
+          "scope": "test"
+        },
+        {
+          "artifactId": "outbox-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "user-settings-spring-boot-starter",
           "scope": "test"
         }
       ],
@@ -2829,7 +3095,7 @@
       },
       "testClasses": {
         "surefire": 5,
-        "failsafe": 8
+        "failsafe": 9
       },
       "pom": "services/crud-service-example/pom.xml",
       "readme": "services/crud-service-example/README.md",
@@ -2953,6 +3219,7 @@
         "services/notification-service/src/main/resources/db/changelog/changes/0021-announcement-content.sql",
         "services/notification-service/src/main/resources/db/changelog/changes/0022-announcement-marker.sql",
         "services/notification-service/src/main/resources/db/changelog/changes/0023-announcement-email-run.sql",
+        "services/notification-service/src/main/resources/db/changelog/changes/0024-announcement-withdrawal.sql",
         "services/notification-service/src/main/resources/db/changelog/db.changelog-master.xml"
       ],
       "i18nBundles": [
@@ -2969,8 +3236,8 @@
         "architecture": "services/notification-service/src/test/java/ru/ludwigandreas/notification/architecture"
       },
       "testClasses": {
-        "surefire": 29,
-        "failsafe": 25
+        "surefire": 30,
+        "failsafe": 27
       },
       "pom": "services/notification-service/pom.xml",
       "readme": "services/notification-service/README.md",
