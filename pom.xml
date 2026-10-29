@@ -852,6 +852,12 @@
                                       "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change admin-listing-odata-filter. The PAT listing's status enum and the audit search's Filter record were the removed parameters' types. Migration: filter on revokedAt/expiresAt, and on the audit event's fields, with $filter."
                                     },
                                     {
+                                      "regex": true,
+                                      "code": "java\\.method\\.addedToInterface",
+                                      "new": "method .* ru\\.ludwigandreas\\.cache\\.api\\.LudwigCacheRegistry::(evictAll|settings)\\(.*\\)",
+                                      "justification": "ADDED IN THE NEXT MAJOR RELEASE, change replica-control-broadcast. The registry clears one cache by name (local and shared tier) and lists every cache's resolved settings, for job-core's caches area and its cacheevict replica control. DefaultLudwigCacheRegistry implements both; a custom registry must add them."
+                                    },
+                                    {
                                         "code": "java.class.removed",
                                         "old": "class ru.ludwigandreas.reconciliation.actuator.ReconciliationEndpoint",
                                         "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The reconciliation actuator endpoint is replaced by the reconciliation area of the administrative surface, /admin/v1/reconciliation/..., authorized by the service's ludwig.admin.grants and audited. Migration: point operator tooling at /admin/v1/reconciliation and grant reconciliation.read/operate/privileged."

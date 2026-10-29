@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-29T12:33:59.698013Z",
+    "generatedAt": "2026-10-29T15:48:14.096256Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 42,
-    "commit": "061f467df98592a0ceb4f180b7fbd55c0dc07395",
-    "commitShort": "061f467",
+    "commit": "f637178a8f97a03ade685ae4767fcf19b31c9aa7",
+    "commitShort": "f637178",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "b7a2a045b74e4fefa3c1b2b5f224d6d0d2e7870ca84f7731dd4c2a543af06724",
+      "pomSetSha": "1afc44866cd581a51b0ab69f44be172c205d4e1ee083854bbca7fdb423743057",
       "newestPom": "pom.xml",
-      "newestPomModified": "2026-10-29T12:33:51.243323Z"
+      "newestPomModified": "2026-10-29T15:48:13.688534Z"
     }
   },
   "modules": [
@@ -492,6 +492,11 @@
           "optional": false
         },
         {
+          "artifactId": "cache-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "security-spring-boot-starter",
           "scope": "compile",
           "optional": true
@@ -554,6 +559,8 @@
       "liquibaseChangelogs": [
         "sources/job-core/src/main/resources/db/changelog/job-core/0001-create-run-lock.sql",
         "sources/job-core/src/main/resources/db/changelog/job-core/0002-create-admin-approval.sql",
+        "sources/job-core/src/main/resources/db/changelog/job-core/0003-create-instance.sql",
+        "sources/job-core/src/main/resources/db/changelog/job-core/0004-create-control.sql",
         "sources/job-core/src/main/resources/db/changelog/job-core/job-core-changelog.xml"
       ],
       "i18nBundles": [
@@ -569,8 +576,8 @@
         "architecture": "sources/job-core/src/test/java/ru/ludwigandreas/job/core/architecture"
       },
       "testClasses": {
-        "surefire": 6,
-        "failsafe": 4
+        "surefire": 8,
+        "failsafe": 6
       },
       "pom": "sources/job-core/pom.xml",
       "readme": "sources/job-core/README.md",
@@ -675,6 +682,10 @@
         }
       ],
       "inRepoDependents": [
+        {
+          "artifactId": "job-core",
+          "scope": "compile"
+        },
         {
           "artifactId": "pat-spring-boot-starter",
           "scope": "compile"

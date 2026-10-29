@@ -1,0 +1,44 @@
+{
+  "change": "replica-control-broadcast",
+  "contract": {
+    "goal": "an administrative control acting on per-replica memory reaches every live replica through job-core's database (heartbeats, commands, acknowledgements), reports per replica, and evicting a cache everywhere is its first control, as specified in specs/replica-control and specs/cache-admin",
+    "output": "LudwigCacheRegistry.evictAll; job-core changesets (instance, command, ack); ReplicaControlPoller; ReplicaControl SPI + startup validator; /admin/v1/replicas, /controls/{control}, /commands/{id}; replicas + caches areas; cacheevict control; service grants; OpenAPI; docs EN+RU",
+    "constraints": [
+      "the database is the only transport",
+      "a command targets the instances live at submission; a silent target is named, never counted done",
+      "at most once per process; controls idempotent",
+      "authorization by the control's own operation, via AdminAccessEvaluator; privileged needs Admin-Reason",
+      "cache-spring-boot-starter gains no in-repo dependency",
+      "liveness judged by the database's now()",
+      "only job-core's POM changes"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_migrations.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :job-core,:cache-spring-boot-starter + all in-repo dependents -am verify (one reactor install)",
+      "openspec validate replica-control-broadcast --strict"
+    ]
+  },
+  "rollback_point": "061f467 (working tree carries the uncommitted earlier admin changes)",
+  "current_task": null,
+  "decisions": [
+    "before the first edit: the design's changesets 0002/0003 collide with job-core-0002-create-admin-approval (admin-four-eyes-approval); they become 0003-create-instance and 0004-create-control.",
+    "1.1: LudwigCacheRegistry gains evictAll(name) - the declared definition's cache (built on demand, so a replica that never read it still clears the shared tier) delegates to LudwigCache.evictAll(), which already invalidates local and publishes ALL_KEYS to the shared tier; an unknown name throws UnknownCacheException. It also gains settings() (resolved CacheSettings of every declared cache), which the design did not name but the caches listing needs for owner, purpose, tiers and TTL. CacheAutoConfigurationTest 8/8 (+1); ModuleIndependenceTest 2/2 (no in-repo dependency added). mvn -pl :cache-spring-boot-starter -am verify rc=0.",
+    "2.1: 0003-create-instance.sql (job_instance owner PK, started_at, last_seen_at, index on last_seen_at) and 0004-create-control.sql (job_control_command with JSONB arguments and TEXT[] targets, indexes on deadline and submitted_at; job_control_ack PK(command_id, owner), FK ON DELETE CASCADE so the purge deletes commands only), both included after 0002, git add -N; check_migrations 108 conforming.",
+    "2.2: ru.ludwigandreas.job.core.control (outside the ArchUnit-analysed admin package, beside lock/claim, because it is JDBC): ControlStore (heartbeat upsert, live by the database's now(), insert with targets TEXT[] and deadline now()+ack-timeout, pendingFor (deadline > now, owner = ANY(targets), no own ack), ack ON CONFLICT DO NOTHING, bounded purge with cascade, forget unseen > 1 day); ReplicaControlPoller (SelfSchedulingLifecycle 'ludwig-replica-control', one per replica, not run-locked; in-memory applied-id set; handler on its own thread with handler-timeout; codes control-failed/-timeout/-result-too-large (4 KiB)/-unknown; purge every 30 passes under run lock 'ludwig-replica-control-purge'). ludwig.job-core.control.{enabled, poll-interval PT2S, ack-timeout PT30S, handler-timeout PT10S, retention P7D}.",
+    "2.3: ReplicaControl<A> SPI {name, argumentType, operationFor(A), possibleOperations, apply -> Optional result}; ReplicaControlValidator at startup (lower-case unique names, every possible operation catalogued). replicas area (read; operate/privileged reserved). ReplicaAdminService: bind JSON -> type (400), Jakarta validate (400), operationFor (IllegalArgumentException -> 400), AdminGrants.holds else AdminAccessEvaluator.refuse (403, published denial), privileged needs Admin-Reason (400), heartbeat self, targets = live now, insert, audit via a new public AdminAudit.record(AdminInvocation, ...) overload in the security starter (the binding is package-private). Envelope per design: any failed ack -> FAILED control-failed [owners]; all succeeded -> SUCCEEDED; deadline passed with silent -> FAILED control-unacknowledged [silent owners]; else RUNNING. Controller: GET /admin/v1/replicas, POST /controls/{control} (@AdminAuthenticated, 202 + Location), GET /commands/{id} (poll with Retry-After). ReplicaControlIT 5/5 - one context as replica A plus a second poller over the same Postgres as replica B (deviation from 'two contexts': same behaviour, one container): both apply once and SUCCEEDED with per-replica results and the audit naming targets; refusals record nothing (blank arg 400, missing op 403, privileged without reason 400, unknown control 404); silent replica named UNACKNOWLEDGED and FAILED; a throwing replica fails its entry and the command while the other applies; liveness within three intervals and a stale replica not targeted. ReplicaControlValidatorTest 2/2. job-core install 98 unit + 26 IT, 0 failures.",
+    "3.1: job-core pom gains optional cache-spring-boot-starter (manifest rebuilt, stale exits 0). CacheAdminAutoConfiguration (after ReplicaControlAutoConfiguration, cache and admin auto-configurations; conditions by class/type name so nothing loads without the cache starter): caches area (read/operate/privileged), CacheAdminService listing registry.settings() as name/owner/purpose/tiers/ttl/enabled, CacheAdminController GET /admin/v1/caches, CacheEvictControl 'cacheevict' (Arguments(@NotBlank cache); unknown cache -> IllegalArgumentException -> 400; SECURITY purpose -> caches.privileged, else caches.operate; apply = registry.evictAll, result {cache, cleared}). CacheAdminIT 3/3 (listing without values; clearing a performance cache SUCCEEDED and the next read misses - one replica here, the two-replica path is ReplicaControlIT's; security cache 403 for operate-only, 400 without reason, 202 privileged with reason; unknown 400). CacheAdminAutoConfigurationTest 1/1 (absent without registry, surface or channel, and with the cache classes filtered out). job-core install 101 unit + 29 IT, 0 failures.",
+    "4.1-4.3: notification-service grants replicas.* and caches.* to NOTIFICATION_ADMIN and the read tiers to NOTIFICATION_SUPPORT; crud-service-example grants all six to CATALOG_ADMIN. api-docs refresh booted both services (their startup grant checks pass) and each document gains /admin/v1/replicas, /replicas/controls/{control}, /replicas/commands/{id} and /admin/v1/caches. The services' full verify runs in the gate (4.1/4.2 ticked there).",
+    "5.1: job-core README EN+RU - schema line for 0003/0004, replicas.* and caches.* rows in the operations table, a 'Replica controls' paragraph (SPI, submission, envelope rules, liveness by the database's clock, the idempotency rule, the polling arithmetic 100 replicas at PT2S = 50 queries/s, timeouts, retention, cacheevict); cache README EN+RU 'Clearing a cache on every replica'; admin guide EN+RU areas table gains replicas and caches; follow-ups item rewritten (broadcast done, hot-reload/tokens/breakers, per-key eviction and replica subsets open). Heading parity ok; openspec validate --strict valid. revapi: LudwigCacheRegistry::evictAll/settings added to an interface (AdminAudit's new overload is additive).",
+    "4.1/4.2/6.1: reactor install of job-core, the cache and security starters with all dependents (both services included) BUILD SUCCESS, 28 modules, 3922 tests, 0 failures; all script checks pass; check_api_baseline unreachable offline. receipt.json written.",
+    "archive: new capability specs replica-control (4 requirements, 8 scenarios) and cache-admin (2, 3) created exclusively from the deltas; validate --specs --strict 70/70; CHANGELOG Added (two entries) + Changed (registry Java API) in both locales; revapi entry added at 5.1; manifest current; archived to openspec/changes/archive/2026-10-29-replica-control-broadcast."
+  ],
+  "failures": [
+    "2.2 attempt 1: checkstyle - MagicNumber on JDBC column indexes and the seconds conversion (moved to column names, an incrementing index and a constant), and a misplaced javadoc in JobCoreProperties.",
+    "2.3 attempt 1: blank arguments were accepted (202) - job-core's tests had no Jakarta Validation provider, so the optional Validator was absent and validation skipped; spring-boot-starter-validation added at test scope. Every service ships a provider; without one only a control's operationFor checks apply (recorded as a limitation)."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

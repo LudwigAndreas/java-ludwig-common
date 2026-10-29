@@ -39,6 +39,27 @@ class CacheAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("the registry lists every cache's settings and clears one by name; an unknown name is refused")
+    void settingsAndEvictAll() {
+        runner.run(context -> {
+            LudwigCacheRegistry registry = context.getBean(LudwigCacheRegistry.class);
+            assertThat(registry.settings()).extracting(ru.ludwigandreas.cache.api.CacheSettings::name)
+                    .containsExactly(CacheFixtures.PROFILES);
+            ru.ludwigandreas.cache.api.LudwigCache<TestKey, TestValue> cache =
+                    registry.cache(CacheFixtures.profiles());
+            TestKey key = new TestKey("k");
+            cache.put(key, new TestValue("v", 1));
+            assertThat(cache.get(key)).isPresent();
+
+            registry.evictAll(CacheFixtures.PROFILES);
+
+            assertThat(cache.get(key)).isEmpty();
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> registry.evictAll("profilez"))
+                    .isInstanceOf(ru.ludwigandreas.cache.error.UnknownCacheException.class);
+        });
+    }
+
+    @Test
     @DisplayName("without a MeterRegistry the metrics are no-ops rather than a startup failure")
     void metricsDegradeWithoutARegistry() {
         runner.run(context -> assertThat(context.getBean(CacheMetrics.class))

@@ -28,6 +28,8 @@ public class JobCoreProperties {
 
     private final Liquibase liquibase = new Liquibase();
 
+    private final Control control = new Control();
+
     /** Whether this module's autoconfiguration is active. */
     public boolean isEnabled() {
         return enabled;
@@ -51,6 +53,11 @@ public class JobCoreProperties {
     /** Run-lock settings. */
     public Lock getLock() {
         return lock;
+    }
+
+    /** The replica-control channel. */
+    public Control getControl() {
+        return control;
     }
 
     /** Schema-management settings. */
@@ -103,6 +110,65 @@ public class JobCoreProperties {
         /** Set false when the application folds this module's changelog into its own master changelog. */
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /** The replica-control channel: how controls reach every replica through this module's tables. */
+    public static class Control {
+
+        /** Whether this replica heartbeats and applies controls. */
+        private boolean enabled = true;
+
+        /** How often a replica polls for commands and records its heartbeat; live means seen within three. */
+        private Duration pollInterval = Duration.ofSeconds(2);
+
+        /** How long the targets of a command have to acknowledge it. */
+        private Duration ackTimeout = Duration.ofSeconds(30);
+
+        /** How long one control may run on a replica before it is acknowledged as timed out. */
+        private Duration handlerTimeout = Duration.ofSeconds(10);
+
+        /** How long commands and their acknowledgements are kept. */
+        private Duration retention = Duration.ofDays(7);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Duration getPollInterval() {
+            return pollInterval;
+        }
+
+        public void setPollInterval(Duration pollInterval) {
+            this.pollInterval = pollInterval;
+        }
+
+        public Duration getAckTimeout() {
+            return ackTimeout;
+        }
+
+        public void setAckTimeout(Duration ackTimeout) {
+            this.ackTimeout = ackTimeout;
+        }
+
+        public Duration getHandlerTimeout() {
+            return handlerTimeout;
+        }
+
+        public void setHandlerTimeout(Duration handlerTimeout) {
+            this.handlerTimeout = handlerTimeout;
+        }
+
+        public Duration getRetention() {
+            return retention;
+        }
+
+        public void setRetention(Duration retention) {
+            this.retention = retention;
         }
     }
 }

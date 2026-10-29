@@ -119,10 +119,24 @@
             <artifactId>web-core-spring-boot-starter</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- For the caches area and the cacheevict replica control only, registered where the cache starter
+             runs. The cache module stays free of in-repo dependencies; this edge points at it. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>cache-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Replica-control arguments are validated with Jakarta Validation where a provider exists, as in every
+             service; the tests run with one so the validation is exercised. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
             <scope>test</scope>
         </dependency>
 

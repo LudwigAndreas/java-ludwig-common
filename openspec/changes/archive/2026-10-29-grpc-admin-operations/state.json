@@ -1,0 +1,34 @@
+{
+  "change": "grpc-admin-operations",
+  "contract": {
+    "goal": "@AdminAccess on @LudwigGrpcService methods is enforced - PERMISSION_DENIED audited like HTTP, privileged needs admin-reason metadata (INVALID_ARGUMENT), the handler runs with AdminInvocation bound, an uncatalogued operation fails startup - through one evaluation shared with the MVC guard, as specified in specs/grpc-server and specs/admin-authorization",
+    "output": "AdminAccessEvaluator.authorize(...) returning AdminInvocation.Scope; MVC guard on it; grpc AdminAccessInterceptor with bind-time map, startup check, admin-reason metadata, status mapping; GrpcAdminAccessIT incl. a cross-transport scenario; GrpcRules javadoc/message; README EN+RU; follow-ups",
+    "constraints": [
+      "no POM changes",
+      "one evaluation for both transports",
+      "every existing admin test unchanged and green",
+      "no platform admin protos",
+      "no AdminInvocation leaks past a call"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_migrations.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :security-spring-boot-starter,:grpc-server-spring-boot-starter,:architecture-rules + all in-repo dependents -am verify (one reactor install)",
+      "openspec validate grpc-admin-operations --strict"
+    ]
+  },
+  "rollback_point": "061f467 (working tree carries the uncommitted earlier admin changes)",
+  "current_task": null,
+  "decisions": [
+    "1.1: authorize takes a fifth argument, the denial target (HandlerMethod for MVC, java.lang.reflect.Method for gRPC), so the existing AuthorizationDeniedAuditListener names the refused method on both transports; methodOf gains the Method case. AdminInvocation.bind/unbind are replaced by Scope (open restores the previous binding on close; reopen() re-binds an authorized invocation). Two test teardowns relied on bind overwriting a leaked invocation: AdminAuditTest passed a null request to afterCompletion, AdminSurfaceGuardTest a fresh one; both now complete the requests they created, last first. Reason check now runs before object scope (both after the grant check); guard javadoc order updated. security starter 230/230.",
+    "2.1: the partner/PAT/required-via checks moved from AdminSurfaceGuard into a new AdminCallerPolicy bean, because AdminSurfaceGuard is a servlet HandlerInterceptor and spring-webmvc is not on grpc-server's classpath; without them gRPC would admit partners and PATs the HTTP surface refuses. The design did not name this. No POM change.",
+    "2.1: an @AdminAccess gRPC method whose operation is in ludwig.admin.approval.required fails startup (four-eyes is HTTP-only; serving it would bypass approval). Not in the spec deltas; added as a fail-closed startup check beside the unknown-operation one, with admin-surface-missing for an annotated method without the surface. New stage ADMIN between CONTEXT and REPLAY, in GrpcServerAdminAutoConfiguration (security starter is optional). GrpcMetadataKeys.ADMIN_REASON in grpc-core, with a parity test.",
+    "after 3.2: the HandlerMethod authorize overload became unused and was removed (one evaluation, user waived backward compatibility), with the unused 4-argument overload added in 1.1.",
+    "4.1: gate stopped at check_api_baseline (offline); remaining steps run by hand, all pass; reactor green after moving GrpcAdminAccessIT's nested app off @SpringBootConfiguration."
+  ],
+  "failures": [],
+  "open_questions": [],
+  "pending_human": []
+}

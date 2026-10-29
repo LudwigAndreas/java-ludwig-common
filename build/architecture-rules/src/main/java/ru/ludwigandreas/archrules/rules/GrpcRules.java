@@ -58,6 +58,12 @@ import ru.ludwigandreas.archrules.support.ConventionPredicates;
  * approved and not enforced - and nothing fails. That asymmetry is why this is a build failure and
  * not a README paragraph.
  *
+ * <p>Two annotations on a service method are honoured, and are not in the refused list:
+ * {@code @Idempotent} and {@code @AdminAccess}. Neither works through a proxy - the server starter
+ * reads both reflectively when it binds the service and enforces them in its own interceptors, and
+ * fails startup when it cannot (no idempotency store; an operation the catalog lacks). An
+ * administrative operation is therefore declared on the gRPC method itself, as on an HTTP handler.
+ *
  * <p>Annotations are matched by <em>name</em>, as everywhere in this jar, so that a service
  * enabling these rules inherits neither gRPC nor Spring Security from them.
  *
@@ -171,12 +177,15 @@ public final class GrpcRules implements ArchitectureRuleSet {
                                 + " dispatches to the object bindService() captured, not through the Spring"
                                 + " proxy around this bean, so @PreAuthorize, @Secured, @Transactional,"
                                 + " @Cacheable and @Async here compile, start and are never applied. For an"
-                                + " authorization rule that means it is written down and not enforced."),
+                                + " authorization rule that means it is written down and not enforced."
+                                + " @AdminAccess and @Idempotent are honoured here: the server starter reads"
+                                + " them itself."),
                 ArchitectureRule.of(SERVICE_IS_A_THIN_ADAPTER, serviceIsAThinAdapter(context),
                         "Delegate to an application service instead of reading a repository from the gRPC"
                                 + " service. The adapter converts messages and nothing else: the transaction"
                                 + " boundary and the authorization belong to the service layer, and cannot be"
-                                + " declared here - see no-proxy-annotations-on-service."));
+                                + " declared here - see no-proxy-annotations-on-service; the one exception is"
+                                + " an administrative operation, declared with @AdminAccess."));
     }
 
     /**

@@ -191,7 +191,9 @@ try (RunLockHandle lease = held.get()) {
 `JobCoreLiquibaseAutoConfiguration` отдельным бином `SpringLiquibase`; выставьте
 `ludwig.job-core.liquibase.enabled=false`, чтобы подключить его из собственного master changelog.
 `job-core-0002` создаёт `job_admin_approval`, где административная поверхность хранит согласования «четырёх глаз»;
-запись в неё идёт только когда `ludwig.admin.approval.required` перечисляет операцию.
+запись в неё идёт только когда `ludwig.admin.approval.required` перечисляет операцию. `job-core-0003` создаёт
+`job_instance` (строка heartbeat на реплику), а `job-core-0004` - `job_control_command` и `job_control_ack`, канал
+команд реплик.
 
 `expires_at` - единственный источник истины для «удерживается». Освобождение очищает `owner` и ставит
 `expires_at = now()`; строки не удаляются, поэтому в таблице одна строка на имя блокировки.
@@ -245,7 +247,27 @@ try (RunLockHandle lease = held.get()) {
 |---|---|---|
 | `jobs.read` | `GET /admin/v1/jobs`<br>`GET /admin/v1/jobs/locks` | Просмотр плановых заданий и владельцев их блокировок запуска. |
 | `jobs.operate` | `POST /admin/v1/jobs/{name}/run` | Запустить плановое задание сейчас. |
+| `replicas.read` | `GET /admin/v1/replicas`<br>`GET /admin/v1/replicas/commands/{id}` | Просмотр живых реплик и ответа каждой на разосланную команду. |
+| `replicas.operate`, `replicas.privileged` | нет | Зарезервированы: команда авторизуется операцией своего модуля. |
+| `caches.read` | `GET /admin/v1/caches` | Просмотр кэшей сервиса с назначением, уровнями и TTL; значения - никогда. |
+| `caches.operate` | `POST /admin/v1/replicas/controls/cacheevict` для кэша `PERFORMANCE` | Очистка кэша производительности на всех репликах. |
+| `caches.privileged` | `POST /admin/v1/replicas/controls/cacheevict` для кэша `SECURITY`, с `Admin-Reason` | Очистка кэша безопасности на всех репликах. |
 | `jobs.privileged` | `POST /admin/v1/jobs/locks/{name}/release` | Принудительно освободить блокировку запуска, владелец которой исчез. |
+
+**Команды реплик.** Часть административных действий меняет память каждой реплики - локальный кэш, - поэтому вызов,
+попавший на одну реплику, изменил бы только её. Модуль предоставляет `ReplicaControl` (имя, тип аргументов, операцию,
+которая авторизует данные аргументы, и обработчик); `POST /admin/v1/replicas/controls/{control}` связывает и проверяет
+аргументы, авторизует их этой операцией, записывает команду для всех реплик, живых в этот момент, и отвечает `202` с
+`Location: /admin/v1/replicas/commands/{id}`. Каждая реплика опрашивает таблицу
+(`ludwig.job-core.control.poll-interval`, `PT2S`), применяет каждую команду один раз и подтверждает её; команда
+`SUCCEEDED`, когда успех подтвердили все цели, `FAILED`, когда хоть одна завершилась ошибкой, и `FAILED` с
+`ludwig.job.error.control-unacknowledged` - с именами молчащих реплик - по истечении `control.ack-timeout` (`PT30S`).
+Живая реплика - heartbeat в пределах трёх интервалов опроса по часам базы данных. **Команда должна быть
+идемпотентной**: реплика применяет её не более одного раза за жизнь процесса, но реплика, перезапустившаяся до
+подтверждения, применит её снова. Она должна быть и быстрой: выполняется с `control.handler-timeout` (`PT10S`).
+Опрос стоит один индексный запрос на реплику за интервал - 100 реплик при `PT2S` дают 50 запросов в секунду. Команды
+хранятся `control.retention` (`P7D`). Первая команда - `cacheevict` (`{"cache": "<имя>"}`), она регистрируется там,
+где работает стартер кэша.
 
 Блок выдачи (имена ролей - собственные роли сервиса):
 

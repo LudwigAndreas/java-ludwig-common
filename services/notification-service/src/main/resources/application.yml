@@ -470,6 +470,12 @@ ludwig:
       "[audit.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
       "[audit.operate]": [NOTIFICATION_ADMIN]
       "[audit.privileged]": [NOTIFICATION_ADMIN]
+      "[replicas.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[replicas.operate]": [NOTIFICATION_ADMIN]
+      "[replicas.privileged]": [NOTIFICATION_ADMIN]
+      "[caches.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
+      "[caches.operate]": [NOTIFICATION_ADMIN]
+      "[caches.privileged]": [NOTIFICATION_ADMIN]
 
   # --- security ----------------------------------------------------------------------------------
   security:

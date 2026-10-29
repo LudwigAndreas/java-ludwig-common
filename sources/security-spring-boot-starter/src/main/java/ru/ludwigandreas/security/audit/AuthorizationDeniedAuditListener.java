@@ -76,6 +76,10 @@ public class AuthorizationDeniedAuditListener implements ApplicationListener<Aut
         if (object instanceof MethodInvocationResult result) {
             return result.getMethodInvocation().getMethod();
         }
+        if (object instanceof Method method) {
+            // A gRPC administrative method, refused by the same evaluation as the HTTP surface.
+            return method;
+        }
         return null;
     }
 

@@ -21,6 +21,25 @@ either.
 
 ### Added
 
+- **Administrative operations over gRPC** (`grpc-admin-operations`). `@AdminAccess` on a method of a
+  `@LudwigGrpcService` is enforced with the same grants, caller admission and audit as `/admin/**`: an operation the
+  caller does not hold is `PERMISSION_DENIED` (audited), a privileged one needs `admin-reason` metadata (else
+  `INVALID_ARGUMENT`), and the handler runs with `AdminInvocation` bound. Startup fails, naming the method, for an
+  unknown operation, for one in `ludwig.admin.approval.required` (approval stays HTTP-only), and for an annotated
+  method with no administrative surface. `GrpcMetadataKeys.ADMIN_REASON` in grpc-core.
+- **Replica controls: administrative actions that reach every replica** (`replica-control-broadcast`). job-core
+  keeps a heartbeat per replica and a database channel of commands and per-replica acknowledgements (migrations
+  `job-core-0003`, `job-core-0004`; `ludwig.job-core.control.*`, polling every `PT2S`). A module contributes a
+  `ReplicaControl`; `POST /admin/v1/replicas/controls/{control}` validates the arguments, authorizes them by the
+  control's own operation (privileged needs `Admin-Reason`), targets every replica live at that moment and answers
+  `202`; `GET /admin/v1/replicas/commands/{id}` is `SUCCEEDED` when all acknowledged, `FAILED` when any failed or,
+  naming them, when a replica stayed silent past `control.ack-timeout`. `GET /admin/v1/replicas` lists the live
+  replicas. Controls must be idempotent.
+- **The `caches` area and clearing a cache everywhere** (`replica-control-broadcast`). `GET /admin/v1/caches` lists
+  the caches with purpose, tiers and TTL; the `cacheevict` control clears one cache on every replica
+  (`caches.operate`, or `caches.privileged` with a reason for a `SECURITY` cache). `LudwigCacheRegistry` gains
+  `evictAll(name)` and `settings()`.
+
 - **OData `$filter` on administrative listings** (`admin-listing-odata-filter`). The audit trail, outbox messages,
   reconciliation runs, export runs, file-action submissions and PATs filter with `$filter` over a per-entity allow-list
   (`@Filterable`; free text, secrets and personal data are never on it), e.g.
@@ -177,6 +196,15 @@ either.
   `SummaryContributor` bean and `PartnerStub.summaryLines` add to the start-up summary.
 
 ### Changed
+
+- **security-spring-boot-starter: one administrative evaluation for every transport** (`grpc-admin-operations`).
+  `AdminAccessEvaluator.authorize(Authentication, LudwigPrincipal, AdminOperation, String reason, Object target)`
+  returns an `AdminInvocation.Scope`, for HTTP and gRPC alike. Partner, personal-access-token and
+  acting-party admission moved from `AdminSurfaceGuard` to the new `AdminCallerPolicy` bean (the guard gains a
+  constructor taking it). On HTTP a privileged call's missing reason is now reported before an object-scope refusal.
+  `RuleGroup.GRPC` names `@AdminAccess` as honoured on gRPC services.
+- **BREAKING (Java API) - `LudwigCacheRegistry` gains `evictAll(String)` and `settings()`**
+  (`replica-control-broadcast`). A custom registry implementation must add both; `DefaultLudwigCacheRegistry` does.
 
 - **BREAKING - administrative listings take `$filter` instead of their filter parameters**
   (`admin-listing-odata-filter`). Removed: the audit search's `category`, `action`, `actor`, `via`, `resourceType`,

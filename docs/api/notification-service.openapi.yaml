@@ -254,6 +254,54 @@ components:
           type: integer
       title: BulkRetryResult
       type: object
+    CacheView:
+      properties:
+        enabled:
+          type: boolean
+        name:
+          type: string
+        owner:
+          type: string
+        purpose:
+          enum:
+          - SECURITY
+          - PERFORMANCE
+          type: string
+        tiers:
+          items:
+            enum:
+            - LOCAL
+            - SHARED
+            type: string
+          type: array
+        ttl:
+          properties:
+            nano:
+              format: int32
+              type: integer
+            negative:
+              type: boolean
+            positive:
+              type: boolean
+            seconds:
+              format: int64
+              type: integer
+            units:
+              items:
+                properties:
+                  dateBased:
+                    type: boolean
+                  durationEstimated:
+                    type: boolean
+                  timeBased:
+                    type: boolean
+                type: object
+              type: array
+            zero:
+              type: boolean
+          type: object
+      title: CacheView
+      type: object
     ChangeAnnouncementWindowRequest:
       description: Replace an announcement's visibility window. The start can move only before the window opens; the end cannot be in the past.
       properties:
@@ -266,6 +314,31 @@ components:
       required:
       - visibleUntil
       title: ChangeAnnouncementWindowRequest
+      type: object
+    CommandView:
+      properties:
+        control:
+          type: string
+        deadline:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        operation:
+          type: string
+        operationEnvelope:
+          $ref: '#/components/schemas/OperationResponse'
+        submittedAt:
+          format: date-time
+          type: string
+        submittedBy:
+          type: string
+        targets:
+          items:
+            $ref: '#/components/schemas/TargetView'
+          type: array
+      title: CommandView
       type: object
     Count:
       properties:
@@ -648,6 +721,18 @@ components:
           type: integer
       title: InboxSummaryResponse
       type: object
+    InstanceView:
+      properties:
+        lastSeenAt:
+          format: date-time
+          type: string
+        owner:
+          type: string
+        startedAt:
+          format: date-time
+          type: string
+      title: InstanceView
+      type: object
     JobView:
       properties:
         lease:
@@ -657,6 +742,9 @@ components:
         schedule:
           type: string
       title: JobView
+      type: object
+    JsonNode:
+      title: JsonNode
       type: object
     LeaseView:
       properties:
@@ -1261,6 +1349,21 @@ components:
           type: string
       title: SuppressionResponse
       type: object
+    TargetView:
+      properties:
+        acknowledgedAt:
+          format: date-time
+          type: string
+        failureCode:
+          type: string
+        owner:
+          type: string
+        result:
+          $ref: '#/components/schemas/JsonNode'
+        state:
+          type: string
+      title: TargetView
+      type: object
     Transition:
       properties:
         attemptNumber:
@@ -1481,6 +1584,26 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - audit-trail-controller
+  /admin/v1/caches:
+    get:
+      operationId: caches
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/CacheView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - cache-admin-controller
   /admin/v1/identity/grants:
     get:
       operationId: grants
@@ -2000,6 +2123,85 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - outbox-admin-controller
+  /admin/v1/replicas:
+    get:
+      operationId: replicas
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/InstanceView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - replica-admin-controller
+  /admin/v1/replicas/commands/{id}:
+    get:
+      operationId: command
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CommandView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - replica-admin-controller
+  /admin/v1/replicas/controls/{control}:
+    post:
+      operationId: submit_1
+      parameters:
+      - in: path
+        name: control
+        required: true
+        schema:
+          type: string
+      - in: header
+        name: Admin-Reason
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonNode'
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CommandView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - replica-admin-controller
   /api/v1/announcements:
     get:
       description: Newest first, dismissed ones excluded, and only those inside their visibility window. Visibility is resolved from the caller's CURRENT roles on every request, so a revoked role stops granting it immediately. Supports $filter/$orderby/$top/$skip over the published surface - the audience is deliberately not filterable.

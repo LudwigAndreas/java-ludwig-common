@@ -13,4 +13,5 @@ ru.ludwigandreas.grpc.server.config.GrpcServerAutoConfiguration
 ru.ludwigandreas.grpc.server.config.GrpcServerSecurityAutoConfiguration
 ru.ludwigandreas.grpc.server.config.GrpcServerObservabilityAutoConfiguration
 ru.ludwigandreas.grpc.server.config.GrpcServerIdempotencyAutoConfiguration
+ru.ludwigandreas.grpc.server.config.GrpcServerAdminAutoConfiguration
 ru.ludwigandreas.grpc.server.config.GrpcServerTestAutoConfiguration

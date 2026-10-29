@@ -46,12 +46,64 @@ public record AdminInvocation(AdminOperation operation, LudwigPrincipal principa
                 + " performed on this thread. AdminInvocation is bound only while an @AdminAccess handler runs."));
     }
 
-    static void bind(AdminInvocation invocation) {
+    /**
+     * Binds an invocation to this thread until the returned scope is closed, which restores whatever was bound before.
+     * Package-private: an invocation is bound only by {@link AdminAccessEvaluator#authorize}, after the caller has
+     * been found to hold the operation.
+     */
+    static Scope open(AdminInvocation invocation) {
+        AdminInvocation previous = CURRENT.get();
         CURRENT.set(invocation);
+        return new Scope(invocation, previous);
     }
 
-    static void unbind() {
-        CURRENT.remove();
+    /**
+     * An administrative invocation bound to the current thread - for an MVC request, a gRPC call, or anything else
+     * that authorized through {@link AdminAccessEvaluator#authorize}. Closing it restores the previous binding.
+     */
+    public static final class Scope implements AutoCloseable {
+
+        private final AdminInvocation invocation;
+        private final AdminInvocation previous;
+        private boolean closed;
+
+        private Scope(AdminInvocation invocation, AdminInvocation previous) {
+            this.invocation = invocation;
+            this.previous = previous;
+        }
+
+        /**
+         * The invocation this scope bound.
+         *
+         * @return it
+         */
+        public AdminInvocation invocation() {
+            return invocation;
+        }
+
+        /**
+         * Binds the same invocation again, for a transport that runs one call across several callbacks and threads:
+         * gRPC re-binds it around each callback. Only an authorized scope can be reopened.
+         *
+         * @return the new binding; close it when the callback returns
+         */
+        public Scope reopen() {
+            return open(invocation);
+        }
+
+        /** Restores the previous binding; a second close does nothing. */
+        @Override
+        public void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            if (previous == null) {
+                CURRENT.remove();
+            } else {
+                CURRENT.set(previous);
+            }
+        }
     }
 
     /**

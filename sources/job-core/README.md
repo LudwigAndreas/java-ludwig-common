@@ -189,7 +189,9 @@ predecessor's work is an explicit reclaim step.
 `JobCoreLiquibaseAutoConfiguration` as an independent `SpringLiquibase` bean; set
 `ludwig.job-core.liquibase.enabled=false` to include it from your own master changelog instead.
 `job-core-0002` creates `job_admin_approval`, where the administrative surface keeps four-eyes approvals; it is
-written only when `ludwig.admin.approval.required` lists an operation.
+written only when `ludwig.admin.approval.required` lists an operation. `job-core-0003` creates `job_instance` (one
+heartbeat row per replica) and `job-core-0004` `job_control_command` and `job_control_ack`, the replica-control
+channel.
 
 `expires_at` is the single source of truth for "held". A release clears `owner` and sets
 `expires_at = now()`; rows are not deleted, so the table holds one row per lock name.
@@ -244,7 +246,26 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 |---|---|---|
 | `jobs.read` | `GET /admin/v1/jobs`<br>`GET /admin/v1/jobs/locks` | See the scheduled jobs and who holds each run lease. |
 | `jobs.operate` | `POST /admin/v1/jobs/{name}/run` | Run a scheduled job now. |
+| `replicas.read` | `GET /admin/v1/replicas`<br>`GET /admin/v1/replicas/commands/{id}` | See the live replicas and what each answered to a broadcast control. |
+| `replicas.operate`, `replicas.privileged` | none | Reserved: a control is authorized by its own module's operation. |
+| `caches.read` | `GET /admin/v1/caches` | See the caches this service runs, with purpose, tiers and TTL; never a value. |
+| `caches.operate` | `POST /admin/v1/replicas/controls/cacheevict` for a `PERFORMANCE` cache | Clear a performance cache on every replica. |
+| `caches.privileged` | `POST /admin/v1/replicas/controls/cacheevict` for a `SECURITY` cache, with `Admin-Reason` | Clear a security cache on every replica. |
 | `jobs.privileged` | `POST /admin/v1/jobs/locks/{name}/release` | Force-release a run lease whose holder is gone. |
+
+**Replica controls.** Some administrative controls act on memory each replica holds - a local cache - so a call that
+landed on one replica would change only that one. A module contributes a `ReplicaControl` (name, argument type, the
+operation that authorizes given arguments, and a handler); `POST /admin/v1/replicas/controls/{control}` binds and
+validates the arguments, authorizes them by that operation, records a command targeting every replica live at that
+moment, and answers `202` with `Location: /admin/v1/replicas/commands/{id}`. Every replica polls
+(`ludwig.job-core.control.poll-interval`, `PT2S`), applies each command once and acknowledges it; the command is
+`SUCCEEDED` when every target acknowledged success, `FAILED` when any failed, and `FAILED` with
+`ludwig.job.error.control-unacknowledged` - naming the silent replicas - once `control.ack-timeout` (`PT30S`) passes.
+Live means a heartbeat within three poll intervals, judged by the database's clock. **A control must be idempotent**:
+a replica applies a command at most once per process, but one that restarts before acknowledging applies it again.
+It must also be quick: it runs with `control.handler-timeout` (`PT10S`). Polling costs one indexed query per replica
+per interval - 100 replicas at `PT2S` is 50 queries a second. Commands are kept for `control.retention` (`P7D`).
+The first control is `cacheevict` (`{"cache": "<name>"}`), registered where the cache starter runs.
 
 Grant block (the role names are the service's own):
 

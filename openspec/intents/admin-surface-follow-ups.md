@@ -54,9 +54,10 @@ The image-pin false positive, the PAT revoke race and `StubFaultIT.slow` were fi
 - **Delegation (`act`) claim** was added by `admin-delegation-claim`: the actor's `via`, the `via` trail filter and
   `ludwig.admin.human-callers.required-via`. Still open: recording the full delegation chain in the envelope (only
   the immediate acting party is stored), and reading delegation from mTLS or PAT callers.
-- **Per-replica controls.** Cache eviction, hot-reload, outbound token invalidation and circuit-breaker state act on
-  the one replica a call lands on. A broadcast (control event over Kafka, "accepted" not "done") is needed before
-  any of these get administrative endpoints.
+- **Per-replica controls.** The broadcast was added by `replica-control-broadcast` - job-core's database channel
+  with per-replica acknowledgements - and cache eviction is its first control (`cacheevict`). Still open:
+  hot-reload, outbound token invalidation and circuit-breaker state (`replica-controls`), per-key eviction, and
+  targeting a subset of replicas.
 - **Moving a database-log consumer's offset** was added by `messaging-db-consumer-controls`: the pause is a row every
   replica's claim reads, so it needed no broadcast. Offsets of groups on a real Kafka cluster stay with Kafka's own
   tooling.
@@ -66,7 +67,9 @@ The image-pin false positive, the PAT revoke race and `StubFaultIT.slow` were fi
 - **Four-eyes approval** was added by `admin-four-eyes-approval`: `ludwig.admin.approval.required`, the
   `/admin/v1/approvals` endpoints and job-core's store. Still open: approval chains (N of M), approver groups distinct
   from operation holders, notifying approvers, and approval of replica controls once those exist.
-- **Administrative operations over gRPC.**
+- **Administrative operations over gRPC** were added by `grpc-admin-operations`: `@AdminAccess` on
+  `@LudwigGrpcService` methods, `admin-reason` metadata, one caller policy and evaluator for both transports. Still
+  open: four-eyes approval over gRPC (such an operation fails startup today).
 - **Reconciliation run history** was added by `reconciliation-run-history`. Still open from it: run history for
   enumeration walks, and for the `async-job` submit pass, which stay synchronous and unrecorded.
 

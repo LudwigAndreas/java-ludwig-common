@@ -365,6 +365,9 @@ ludwig:
   # exports, fileactions, identity, jobs (job-core) and outbox. Bracketed because the ids contain a dot.
   admin:
     grants:
+      "[caches.read]": [CATALOG_ADMIN]
+      "[caches.operate]": [CATALOG_ADMIN]
+      "[caches.privileged]": [CATALOG_ADMIN]
       "[exports.read]": [CATALOG_ADMIN]
       "[exports.operate]": [CATALOG_ADMIN]
       "[exports.privileged]": [CATALOG_ADMIN]
@@ -380,6 +383,9 @@ ludwig:
       "[outbox.read]": [CATALOG_ADMIN]
       "[outbox.operate]": [CATALOG_ADMIN]
       "[outbox.privileged]": [CATALOG_ADMIN]
+      "[replicas.read]": [CATALOG_ADMIN]
+      "[replicas.operate]": [CATALOG_ADMIN]
+      "[replicas.privileged]": [CATALOG_ADMIN]
 
   # --- ludwig security -------------------------------------------------------------------------
   security:

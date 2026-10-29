@@ -51,7 +51,8 @@ domain exceptions as in a controller: the `ExceptionProblemMapper`s modules cont
 
 ```
 observation → correlation → access log → exception→status → admission → authentication
-            → context bridge (principal, correlation MDC, preferences) → [idempotent replay]
+            → context bridge (principal, correlation MDC, preferences) → [administrative access]
+            → [idempotent replay]
             → your LudwigGrpcServerInterceptor beans → handler
 ```
 
@@ -71,7 +72,7 @@ gRPC dispatches to the object `bindService()` captured, not through the Spring p
 `@PreAuthorize`, `@Secured`, `@RolesAllowed`, `@Transactional`, `@Cacheable` and `@Async` on a gRPC service
 **do nothing**. Put authorization and transactions on the application service it calls. `architecture-rules`
 `RuleGroup.GRPC` fails the build on those annotations and on a repository dependency in a `@LudwigGrpcService`
-class. `@Idempotent` is the exception (read reflectively at bind time).
+class. `@Idempotent` and `@AdminAccess` are the exceptions (read reflectively at bind time).
 
 ### Authentication
 
@@ -99,6 +100,25 @@ claim as the HTTP filter. A repeat gets the stored reply with `idempotency-repla
 different request, or a duplicate while the first runs, gets the idempotency module's problems; failed or
 cancelled calls are not stored. `@Idempotent(required = true)` without a key → `INVALID_ARGUMENT`. `@Idempotent`
 without an `IdempotencyStore`, or on a streaming method, fails startup.
+
+### Administrative methods
+
+With the security starter's administrative surface (`ludwig.admin`), a method of a `@LudwigGrpcService` annotated
+`@AdminAccess("<area>.<tier>")` is enforced exactly as an HTTP handler under `/admin/**`. The same
+`AdminCallerPolicy` and `AdminAccessEvaluator` run, so the same `ludwig.admin.grants` apply on both transports:
+
+- partners, personal access tokens (unless `ludwig.admin.allow-personal-access-tokens`) and people not through
+  `human-callers.required-via` are refused, as on HTTP;
+- an operation the caller does not hold → `PERMISSION_DENIED`, audited and metered as an administrative denial
+  (the audit action is the method's name);
+- a privileged operation needs `admin-reason` metadata (at most 500 characters, as the `Admin-Reason` header) →
+  else `INVALID_ARGUMENT`;
+- the handler runs with `AdminInvocation` bound, on every callback's thread, so `AdminAudit` records the operation,
+  reason and actor.
+
+Startup fails, naming the method, for an operation the catalog lacks, for an operation in
+`ludwig.admin.approval.required` (four-eyes approval is HTTP-only), and for any annotated method when the
+administrative surface is not configured. Object scope applies through the application service the method calls.
 
 ### Health and shutdown
 

@@ -54,7 +54,21 @@ public class AdminAudit {
      * @param attributes   further facts, such as a bulk operation's filter and count
      */
     public void record(String resourceType, String resourceId, AdminOutcome outcome, Map<String, Object> attributes) {
-        AdminInvocation invocation = AdminInvocation.require();
+        record(AdminInvocation.require(), resourceType, resourceId, outcome, attributes);
+    }
+
+    /**
+     * Records an administrative operation authorized programmatically rather than by {@code @AdminAccess} - one whose
+     * operation depends on the request, such as a replica control whose tier depends on its arguments.
+     *
+     * @param invocation   the operation, the caller and the stated reason
+     * @param resourceType the kind of object
+     * @param resourceId   the object's identity, or null for an operation on a set
+     * @param outcome      how the operation ended
+     * @param attributes   further, already-redacted facts
+     */
+    public void record(AdminInvocation invocation, String resourceType, String resourceId, AdminOutcome outcome,
+                       Map<String, Object> attributes) {
         LudwigPrincipal principal = invocation.principal();
         Map<String, Object> details = new LinkedHashMap<>(attributes);
         invocation.statedReason().ifPresent(reason -> details.put("reason", reason));

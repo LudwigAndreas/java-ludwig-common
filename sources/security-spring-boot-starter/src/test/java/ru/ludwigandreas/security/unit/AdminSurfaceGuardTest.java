@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -56,12 +57,15 @@ class AdminSurfaceGuardTest {
     };
 
     private final MockHttpServletResponse response = new MockHttpServletResponse();
+    private final List<MockHttpServletRequest> requests = new ArrayList<>();
 
     @AfterEach
     void clear() {
         // The dispatcher always calls afterCompletion once preHandle returned true; tests that stop at preHandle
         // stand in for it here, or the bound invocation leaks into the next test on this thread.
-        guard(false).afterCompletion(request(), response, null, null);
+        // Last bound, first closed: each scope restores what was bound before it.
+        Collections.reverse(requests);
+        requests.forEach(request -> guard(false).afterCompletion(request, response, null, null));
         SecurityContextHolder.clearContext();
     }
 
@@ -105,8 +109,10 @@ class AdminSurfaceGuardTest {
         return new AdminSurfaceGuard(catalog, new AdminAccessEvaluator(grants, publisher), allowPats);
     }
 
-    private static MockHttpServletRequest request() {
-        return new MockHttpServletRequest("POST", "/admin/v1/outbox/messages/1/retry");
+    private MockHttpServletRequest request() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/admin/v1/outbox/messages/1/retry");
+        requests.add(request);
+        return request;
     }
 
     @Test

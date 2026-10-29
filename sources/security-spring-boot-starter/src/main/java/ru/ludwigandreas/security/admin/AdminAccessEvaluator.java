@@ -49,20 +49,30 @@ public class AdminAccessEvaluator {
     }
 
     /**
-     * Refuses the call unless the principal holds the operation.
+     * The one evaluation of an administrative call, for every transport: the caller must hold the operation (else the
+     * denial is published - audited and metered - and {@code AccessDeniedException} thrown), a privileged operation
+     * needs a stated reason of at most {@link AdminInvocation#MAX_REASON_LENGTH} characters (else
+     * {@link AdminReasonRequiredException}), and the invocation is then bound to this thread until the returned scope
+     * is closed.
      *
-     * @param authentication the request's authentication
+     * @param authentication the caller's authentication
      * @param principal      the caller
-     * @param handler        the handler being invoked
-     * @param operationId    the operation it declares
-     * @throws AccessDeniedException when the caller does not hold the operation
+     * @param operation      the operation the call performs
+     * @param reason         the stated reason as sent, or null
+     * @param target         what a denial names - the handler method, or a gRPC service method
+     * @return the bound invocation; close it when the call completes
      */
-    public void authorize(Authentication authentication, LudwigPrincipal principal, HandlerMethod handler,
-                          String operationId) {
-        if (grants.holds(principal, operationId)) {
-            return;
+    public AdminInvocation.Scope authorize(Authentication authentication, LudwigPrincipal principal,
+                                           AdminOperation operation, String reason, Object target) {
+        if (!grants.holds(principal, operation.id())) {
+            refuse(authentication, target, "Caller does not hold administrative operation " + operation.id());
         }
-        refuse(authentication, handler, "Caller does not hold administrative operation " + operationId);
+        String stated = reason == null ? "" : reason.trim();
+        if (stated.length() > AdminInvocation.MAX_REASON_LENGTH
+                || stated.isEmpty() && operation.tier() == AdminTier.PRIVILEGED) {
+            throw new AdminReasonRequiredException();
+        }
+        return AdminInvocation.open(new AdminInvocation(operation, principal, stated.isEmpty() ? null : stated));
     }
 
     /**

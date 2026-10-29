@@ -43,9 +43,13 @@ class AdminAuditTest {
                 }
             }), false);
 
+    private MockHttpServletRequest request;
+
     @AfterEach
     void clear() {
-        AdminInvocation.current().ifPresent(ignored -> guard.afterCompletion(null, null, null, null));
+        if (request != null) {
+            guard.afterCompletion(request, null, null, null);
+        }
         SecurityContextHolder.clearContext();
     }
 
@@ -53,7 +57,7 @@ class AdminAuditTest {
         LudwigPrincipal principal = LudwigPrincipal.builder().subject(type == PrincipalType.USER ? "alice" : "ops-sa")
                 .type(type).displayName("Alice").role("NOTIFICATION_ADMIN").build();
         SecurityContextHolder.getContext().setAuthentication(new LudwigAuthentication(principal, Credential.DIRECT));
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/admin/v1/outbox/messages/m1/retry");
+        request = new MockHttpServletRequest("POST", "/admin/v1/outbox/messages/m1/retry");
         if (reason != null) {
             request.addHeader(AdminInvocation.REASON_HEADER, reason);
         }

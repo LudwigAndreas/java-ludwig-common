@@ -19,6 +19,25 @@
 
 ### Added
 
+- **Административные операции по gRPC** (`grpc-admin-operations`). `@AdminAccess` на методе `@LudwigGrpcService`
+  проверяется теми же grant-ами, допуском вызывающего и аудитом, что и `/admin/**`: операция, которой у вызывающего
+  нет, - `PERMISSION_DENIED` (с аудитом), привилегированной нужны метаданные `admin-reason` (иначе
+  `INVALID_ARGUMENT`), обработчик выполняется с привязанным `AdminInvocation`. Старт падает с именем метода для
+  неизвестной операции, для операции из `ludwig.admin.approval.required` (подтверждение остаётся только в HTTP) и для
+  аннотированного метода без административной поверхности. `GrpcMetadataKeys.ADMIN_REASON` в grpc-core.
+- **Команды реплик: административные действия, доходящие до каждой реплики** (`replica-control-broadcast`).
+  job-core ведёт heartbeat каждой реплики и канал в базе данных: команды и подтверждения по репликам (миграции
+  `job-core-0003`, `job-core-0004`; `ludwig.job-core.control.*`, опрос каждые `PT2S`). Модуль предоставляет
+  `ReplicaControl`; `POST /admin/v1/replicas/controls/{control}` проверяет аргументы, авторизует их собственной
+  операцией команды (для privileged нужен `Admin-Reason`), адресует все реплики, живые в этот момент, и отвечает
+  `202`; `GET /admin/v1/replicas/commands/{id}` - `SUCCEEDED`, когда подтвердили все, `FAILED`, когда кто-то
+  завершился ошибкой или, с их именами, когда реплика промолчала дольше `control.ack-timeout`.
+  `GET /admin/v1/replicas` перечисляет живые реплики. Команды должны быть идемпотентными.
+- **Область `caches` и очистка кэша на всех репликах** (`replica-control-broadcast`). `GET /admin/v1/caches`
+  перечисляет кэши с назначением, уровнями и TTL; команда `cacheevict` очищает кэш на всех репликах
+  (`caches.operate` либо `caches.privileged` с причиной для кэша `SECURITY`). `LudwigCacheRegistry` получает
+  `evictAll(name)` и `settings()`.
+
 - **OData `$filter` в административных списках** (`admin-listing-odata-filter`). Журнал аудита, сообщения outbox,
   запуски сверки, запуски экспорта, отправки file-action и PAT фильтруются через `$filter` по списку разрешённых полей
   сущности (`@Filterable`; свободный текст, секреты и персональные данные в него не входят никогда), например
@@ -182,6 +201,16 @@
   Бин `SummaryContributor` и `PartnerStub.summaryLines` дополняют сводку при старте.
 
 ### Changed
+
+- **security-spring-boot-starter: одна административная проверка для всех транспортов** (`grpc-admin-operations`).
+  `AdminAccessEvaluator.authorize(Authentication, LudwigPrincipal, AdminOperation, String reason, Object target)`
+  возвращает `AdminInvocation.Scope` - и для HTTP, и для gRPC. Допуск партнёров, персональных токенов и
+  посредника перенесён из `AdminSurfaceGuard` в новый бин `AdminCallerPolicy` (у guard-а новый конструктор с ним). В
+  HTTP отсутствие причины у привилегированного вызова теперь сообщается раньше отказа по объекту. `RuleGroup.GRPC`
+  называет `@AdminAccess` поддерживаемым на gRPC-сервисах.
+- **BREAKING (Java API) - `LudwigCacheRegistry` получает `evictAll(String)` и `settings()`**
+  (`replica-control-broadcast`). Собственная реализация реестра должна добавить оба метода; `DefaultLudwigCacheRegistry`
+  их уже реализует.
 
 - **BREAKING - административные списки принимают `$filter` вместо своих параметров фильтрации**
   (`admin-listing-odata-filter`). Удалены: у поиска по аудиту `category`, `action`, `actor`, `via`, `resourceType`,

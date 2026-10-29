@@ -344,16 +344,8 @@ public class AdminApprovals {
         Map<String, Object> attributes = new LinkedHashMap<>(facts);
         attributes.put("approval", action);
         attributes.put("requestedBy", approval.requestedBy());
-        AdminInvocation previous = AdminInvocation.current().orElse(null);
-        AdminInvocation.bind(new AdminInvocation(operation, principal, reason));
-        try {
+        try (AdminInvocation.Scope ignored = AdminInvocation.open(new AdminInvocation(operation, principal, reason))) {
             audit.record(RESOURCE, approval.id().toString(), outcome, attributes);
-        } finally {
-            if (previous == null) {
-                AdminInvocation.unbind();
-            } else {
-                AdminInvocation.bind(previous);
-            }
         }
     }
 

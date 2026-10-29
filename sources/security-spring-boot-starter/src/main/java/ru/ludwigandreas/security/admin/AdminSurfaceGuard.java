@@ -8,17 +8,12 @@ import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
-import ru.ludwigandreas.security.principal.Delegation;
-import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
-import ru.ludwigandreas.security.principal.PrincipalType;
-import ru.ludwigandreas.security.web.PatCredentialNotPermittedException;
 
 /**
  * Guards every request under {@code /admin/}, before the handler runs.
@@ -28,7 +23,9 @@ import ru.ludwigandreas.security.web.PatCredentialNotPermittedException;
  * chain is in place - including one that permits {@code /admin/**} anonymously. Its refusals are thrown, so they are
  * rendered by web-core's one problem pipeline with the same types every other endpoint uses.
  *
- * <p>In order, it refuses:
+ * <p>In order, it refuses (the first four by {@link AdminCallerPolicy}, the next two by
+ * {@link AdminAccessEvaluator#authorize(Authentication, LudwigPrincipal, AdminOperation, String, Object)}, both shared
+ * with gRPC):
  *
  * <ol>
  *   <li>an unauthenticated caller, {@code 401};</li>
@@ -38,10 +35,10 @@ import ru.ludwigandreas.security.web.PatCredentialNotPermittedException;
  *   <li>a person ({@code USER}) whose validated token names none of {@code ludwig.admin.human-callers.required-via}
  *       as its acting party, when that list is set, {@code 403} - audited as a denial;</li>
  *   <li>a handler declaring an operation the caller does not hold, {@code 403};</li>
- *   <li>an {@link AdminObject} outside the caller's data scope, where the area and tier are scoped: {@code 403}, or
- *       on a read the area's not-found {@code 404};</li>
  *   <li>a privileged operation without a stated reason, {@code 400} - after the grant check, so that the
  *       requirement reveals nothing to a caller who could not perform the operation anyway;</li>
+ *   <li>an {@link AdminObject} outside the caller's data scope, where the area and tier are scoped: {@code 403}, or
+ *       on a read the area's not-found {@code 404};</li>
  *   <li>a handler declaring neither an operation nor {@link AdminAuthenticated}, {@code 403} - a forgotten
  *       annotation fails closed.</li>
  * </ol>
@@ -59,8 +56,7 @@ public class AdminSurfaceGuard implements HandlerInterceptor {
 
     private final AdminOperationCatalog catalog;
     private final AdminAccessEvaluator evaluator;
-    private final boolean allowPersonalAccessTokens;
-    private final Set<String> requiredVia;
+    private final AdminCallerPolicy callers;
     private final AdminApprovals approvals;
 
     /**
@@ -99,12 +95,27 @@ public class AdminSurfaceGuard implements HandlerInterceptor {
      */
     public AdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator,
                              boolean allowPersonalAccessTokens, Set<String> requiredVia, AdminApprovals approvals) {
+        this(catalog, evaluator, new AdminCallerPolicy(evaluator, allowPersonalAccessTokens, requiredVia), approvals);
+    }
+
+    /**
+     * Creates the guard over a shared caller policy, the one gRPC administrative methods are admitted by too.
+     *
+     * @param catalog   the declared operations
+     * @param evaluator the grant check
+     * @param callers   who may use the surface at all
+     * @param approvals holds calls whose operation requires approval, or null for none
+     */
+    public AdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator, AdminCallerPolicy callers,
+                             AdminApprovals approvals) {
         this.catalog = catalog;
         this.evaluator = evaluator;
-        this.allowPersonalAccessTokens = allowPersonalAccessTokens;
-        this.requiredVia = Set.copyOf(requiredVia);
+        this.callers = callers;
         this.approvals = approvals;
     }
+
+    /** The request attribute holding the bound invocation's scope until the request completes. */
+    private static final String SCOPE_ATTRIBUTE = AdminSurfaceGuard.class.getName() + ".SCOPE";
 
     /**
      * OData options administrative listings refuse: they page by keyset in a fixed order and filter with
@@ -116,27 +127,8 @@ public class AdminSurfaceGuard implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (!(authentication instanceof LudwigAuthentication ludwig) || !ludwig.isAuthenticated()) {
-            throw new AuthenticationCredentialsNotFoundException("The administrative surface requires authentication");
-        }
-        LudwigPrincipal principal = ludwig.getPrincipal();
-        if (principal.type() == PrincipalType.PARTNER) {
-            log.warn("Refused partner {} on the administrative surface: {} {}", principal.subject(),
-                    request.getMethod(), request.getRequestURI());
-            throw new AccessDeniedException("Partners may not use the administrative surface");
-        }
-        if (ludwig.credential().isLongLived() && !allowPersonalAccessTokens) {
-            log.warn("Refused a {} credential on the administrative surface: {} {}", ludwig.credential().kind(),
-                    request.getMethod(), request.getRequestURI());
-            throw new PatCredentialNotPermittedException(ludwig.credential().kind().name());
-        }
-        if (!requiredVia.isEmpty() && principal.type() == PrincipalType.USER
-                && ludwig.delegation().map(Delegation::actingParty).filter(requiredVia::contains).isEmpty()) {
-            log.warn("Refused {} on the administrative surface: not through {} ({} {})", principal.subject(),
-                    requiredVia, request.getMethod(), request.getRequestURI());
-            evaluator.refuse(authentication, handler, "People reach the administrative surface only through "
-                    + requiredVia);
-        }
+        LudwigPrincipal principal = callers.admit(authentication, handler,
+                request.getMethod() + " " + request.getRequestURI()).getPrincipal();
         if (!(handler instanceof HandlerMethod method)) {
             // No handler method (an unmapped path): the caller is admitted and gets the ordinary 404.
             return true;
@@ -154,26 +146,43 @@ public class AdminSurfaceGuard implements HandlerInterceptor {
         }
         AdminOperation operation = catalog.find(access.value())
                 .orElseThrow(() -> new AccessDeniedException("Uncatalogued administrative operation"));
-        evaluator.authorize(authentication, principal, method, operation.id());
-        evaluator.authorizeObject(authentication, principal, method, operation, pathVariables(request));
-        String reason = reasonOf(request, operation);
-        if (approvals != null && approvals.requires(operation)) {
-            Object executing = request.getAttribute(ApprovedRequest.EXECUTING);
-            if (executing == null) {
-                // Held, not executed: the handler never runs, and the caller gets the approval.
-                approvals.hold(request, response, operation, principal, reason);
-                return false;
+        AdminInvocation.Scope scope = evaluator.authorize(authentication, principal, operation,
+                request.getHeader(AdminInvocation.REASON_HEADER), method);
+        return admit(request, response, authentication, method, operation, scope);
+    }
+
+    /** Object scope and four-eyes approval, after the grant: the call proceeds with its invocation bound, or not. */
+    private boolean admit(HttpServletRequest request, HttpServletResponse response, Authentication authentication,
+                          HandlerMethod method, AdminOperation operation, AdminInvocation.Scope scope) {
+        LudwigPrincipal principal = scope.invocation().principal();
+        try {
+            evaluator.authorizeObject(authentication, principal, method, operation, pathVariables(request));
+            if (approvals != null && approvals.requires(operation)) {
+                Object executing = request.getAttribute(ApprovedRequest.EXECUTING);
+                if (executing == null) {
+                    // Held, not executed: the handler never runs, and the caller gets the approval.
+                    approvals.hold(request, response, operation, principal, scope.invocation().reason());
+                    scope.close();
+                    return false;
+                }
+                approvals.admitExecution((UUID) executing, operation, principal);
             }
-            approvals.admitExecution((UUID) executing, operation, principal);
+        } catch (RuntimeException e) {
+            // CHECKSTYLE.OFF: IllegalCatch - whatever refused the call, nothing stays bound for the next request.
+            scope.close();
+            throw e;
+            // CHECKSTYLE.ON: IllegalCatch
         }
-        AdminInvocation.bind(new AdminInvocation(operation, principal, reason));
+        request.setAttribute(SCOPE_ATTRIBUTE, scope);
         return true;
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
                                 Exception exception) {
-        AdminInvocation.unbind();
+        if (request.getAttribute(SCOPE_ATTRIBUTE) instanceof AdminInvocation.Scope scope) {
+            scope.close();
+        }
         AdminApprovalContext.unbind();
     }
 
@@ -191,13 +200,4 @@ public class AdminSurfaceGuard implements HandlerInterceptor {
         return variables instanceof Map<?, ?> map ? (Map<String, String>) map : Map.of();
     }
 
-    private static String reasonOf(HttpServletRequest request, AdminOperation operation) {
-        String header = request.getHeader(AdminInvocation.REASON_HEADER);
-        String reason = header == null ? "" : header.trim();
-        if (reason.length() > AdminInvocation.MAX_REASON_LENGTH
-                || reason.isEmpty() && operation.tier() == AdminTier.PRIVILEGED) {
-            throw new AdminReasonRequiredException();
-        }
-        return reason.isEmpty() ? null : reason;
-    }
 }

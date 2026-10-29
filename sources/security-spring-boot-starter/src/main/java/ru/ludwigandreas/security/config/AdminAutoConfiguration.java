@@ -24,6 +24,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.admin.AdminAccessEvaluator;
 import ru.ludwigandreas.security.admin.AdminApprovalPolicy;
+import ru.ludwigandreas.security.admin.AdminCallerPolicy;
 import ru.ludwigandreas.security.admin.AdminApprovals;
 import ru.ludwigandreas.security.admin.AdminApprovalsController;
 import ru.ludwigandreas.security.admin.AdminApprovalStore;
@@ -113,10 +114,16 @@ public class AdminAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public AdminCallerPolicy ludwigAdminCallerPolicy(AdminAccessEvaluator evaluator, AdminProperties properties) {
+        return new AdminCallerPolicy(evaluator, properties.isAllowPersonalAccessTokens(),
+                Set.copyOf(properties.getHumanCallers().getRequiredVia()));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public AdminSurfaceGuard ludwigAdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator,
-                                                     AdminProperties properties, AdminApprovals approvals) {
-        return new AdminSurfaceGuard(catalog, evaluator, properties.isAllowPersonalAccessTokens(),
-                Set.copyOf(properties.getHumanCallers().getRequiredVia()), approvals);
+                                                     AdminCallerPolicy callers, AdminApprovals approvals) {
+        return new AdminSurfaceGuard(catalog, evaluator, callers, approvals);
     }
 
     @Bean

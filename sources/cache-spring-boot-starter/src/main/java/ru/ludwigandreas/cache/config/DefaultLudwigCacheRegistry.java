@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import java.time.Clock;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -116,6 +117,22 @@ public class DefaultLudwigCacheRegistry implements LudwigCacheRegistry {
     @Override
     public boolean contains(String name) {
         return declared.containsKey(name);
+    }
+
+    @Override
+    public List<CacheSettings> settings() {
+        return declared.values().stream().map(resolver::resolve).toList();
+    }
+
+    @Override
+    @SuppressWarnings({"unchecked", "rawtypes"}) // the declared definition builds the cache, as cache() does
+    public void evictAll(String name) {
+        CacheDefinition definition = declared.get(name);
+        if (definition == null) {
+            throw new UnknownCacheException(name, declared.keySet());
+        }
+        // Built on demand: a cache this replica never read still clears the shared tier for the others.
+        cache(definition).evictAll();
     }
 
     private <K, V> LudwigCache<K, V> build(CacheDefinition<K, V> definition) {

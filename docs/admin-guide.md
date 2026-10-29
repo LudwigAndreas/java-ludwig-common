@@ -167,6 +167,8 @@ did is in the `fileingest` and `reconciliation` areas below.
 | Area | Module | Read | Operate | Privileged |
 |---|---|---|---|---|
 | `jobs` | job-core | jobs, run leases | run a job now | force-release a run lease |
+| `replicas` | job-core | live replicas, a command's per-replica acknowledgements | - (controls use their own module's operations) | - |
+| `caches` | job-core + cache | caches with purpose and TTL | clear a performance cache on every replica | clear a security cache on every replica |
 | `outbox` | outbox | messages (no payload), summary | retry one or many | discard |
 | `messaging` | messaging-db | consumer lag | - | - |
 | `reconciliation` | reconciliation | tasks, scopes, quarantine | runs, backfills, requeues, walks | cancel remote job, release lease, confirm sweep |

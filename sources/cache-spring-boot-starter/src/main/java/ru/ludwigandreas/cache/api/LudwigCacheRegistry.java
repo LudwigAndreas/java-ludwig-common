@@ -1,5 +1,6 @@
 package ru.ludwigandreas.cache.api;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -44,4 +45,21 @@ public interface LudwigCacheRegistry {
 
     /** Whether a cache of this name has been declared by some module. */
     boolean contains(String name);
+
+    /**
+     * The resolved settings of every declared cache, for an operator's listing - name, owner, purpose, tiers and
+     * TTL, never an entry.
+     *
+     * @return the settings, in declaration order
+     */
+    List<CacheSettings> settings();
+
+    /**
+     * Clears every entry of one cache on this replica, and in the shared tier where the cache has one (which
+     * invalidates the other replicas' local copies through the existing invalidation channel).
+     *
+     * @param name the cache
+     * @throws ru.ludwigandreas.cache.error.UnknownCacheException when no module declares it
+     */
+    void evictAll(String name);
 }

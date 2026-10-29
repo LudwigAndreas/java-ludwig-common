@@ -16,5 +16,7 @@
     -->
     <include file="classpath:db/changelog/job-core/0001-create-run-lock.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/job-core/0002-create-admin-approval.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/job-core/0003-create-instance.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/job-core/0004-create-control.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

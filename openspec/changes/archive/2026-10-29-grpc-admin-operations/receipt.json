@@ -1,0 +1,50 @@
+{
+  "change": "grpc-admin-operations",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "security-spring-boot-starter",
+    "grpc-core (ADMIN_REASON key)",
+    "grpc-server-spring-boot-starter",
+    "architecture-rules (javadoc and messages only)"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "not run to completion (releases repository unreachable)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "manifest stale": "pass",
+    "maven reactor (security, grpc-core, grpc-server, architecture-rules + all dependents, -am -amd install)": "pass after one fix: first run 30 modules SUCCESS (3588 tests, 0 failures) and grpc-server 4 errors; resumed from grpc-server, 6 modules SUCCESS (1168 tests, 0 failures)",
+    "openspec validate --strict": "pass"
+  },
+  "tests": [
+    "GrpcAdminAccessIT 7/7 (new: granted, ungranted+audited, privileged reason, partner/unannotated, cross-transport, typo at startup, no surface at startup)",
+    "GrpcMetadataKeysParityTest +1 (5/5)",
+    "security-spring-boot-starter 230/230 (two teardowns fixed)",
+    "architecture-rules 102/102"
+  ],
+  "deviations_from_design": [
+    "authorize takes a fifth argument, the denial target, so the audit listener names the refused method on both transports",
+    "AdminCallerPolicy (new public bean) holds the partner/PAT/required-via checks the guard had; AdminSurfaceGuard is a servlet interceptor and not on grpc-server's classpath, and without them gRPC would admit callers HTTP refuses",
+    "AdminInvocation.Scope.reopen() re-binds an authorized invocation around each gRPC callback",
+    "A gRPC @AdminAccess operation that requires four-eyes approval fails startup; so does any annotated method with no administrative surface",
+    "The HandlerMethod authorize overload was removed (one evaluation; backward compatibility waived)",
+    "Reason is checked before object scope on HTTP (both still after the grant check)",
+    "The reason cap is AdminInvocation.MAX_REASON_LENGTH (500), not the design's 512"
+  ],
+  "retries": [
+    "checkstyle (javadoc position, cyclomatic complexity in preHandle)",
+    "test teardowns leaking invocations once Scope restores the previous binding",
+    "IT context: DataSource/JPA exclusions, lambda Converter bean, operation description bundle",
+    "IT nested @SpringBootConfiguration broke discovery for the package's other ITs"
+  ],
+  "rollback_commit": "f637178 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "check_api_baseline cannot run offline",
+    "four-eyes approval over gRPC",
+    "object scope on gRPC applies only through the application service (no path variables)"
+  ]
+}
