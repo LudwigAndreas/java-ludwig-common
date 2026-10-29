@@ -630,6 +630,7 @@ resource, which bytecode analysis cannot see, and `scripts/check_protos.sh` owns
 | `admin.no-second-gate` | A class declaring administrative handlers, and those handlers, carry none of `@PreAuthorize`, `@PostAuthorize`, `@Secured`, `@RolesAllowed` |
 | `admin.mapped-under-the-versioned-prefix` | A handler carrying either annotation is mapped under `/admin/v1/` |
 | `admin.controller-is-a-thin-adapter` | A class declaring administrative handlers depends on no repository |
+| `admin.admin-object-is-a-path-variable` | `@AdminObject` appears only on a parameter that is also `@PathVariable` |
 
 On by default, and vacuous for a module with no handler under `/admin/`. A placeholder without a default cannot be
 resolved from bytecode; that method is skipped by the path-based rules rather than guessed at. Annotations are

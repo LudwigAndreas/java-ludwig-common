@@ -27,7 +27,8 @@
   "decisions": [
     "withdrawal is a withdrawn_at marker, not visible_until=now: ck_notification_announcement_window (visible_until > visible_from) forbids the latter for a not-yet-open announcement",
     "scope addition before first edit: task 5.2 refreshes docs/api/notification-service.openapi.yaml, because the service's drift IT fails on new endpoints and tasks.md omitted it",
-    "audit-record scenarios (once on withdraw, none on repeat or on a refused change) are asserted in unit test AnnouncementLifecycleTest with RecordingAuditSink, not in AnnouncementLifecycleIT: the IT context's @Primary AuditSink cannot be substituted (RecordingAuditSink javadoc). Fan-out withdrawal scenarios live in AnnouncementEmailFanOutIT, which owns the users and scheduler"
+    "audit-record scenarios (once on withdraw, none on repeat or on a refused change) are asserted in unit test AnnouncementLifecycleTest with RecordingAuditSink, not in AnnouncementLifecycleIT: the IT context's @Primary AuditSink cannot be substituted (RecordingAuditSink javadoc). Fan-out withdrawal scenarios live in AnnouncementEmailFanOutIT, which owns the users and scheduler",
+    "archive (2026-10-29, from a later session): four ADDED requirements appended to platform-announcement (validate --specs --strict 67/67); CHANGELOG Added entry in both locales (none existed); READMEs already covered it; archived to openspec/changes/archive/2026-10-29-add-announcement-withdrawal-and-window-edits."
   ],
   "failures": [
     "gate step scripts/check_image_pins.sh FAILS at HEAD, independent of this change: openspec/changes/archive/2026-10-11-adopt-local-run-in-notification-service/proposal.md:78 (unmodified since 7abdcd4), apparently a false positive on prose 'no new image'",

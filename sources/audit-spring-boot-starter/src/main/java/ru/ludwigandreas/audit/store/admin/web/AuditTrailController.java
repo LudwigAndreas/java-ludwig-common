@@ -1,6 +1,5 @@
 package ru.ludwigandreas.audit.store.admin.web;
 
-import java.time.Instant;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -8,7 +7,6 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.audit.store.admin.AuditAdminOperations;
 import ru.ludwigandreas.audit.store.admin.service.AuditTrailSearch;
 import ru.ludwigandreas.audit.store.admin.service.AuditTrailSearch.EventView;
-import ru.ludwigandreas.audit.store.admin.service.AuditTrailSearch.Filter;
 import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
 
@@ -31,34 +29,19 @@ public class AuditTrailController {
     }
 
     /**
-     * Matching events, newest first; the last 30 days when no range is given.
+     * One page of the stored trail, newest first.
      *
-     * @param category     the event category
-     * @param action       the event action
-     * @param actor        who acted
-     * @param resourceType the kind of object
-     * @param resourceId   the object
-     * @param outcome      how it ended
-     * @param from         from this instant, inclusive
-     * @param to           until this instant, exclusive
-     * @param cursor       the previous page's cursor
-     * @param size         the page size, at most 200
+     * @param filter an OData {@code $filter} over the audit event's filterable fields; without one constraining
+     *               {@code occurredAt}, the last 30 days
+     * @param cursor the previous page's cursor
+     * @param size   the page size, at most 200
      * @return one page
      */
     @GetMapping("/events")
     @AdminAccess(AuditAdminOperations.READ)
-    @SuppressWarnings("checkstyle:ParameterNumber")
-    public AdminPage<EventView> events(@RequestParam(required = false) String category,
-                                       @RequestParam(required = false) String action,
-                                       @RequestParam(required = false) String actor,
-                                       @RequestParam(required = false) String resourceType,
-                                       @RequestParam(required = false) String resourceId,
-                                       @RequestParam(required = false) String outcome,
-                                       @RequestParam(required = false) Instant from,
-                                       @RequestParam(required = false) Instant to,
+    public AdminPage<EventView> events(@RequestParam(name = "$filter", required = false) String filter,
                                        @RequestParam(required = false) String cursor,
                                        @RequestParam(required = false) Integer size) {
-        return search.search(new Filter(category, action, actor, resourceType, resourceId, outcome, from, to),
-                cursor, size);
+        return search.search(filter, cursor, size);
     }
 }

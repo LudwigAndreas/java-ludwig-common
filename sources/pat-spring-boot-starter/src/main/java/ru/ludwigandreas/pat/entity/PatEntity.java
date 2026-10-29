@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.DynamicUpdate;
 import ru.ludwigandreas.db.core.entity.AuditedEntity;
+import ru.ludwigandreas.odatafilter.annotation.Filterable;
 
 /**
  * One personal access token, as stored.
@@ -61,6 +62,7 @@ public class PatEntity extends AuditedEntity<UUID> {
      * tokens to another. For a credential that outlives several of its owner's job titles, this matters more
      * than it does for a request-scoped principal.
      */
+    @Filterable
     @Column(name = "owner_subject", nullable = false)
     private String ownerSubject;
 
@@ -127,10 +129,12 @@ public class PatEntity extends AuditedEntity<UUID> {
      * one, but the service refuses a null unless {@code ludwig.pat.allow-non-expiring} is set. A credential
      * with no expiry is a credential that outlives every process that knows it exists.
      */
+    @Filterable
     @Column(name = "expires_at")
     private Instant expiresAt;
 
     /** When an operator or the owner-disabled listener revoked it. Null while live. */
+    @Filterable
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
@@ -145,6 +149,7 @@ public class PatEntity extends AuditedEntity<UUID> {
     private String revocationReason;
 
     /** Debounced, best-effort, and may be stale or absent. See the tracker for why that is acceptable. */
+    @Filterable
     @Column(name = "last_used_at")
     private Instant lastUsedAt;
 
@@ -153,6 +158,7 @@ public class PatEntity extends AuditedEntity<UUID> {
     private String lastUsedIp;
 
     /** Monotonic, debounced. Zero means never used, which is what makes a first use detectable. */
+    @Filterable
     @Column(name = "use_count", nullable = false)
     private long useCount;
 

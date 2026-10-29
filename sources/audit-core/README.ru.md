@@ -64,7 +64,7 @@ public record AuditEvent(
         Instant occurredAt,
         String category,                // см. AuditCategories
         String action,                  // "run.completed", "access.denied", "setting.changed"
-        Actor actor,                    // subject, principalType, displayName, onBehalfOf
+        Actor actor,                    // subject, principalType, displayName, onBehalfOf, tenant, via
         Resource resource,              // type, id, name
         AuditOutcome outcome,           // SUCCESS | FAILURE | DENIED | PARTIAL, + reason
         String correlationId,
@@ -218,7 +218,7 @@ Correlation id связывает событие аудита с логами, �
 
 | Логгер / уровень | Содержимое |
 |---|---|
-| `ru.ludwigandreas.audit` / `INFO` | Одна строка на событие: `audit id=… at=… category=… action=… outcome=… actor=… actorType=… onBehalfOf=… resourceType=… resourceId=… correlationId=… traceId=… reason=… attributes=…` |
+| `ru.ludwigandreas.audit` / `INFO` | Одна строка на событие: `audit id=… at=… category=… action=… outcome=… actor=… actorType=… onBehalfOf=… via=… resourceType=… resourceId=… correlationId=… traceId=… reason=… attributes=…` |
 | `WARN` | `Audit sink <sink> failed for <category>/<action> (event <id>); the operation was not affected` (при `LOG_AND_CONTINUE`) |
 
 **Метрики.** Здесь нет. Со стартером отказы приёмника считаются как `ludwig.audit.sink.failures`.

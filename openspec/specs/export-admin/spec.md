@@ -9,8 +9,8 @@ deliberately hides, and lets them cancel a run that should not continue.
 `export-spring-boot-starter` SHALL declare `exports.read`, `exports.operate` and `exports.privileged`, and serve under
 `exports.read`:
 
-- `GET /admin/v1/exports/runs?requester=&report=&status=&cursor=` and `GET /admin/v1/exports/runs/{runId}` - each
-  run in the platform operation envelope with its requester and report, without its output;
+- `GET /admin/v1/exports/runs?$filter=&cursor=` and `GET /admin/v1/exports/runs/{runId}` - each run in the platform
+  operation envelope with its requester and report, without its output;
 - `GET /admin/v1/exports/subscriptions?owner=&report=` - each subscription with its schedule, run-as identity and
   last run.
 
@@ -18,7 +18,7 @@ The requester-scoped endpoints SHALL keep answering `404` to a caller who is not
 this area instead.
 
 #### Scenario: An administrator finds a stuck run of another user
-- **WHEN** a caller holding `exports.read` lists runs with status `RUNNING`
+- **WHEN** a caller holding `exports.read` lists runs with `$filter=status eq 'RUNNING'`
 - **THEN** runs of every requester are listed, and no response offers the run's output
 
 ### Requirement: Any run can be cancelled
@@ -32,3 +32,11 @@ envelope, not `409`.
 - **THEN** the response is `202`, the run reaches `CANCELLED` cooperatively, and the audit event names the actor and
   the requester
 
+### Requirement: Export runs are filterable on their definition, requester and state
+`$filter` on the administrative export runs listing SHALL accept `definitionKey`, `requester`, `status`, `attempts`,
+`failureCode`, `createdAt`, `startedAt` and `finishedAt`. The stored filter expression, the failure arguments and the
+idempotency key SHALL NOT be filterable.
+
+#### Scenario: One requester's failed runs
+- **WHEN** an operator lists runs with `$filter=requester eq 'alice' and status eq 'FAILED'`
+- **THEN** only alice's failed runs are returned

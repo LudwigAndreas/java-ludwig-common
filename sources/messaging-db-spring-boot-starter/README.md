@@ -111,7 +111,8 @@ Workers per listener follow the listener's `concurrency`, as Kafka consumer thre
   `IF NOT EXISTS` and takes an advisory lock first, so services may start in any order or concurrently.
 - **Tables.** `message_log` (records), `partition_head` (next offset per partition; its row lock
   serialises writers so offsets never become visible out of order), `consumer_offset` (each group's
-  position; its row lock is the partition assignment).
+  position; its row lock is the partition assignment), `consumer_pause` (a group paused on a topic by an
+  operator; every replica's claim reads it).
 - **Connection pool.** A worker holds one pooled connection while handling a record and the listener's
   transaction uses another: add `concurrency × 2` per log listener to the pool size the service already
   needs.
@@ -185,11 +186,21 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 
 | Operation | Endpoints | Allows |
 |---|---|---|
-| `messaging.read` | `GET /admin/v1/messaging/consumers` | See how far each consumer group is behind on each partition of the database log. |
-| `messaging.operate` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
-| `messaging.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+| `messaging.read` | `GET /admin/v1/messaging/consumers` | See how far each consumer group is behind on each partition of the database log, and whether it is paused, by whom and since when. |
+| `messaging.operate` | `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/pause`, `.../resume` | Stop and restart delivery of one topic to one group, on every replica at once. |
+| `messaging.privileged` | `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/offsets` | Move a paused group's position on one partition or all of them, skipping or replaying records. |
 
-No endpoint moves an offset; any other method on `/admin/v1/messaging/consumers` is `405`.
+Only groups this service's own listeners consume as can be paused or moved; any other group, or a group with no
+position on the topic, is `404`. Pause and resume are idempotent and return the pair's state; the pause is a row
+every replica's claim reads, so it holds everywhere with nothing broadcast, and a record already being handled
+finishes first.
+
+A move is refused with `409` unless the group is paused on the topic, so no replica is handling the records being
+moved past. The body is `{"to": "earliest" | "latest" | "offset" | "timestamp", "value": ..., "partition": n}`:
+`offset` is the next offset to deliver, `timestamp` an ISO-8601 instant (delivery restarts at the first record
+produced at or after it), and `partition` absent means every partition. The result is clamped to the records still
+retained. The response and the audit event give each partition's old and new position and how many records are
+skipped or replayed; an unknown target or unparseable value is `400`.
 
 Grant block (the role names are the service's own):
 
@@ -211,12 +222,15 @@ ludwig:
 | `never consumed` warning | Group stopped consuming longer than `retention` | The purged records are gone; ask the producer to republish if needed. Fix the consumer |
 | Pool exhaustion / connection timeouts | Pool not sized for `concurrency × 2` per log listener | Increase `spring.datasource.hikari.maximum-pool-size` |
 | Startup fails naming `topicPattern`, group id, non-blocking retry or an unknown cluster | One of the [refused configurations](#what-is-refused-at-startup) | Fix as the message says |
+| One record fails every attempt and holds its partition back | A poison record: the payload cannot be handled by any version of the listener | Pause the group on the topic (`.../pause`), read `committedOffset` from `GET /admin/v1/messaging/consumers`, move to the next offset (`{"to":"offset","value":"<committed + 2>","partition":n}`), resume. The record is skipped, not dead-lettered: take it from `message_log` first if it is needed |
+| Records were handled wrongly by a bug now fixed | Replay after a fix | Pause, move to the time the bug shipped (`{"to":"timestamp","value":"2026-10-01T09:00:00Z"}`), resume. Every record from then is delivered again, including ones handled correctly: the listener must be idempotent or this repeats their side effects. With consumer-side dedup (keyed on `ludwig-idempotency-key`, the same on a redelivery) the replayed records are dropped as duplicates unless their dedup entries are removed first |
 | Need to move to Kafka | - | [Moving to a real cluster](#moving-to-a-real-cluster) |
 
 ## Testing
 
 `mvn verify` (Docker): `LogStoreIT`, `LogOnlyTransportIT`, `MixedTransportIT` (log and a real Kafka in one
-service), `DrainingIT`, `SchemaInstallIT` (concurrent installs), plus `StartupValidationTest` for the
+service), `DrainingIT`, `SchemaInstallIT` (concurrent installs), `ConsumerPauseIT` and `ConsumerOffsetMoveIT` (pause and
+move across replicas and over HTTP), `MessagingAdminIT`, plus `StartupValidationTest` for the
 refusals and an `ArchitectureTest`.
 
 ## Design decisions

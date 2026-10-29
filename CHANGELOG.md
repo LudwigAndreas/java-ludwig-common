@@ -21,6 +21,77 @@ either.
 
 ### Added
 
+- **OData `$filter` on administrative listings** (`admin-listing-odata-filter`). The audit trail, outbox messages,
+  reconciliation runs, export runs, file-action submissions and PATs filter with `$filter` over a per-entity allow-list
+  (`@Filterable`; free text, secrets and personal data are never on it), e.g.
+  `$filter=status eq 'DEAD_LETTER' and eventType eq 'OrderCreated'`. The filter is ANDed under tenant confinement, the
+  audit search's 30-day default (lifted by a filter on `occurredAt`) and the path's task, so it only narrows. Paging stays
+  keyset (`cursor`, `size`). A search's audit event records the filter's paths and operators, never its values.
+  db-core's `AdminQueryFilter` is the seam; without the OData starter a listing answers unfiltered and a `$filter` is
+  `400` (`ludwig.admin.filter-unavailable`). `ODataQuery` exposes `filterSummary()`.
+
+- **Four-eyes approval of privileged administrative operations** (`admin-four-eyes-approval`).
+  `ludwig.admin.approval.required` lists privileged operations (empty by default; an uncatalogued or non-privileged
+  id, or a list without a store, fails startup). Such a call is recorded instead of executed - body up to 64 KiB,
+  `413` above - and answered `202` with a pending approval at `/admin/v1/approvals/{id}`. `GET /admin/v1/approvals`
+  lists the approvals of the operations the caller holds; a different holder approves (`POST .../approve`, the
+  requester's authority re-checked, the stored request then run through the same handler as the approver), rejects or
+  lets it expire after `ludwig.admin.approval.ttl` (`PT24H`); the requester may withdraw. Self-approval is `403`, a
+  decided approval `409`. Every step is audited and the executed operation's event carries `requestedBy` and
+  `approvedBy`. job-core provides the store (`job_admin_approval`, migration `job-core-0002`) and the
+  `ludwig-admin-approval-expiry` sweep.
+
+- **Per-object scope for administrative operations** (`admin-object-scope`). An operation on a named object can be
+  narrowed to the objects a caller is granted: resource `admin.<area>`, action = tier, built-in dimension `object`.
+  Opt-in per area and tier with a `ludwig.security.data.policies."admin.<area>"` entry whose roles are `ALL` or
+  `NONE`, and objects granted per subject through `POST /admin/v1/identity/grants`. Out of scope is `403` on
+  operate/privileged and, on a read, the area's own not-found `404`; both are audited. Handlers mark the object with
+  `@AdminObject` on a `@PathVariable` (ArchUnit `admin.admin-object-is-a-path-variable`); listings filter through
+  `AdminObjectScope`. Reconciliation is the first adopter: every `{task}` endpoint and the task listing. Without a
+  policy entry nothing changes.
+
+- **Acting party on the audit trail** (`admin-delegation-claim`). A token's RFC 8693 delegation claim
+  (`ludwig.security.jwt.actor-claim`, default `act`, read as `act.sub`) names the party a request came through, for
+  example an administrative UI. It is recorded as the audit actor's new `via` (column `audit_event.actor_via`,
+  migration `0006`) and searchable with `GET /admin/v1/audit/events?$filter=actorVia eq 'admin-console'`; it never grants a role.
+  `ludwig.admin.human-callers.required-via` optionally requires people to reach `/admin/**` only through the listed
+  parties (`403`, audited, otherwise); service principals are unaffected, so a break-glass service account keeps
+  working.
+- **`notification-service`: withdrawing and rescheduling announcements** (`add-announcement-withdrawal-and-window-edits`).
+  `POST /api/v1/announcements/{id}/withdrawal` (optional reason, idempotent) hides a published announcement from
+  every recipient at once and cancels a running email fan-out; emails already sent are not recalled, and the row is
+  kept for retention (migration `0024`). `PUT /api/v1/announcements/{id}/window` moves the visibility window: the end
+  either way but not into the past, the start only before the window opens, within the maximum length. A withdrawn
+  announcement is final. Both are audited, a window change with its old and new values.
+
+- **Database-log consumer controls** (`messaging-db-consumer-controls`). An operator can pause and resume one consumer
+  group on one topic on every replica (`POST /admin/v1/messaging/consumers/{group}/topics/{topic}/pause`, `.../resume`,
+  `messaging.operate`), and move a paused group's position (`.../offsets`, `messaging.privileged`, `Admin-Reason`
+  required) to `earliest`, `latest`, an offset or a timestamp, on one partition or all. A move is `409` unless the
+  group is paused, is clamped to the retained log, and answers and audits each partition's old and new position and
+  the records skipped or replayed. The pause is a row in the new `consumer_pause` table (migration `0005`) that every
+  replica's claim reads, so nothing is broadcast. Only the service's own listener groups can be controlled (`404`
+  otherwise). `GET /admin/v1/messaging/consumers` also shows whether each pair is paused, by whom and since when.
+
+- **Reconciliation run history** (`reconciliation-run-history`). Every run that takes its lease - scheduled, manual,
+  dry run or backfill - is recorded in `sync_run` (migration `0015`). A record holds:
+  - kind, trigger, replica and correlation id;
+  - timestamps and outcome;
+  - counts: keys demanded, records fetched, rows produced.
+
+  `GET /admin/v1/reconciliation/tasks/{task}/runs` (keyset-paged, filterable by tier and status) and `.../runs/{runId}`
+  serve them as the platform operation envelope, under `reconciliation.read`. Runs are kept for
+  `ludwig.reconciliation.runs.retention` (`30d`) and purged by `ludwig-reconciliation-run-purge`, which also ends a run
+  whose replica died as `FAILED` with `run-abandoned`.
+- **Outbox retention** (`outbox-retention-purge`). A run-locked `job-core` job, `ludwig-outbox-retention-purge`,
+  deletes the following messages, with their `outbox_status_history` rows, in committed batches of 500:
+  - `PUBLISHED` messages, 7 days after publication (`ludwig.outbox.retention.published`, at least `1d`);
+  - `DEAD_LETTER` and `DISCARDED` messages, 30 days after they became terminal (`retention.terminal`).
+
+  It never deletes `PENDING`, `PROCESSING` or `FAILED` messages, and an administrator's retry takes a message out of
+  retention. Each batch is audited as `outbox.purged` and counted in `ludwig.outbox.purged{status}`. The job is
+  listed in `GET /admin/v1/jobs`. Migration `0006` adds `outbox_message.finished_at`; rows that were dead-lettered
+  or discarded before it count their retention from the migration.
 - **Administrative surface** (`admin-authorization`, `starter-admin-endpoints`). Every module's operator controls
   live under `/admin/v1/<area>/`, authorized by operations of the form `<area>.<tier>`, where the tier is `read`,
   `operate` or `privileged`. A service grants operations to its own roles in `ludwig.admin.grants`, for example
@@ -107,6 +178,50 @@ either.
 
 ### Changed
 
+- **BREAKING - administrative listings take `$filter` instead of their filter parameters**
+  (`admin-listing-odata-filter`). Removed: the audit search's `category`, `action`, `actor`, `via`, `resourceType`,
+  `resourceId`, `outcome`, `from`, `to`; the outbox's `status`, `eventType`, `destination`, `createdBefore`; the run
+  history's `tier`, `status`; the export runs' `requester`, `report`, `status`; the submissions' `action`,
+  `submitter`, `status`; the PAT listing's `owner`, `status`. A removed parameter is ignored if sent. Status filters
+  name stored values: `outcome eq 'FAILURE'` on a run, `state eq 'CANCELLED'` on a submission, `revokedAt eq null` on a
+  token. `$orderby`, `$top`, `$skip` and `$count` under `/admin/**` are `400`. Java: the listings' services,
+  repositories and auto-configuration bean methods take the parsed filter; `PatAdminService.TokenStatus` and
+  `AuditTrailSearch.Filter` are removed; `AuditTrailQuery` loses `via`; `ODataQuery`'s constructor takes the summary.
+
+- **`OBJECT` is a built-in scope token** (`admin-object-scope`). It is accepted under
+  `strict-policy-tokens`, where it was refused at startup. An `admin.*` policy with a role entry other than `ALL` or
+  `NONE`, an undeclared area or an action that is not a tier now fails startup.
+
+- **BREAKING — a malformed delegation claim refuses the token** (`admin-delegation-claim`). A token whose `act`
+  claim is present but not an object with `sub` (or nests deeper than 5) is now `401`, counted as
+  `ludwig_security_authentication_total{reason="malformed-actor-claim"}`. If the identity provider uses `act` for
+  something else, set `ludwig.security.jwt.actor-claim` to its real name or to blank.
+- **BREAKING (Java API) — `Actor` and the audit search types gain `via`** (`admin-delegation-claim`). `Actor`'s
+  canonical constructor takes `via` last (the factories are unchanged); `AuditTrailQuery`, `AuditTrailSearch.Filter`
+  and `EventView` gain it too. `AuditTrailQuery`'s builder is unchanged.
+
+- **BREAKING (Java API) — `MessagingAdminService`** (`messaging-db-consumer-controls`). The constructor takes the
+  service's local consumer groups and `AdminAudit` besides the `LogStore`, and `consumers()` returns `ConsumerView`
+  instead of the bare position. The JSON listing only gains fields. Services that let the auto-configuration build the
+  service need no change.
+
+- **BREAKING — operator-triggered reconciliation runs are asynchronous** (`reconciliation-run-history`).
+  `POST .../runs` (a manual run of a key-addressed task, or any dry run) and `POST .../backfills` take the lease at
+  once (`409` if held anywhere) and answer `202` with the run's real envelope and `Location: .../runs/{runId}`. The old
+  answer was a fabricated, always-`SUCCEEDED` envelope after the whole pass. The dry-run report and the backfill counts
+  are now the run's `result`. A full manual-run executor (`runs.manual-concurrency`, `2`) answers `429` with
+  `retryAfterSeconds`. Running an enumeration, or an `async-job` task, stays synchronous and answers `200`.
+
+  Public API changes:
+  - `TaskRunner.dryRun` and `backfill` are replaced by `start(...)`, and the constructor takes a `RunRecorder` and the
+    manual-run executor.
+  - `ReconciliationAdminService.Engine` gains `runs`.
+  - `ReconciliationMetrics` gains a default `recordRunRecordFailed`.
+- **BREAKING — the outbox now deletes terminal messages by default** (`outbox-retention-purge`). Set
+  `ludwig.outbox.retention.enabled=false` to keep them. `retention.published` is the idempotency window: once a
+  published row is purged, a duplicate carrying its key is accepted and sent again. Without a `RunLock` the purge is
+  not registered and startup logs a warning. `OutboxMessageRepositoryCustom` gains `purgeFinishedBefore`;
+  `OutboxMetrics` gains a default `recordPurged`.
 - **BREAKING — a cancelled file-action submission ends `CANCELLED`** (`file-action-cancelled-state`).
   `FileActionState` gains `CANCELLED`, mapped to `OperationStatus.CANCELLED`. A consumer switching over the enum or
   over `OperationResponse.detail()` must handle it. A `VALIDATED` submission is cancelled at once (`200`), while a

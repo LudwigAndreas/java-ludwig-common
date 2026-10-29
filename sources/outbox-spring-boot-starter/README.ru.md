@@ -65,7 +65,7 @@ PENDING ──захват──> PROCESSING ──успех──> PUBLISHED
 отбросить сообщение в `PENDING`, `FAILED` или `DEAD_LETTER` в `DISCARDED` - терминальное состояние, которое поллер
 никогда не захватывает; см. [Административные эндпоинты](#административные-эндпоинты). Миграция для `DISCARDED` не
 нужна: `status` - это `VARCHAR(20)` без check-ограничения, а предикат индекса опроса (`status IN ('PENDING', 'FAILED')`)
-его уже исключает. Очистки по сроку хранения в модуле нет, поэтому отброшенные строки хранятся так же, как dead letter.
+его уже исключает. Отброшенные строки хранятся и удаляются по тому же сроку хранения, что и dead letter (см. [Развёртывание](#развёртывание)).
 
 Строку в `PROCESSING`, владелец которой умер, реклеймер возвращает в `PENDING` по истечении
 `processing.stale-timeout`. При остановке поллер дорабатывает текущий цикл (до
@@ -175,6 +175,12 @@ OutboxEventTypes catalogEventTypes() {
 | `ludwig.outbox.idempotency.enabled` | `true` | Учитывать `idempotencyKey` |
 | `ludwig.outbox.dead-letter.enabled` | `true` | Переводить исчерпавшие попытки сообщения в `DEAD_LETTER`; иначе они остаются `FAILED` |
 | `ludwig.outbox.audit.persist-history` | `false` | Дополнительно сохранять каждый переход в `outbox_status_history` |
+| `ludwig.outbox.retention.enabled` | `true` | Запускать очистку по сроку хранения (нужен `RunLock`; без него - WARN при старте и никакой очистки) |
+| `ludwig.outbox.retention.published` | `7d` | Хранить сообщение в `PUBLISHED` столько после публикации; не меньше `1d` |
+| `ludwig.outbox.retention.terminal` | `30d` | Хранить сообщение в `DEAD_LETTER` или `DISCARDED` столько после перехода в терминальное состояние |
+| `ludwig.outbox.retention.interval` | `1h` | Пауза между запусками очистки |
+| `ludwig.outbox.retention.batch-size` | `500` | Сообщений, удаляемых за один зафиксированный пакет |
+| `ludwig.outbox.retention.drain-timeout` | `30s` | Сколько остановка ждёт текущую очистку |
 | `ludwig.outbox.metrics.enabled` | `true` | Публиковать метрики Micrometer (если Micrometer есть в classpath) |
 | `ludwig.outbox.liquibase.enabled` | `true` | Применять поставляемый changelog отдельным бином `SpringLiquibase` |
 | `ludwig.outbox.rest.connect-timeout` / `read-timeout` | `5s` / `10s` | Таймауты REST-диспетчера |
@@ -213,8 +219,18 @@ changeset-ами сервиса.
 **Планирование.** Поллер работает на собственном `TaskScheduler` стартера; `@EnableScheduling` в сервисе
 не нужен.
 
-**Рост данных.** Стартер не удаляет строки в `PUBLISHED`. Запланируйте задачу хранения (или
-партиционирование `outbox_message`) под объём событий; см. [Runbook](#runbook).
+**Рост данных.** Очистка по сроку хранения (`ludwig-outbox-retention-purge`, задача `job-core` под собственной
+блокировкой запуска) удаляет сообщения в `PUBLISHED` через 7 дней после публикации, а в `DEAD_LETTER` / `DISCARDED` -
+через 30 дней после перехода в терминальное состояние, вместе со строками `outbox_status_history`, зафиксированными
+пакетами по 500. Сообщения в `PENDING`, `PROCESSING` и `FAILED` не удаляются никогда, а повтор администратором выводит
+сообщение из-под хранения, пока оно снова не станет терминальным. Каждый пакет аудируется как `outbox.purged`
+(`PARTIAL`, пока остаются просроченные сообщения) и учитывается в `ludwig.outbox.purged{status}`. Задача видна в
+`GET /admin/v1/jobs`, и её можно запустить через `jobs.operate`.
+
+**`retention.published` - это окно идемпотентности.** Ключ идемпотентности проверяется по ещё существующим строкам,
+поэтому после удаления опубликованной строки дубликат с её ключом принимается и отправляется снова. Задайте срок
+больше, чем любой отправитель может повторять; минимум `1d` - нижняя граница, а не рекомендация. При обновлении:
+строки, бывшие в `DEAD_LETTER` или `DISCARDED` до миграции `0006`, отсчитывают срок хранения от миграции.
 
 ## Наблюдаемость
 
@@ -287,6 +303,8 @@ Payload никогда не включается: это бизнес-событ
 | `outbox.operate` | `POST /admin/v1/outbox/messages/{id}/retry`<br>`POST /admin/v1/outbox/messages/retry` | Повторная отправка неудавшихся и попавших в dead letter сообщений outbox. |
 | `outbox.privileged` | `POST /admin/v1/outbox/messages/{id}/discard` | Отбросить сообщение outbox, чтобы оно никогда не было отправлено. |
 
+**Фильтрация `GET /admin/v1/outbox/messages`.** Список принимает OData `$filter` и никаких других параметров фильтрации; он листается через `cursor` и `size` в фиксированном порядке от новых к старым, поэтому `$orderby`, `$top`, `$skip` и `$count` - `400`, как и поле, не перечисленное здесь. Фильтр применяется поверх собственных правил области и может их только сузить. Фильтруемые поля: `status`, `eventType`, `eventVersion`, `aggregateType`, `aggregateId`, `destination`, `transport`, `attempts`, `createdAt`, `nextAttemptAt`, `publishedAt`, `finishedAt`. Индексированы вместе со `status`: `nextAttemptAt` (для `PENDING` и `FAILED`) и `finishedAt`. Не фильтруются: payload, `lastError`, ключ идемпотентности, владелец блокировки. Пример: `$filter=status eq 'DEAD_LETTER' and eventType eq 'OrderCreated'`.
+
 Блок выдачи (имена ролей - собственные роли сервиса):
 
 ```yaml
@@ -309,7 +327,7 @@ ludwig:
 | Старт падает: маршрут ссылается на необъявленный кластер | `transport=kafka:<name>` без `ludwig.kafka.clusters.<name>` | Объявить кластер или исправить маршрут |
 | Старт падает: тип события объявлен дважды | Два бина `OutboxEventTypes` противоречат друг другу | Согласовать объявления |
 | Тест падает: "undeclared event type" | `require-declared=true`, а у нового типа события нет объявления | Добавить его в бин `OutboxEventTypes` сервиса |
-| `outbox_message` растёт без ограничений | Нет политики хранения для `PUBLISHED` | Удалять пачками в непиковое время: `DELETE FROM outbox_message WHERE id IN (SELECT id FROM outbox_message WHERE status = 'PUBLISHED' AND published_at < now() - interval '7 days' LIMIT 10000);` |
+| `outbox_message` растёт без ограничений | Хранение выключено, нет `RunLock` (WARN при старте) или очистка не успевает | Проверьте `ludwig.outbox.retention.enabled` и журнал запуска; если события `outbox.purged` остаются `PARTIAL`, увеличьте `retention.batch-size` или уменьшите `retention.interval` |
 
 **Переотправка dead letter** (после устранения причины):
 

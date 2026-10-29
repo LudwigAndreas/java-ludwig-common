@@ -190,6 +190,8 @@ try (RunLockHandle lease = held.get()) {
 (`lock_name` уникален, `owner`, `run_id`, `acquired_at`, `heartbeat_at`, `expires_at`). Применяется
 `JobCoreLiquibaseAutoConfiguration` отдельным бином `SpringLiquibase`; выставьте
 `ludwig.job-core.liquibase.enabled=false`, чтобы подключить его из собственного master changelog.
+`job-core-0002` создаёт `job_admin_approval`, где административная поверхность хранит согласования «четырёх глаз»;
+запись в неё идёт только когда `ludwig.admin.approval.required` перечисляет операцию.
 
 `expires_at` - единственный источник истины для «удерживается». Освобождение очищает `owner` и ставит
 `expires_at = now()`; строки не удаляются, поэтому в таблице одна строка на имя блокировки.
@@ -255,6 +257,14 @@ ludwig:
       "[jobs.operate]": [ORDERS_ADMIN]
       "[jobs.privileged]": [ORDERS_ADMIN]
 ```
+
+**Хранилище согласований «четырёх глаз».** Рядом с административной поверхностью job-core предоставляет её
+`AdminApprovalStore` (`JdbcAdminApprovalStore`, таблица `job_admin_approval`): каждое изменение состояния - условное
+обновление, поэтому из двух одновременно одобряющих выполнит запрос один, а тело запроса удаляется, как только по
+согласованию принято решение. Если `ludwig.admin.approval.required` перечисляет операцию, задание
+`ludwig-admin-approval-expiry` (под одноимённой блокировкой запуска, раз в минуту) переводит нерешённые согласования
+в истёкшие и помечает прерванными те, что остановившаяся реплика оставила выполняться. Сами эндпоинты согласований -
+часть стартера безопасности.
 
 ## Runbook
 

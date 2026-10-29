@@ -1,5 +1,6 @@
 package ru.ludwigandreas.pat.repository;
 
+import com.querydsl.core.types.Predicate;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -37,20 +38,15 @@ public interface PatQueryRepository {
     List<PatEntity> findByOwner(String ownerSubject);
 
     /**
-     * Any owner's tokens, newest first, after a keyset position, for the administrative listing. Every filter is
-     * optional.
+     * Any owner's tokens, newest first, after a keyset position, for the administrative listing.
      *
-     * @param ownerSubject     the owner, or null
-     * @param revoked          revoked or not, or null for either
-     * @param expired          past its expiry at {@code now} or not, or null for either
-     * @param now              the instant expiry is judged at
-     * @param afterCreatedAt   the last returned token's creation time, or null
-     * @param afterId          the last returned token's id, or null
-     * @param limit            at most this many
+     * @param filter         the caller's parsed {@code $filter}, or null for every token
+     * @param afterCreatedAt the last returned token's creation time, or null
+     * @param afterId        the last returned token's id, or null
+     * @param limit          at most this many
      * @return the tokens
      */
-    List<PatEntity> findForAdministration(String ownerSubject, Boolean revoked, Boolean expired, Instant now,
-                                          Instant afterCreatedAt, UUID afterId, int limit);
+    List<PatEntity> findForAdministration(Predicate filter, Instant afterCreatedAt, UUID afterId, int limit);
 
     /**
      * Records one verified use: the last-use time and source, and one more use.

@@ -19,9 +19,18 @@ class ActorTest {
     @Test
     @DisplayName("acting on behalf of someone keeps the actor's own tenant")
     void onBehalfOfKeepsTheTenant() {
-        Actor actor = new Actor("alice", "USER", "Alice", null, "acme").onBehalfOf("bob");
+        Actor actor = new Actor("alice", "USER", "Alice", null, "acme", "admin-console").onBehalfOf("bob");
 
         assertThat(actor.onBehalfOf()).isEqualTo("bob");
         assertThat(actor.tenant()).isEqualTo("acme");
+        assertThat(actor.via()).isEqualTo("admin-console");
+    }
+
+    @Test
+    @DisplayName("the factories record no acting party")
+    void factoriesHaveNoVia() {
+        assertThat(Actor.of("alice").via()).isNull();
+        assertThat(Actor.of("alice", "USER").via()).isNull();
+        assertThat(Actor.system().via()).isNull();
     }
 }

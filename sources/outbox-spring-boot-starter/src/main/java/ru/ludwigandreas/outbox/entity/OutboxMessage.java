@@ -15,6 +15,7 @@ import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import ru.ludwigandreas.db.core.entity.GeneratedEntity;
+import ru.ludwigandreas.odatafilter.annotation.Filterable;
 
 import java.time.Instant;
 import java.util.Map;
@@ -35,15 +36,19 @@ import java.util.UUID;
 @EntityListeners(AuditingEntityListener.class)
 public class OutboxMessage extends GeneratedEntity<UUID> {
 
+    @Filterable
     @Column(name = "aggregate_type", nullable = false, updatable = false)
     private String aggregateType;
 
+    @Filterable
     @Column(name = "aggregate_id", nullable = false, updatable = false)
     private String aggregateId;
 
+    @Filterable
     @Column(name = "event_type", nullable = false, updatable = false)
     private String eventType;
 
+    @Filterable
     @Column(name = "event_version", nullable = false, updatable = false)
     private int eventVersion = 1;
 
@@ -61,26 +66,31 @@ public class OutboxMessage extends GeneratedEntity<UUID> {
     private String orderingKey;
 
     /** Resolved at publish time by the route resolver; identifies which {@link ru.ludwigandreas.outbox.dispatch.OutboxDispatcher} handles this row. */
+    @Filterable
     @Column(name = "transport", nullable = false, updatable = false)
     private String transport;
 
     /** Transport-specific target (Kafka topic name, REST endpoint key/URL, ...). */
+    @Filterable
     @Column(name = "destination", nullable = false, updatable = false)
     private String destination;
 
     @Column(name = "idempotency_key", updatable = false)
     private String idempotencyKey;
 
+    @Filterable
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private OutboxStatus status = OutboxStatus.PENDING;
 
+    @Filterable
     @Column(name = "attempts", nullable = false)
     private int attempts;
 
     @Column(name = "max_attempts", nullable = false, updatable = false)
     private int maxAttempts;
 
+    @Filterable
     @Column(name = "next_attempt_at", nullable = false)
     private Instant nextAttemptAt;
 
@@ -93,12 +103,22 @@ public class OutboxMessage extends GeneratedEntity<UUID> {
     @Column(name = "last_error", columnDefinition = "text")
     private String lastError;
 
+    @Filterable
     @Column(name = "published_at")
     private Instant publishedAt;
+
+    /**
+     * When the message became terminal ({@code PUBLISHED}, {@code DEAD_LETTER} or {@code DISCARDED}); null while it
+     * is not. Retention is measured from it, and an administrator's retry clears it.
+     */
+    @Filterable
+    @Column(name = "finished_at")
+    private Instant finishedAt;
 
     @Column(name = "trace_id", updatable = false)
     private String traceId;
 
+    @Filterable
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

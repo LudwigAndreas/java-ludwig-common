@@ -1,6 +1,7 @@
 package ru.ludwigandreas.outbox.repository;
 
 import com.querydsl.core.BooleanBuilder;
+import com.querydsl.core.types.Predicate;
 import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
@@ -34,14 +35,14 @@ public class OutboxAdminQueries {
     /**
      * One page of messages matching the filter, newest first, after the given position.
      *
-     * @param filter         what to match
+     * @param filter         the caller's parsed {@code $filter}, or null for every message
      * @param afterCreatedAt the last returned row's creation time, or null for the first page
      * @param afterId        the last returned row's id, or null for the first page
      * @param limit          how many rows to read
      * @return the rows, newest first
      */
-    public List<OutboxMessage> page(Filter filter, Instant afterCreatedAt, UUID afterId, int limit) {
-        BooleanBuilder where = filter.predicate();
+    public List<OutboxMessage> page(Predicate filter, Instant afterCreatedAt, UUID afterId, int limit) {
+        BooleanBuilder where = new BooleanBuilder(filter);
         if (afterCreatedAt != null && afterId != null) {
             where.and(MESSAGE.createdAt.lt(afterCreatedAt)
                     .or(MESSAGE.createdAt.eq(afterCreatedAt).and(MESSAGE.id.lt(afterId))));

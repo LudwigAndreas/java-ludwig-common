@@ -66,9 +66,17 @@ class AuditTrailSearchIntegrationTest {
     }
 
     private void recorded(String actor, String tenant, String resourceId, Instant at) {
+        recorded(actor, tenant, null, resourceId, at);
+    }
+
+    private void recorded(String actor, String tenant, String via, String resourceId, Instant at) {
         sink.record(AuditEvent.builder().category(CATEGORY).action("partner.suspended")
-                .actor(new Actor(actor, "USER", null, null, tenant))
+                .actor(new Actor(actor, "USER", null, null, tenant, via))
                 .resource(new Resource("partner", resourceId, null)).occurredAt(at).build());
+    }
+
+    private static MockHttpServletRequestBuilder filtered(String expression) {
+        return get(EVENTS).param("$filter", expression);
     }
 
     private static RequestPostProcessor auditorOf(String tenant) {
@@ -93,12 +101,29 @@ class AuditTrailSearchIntegrationTest {
         recorded("gary", "globex", "p-2", now.minus(2, ChronoUnit.HOURS));
         recorded("system-job", null, "p-3", now.minus(3, ChronoUnit.HOURS));
 
-        JsonNode acme = page(get(EVENTS).param("category", CATEGORY).with(auditorOf("acme")));
-        JsonNode service = page(get(EVENTS).param("category", CATEGORY).with(auditService()));
+        JsonNode acme = page(filtered("category eq '" + CATEGORY + "'").with(auditorOf("acme")));
+        JsonNode service = page(filtered("category eq '" + CATEGORY + "'").with(auditService()));
 
         assertThat(acme.path("items").findValuesAsText("actorSubject")).containsExactly("alice");
         assertThat(service.path("items").findValuesAsText("actorSubject"))
                 .containsExactly("alice", "gary", "system-job");
+    }
+
+    @Test
+    @DisplayName("everything done through the administrative UI yesterday, and only that")
+    void throughTheUiYesterday() throws Exception {
+        Instant startOfToday = Instant.now().truncatedTo(ChronoUnit.DAYS);
+        Instant yesterday = startOfToday.minus(1, ChronoUnit.DAYS);
+        recorded("alice", "acme", "admin-console", "p-1", yesterday.plus(9, ChronoUnit.HOURS));
+        recorded("alice", "acme", null, "p-2", yesterday.plus(10, ChronoUnit.HOURS));
+        recorded("bob", "acme", "ops-portal", "p-3", yesterday.plus(11, ChronoUnit.HOURS));
+        recorded("alice", "acme", "admin-console", "p-4", startOfToday.plus(1, ChronoUnit.MINUTES));
+
+        JsonNode result = page(filtered("actorVia eq 'admin-console' and occurredAt ge "
+                + yesterday + " and occurredAt lt " + startOfToday).with(auditService()));
+
+        assertThat(result.path("items").findValuesAsText("resourceId")).containsExactly("p-1");
+        assertThat(result.path("items").get(0).path("via").asText()).isEqualTo("admin-console");
     }
 
     @Test
@@ -110,11 +135,11 @@ class AuditTrailSearchIntegrationTest {
         }
 
         List<String> seen = new ArrayList<>();
-        JsonNode first = page(get(EVENTS).param("resourceType", "partner").param("resourceId", "acme-logistics")
+        JsonNode first = page(filtered("resourceType eq 'partner' and resourceId eq 'acme-logistics'")
                 .param("size", "2").with(auditService()));
         first.path("items").forEach(item -> seen.add(item.path("id").asText()));
         String cursor = first.path("next").asText();
-        JsonNode second = page(get(EVENTS).param("resourceType", "partner").param("resourceId", "acme-logistics")
+        JsonNode second = page(filtered("resourceType eq 'partner' and resourceId eq 'acme-logistics'")
                 .param("size", "2").param("cursor", cursor).with(auditService()));
         second.path("items").forEach(item -> seen.add(item.path("id").asText()));
 
@@ -133,16 +158,18 @@ class AuditTrailSearchIntegrationTest {
     }
 
     @Test
-    @DisplayName("each search leaves one admin event with its filter and result count, and none of the results")
+    @DisplayName("each search leaves one admin event with its filter's paths and operators, never its values")
     void searchIsRecorded() throws Exception {
         recorded("alice", "acme", "p-1", Instant.now().minus(1, ChronoUnit.HOURS));
 
-        page(get(EVENTS).param("actor", "alice").with(auditService()));
+        page(filtered("actorSubject eq 'alice'").with(auditService()));
 
-        JsonNode trail = page(get(EVENTS).param("category", "admin").with(auditService()));
+        JsonNode trail = page(filtered("category eq 'admin'").with(auditService()));
         JsonNode search = trail.path("items").get(trail.path("items").size() - 1);
         assertThat(search.path("action").asText()).isEqualTo("audit.read");
-        assertThat(search.path("attributes").path("actor").asText()).isEqualTo("alice");
+        assertThat(search.path("attributes").path("filterPaths").toString()).isEqualTo("[\"actorSubject\"]");
+        assertThat(search.path("attributes").path("filterOperators").toString()).isEqualTo("[\"actorSubject eq\"]");
+        assertThat(search.path("attributes").toString()).doesNotContain("alice");
         assertThat(search.path("attributes").path("returned").asInt()).isEqualTo(1);
         assertThat(search.path("resourceId").isNull()).isTrue();
     }
@@ -156,8 +183,40 @@ class AuditTrailSearchIntegrationTest {
                 + " VALUES (?, now(), 'legacy', now(), ?, 'x', 'old', 'SUCCESS')",
                 legacy, CATEGORY);
 
-        assertThat(page(get(EVENTS).param("category", CATEGORY).with(auditorOf("acme"))).path("items")).isEmpty();
-        assertThat(page(get(EVENTS).param("category", CATEGORY).with(auditService())).path("items")
+        assertThat(page(filtered("category eq '" + CATEGORY + "'").with(auditorOf("acme"))).path("items")).isEmpty();
+        assertThat(page(filtered("category eq '" + CATEGORY + "'").with(auditService())).path("items")
                 .findValuesAsText("id")).contains(legacy.toString());
+    }
+
+    @Test
+    @DisplayName("a filter cannot widen tenant confinement: another tenant's actor stays invisible")
+    void filterCannotWiden() throws Exception {
+        recorded("gary", "globex", "p-2", Instant.now().minus(1, ChronoUnit.HOURS));
+
+        assertThat(page(filtered("actorSubject eq 'gary'").with(auditorOf("acme")))
+                .path("items")).isEmpty();
+        assertThat(page(filtered("actorSubject eq 'gary'").with(auditService()))
+                .path("items").findValuesAsText("actorSubject")).containsExactly("gary");
+    }
+
+    @Test
+    @DisplayName("an occurred-at filter lifts the 30-day default; without one, older events stay out")
+    void windowLiftedByFilter() throws Exception {
+        recorded("alice", "acme", "p-old", Instant.now().minus(40, ChronoUnit.DAYS));
+        String since = Instant.now().minus(60, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS).toString();
+
+        assertThat(page(filtered("resourceId eq 'p-old'").with(auditService())).path("items"))
+                .isEmpty();
+        assertThat(page(filtered("resourceId eq 'p-old' and occurredAt ge " + since)
+                .with(auditService())).path("items").findValuesAsText("resourceId")).containsExactly("p-old");
+    }
+
+    @Test
+    @DisplayName("a free-text field is not filterable, and offset paging is refused")
+    void refusals() throws Exception {
+        assertThat(mvc.perform(filtered("reason eq 'x'").with(auditService())).andReturn()
+                .getResponse().getStatus()).isEqualTo(400);
+        assertThat(mvc.perform(get(EVENTS).param("$skip", "40").with(auditService())).andReturn()
+                .getResponse().getStatus()).isEqualTo(400);
     }
 }

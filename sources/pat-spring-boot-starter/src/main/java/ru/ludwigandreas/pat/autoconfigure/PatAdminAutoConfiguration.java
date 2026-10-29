@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.pat.admin.PatAdminOperations;
 import ru.ludwigandreas.pat.admin.service.PatAdminService;
 import ru.ludwigandreas.pat.admin.web.PatAdminController;
@@ -31,9 +32,9 @@ public class PatAdminAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public PatAdminService ludwigPatAdminService(PatService service, PatQueryRepository queries, AdminAudit audit,
-                                                 Clock clock) {
-        return new PatAdminService(service, queries, audit, clock);
+    public PatAdminService ludwigPatAdminService(PatService service, PatQueryRepository queries,
+                                                 AdminQueryFilter filters, AdminAudit audit, Clock clock) {
+        return new PatAdminService(service, queries, filters, audit, clock);
     }
 
     @Bean

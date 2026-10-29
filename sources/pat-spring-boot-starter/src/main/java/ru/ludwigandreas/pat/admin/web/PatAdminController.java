@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.pat.admin.PatAdminOperations;
 import ru.ludwigandreas.pat.admin.service.PatAdminService;
-import ru.ludwigandreas.pat.admin.service.PatAdminService.TokenStatus;
 import ru.ludwigandreas.pat.service.IssueTokenCommand;
 import ru.ludwigandreas.pat.service.PatService;
 import ru.ludwigandreas.pat.service.PatSnapshot;
@@ -53,19 +52,17 @@ public class PatAdminController {
     /**
      * Tokens matching the filter, newest first; metadata only.
      *
-     * @param owner  the owner
-     * @param status the state
+     * @param filter an OData {@code $filter} over the token's filterable fields
      * @param cursor the previous page's cursor
      * @param size   the page size, at most 200
      * @return one page
      */
     @GetMapping
     @AdminAccess(PatAdminOperations.READ)
-    public AdminPage<PatResponse> tokens(@RequestParam(required = false) String owner,
-                                         @RequestParam(required = false) TokenStatus status,
+    public AdminPage<PatResponse> tokens(@RequestParam(name = "$filter", required = false) String filter,
                                          @RequestParam(required = false) String cursor,
                                          @RequestParam(required = false) Integer size) {
-        AdminPage<PatSnapshot> page = service.tokens(owner, status, cursor, size);
+        AdminPage<PatSnapshot> page = service.tokens(filter, cursor, size);
         return new AdminPage<>(page.items().stream().map(PatResponse::of).toList(), page.next());
     }
 

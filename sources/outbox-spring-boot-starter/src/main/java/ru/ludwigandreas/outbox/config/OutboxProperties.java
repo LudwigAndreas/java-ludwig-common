@@ -26,6 +26,7 @@ public class OutboxProperties {
     private final Rest rest = new Rest();
     private final Kafka kafka = new Kafka();
     private final Events events = new Events();
+    private final Retention retention = new Retention();
 
     /** Used when an event doesn't match any entry in {@link #routes} and sets no explicit route. */
     private Route defaultRoute;
@@ -83,6 +84,10 @@ public class OutboxProperties {
 
     public Kafka getKafka() {
         return kafka;
+    }
+
+    public Retention getRetention() {
+        return retention;
     }
 
     public Events getEvents() {
@@ -295,6 +300,112 @@ public class OutboxProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /**
+     * How long terminal messages are kept, and how the purge runs.
+     *
+     * <p>{@code published} is also the idempotency window: an idempotency key is deduplicated against live rows only,
+     * so once a published row is purged a duplicate carrying its key is accepted and sent again. That is why it may
+     * not be shorter than a day - a floor, not a recommendation.
+     */
+    public static class Retention {
+
+        /** The shortest {@code published} period accepted. */
+        static final Duration MINIMUM_PUBLISHED = Duration.ofDays(1);
+
+        /** Whether the purge job is registered at all. */
+        private boolean enabled = true;
+
+        /** How long a {@code PUBLISHED} message is kept after it was published. */
+        private Duration published = Duration.ofDays(7);
+
+        /** How long a {@code DEAD_LETTER} or {@code DISCARDED} message is kept after it became terminal. */
+        private Duration terminal = Duration.ofDays(30);
+
+        /** How often the purge runs. */
+        private Duration interval = Duration.ofHours(1);
+
+        /** How many messages one committed batch deletes. */
+        private int batchSize = 500;
+
+        /** How long shutdown waits for an in-flight purge. */
+        private Duration drainTimeout = Duration.ofSeconds(30);
+
+        /**
+         * Refuses a configuration that would delete too early or never stop.
+         *
+         * @throws IllegalStateException naming the offending property
+         */
+        public void validate() {
+            requirePositive("published", published);
+            requirePositive("terminal", terminal);
+            requirePositive("interval", interval);
+            if (published.compareTo(MINIMUM_PUBLISHED) < 0) {
+                throw new IllegalStateException("ludwig.outbox.retention.published is " + published
+                        + ", shorter than " + MINIMUM_PUBLISHED + ": a published row is the idempotency window, and"
+                        + " purging it sooner lets a duplicate be sent again. Raise it, or disable retention.");
+            }
+            if (batchSize <= 0) {
+                throw new IllegalStateException(
+                        "ludwig.outbox.retention.batch-size must be positive, was " + batchSize);
+            }
+        }
+
+        private static void requirePositive(String name, Duration value) {
+            if (value == null || value.isZero() || value.isNegative()) {
+                throw new IllegalStateException("ludwig.outbox.retention." + name + " must be a positive duration, was "
+                        + value + ". To keep messages for ever, set ludwig.outbox.retention.enabled=false.");
+            }
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Duration getPublished() {
+            return published;
+        }
+
+        public void setPublished(Duration published) {
+            this.published = published;
+        }
+
+        public Duration getTerminal() {
+            return terminal;
+        }
+
+        public void setTerminal(Duration terminal) {
+            this.terminal = terminal;
+        }
+
+        public Duration getInterval() {
+            return interval;
+        }
+
+        public void setInterval(Duration interval) {
+            this.interval = interval;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        public Duration getDrainTimeout() {
+            return drainTimeout;
+        }
+
+        public void setDrainTimeout(Duration drainTimeout) {
+            this.drainTimeout = drainTimeout;
         }
     }
 

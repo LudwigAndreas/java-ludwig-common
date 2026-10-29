@@ -1,5 +1,16 @@
 package ru.ludwigandreas.reconciliation.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,24 +25,19 @@ import ru.ludwigandreas.reconciliation.engine.RegisteredTask;
 import ru.ludwigandreas.reconciliation.engine.TaskRegistry;
 import ru.ludwigandreas.reconciliation.engine.TaskRunner;
 import ru.ludwigandreas.reconciliation.engine.TaskStateService;
+import ru.ludwigandreas.reconciliation.entity.RunKind;
 import ru.ludwigandreas.reconciliation.entity.SyncInboxRecord;
 import ru.ludwigandreas.reconciliation.entity.SyncRecordKind;
 import ru.ludwigandreas.reconciliation.entity.SyncRecordStatus;
+import ru.ludwigandreas.reconciliation.entity.SyncRun;
 import ru.ludwigandreas.reconciliation.integration.testmodel.LocalOrder;
 import ru.ludwigandreas.reconciliation.integration.testmodel.LocalOrderRepository;
 import ru.ludwigandreas.reconciliation.integration.testmodel.PartnerCatalogueTask;
 import ru.ludwigandreas.reconciliation.integration.testmodel.StubPartner;
 import ru.ludwigandreas.reconciliation.repository.SyncInboxRecordRepository;
+import ru.ludwigandreas.reconciliation.repository.SyncRunRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncTaskStateRepository;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The engine against a real Postgres: staging, applying, the two guard rails, failure isolation,
@@ -55,6 +61,9 @@ class ReconciliationIntegrationTest {
 
     @Autowired
     private TaskRunner runner;
+
+    @Autowired
+    private SyncRunRepository runs;
 
     @Autowired
     private ApplyService applyService;
@@ -362,7 +371,7 @@ class ReconciliationIntegrationTest {
         partner.holds("A-1", "PAID", LATER);
         partner.doesNotKnow("A-2");
 
-        Map<String, Object> report = runner.dryRun(task("billing-status"), DemandTier.HOT);
+        Map<String, Object> report = resultOf(started(RunKind.DRY_RUN, List.of()));
 
         assertThat(report).containsEntry("ran", true).containsEntry("demandSize", 2);
         assertThat(report).containsKey("found").containsKey("notFound");
@@ -379,7 +388,7 @@ class ReconciliationIntegrationTest {
         // The hot demand query excludes SETTLED, so a scheduled run would not touch this record.
         assertThat(runner.run(task("billing-status"), DemandTier.HOT)).isZero();
 
-        assertThat(runner.backfill(task("billing-status"), List.of("A-1"))).isEqualTo(1);
+        assertThat(started(RunKind.BACKFILL, List.of("A-1")).getProduced()).isEqualTo(1);
         applyService.runOnce(task("billing-status"));
 
         assertThat(order("A-1").getStatus()).isEqualTo("REFUNDED");
@@ -393,7 +402,7 @@ class ReconciliationIntegrationTest {
         runAndApply("billing-status");
 
         partner.holds("A-1", "PAID", EARLIER);
-        runner.backfill(task("billing-status"), List.of("A-1"));
+        started(RunKind.BACKFILL, List.of("A-1"));
         applyService.runOnce(task("billing-status"));
 
         assertThat(order("A-1").getStatus()).isEqualTo("REFUNDED");
@@ -404,9 +413,36 @@ class ReconciliationIntegrationTest {
         givenOrder("A-1", "PENDING");
         partner.holds("A-1", "PAID", LATER);
 
-        runner.backfill(task("billing-status"), List.of("A-1"));
+        started(RunKind.BACKFILL, List.of("A-1"));
 
         assertThat(taskState.watermark("billing-status", DemandTier.HOT)).isEmpty();
+    }
+
+    /** Starts an operator's run of billing-status the way the administrative surface does, and waits for its end. */
+    private SyncRun started(RunKind kind, List<String> keys) {
+        UUID id = runner.start(task("billing-status"), DemandTier.HOT, kind, keys, "it").orElseThrow();
+        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        while (System.nanoTime() < deadline) {
+            Optional<SyncRun> run = runs.findById(id);
+            if (run.isPresent() && run.get().getFinishedAt() != null) {
+                return run.get();
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("interrupted waiting for run " + id, interrupted);
+            }
+        }
+        throw new AssertionError("run " + id + " did not finish within 30 seconds");
+    }
+
+    private static Map<String, Object> resultOf(SyncRun run) {
+        try {
+            return new ObjectMapper().readValue(run.getResultJson(), new TypeReference<Map<String, Object>>() { });
+        } catch (JsonProcessingException e) {
+            throw new AssertionError("run result is not JSON: " + run.getResultJson(), e);
+        }
     }
 
     private void runAndApply(String taskName) {

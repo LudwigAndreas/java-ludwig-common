@@ -1,0 +1,50 @@
+{
+  "change": "admin-object-scope",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "security-spring-boot-starter",
+    "reconciliation-spring-boot-starter",
+    "architecture-rules"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "not run to completion (releases repository unreachable, as for every change this session)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "manifest stale": "pass (rebuilt after the revapi entries)",
+    "maven reactor (security, reconciliation, architecture-rules + all dependents, -am -amd install)": "pass: 35 modules, 4649 tests, 0 failures",
+    "openspec validate --strict": "pass"
+  },
+  "tests": [
+    "DataScopeTest +2",
+    "ScopeGrantTest +1",
+    "DataScopePolicyValidatorTest 4/4 (new)",
+    "AdminSurfaceMvcTest $ObjectScoped 2/2, $NoObjectPolicy 1/1, role-level OBJECT startup refusal 1/1 (new)",
+    "AdminRulesTest +1 (8/8)",
+    "ReconciliationObjectScopeIntegrationTest 3/3 (new)",
+    "ReconciliationAdminIntegrationTest 15/15 unchanged (the no-policy case)"
+  ],
+  "deviations_from_design": [
+    "The object is read from the matched URI template in the guard (before argument resolution), not from resolved handler arguments; the ArchUnit rule makes that sound",
+    "@AdminObject carries notFound (the area's own not-found code) so the out-of-scope 404 is byte-for-byte the area's missing-object answer, rather than a generic AdminObjectNotFoundException mapping",
+    "The policy validator also refuses an admin.* action that is not a tier",
+    "Scoped reconciliation scenarios are in ReconciliationObjectScopeIntegrationTest, not ReconciliationAdminIntegrationTest (a @Nested context's @TestPropertySource did not take effect)",
+    "Enumerations are filtered in the listing alongside tasks (both are addressed by /tasks/{task}); passes and quotas are not filtered"
+  ],
+  "retries": [
+    "1.1, 1.2, 2.1: checkstyle (JavadocStyle on admin.<area>, javadoc position, line length)",
+    "2.1: unnamed @PathVariable name was null without a parameter-name discoverer (failed closed)",
+    "3.1: nested-context @Import and @TestPropertySource; moved to its own class"
+  ],
+  "rollback_commit": "061f467 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "check_api_baseline cannot run offline",
+    "why the @Nested @TestPropertySource was ignored was not pinned down (a probe was declined)",
+    "revapi entry for messaging-db-consumer-controls' bean method added late, in this change",
+    "three completed changes still await their archive move"
+  ]
+}

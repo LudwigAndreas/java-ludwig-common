@@ -60,4 +60,11 @@ class ScopeGrantTest {
     void ignoresRepeatedAndEmptySegments() {
         assertThat(parse("OWN++OWN").dimensions()).containsExactly(ScopeDimension.OWNER);
     }
+
+    @Test
+    @DisplayName("OBJECT is a built-in token, accepted under strict tokens")
+    void objectIsBuiltIn() {
+        assertThat(ScopeDimension.BUILT_IN).contains(ScopeDimension.OBJECT);
+        assertThat(parse("OBJECT").dimensions()).containsExactly(ScopeDimension.OBJECT);
+    }
 }

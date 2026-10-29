@@ -18,6 +18,7 @@ import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import ru.ludwigandreas.db.core.entity.GeneratedEntity;
+import ru.ludwigandreas.odatafilter.annotation.Filterable;
 import ru.ludwigandreas.webcore.operation.OperationStatus;
 
 /**
@@ -51,6 +52,7 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
 @EntityListeners(AuditingEntityListener.class)
 public class ExportReportRun extends GeneratedEntity<UUID> {
 
+    @Filterable
     @Column(name = "definition_key", nullable = false, updatable = false, length = 128)
     private String definitionKey;
 
@@ -61,6 +63,7 @@ public class ExportReportRun extends GeneratedEntity<UUID> {
     @Column(name = "saved_report_id", updatable = false)
     private UUID savedReportId;
 
+    @Filterable
     @Column(name = "requester", nullable = false, updatable = false, length = 255)
     private String requester;
 
@@ -112,10 +115,12 @@ public class ExportReportRun extends GeneratedEntity<UUID> {
      * only then terminal. {@code EXPIRED} is reached from {@code SUCCEEDED} when the retention purge
      * removes the outputs and keeps the row.
      */
+    @Filterable
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private OperationStatus status = OperationStatus.PENDING;
 
+    @Filterable
     @Column(name = "attempts", nullable = false)
     private int attempts;
 
@@ -162,13 +167,16 @@ public class ExportReportRun extends GeneratedEntity<UUID> {
     @Column(name = "percent", nullable = false)
     private int percent;
 
+    @Filterable
     @Column(name = "started_at")
     private Instant startedAt;
 
+    @Filterable
     @Column(name = "finished_at")
     private Instant finishedAt;
 
     /** The problem code this run failed with, so a client sees the same code a synchronous run gives. */
+    @Filterable
     @Column(name = "failure_code", length = 128)
     private String failureCode;
 
@@ -204,6 +212,7 @@ public class ExportReportRun extends GeneratedEntity<UUID> {
     @Column(name = "idempotency_key", nullable = false, updatable = false, length = 128)
     private String idempotencyKey;
 
+    @Filterable
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

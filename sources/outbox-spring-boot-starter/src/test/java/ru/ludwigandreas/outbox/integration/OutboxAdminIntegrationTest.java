@@ -115,12 +115,13 @@ class OutboxAdminIntegrationTest {
     }
 
     @Test
-    @DisplayName("a listing by state carries no payload, no headers and no last error")
+    @DisplayName("a listing filtered by state carries no payload, no headers and no last error")
     void listingWithoutContents() throws Exception {
         messageIn(OutboxStatus.DEAD_LETTER);
         messageIn(OutboxStatus.PUBLISHED);
 
-        String body = mvc.perform(get("/admin/v1/outbox/messages").param("status", "DEAD_LETTER").with(support()))
+        String body = mvc.perform(get("/admin/v1/outbox/messages").param("$filter", "status eq 'DEAD_LETTER'")
+                        .with(support()))
                 .andReturn().getResponse().getContentAsString();
 
         JsonNode page = JSON.readTree(body);
@@ -219,5 +220,30 @@ class OutboxAdminIntegrationTest {
         processingService.processBatch();
         assertThat(dispatcher.dispatched()).isEmpty();
         assertThat(repository.findById(id).orElseThrow().getStatus()).isEqualTo(OutboxStatus.DISCARDED);
+    }
+
+    @Test
+    @DisplayName("dead letters of one type created before an instant; payload and last error are not filterable")
+    void filteredByTypeAndAge() throws Exception {
+        messageIn(OutboxStatus.DEAD_LETTER);
+        messageIn(OutboxStatus.DEAD_LETTER);
+        messageIn(OutboxStatus.FAILED);
+        String future = java.time.Instant.now().plusSeconds(3600).toString();
+        String past = java.time.Instant.now().minusSeconds(3600).toString();
+
+        assertThat(listed("status eq 'DEAD_LETTER' and eventType eq 'OrderCreated' and createdAt lt " + future))
+                .hasSize(2);
+        assertThat(listed("status eq 'DEAD_LETTER' and createdAt lt " + past)).isEmpty();
+        for (String field : List.of("lastError", "payload", "idempotencyKey", "lockedBy")) {
+            assertThat(mvc.perform(get("/admin/v1/outbox/messages").param("$filter", field + " eq 'x'")
+                    .with(support())).andReturn().getResponse().getStatus()).as(field).isEqualTo(400);
+        }
+    }
+
+    private JsonNode listed(String filter) throws Exception {
+        MvcResult result = mvc.perform(get("/admin/v1/outbox/messages").param("$filter", filter).with(support()))
+                .andReturn();
+        assertThat(result.getResponse().getStatus()).as(result.getResponse().getContentAsString()).isEqualTo(200);
+        return JSON.readTree(result.getResponse().getContentAsString()).path("items");
     }
 }

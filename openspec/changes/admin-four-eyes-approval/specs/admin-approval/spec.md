@@ -46,7 +46,8 @@ withdrawn or expired approval SHALL answer `409`.
   rejected
 
 ### Requirement: Approvals are listable by those who could decide them, and expire
-`GET /admin/v1/approvals` SHALL list only approvals whose operation the caller holds, filterable by status. The
+`GET /admin/v1/approvals` SHALL list only approvals whose operation the caller holds, filterable by status. An approval of
+an operation the caller does not hold SHALL be answered as not found. The
 requester SHALL be able to withdraw a pending approval. An approval undecided after `ludwig.admin.approval.ttl`
 (default `PT24H`) SHALL become `EXPIRED` and SHALL NOT be executable. Every request, decision, withdrawal and expiry
 SHALL be audited.

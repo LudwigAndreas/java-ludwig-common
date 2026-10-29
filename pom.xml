@@ -786,6 +786,72 @@
                                       "justification": "ADDED IN THE NEXT MAJOR RELEASE, change file-action-cancelled-state. A cancel and a confirm racing on one VALIDATED submission are now two conditional updates on the same predicate, so exactly one wins. The interface is the module's own query fragment, implemented by FileActionSubmissionQueryRepositoryImpl; a custom implementation must add both, each a version-bumping update WHERE state = 'VALIDATED' that refreshes the copy the persistence context holds."
                                     },
                                     {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(addedToInterface|defaultMethodAddedToInterface)",
+                                      "new": "method .* ru\\.ludwigandreas\\.outbox\\.(repository\\.OutboxMessageRepositoryCustom::purgeFinishedBefore|metrics\\.OutboxMetrics::recordPurged)\\(.*\\)",
+                                      "justification": "ADDED IN THE NEXT MAJOR RELEASE, change outbox-retention-purge. The outbox purges terminal messages after their retention period. OutboxMessageRepositoryCustom is the module's own repository fragment, implemented by OutboxMessageRepositoryCustomImpl; a custom implementation must add purgeFinishedBefore(status, cutoff, limit), a bounded SKIP LOCKED delete of messages and their history in one transaction. OutboxMetrics.recordPurged is a default method, so existing implementations keep compiling and simply do not count purges."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(removed|numberOfParametersChanged|parameterTypeChanged|returnTypeChanged)",
+                                      "old": "method .* ru\\.ludwigandreas\\.reconciliation\\.(engine\\.TaskRunner::(dryRun|backfill|<init>)|admin\\.service\\.ReconciliationAdminService::(run|backfill)|admin\\.service\\.ReconciliationAdminService\\.Engine::<init>)\\(.*\\)",
+                                      "justification": "REMOVED OR CHANGED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change reconciliation-run-history. Operator-triggered runs became recorded, asynchronous runs: TaskRunner.dryRun and backfill (synchronous, unrecorded) are replaced by start(task, tier, kind, keys, triggeredBy), and the runner takes a RunRecorder and the manual-run executor; the admin service's run/backfill return the run record; Engine gains the run repository. Migration: call TaskRunner.start and poll the run, or use the administrative endpoints."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(addedToInterface|defaultMethodAddedToInterface)",
+                                      "new": "method void ru\\.ludwigandreas\\.reconciliation\\.metrics\\.ReconciliationMetrics::recordRunRecordFailed\\(.*\\)",
+                                      "justification": "ADDED IN THE NEXT MAJOR RELEASE, change reconciliation-run-history. A default method, so an implementation written before run history keeps compiling and simply does not count failed history writes."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(removed|numberOfParametersChanged|parameterTypeChanged|returnTypeChanged)",
+                                      "old": "method .* ru\\.ludwigandreas\\.messaging\\.db\\.admin\\.(service\\.MessagingAdminService::(<init>|consumers)|web\\.MessagingAdminController::consumers)\\(.*\\)",
+                                      "justification": "REMOVED OR CHANGED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change messaging-db-consumer-controls. The messaging admin area can pause, resume and move a database-log consumer: the service takes the service's local consumer groups and AdminAudit besides the LogStore, and consumers() returns ConsumerView (the position fields plus paused, pausedBy, pausedAt) - the JSON listing only gains fields. Migration: let the auto-configuration build the service, or pass the group supplier and AdminAudit."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(numberOfParametersChanged|parameterTypeChanged)",
+                                      "old": "method void ru\\.ludwigandreas\\.audit\\.Actor::<init>\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change admin-delegation-claim. Actor gains via, the party the request came through (RFC 8693 act.sub), as its last component, so that it is stored and searchable rather than an attribute. The factories Actor.of and Actor.system keep their signatures and record no via. Migration: append null (or the acting party) to a canonical-constructor call."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(numberOfParametersChanged|parameterTypeChanged)",
+                                      "old": "method .* ru\\.ludwigandreas\\.audit\\.store\\.(repository\\.AuditTrailQuery::<init>|admin\\.service\\.AuditTrailSearch\\.(Filter|EventView)::<init>|admin\\.web\\.AuditTrailController::events)\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change admin-delegation-claim. The audit trail can be searched by acting party: AuditTrailQuery and the search Filter gain via, EventView shows it, and GET /admin/v1/audit/events gains an optional via parameter. Migration: build AuditTrailQuery with its builder (unchanged), and add via (or null) to a positional Filter or EventView construction."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(numberOfParametersChanged|parameterTypeChanged)",
+                                      "old": "method .* ru\\.ludwigandreas\\.messaging\\.db\\.config\\.MessagingDbAdminAutoConfiguration::ludwigMessagingAdminService\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE, change messaging-db-consumer-controls (recorded late, during admin-object-scope). The bean method takes the listener registry and AdminAudit for the service's new constructor. Auto-configuration bean methods are called by Spring, not by consumers; a service that declares its own MessagingAdminService bean is unaffected."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(numberOfParametersChanged|parameterTypeChanged)",
+                                      "old": "method .* ru\\.ludwigandreas\\.(security\\.config\\.(AdminAutoConfiguration::ludwigAdminAccessEvaluator|DataAuthorizationAutoConfiguration::ludwigDataScopePolicyValidator)|reconciliation\\.config\\.ReconciliationAdminAutoConfiguration::ludwigReconciliationAdminService)\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE, change admin-object-scope. Administrative operations can be scoped to named objects: the evaluator and the reconciliation admin service take the AdminObjectScope, and the policy validator the administrative areas it checks admin.* policies against. Auto-configuration bean methods are called by Spring, not by consumers; the types' previous constructors are kept."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(numberOfParametersChanged|parameterTypeChanged)",
+                                      "old": "method .* ru\\.ludwigandreas\\.security\\.config\\.AdminAutoConfiguration::ludwigAdminSurfaceGuard\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE, change admin-four-eyes-approval. The surface guard holds calls whose operation requires approval, so its bean method takes AdminApprovals. Auto-configuration bean methods are called by Spring, not by consumers; AdminSurfaceGuard keeps its previous constructors."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.(removed|numberOfParametersChanged|parameterTypeChanged)",
+                                      "old": "method .* ru\\.ludwigandreas\\.(audit\\.store\\.(admin\\.(service\\.AuditTrailSearch::(<init>|search)|web\\.AuditTrailController::events)|repository\\.AuditEventQueryRepository(Impl)?::findPage|repository\\.AuditTrailQuery::<init>|config\\.AuditAdminAutoConfiguration::ludwigAuditTrailSearch)|outbox\\.(admin\\.(service\\.OutboxAdminService::(<init>|messages)|web\\.OutboxAdminController::messages)|repository\\.OutboxAdminQueries::page|config\\.OutboxAdminAutoConfiguration::ludwigOutboxAdminService)|reconciliation\\.(admin\\.(service\\.ReconciliationAdminService::(<init>|runs)|web\\.ReconciliationAdminController::runs)|config\\.ReconciliationAdminAutoConfiguration::ludwigReconciliationAdminService)|export\\.(admin\\.(service\\.ExportAdminService::(<init>|runs)|web\\.ExportAdminController::runs)|repository\\.ExportAdminQueries::runs|config\\.ExportAdminAutoConfiguration::ludwigExportAdminService)|fileaction\\.(admin\\.(service\\.FileActionAdminService::(<init>|submissions)|web\\.FileActionAdminController::submissions)|repository\\.FileActionAdminQueries::submissions|config\\.FileActionAdminAutoConfiguration::ludwigFileActionAdminService)|pat\\.(admin\\.(service\\.PatAdminService::(<init>|tokens)|web\\.PatAdminController::tokens)|repository\\.PatQueryRepository(Impl)?::findForAdministration|autoconfigure\\.PatAdminAutoConfiguration::ludwigPatAdminService)|odatafilter\\.core\\.ODataQuery::<init>)\\(.*\\)",
+                                      "justification": "REMOVED OR CHANGED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION (no backward compatibility) - change admin-listing-odata-filter. The six paged administrative listings filter with OData $filter only: their explicit filter parameters are removed, and the services, repository methods and auto-configuration bean methods take the parsed predicate or db-core's AdminQueryFilter instead. ODataQuery's constructor carries the FilterSummary. AuditTrailQuery loses via. Migration: send $filter (e.g. ?status=FAILED becomes $filter=status eq 'FAILED'); build the services through their auto-configuration."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.class\\.removed",
+                                      "old": "(enum|class) ru\\.ludwigandreas\\.(pat\\.admin\\.service\\.PatAdminService\\.TokenStatus|audit\\.store\\.admin\\.service\\.AuditTrailSearch\\.Filter)",
+                                      "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change admin-listing-odata-filter. The PAT listing's status enum and the audit search's Filter record were the removed parameters' types. Migration: filter on revokedAt/expiresAt, and on the audit event's fields, with $filter."
+                                    },
+                                    {
                                         "code": "java.class.removed",
                                         "old": "class ru.ludwigandreas.reconciliation.actuator.ReconciliationEndpoint",
                                         "justification": "REMOVED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change starter-admin-endpoints. The reconciliation actuator endpoint is replaced by the reconciliation area of the administrative surface, /admin/v1/reconciliation/..., authorized by the service's ludwig.admin.grants and audited. Migration: point operator tooling at /admin/v1/reconciliation and grant reconciliation.read/operate/privileged."

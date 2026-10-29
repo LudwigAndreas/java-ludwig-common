@@ -153,4 +153,9 @@ public class MicrometerReconciliationMetrics implements ReconciliationMetrics {
                 .strongReference(true)
                 .register(registry);
     }
+
+    @Override
+    public void recordRunRecordFailed(String task) {
+        registry.counter(PREFIX + "run.record.failed", Tags.of("task", task)).increment();
+    }
 }

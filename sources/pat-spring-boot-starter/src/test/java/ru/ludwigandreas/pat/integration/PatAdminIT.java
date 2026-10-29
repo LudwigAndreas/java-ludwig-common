@@ -125,7 +125,8 @@ class PatAdminIT {
 
         String reread = mvc.perform(get(TOKENS + "/" + id).with(as("sam", "PAT_SUPPORT", null)))
                 .andReturn().getResponse().getContentAsString();
-        String listed = mvc.perform(get(TOKENS).param("owner", "bob").with(as("sam", "PAT_SUPPORT", null)))
+        String listed = mvc.perform(get(TOKENS).param("$filter", "ownerSubject eq 'bob'")
+                        .with(as("sam", "PAT_SUPPORT", null)))
                 .andReturn().getResponse().getContentAsString();
         assertThat(reread).doesNotContain(secret).doesNotContain("lpat_").doesNotContain("digest");
         assertThat(JSON.readTree(listed).path("items")).hasSize(1);
@@ -159,12 +160,16 @@ class PatAdminIT {
         assertThat(revoked.getResponse().getStatus()).isEqualTo(200);
         assertThat(JSON.readTree(revoked.getResponse().getContentAsString()).path("live").asBoolean()).isFalse();
         assertThat(auditSink.lastOf("pat.revoked").attributes()).containsEntry("revokedBy", "olga");
-        String active = mvc.perform(get(TOKENS).param("owner", "bob").param("status", "ACTIVE").with(admin()))
-                .andReturn().getResponse().getContentAsString();
-        String revokedOnes = mvc.perform(get(TOKENS).param("owner", "bob").param("status", "REVOKED")
+        String active = mvc.perform(get(TOKENS).param("$filter", "ownerSubject eq 'bob' and revokedAt eq null")
+                .with(admin())).andReturn().getResponse().getContentAsString();
+        String revokedOnes = mvc.perform(get(TOKENS).param("$filter", "ownerSubject eq 'bob' and revokedAt ne null")
                 .with(admin())).andReturn().getResponse().getContentAsString();
         assertThat(JSON.readTree(active).path("items")).isEmpty();
         assertThat(JSON.readTree(revokedOnes).path("items")).hasSize(1);
+        for (String secretField : java.util.List.of("secretDigest", "keyId", "lastUsedIp", "name")) {
+            assertThat(mvc.perform(get(TOKENS).param("$filter", secretField + " eq 'x'").with(admin())).andReturn()
+                    .getResponse().getStatus()).as(secretField).isEqualTo(400);
+        }
     }
 
     @Test

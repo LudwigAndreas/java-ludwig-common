@@ -81,6 +81,13 @@
             <artifactId>db-core</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- For @Filterable on the entities its administrative listings filter with $filter; the parsing
+             goes through db-core's AdminQueryFilter, so nothing here loads without the starter. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>odata-filter-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!--
             The one caching primitive. Not optional: verification on every exchange would otherwise be a

@@ -77,7 +77,10 @@ import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
         // The one emailing category, so the fan-out has something to drive. Kept here
         // rather than in a per-class property source for the container reason above.
         "ludwig.notification.announcements.categories.platform-incident.category-class=PLATFORM",
-        "ludwig.notification.announcements.categories.platform-incident.channels=IN_APP,EMAIL"
+        "ludwig.notification.announcements.categories.platform-incident.channels=IN_APP,EMAIL",
+        // Four-eyes approval of outbox discards (FourEyesApprovalIT). Here, not in a per-class source, for the
+        // container reason above; no other test calls a privileged outbox endpoint, so nothing else is held.
+        "ludwig.admin.approval.required=outbox.privileged"
 })
 abstract class NotificationTestBase {
 

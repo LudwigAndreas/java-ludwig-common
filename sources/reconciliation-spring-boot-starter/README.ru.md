@@ -341,6 +341,15 @@ ludwig:
 
 `tasks.<name>.audit.persist` всё ещё связывается, но ни на что не влияет (след идёт через платформенный `AuditSink`).
 
+**История запусков** (`ludwig.reconciliation.runs.*`, нужен перезапуск):
+
+| Свойство | По умолчанию | Значение |
+|---|---|---|
+| `manual-concurrency` | `2` | Сколько запусков, пробных запусков и backfill оператора выполняется одновременно на реплике; сверх этого запрос получает `429` |
+| `retention` | `30d` | Сколько завершённый запуск остаётся доступным |
+| `purge-interval` | `1h` | Как часто удаляются старые запуски и завершаются брошенные |
+| `purge-batch-size` | `500` | Запусков, удаляемых за один зафиксированный пакет |
+
 | Перечитывается (следующий проход) | Нужен перезапуск |
 |---|---|
 | `retry.*`, `demand.max-records-per-run`, `demand.freshness-target`, `fetch.batch-size`, `fetch.page-size`, `fetch.max-concurrency`, `not-found`, `apply.batch-size`, `rate-limits.*`; у перечислений `walk`, `sweep`, `refresh`, `retry` | `fetch.shape`, `schedule.*`, `cold-schedule.*`, `apply.fixed-delay`, `mode`, `quotas.*`, у перечислений `schedule.*`, `discovery.fixed-delay`, добавление/удаление задач, перечислений, квот и rate limit |
@@ -420,11 +429,32 @@ Gauge вычисляются из supplier-ов (остановившаяся з
 
 | Операция | Эндпоинты | Что разрешает |
 |---|---|---|
-| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}` | Просмотр задач сверки, перечислений, областей, квот и того, что застряло. |
+| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}` | Просмотр задач сверки, перечислений, областей, квот, того, что застряло, и исхода каждого запуска. |
 | `reconciliation.operate` | `POST /admin/v1/reconciliation/tasks/{task}/runs`<br>`POST /admin/v1/reconciliation/tasks/{task}/backfills`<br>`POST /admin/v1/reconciliation/tasks/{task}/cursor/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/discover`<br>`POST /admin/v1/reconciliation/tasks/{task}/members/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Запуск, дозагрузка, повторная постановка и сброс задач сверки и областей перечислений. |
 | `reconciliation.privileged` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel`<br>`POST /admin/v1/reconciliation/leases/{leaseId}/release`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Отмена удалённого задания, освобождение аренды квоты или подтверждение удержанной зачистки - действия, после которых эта система и партнёр могут разойтись. |
 
+**Запуски - это ресурсы.** Каждый запуск, взявший аренду, - по расписанию, ручной, пробный или backfill -
+записывается с видом, тем, кто его запросил, репликой, correlation id, отметками времени, исходом и счётчиками
+(ключей в спросе, полученных записей, произведённых строк); его id - это run id из событий аудита запуска.
+`POST .../runs` и `.../backfills` берут аренду сразу (`409`, если её держит любая реплика), отвечают `202` с
+конвертом запуска и `Location: .../runs/{runId}` и выполняют проход после ответа; опрашивайте ресурс запуска, он
+несёт `Retry-After`, пока запуск не завершён. Отчёт пробного запуска и счётчики backfill - это `result` запуска. Если
+все слоты ручных запусков заняты, запрос получает `429` со свойством `retryAfterSeconds`, и ничего не удерживается.
+Запуск перечисления или задачи с формой `async-job` по-прежнему синхронно выполняет её проход обхода или отправки и
+отвечает `200`; такие проходы не записываются как запуски. Запуски хранятся `runs.retention` и удаляются задачей
+`ludwig-reconciliation-run-purge` (видна в `GET /admin/v1/jobs`), которая также завершает запуск, чья реплика
+остановилась, как `FAILED` с `run-abandoned`.
+
+**Ограничение по задачам.** Каждый эндпоинт с `{task}` считает имя задачи (или перечисления) своим
+административным объектом, а `GET /admin/v1/reconciliation/tasks` перечисляет только задачи и перечисления, которые
+допускает область `read` вызывающего. При политике областей данных для `admin.reconciliation` команде можно выдать
+одну её задачу: другая задача - `403` для управления и `404` для чтения, тот же ответ, что и для несуществующей
+задачи. Без политики владение операцией распространяется на все задачи. Настройка:
+[настройка областей данных](../../docs/data-scope-configuration.ru.md#административные-объекты).
+
 **Удалено:** actuator-эндпоинт `reconciliation` и `ludwig.reconciliation.endpoint.*`, включая `allow-destructive-operations` и параметр `confirm`. Разрешены ли разрушающие действия, теперь определяется тем, выдана ли какой-либо роли сервиса операция `reconciliation.privileged`; `reconciliation` в списке экспозиции actuator ничего не открывает.
+
+**Фильтрация `GET /admin/v1/reconciliation/tasks/{task}/runs`.** Список принимает OData `$filter` и никаких других параметров фильтрации; он листается через `cursor` и `size` в фиксированном порядке от новых к старым, поэтому `$orderby`, `$top`, `$skip` и `$count` - `400`, как и поле, не перечисленное здесь. Фильтр применяется поверх собственных правил области и может их только сузить. Фильтруемые поля: `tier`, `kind` (`SCHEDULED`, `MANUAL`, `DRY_RUN`), `outcome` (`SUCCESS`, `FAILURE`, `TIMED_OUT`), `triggeredBy`, `instance`, `failureCode`, `correlationId`, `submittedAt`, `startedAt`, `finishedAt`, всегда внутри задачи из пути (индекс по задаче и `submittedAt`). Идущий запуск - `startedAt ne null and finishedAt eq null`. Не фильтруется: тело результата. Пример: `$filter=kind eq 'MANUAL' and outcome eq 'FAILURE'`.
 
 Блок выдачи (имена ролей - собственные роли сервиса):
 
@@ -443,9 +473,10 @@ ludwig:
 
 | Действие | Эндпоинт | Эффект |
 |---|---|---|
-| запуск | `POST /tasks/{task}/runs` `{tier}` | Выполнить проход сейчас; `409`, если уже идёт |
-| пробный запуск | `POST /tasks/{task}/runs` `{tier, dryRun: true}` | Получить и отчитаться по исходам, **ничего не записывая** |
-| backfill | `POST /tasks/{task}/backfills` `{keys}` | Получить указанные ключи в обход спроса; ограждения сохраняются; watermark не сдвигается |
+| запуск | `POST /tasks/{task}/runs` `{tier}` | Начать проход сейчас: `202` с запуском, опрашивать `Location`; `409`, если уже идёт |
+| пробный запуск | `POST /tasks/{task}/runs` `{tier, dryRun: true}` | Получить и отчитаться по исходам, **ничего не подготавливая**; отчёт - это `result` запуска |
+| backfill | `POST /tasks/{task}/backfills` `{keys}` | Получить указанные ключи в обход спроса; ограждения сохраняются; watermark не сдвигается; это такой же запуск |
+| запуски | `GET /tasks/{task}/runs?tier=&status=&cursor=`, `GET /tasks/{task}/runs/{runId}` | Все запуски, новые первыми, с исходом и счётчиками |
 | сброс курсора | `POST /tasks/{task}/cursor/reset` `{tier}` | Сбросить курсор и watermark |
 | возврат карантина | `POST /tasks/{task}/quarantine/requeue` | Вернуть в очередь со **сброшенными** счётчиками попыток |
 | возврат задания | `POST /tasks/{task}/remotejobs/{jobId}/requeue` | Вернуть в очередь собранные заданием записи |
@@ -466,6 +497,8 @@ privileged нужен заголовок `Admin-Reason`.
 | `freshness.lag` растёт, ошибок нет | Запрос спроса перестал совпадать: `records.fetched` ноль при успешных запусках |
 | Удаление отложено (`sweep.held`) | Посмотреть область. Реальное удаление: `confirm-sweep`. Сбой/права: `discard-sweep` и исправить; следующий обход будет полным. Применение тем временем продолжается |
 | Элементы в карантине | Образцы в `GET .../{enumeration}`; исправить; `requeue-members` (затронутые области получат полный обход) |
+| Запуск завис в `RUNNING` | Вероятно, его реплика остановилась. Очистка запусков завершит его как `FAILED` с `run-abandoned`, когда он станет старше `run-timeout` задачи плюс пять минут; аренда истекает через `run-timeout`, поэтому следующий запуск не блокируется |
+| Ручные запуски получают `429` | Все слоты `runs.manual-concurrency` на этой реплике заняты; повторите через `retryAfterSeconds` или увеличьте значение |
 
 ## Тестирование
 

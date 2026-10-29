@@ -465,7 +465,7 @@ behaviour here and all of which `PERFORMANCE` would quietly disable.
 
 `pat-spring-boot-starter` SHALL declare `pat.read`, `pat.operate` and `pat.privileged`, and serve:
 
-- `GET /admin/v1/pat/tokens?owner=&status=` and `GET /admin/v1/pat/tokens/{id}` (`pat.read`) - metadata only, never
+- `GET /admin/v1/pat/tokens?$filter=&cursor=` and `GET /admin/v1/pat/tokens/{id}` (`pat.read`) - metadata only, never
   a secret or its hash;
 - `POST /admin/v1/pat/tokens` (`pat.privileged`) - issue for another owner;
 - `POST /admin/v1/pat/tokens/{id}/revoke` (`pat.privileged`) - revoke any owner's PAT.
@@ -496,3 +496,12 @@ count. A revocation or rotation that overlaps a use SHALL succeed, and its effec
 #### Scenario: A last-use write for a token that was rotated
 - **WHEN** the last-use write runs after the token was rotated
 - **THEN** the rotation's new state is unchanged and only the last-use columns differ
+
+### Requirement: The administrative token listing is filterable on owner and lifetime
+`$filter` on `GET /admin/v1/pat/tokens` SHALL accept `ownerSubject`, `expiresAt`, `revokedAt`, `lastUsedAt` and
+`useCount`. The secret digests, the key ids, the token name, the scopes, the last-used address and the revocation
+reason SHALL NOT be filterable.
+
+#### Scenario: Tokens unused for ninety days
+- **WHEN** an administrator lists `$filter=revokedAt eq null and lastUsedAt lt 2026-07-31T00:00:00Z`
+- **THEN** only unrevoked tokens last used before that date are returned, without any secret material

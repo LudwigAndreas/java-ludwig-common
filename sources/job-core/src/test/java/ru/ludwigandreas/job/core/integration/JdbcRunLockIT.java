@@ -193,6 +193,30 @@ class JdbcRunLockIT {
     }
 
     /**
+     * The lease is a row, not a monitor: a lease taken on one thread and handed to another - which is what
+     * reconciliation's manual runs do, taking the lease on the request thread so a conflict is answered at once -
+     * is released by whichever thread closes it.
+     */
+    @Test
+    @DisplayName("a lease taken on one thread is released by another, and is then immediately claimable")
+    void releaseFromAnotherThread() throws Exception {
+        RunLock first = lockFor("replica-1");
+        RunLock second = lockFor("replica-2");
+        RunLockHandle taken = first.tryAcquire(LOCK_NAME, LEASE).orElseThrow();
+
+        ExecutorService other = Executors.newSingleThreadExecutor();
+        try {
+            other.submit(taken::close).get(10, TimeUnit.SECONDS);
+        } finally {
+            other.shutdownNow();
+        }
+
+        try (RunLockHandle next = second.tryAcquire(LOCK_NAME, LEASE).orElseThrow()) {
+            assertThat(next.owner()).isEqualTo("replica-2");
+        }
+    }
+
+    /**
      * A thrown run must cost nothing. Letting the lease expire instead would also be correct, but it
      * would block the next scheduled run for a full lease period after a failure that took
      * milliseconds.

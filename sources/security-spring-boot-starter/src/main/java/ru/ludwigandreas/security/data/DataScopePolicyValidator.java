@@ -3,8 +3,8 @@ package ru.ludwigandreas.security.data;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 import ru.ludwigandreas.security.exception.SecurityConfigurationException;
@@ -21,17 +21,50 @@ import ru.ludwigandreas.security.exception.SecurityConfigurationException;
  * one startup failure at a time is a slow and demoralizing way to find out there were four.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class DataScopePolicyValidator implements InitializingBean {
+
+    /** The resource-type prefix of an administrative area's objects, as in {@code admin.reconciliation}. */
+    public static final String ADMIN_RESOURCE_PREFIX = "admin.";
 
     private final ScopePolicies policies;
     private final DataScopeRegistry registry;
+    private final Supplier<Set<String>> administrativeAreas;
+
+    private static final List<String> ADMIN_TIERS = List.of("read", "operate", "privileged");
+
+    /**
+     * Creates the validator for a service with no administrative surface: any {@code admin.*} policy is refused.
+     *
+     * @param policies the compiled policies
+     * @param registry the resource mappings
+     */
+    public DataScopePolicyValidator(ScopePolicies policies, DataScopeRegistry registry) {
+        this(policies, registry, Set::of);
+    }
+
+    /**
+     * Creates the validator.
+     *
+     * @param policies            the compiled policies
+     * @param registry            the resource mappings
+     * @param administrativeAreas the areas of the administrative surface, read at validation
+     */
+    public DataScopePolicyValidator(ScopePolicies policies, DataScopeRegistry registry,
+                                    Supplier<Set<String>> administrativeAreas) {
+        this.policies = policies;
+        this.registry = registry;
+        this.administrativeAreas = administrativeAreas;
+    }
 
     @Override
     public void afterPropertiesSet() {
         List<String> problems = new ArrayList<>();
 
         for (String resource : policies.resources()) {
+            if (resource.startsWith(ADMIN_RESOURCE_PREFIX)) {
+                validateAdministrative(resource, problems);
+                continue;
+            }
             if (registry.isUnscoped(resource)) {
                 // The guard short-circuits unscoped resources to "everything", so these policies would
                 // never be consulted. Two settings that contradict each other, one of which silently
@@ -80,5 +113,33 @@ public class DataScopePolicyValidator implements InitializingBean {
 
         log.debug("Data-scope configuration validated: {} policed resource(s), {} mapped resource(s)",
                 policies.resources().size(), registry.resourceTypes().size());
+    }
+
+    /**
+     * An administrative resource is named objects, not rows: it needs no mapping, but its area must exist, its actions
+     * must be tiers, and a role may only keep every object or none - objects are granted per subject.
+     */
+    private void validateAdministrative(String resource, List<String> problems) {
+        String area = resource.substring(ADMIN_RESOURCE_PREFIX.length());
+        if (!administrativeAreas.get().contains(area)) {
+            problems.add("Resource '" + resource + "' scopes administrative area '" + area + "', which no module"
+                    + " of this service declares (or the administrative surface is off). A misspelled area would"
+                    + " scope nothing.");
+            return;
+        }
+        for (String action : ADMIN_TIERS) {
+            policies.grantsFor(resource, action).forEach((role, grant) -> {
+                if (grant.kind() == ScopeGrant.Kind.RESTRICTED) {
+                    problems.add("Policy " + resource + "." + action + "." + role + " is '"
+                            + grant.dimensions().stream().map(ScopeDimension::name).collect(Collectors.joining("+"))
+                            + "', but a role entry for an administrative resource is ALL or NONE: objects are"
+                            + " granted per subject (dimension 'object', through the identity grants), not listed"
+                            + " per role.");
+                }
+            });
+        }
+        policies.actionsOf(resource).stream().filter(action -> !ADMIN_TIERS.contains(action)).forEach(action ->
+                problems.add("Policy " + resource + "." + action + " names no tier; the action of an administrative"
+                        + " resource is read, operate or privileged."));
     }
 }

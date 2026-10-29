@@ -15,6 +15,8 @@ import ru.ludwigandreas.security.metrics.SecurityMetrics;
 import ru.ludwigandreas.pat.claim.PatClaims;
 import ru.ludwigandreas.pat.scope.PatAttenuation;
 import ru.ludwigandreas.security.authn.attenuation.AttenuatedAuthentications;
+import ru.ludwigandreas.security.principal.Delegation;
+import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
 
@@ -98,14 +100,33 @@ public class JwtPrincipalConverter implements Converter<Jwt, AbstractAuthenticat
                 // Passed as the fallback, which is what that precedence means.
                 claim(jwt, config.getTenantClaim()));
 
+        Optional<Delegation> delegation = delegationFor(jwt, config, type);
+
         metrics.recordAuthenticated(type.name());
 
-        if (attenuation.isEmpty()) {
-            return AttenuatedAuthentications.direct(principal);
+        LudwigAuthentication authentication = attenuation.isEmpty()
+                ? AttenuatedAuthentications.direct(principal)
+                : AttenuatedAuthentications.attenuated(subject, type, claim(jwt, config.getNameClaim()), authorities,
+                        attenuation.get(), patId(jwt));
+        return delegation.map(authentication::withDelegation).orElse(authentication);
+    }
+
+    /**
+     * The parties the token says the request came through. Identity only: nothing here reaches the authorities.
+     * Present but unreadable is refused, as for the personal-access-token claim.
+     */
+    private Optional<Delegation> delegationFor(Jwt jwt, SecurityProperties.Jwt config, PrincipalType type) {
+        String name = config.getActorClaim();
+        if (name == null || name.isBlank()) {
+            return Optional.empty();
         }
-        return AttenuatedAuthentications.attenuated(
-                subject, type, claim(jwt, config.getNameClaim()), authorities,
-                attenuation.get(), patId(jwt));
+        try {
+            return DelegationClaims.read(jwt.getClaims().get(name));
+        } catch (IllegalArgumentException e) {
+            metrics.recordAuthenticationFailed(type.name(), "malformed-actor-claim");
+            throw new InvalidBearerTokenException("Token carries a '" + name + "' claim that is not readable as a"
+                    + " delegation: " + e.getMessage());
+        }
     }
 
     /**

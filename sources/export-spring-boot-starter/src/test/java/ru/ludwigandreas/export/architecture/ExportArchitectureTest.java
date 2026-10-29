@@ -3,6 +3,8 @@ package ru.ludwigandreas.export.architecture;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
 
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -71,7 +73,7 @@ class ExportArchitectureTest {
     @DisplayName("the OData filter dialect is visible to the filter package and the wiring")
     void filterDialectStaysInsideTheFilterPackage() {
         noClasses()
-                .that().resideOutsideOfPackages(ROOT + ".filter..", ROOT + ".config..")
+                .that().resideOutsideOfPackages(ROOT + ".filter..", ROOT + ".config..", ROOT + ".entity..")
                 .should().dependOnClassesThat().resideInAnyPackage("ru.ludwigandreas.odatafilter..",
                         "org.apache.olingo..")
                 .because("the platform has one filter dialect and this module parses none of it; a"
@@ -79,6 +81,21 @@ class ExportArchitectureTest {
                         + " autoconfiguration is exempt because it has to name the class it conditions"
                         + " on - that is what makes the dependency optional rather than what makes it"
                         + " used")
+                .check(CLASSES);
+    }
+
+    @Test
+    @DisplayName("an entity may declare which of its fields are filterable, and use nothing else of the dialect")
+    void entitiesOnlyDeclareFilterableFields() {
+        noClasses()
+                .that().resideInAPackage(ROOT + ".entity..")
+                .should().dependOnClassesThat(DescribedPredicate.describe("the OData dialect beyond its annotations",
+                        (JavaClass type) -> type.getPackageName().startsWith("ru.ludwigandreas.odatafilter")
+                                && !"ru.ludwigandreas.odatafilter.annotation".equals(type.getPackageName())
+                                || type.getPackageName().startsWith("org.apache.olingo")))
+                .because("@Filterable on an entity field is the administrative listing's allow-list - a"
+                        + " declaration of what an operator may filter on, parsed by the OData starter through"
+                        + " db-core's AdminQueryFilter, not by this module; parsing stays in the filter package")
                 .check(CLASSES);
     }
 

@@ -1,35 +1,50 @@
 package ru.ludwigandreas.reconciliation.admin.service;
 
+import com.querydsl.core.types.Predicate;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.data.domain.PageRequest;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.reconciliation.api.DemandTier;
+import ru.ludwigandreas.reconciliation.config.FetchShape;
 import ru.ludwigandreas.reconciliation.config.ReconciliationProperties;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
+import ru.ludwigandreas.reconciliation.engine.ManualRunCapacityException;
 import ru.ludwigandreas.reconciliation.engine.ReconciliationRuntime;
 import ru.ludwigandreas.reconciliation.engine.RegisteredTask;
 import ru.ludwigandreas.reconciliation.engine.TaskRegistry;
 import ru.ludwigandreas.reconciliation.engine.TaskRunner;
 import ru.ludwigandreas.reconciliation.engine.TaskStateService;
 import ru.ludwigandreas.reconciliation.engine.enumeration.EnumerationOperations;
+import ru.ludwigandreas.reconciliation.entity.QSyncRun;
 import ru.ludwigandreas.reconciliation.entity.QuotaLease;
 import ru.ludwigandreas.reconciliation.entity.RemoteJobState;
+import ru.ludwigandreas.reconciliation.entity.RunKind;
 import ru.ludwigandreas.reconciliation.entity.SyncInboxRecord;
 import ru.ludwigandreas.reconciliation.entity.SyncRecordStatus;
 import ru.ludwigandreas.reconciliation.entity.SyncRemoteJob;
+import ru.ludwigandreas.reconciliation.entity.SyncRun;
 import ru.ludwigandreas.reconciliation.quota.DatabaseQuota;
 import ru.ludwigandreas.reconciliation.repository.QuotaLeaseRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncInboxRecordRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncRemoteJobRepository;
+import ru.ludwigandreas.reconciliation.repository.SyncRunRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
+import ru.ludwigandreas.security.admin.AdminObjectScope;
+import ru.ludwigandreas.security.admin.AdminTier;
+import ru.ludwigandreas.security.admin.AdminCursor;
 import ru.ludwigandreas.security.admin.AdminInvocation;
 import ru.ludwigandreas.security.admin.AdminOutcome;
+import ru.ludwigandreas.security.admin.AdminPage;
 
 /**
  * The {@code reconciliation} area's operations - every action the reconciliation actuator endpoint offered, on the
@@ -49,10 +64,13 @@ public class ReconciliationAdminService {
     /** How many quarantined records a detail view lists before it is a report rather than a view. */
     private static final int QUARANTINE_SAMPLE = 20;
 
+    private static final String AREA = "reconciliation";
     private static final String TASK = "reconciliation-task";
     private static final String SCOPE = "reconciliation-scope";
     private static final String REMOTE_JOB = "reconciliation-remote-job";
     private static final String LEASE = "reconciliation-quota-lease";
+
+    private static final QSyncRun RUN = QSyncRun.syncRun;
 
     private final TaskRegistry registry;
     private final ReconciliationRuntime runtime;
@@ -65,6 +83,9 @@ public class ReconciliationAdminService {
     private final ReconciliationProperties properties;
     private final EnumerationOperations enumerations;
     private final AdminAudit audit;
+    private final SyncRunRepository runs;
+    private final AdminObjectScope objects;
+    private final AdminQueryFilter filters;
 
     /**
      * Creates the service.
@@ -72,8 +93,13 @@ public class ReconciliationAdminService {
      * @param engine       the task-kind collaborators
      * @param enumerations the enumeration operations, or null when no enumeration is configured
      * @param audit        the administrative audit
+     * @param objects      which tasks a caller's data scope admits, or null for no per-task scoping
+     * @param filters      parses the run history's {@code $filter}
      */
-    public ReconciliationAdminService(Engine engine, EnumerationOperations enumerations, AdminAudit audit) {
+    public ReconciliationAdminService(Engine engine, EnumerationOperations enumerations, AdminAudit audit,
+                                      AdminObjectScope objects, AdminQueryFilter filters) {
+        this.objects = objects;
+        this.filters = filters;
         this.registry = engine.registry();
         this.runtime = engine.runtime();
         this.runner = engine.runner();
@@ -85,6 +111,7 @@ public class ReconciliationAdminService {
         this.properties = engine.properties();
         this.enumerations = enumerations;
         this.audit = audit;
+        this.runs = engine.runs();
     }
 
     /**
@@ -97,13 +124,14 @@ public class ReconciliationAdminService {
      * @param records    the staging table
      * @param jobs       the job table
      * @param leases     the lease table
+     * @param runs       the run history
      * @param quota      the quota
      * @param properties the bound configuration
      */
     public record Engine(TaskRegistry registry, ReconciliationRuntime runtime, TaskRunner runner,
                          TaskStateService taskState, SyncInboxRecordRepository records,
                          SyncRemoteJobRepository jobs, QuotaLeaseRepository leases, DatabaseQuota quota,
-                         ReconciliationProperties properties) {
+                         ReconciliationProperties properties, SyncRunRepository runs) {
     }
 
     /**
@@ -113,11 +141,11 @@ public class ReconciliationAdminService {
      */
     public Map<String, Object> overview() {
         Map<String, Object> view = new LinkedHashMap<>();
-        view.put("tasks", registry.all().stream().map(this::summarize).toList());
+        view.put("tasks", readable(registry.all().stream().map(this::summarize).toList()));
         view.put("quotas", quota.names().stream().map(this::summarizeQuota).toList());
         List<String> passes = new ArrayList<>(runtime.passNames());
         if (enumerations != null) {
-            view.put("enumerations", enumerations.summaries());
+            view.put("enumerations", readable(enumerations.summaries()));
             passes.addAll(enumerations.passNames());
         }
         view.put("passes", passes);
@@ -170,24 +198,51 @@ public class ReconciliationAdminService {
     }
 
     /**
-     * Runs a task's pass now, or performs a dry run of it.
+     * Whether an operator's run request for this task becomes a recorded, asynchronous run.
+     *
+     * <p>A dry run always does, and so does a manual run of a key-addressed task. A manual run of a task using the
+     * asynchronous remote-job shape triggers its submit pass, and an enumeration its walk; neither is a fetch run
+     * with a run lease of the task's own, so they stay what they were: synchronous, and not recorded as runs.
      *
      * @param task   the task or enumeration
+     * @param dryRun whether a dry run is asked for
+     * @return true when {@link #startRun} applies
+     */
+    public boolean recordsRun(String task, boolean dryRun) {
+        if (isEnumeration(task)) {
+            return false;
+        }
+        return dryRun || require(task).settings().fetch().shape() != FetchShape.ASYNC_JOB;
+    }
+
+    /**
+     * Starts an operator's run or dry run and returns its run record, pending or already running.
+     *
+     * @param task   the task
      * @param tier   {@code hot} or {@code cold}; null for hot
      * @param dryRun whether to fetch and compare without applying
+     * @return the run
+     */
+    public RunSnapshot startRun(String task, String tier, boolean dryRun) {
+        RegisteredTask<?, ?, ?> registered = require(task);
+        RunKind kind = dryRun ? RunKind.DRY_RUN : RunKind.MANUAL;
+        return started(task, kind.name().toLowerCase(Locale.ROOT), tierOf(tier), kind,
+                () -> runner.start(registered, tierOf(tier), kind, List.of(), triggeredBy()));
+    }
+
+    /**
+     * Triggers the pass of a task that is not run as a recorded fetch run (an enumeration, or the submit pass of an
+     * asynchronous remote-job task), synchronously.
+     *
+     * @param task the task or enumeration
      * @return what happened
      */
-    public Map<String, Object> run(String task, String tier, boolean dryRun) {
+    public Map<String, Object> runPass(String task) {
         if (isEnumeration(task)) {
             return recorded(TASK, task, "run", enumerations.operate(task, "run"));
         }
-        RegisteredTask<?, ?, ?> registered = require(task);
-        if (dryRun) {
-            return recorded(TASK, task, "dry-run", runner.dryRun(registered, tierOf(tier)));
-        }
-        String pass = task + ":" + tierOf(tier).name().toLowerCase(Locale.ROOT);
-        // A task using the async-job shape has no hot pass; its equivalent trigger is the submit pass.
-        String resolved = runtime.passNames().contains(pass) ? pass : task + ":submit";
+        require(task);
+        String resolved = task + ":submit";
         if (!runtime.runNow(resolved)) {
             audit.record(TASK, task, AdminOutcome.REFUSED_BY_STATE, Map.of("action", "run", "pass", resolved));
             throw ReconciliationAdminException.alreadyRunning(resolved);
@@ -196,21 +251,85 @@ public class ReconciliationAdminService {
     }
 
     /**
-     * Fetches an explicit set of keys through the same walker, staging and apply path as a scheduled run, so a
-     * backfilled record keeps the stale-write and idempotency guards.
+     * Starts a fetch of an explicit set of keys through the same walker, staging and apply path as a scheduled run,
+     * so a backfilled record keeps the stale-write and idempotency guards.
      *
      * @param task the task
      * @param keys correlation keys, in the form the task's key codec writes them
-     * @return what was staged
+     * @return the run
      */
-    public Map<String, Object> backfill(String task, List<String> keys) {
+    public RunSnapshot backfill(String task, List<String> keys) {
         List<String> requested = keys == null ? List.of()
                 : keys.stream().map(String::trim).filter(key -> !key.isBlank()).toList();
         if (requested.isEmpty()) {
             throw ReconciliationAdminException.keysRequired();
         }
-        int staged = runner.backfill(require(task), requested);
-        return recorded(TASK, task, "backfill", Map.of("task", task, "requested", requested.size(), "staged", staged));
+        RegisteredTask<?, ?, ?> registered = require(task);
+        return started(task, "backfill", DemandTier.HOT, RunKind.BACKFILL,
+                () -> runner.start(registered, DemandTier.HOT, RunKind.BACKFILL, requested, triggeredBy()));
+    }
+
+    /**
+     * A task's runs, newest first.
+     *
+     * @param task      the task
+     * @param rawFilter an OData {@code $filter} over the run's filterable fields, within the task, or null
+     * @param cursor    the previous page's cursor, or null
+     * @param size      the requested page size, or null
+     * @return the page
+     */
+    public AdminPage<RunSnapshot> runs(String task, String rawFilter, String cursor, Integer size) {
+        require(task);
+        int pageSize = AdminCursor.pageSize(size);
+        Instant afterSubmittedAt = null;
+        UUID afterId = null;
+        if (cursor != null) {
+            List<String> position = AdminCursor.decode(cursor, 2);
+            afterSubmittedAt = Instant.parse(position.get(0));
+            afterId = UUID.fromString(position.get(1));
+        }
+        Predicate filter = filters.parse(SyncRun.class, rawFilter).where().orElse(null);
+        List<RunSnapshot> page = runs.findPage(task, filter, afterSubmittedAt, afterId, pageSize + 1).stream()
+                .map(RunSnapshot::of).toList();
+        return AdminPage.of(page, pageSize,
+                run -> AdminCursor.encode(run.submittedAt().toString(), run.id().toString()));
+    }
+
+    /**
+     * One run of a task.
+     *
+     * @param task  the task
+     * @param runId the run
+     * @return the run
+     */
+    public RunSnapshot run(String task, UUID runId) {
+        require(task);
+        return runs.findById(runId).filter(run -> task.equals(run.getTaskName())).map(RunSnapshot::of)
+                .orElseThrow(() -> ReconciliationAdminException.runNotFound(runId, task));
+    }
+
+    private RunSnapshot started(String task, String action, DemandTier tier, RunKind kind,
+                            Supplier<Optional<UUID>> start) {
+        Optional<UUID> runId;
+        try {
+            runId = start.get();
+        } catch (ManualRunCapacityException full) {
+            audit.record(TASK, task, AdminOutcome.REFUSED_BY_STATE, Map.of("action", action, "reason", "capacity"));
+            throw ReconciliationAdminException.manualRunCapacity(task, properties.getRuns().getManualConcurrency());
+        }
+        if (runId.isEmpty()) {
+            audit.record(TASK, task, AdminOutcome.REFUSED_BY_STATE, Map.of("action", action));
+            throw ReconciliationAdminException.alreadyRunning(task + ":" + tier.name().toLowerCase(Locale.ROOT));
+        }
+        UUID id = runId.get();
+        audit.record(TASK, task, AdminOutcome.SUCCEEDED, Map.of("action", action, "runId", id.toString()));
+        // The recorder's write is best-effort; if it failed, the run still runs, and the caller is told so through a
+        // pending view rather than an error for something that did start.
+        return runs.findById(id).map(RunSnapshot::of).orElseGet(() -> RunSnapshot.pending(id, task, tier, kind));
+    }
+
+    private static String triggeredBy() {
+        return AdminInvocation.current().map(invocation -> invocation.principal().subject()).orElse(null);
     }
 
     /**
@@ -325,6 +444,16 @@ public class ReconciliationAdminService {
                                          Map<String, Object> result) {
         audit.record(resourceType, resourceId, AdminOutcome.SUCCEEDED, Map.of("action", action));
         return result;
+    }
+
+    /** The summaries whose task the caller's read scope admits; every one when tasks are not scoped. */
+    private List<Map<String, Object>> readable(List<Map<String, Object>> summaries) {
+        if (objects == null) {
+            return summaries;
+        }
+        List<String> admitted = objects.filter(AREA, AdminTier.READ,
+                summaries.stream().map(summary -> String.valueOf(summary.get("name"))).toList());
+        return summaries.stream().filter(summary -> admitted.contains(String.valueOf(summary.get("name")))).toList();
     }
 
     private boolean isEnumeration(String task) {

@@ -36,7 +36,7 @@ audited. An unknown group or topic SHALL be `404`.
 `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/offsets` (`messaging.privileged`, reason required) SHALL move
 the group's committed position on one partition or all partitions of the topic to `earliest`, `latest`, an explicit
 offset, or the first record at or after a timestamp, clamped to the retained log. It SHALL be refused with `409`
-unless the pair is paused. It SHALL reset the partitions' retry state, and SHALL answer with each partition's old and
+unless the pair is paused, and with `400` for an unrecognised target or unparseable value. It SHALL reset the partitions' retry state, and SHALL answer with each partition's old and
 new position and the number of records skipped or to be replayed. The move SHALL be audited with the reason,
 positions and counts.
 

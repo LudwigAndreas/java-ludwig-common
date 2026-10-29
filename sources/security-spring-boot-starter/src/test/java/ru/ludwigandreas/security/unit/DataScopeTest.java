@@ -47,4 +47,29 @@ class DataScopeTest {
         assertThat(own.union(DataScope.none())).isEqualTo(own);
         assertThat(DataScope.none().union(own)).isEqualTo(own);
     }
+
+    @Test
+    @DisplayName("admits: ALL admits any value, NONE none, a restriction only the values it lists on that dimension")
+    void admitsOneValue() {
+        DataScope granted = DataScope.restrictedTo(ScopeDimension.OBJECT, "supplier-sync");
+
+        assertThat(DataScope.all().admits(ScopeDimension.OBJECT, "anything")).isTrue();
+        assertThat(DataScope.none().admits(ScopeDimension.OBJECT, "supplier-sync")).isFalse();
+        assertThat(granted.admits(ScopeDimension.OBJECT, "supplier-sync")).isTrue();
+        assertThat(granted.admits(ScopeDimension.OBJECT, "customer-sync")).isFalse();
+        assertThat(granted.admits(ScopeDimension.OBJECT, null)).isFalse();
+        assertThat(granted.union(DataScope.restrictedTo(ScopeDimension.OBJECT, "customer-sync"))
+                .admits(ScopeDimension.OBJECT, "customer-sync")).isTrue();
+    }
+
+    @Test
+    @DisplayName("admits fails closed: an alternative that also restricts another dimension admits nothing")
+    void admitsFailsClosedOnOtherDimensions() {
+        DataScope tenantBound = DataScope.restrictedTo(Map.of(
+                ScopeDimension.OBJECT, Set.of("supplier-sync"), ScopeDimension.TENANT, Set.of("acme")));
+
+        assertThat(tenantBound.admits(ScopeDimension.OBJECT, "supplier-sync")).isFalse();
+        assertThat(DataScope.restrictedTo(ScopeDimension.TENANT, "acme").admits(ScopeDimension.OBJECT, "acme"))
+                .isFalse();
+    }
 }

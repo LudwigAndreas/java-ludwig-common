@@ -373,6 +373,8 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 
 Responses carry no file, no row content and no error-report link. Cancel is the submitter's own cancel: `202` while the stop is pending, or `200` with the envelope when the submission is terminal - including one it ended `CANCELLED` itself, as a `VALIDATED` one is.
 
+**Filtering `GET /admin/v1/fileactions/submissions`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `action`, `state` (`UPLOADED`, `VALIDATED`, `APPLYING`, `APPLIED`, `REJECTED`, `EXPIRED`, `CANCELLED`), `submittedBy`, `sourceFormat`, `failureCode`, `rowsRejected`, `submittedAt`, `startedAt`, `finishedAt`. Not filterable: the object location, the declared file name, the failure arguments. Example: `$filter=action eq 'product-import' and rowsRejected gt 0`.
+
 Grant block (the role names are the service's own):
 
 ```yaml

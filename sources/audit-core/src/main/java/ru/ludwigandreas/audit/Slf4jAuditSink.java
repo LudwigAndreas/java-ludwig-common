@@ -41,7 +41,7 @@ public class Slf4jAuditSink implements AuditSink {
      * person reading a sentence.
      */
     private static final String FORMAT = "audit id={} at={} category={} action={} outcome={}"
-            + " actor={} actorType={} onBehalfOf={} resourceType={} resourceId={}"
+            + " actor={} actorType={} onBehalfOf={} via={} resourceType={} resourceId={}"
             + " correlationId={} traceId={} reason={} attributes={}";
 
     @Override
@@ -53,14 +53,14 @@ public class Slf4jAuditSink implements AuditSink {
                 || outcome.status() == AuditOutcome.Status.FAILURE;
         if (adverse) {
             AUDIT.warn(FORMAT, event.id(), event.occurredAt(), event.category(), event.action(),
-                    outcome.status(), actor.subject(), actor.principalType(), actor.onBehalfOf(),
+                    outcome.status(), actor.subject(), actor.principalType(), actor.onBehalfOf(), actor.via(),
                     type(resource), id(resource), event.correlationId(), event.traceId(),
                     outcome.reason(), event.attributes());
             return;
         }
         if (AUDIT.isInfoEnabled()) {
             AUDIT.info(FORMAT, event.id(), event.occurredAt(), event.category(), event.action(),
-                    outcome.status(), actor.subject(), actor.principalType(), actor.onBehalfOf(),
+                    outcome.status(), actor.subject(), actor.principalType(), actor.onBehalfOf(), actor.via(),
                     type(resource), id(resource), event.correlationId(), event.traceId(),
                     outcome.reason(), event.attributes());
         }

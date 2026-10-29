@@ -51,19 +51,24 @@ The image-pin false positive, the PAT revoke race and `StubFaultIT.slow` were fi
 
 ## 2. Capabilities explicitly out of scope
 
-- **Delegation (`act`) claim.** Record "alice via admin-console" and optionally require administrative calls from
-  people to arrive through the administrative UI. Depends on the identity provider issuing the claim; the audit
-  envelope already has `on_behalf_of`.
+- **Delegation (`act`) claim** was added by `admin-delegation-claim`: the actor's `via`, the `via` trail filter and
+  `ludwig.admin.human-callers.required-via`. Still open: recording the full delegation chain in the envelope (only
+  the immediate acting party is stored), and reading delegation from mTLS or PAT callers.
 - **Per-replica controls.** Cache eviction, hot-reload, outbound token invalidation and circuit-breaker state act on
   the one replica a call lands on. A broadcast (control event over Kafka, "accepted" not "done") is needed before
   any of these get administrative endpoints.
-- **Moving a database-log consumer's offset.** Needs a coordinated pause of the consumer on every replica.
-- **Per-object grants** (operate one reconciliation task but not another): a data-scope binding, not a new grant
-  syntax.
-- **Four-eyes approval** for privileged operations.
+- **Moving a database-log consumer's offset** was added by `messaging-db-consumer-controls`: the pause is a row every
+  replica's claim reads, so it needed no broadcast. Offsets of groups on a real Kafka cluster stay with Kafka's own
+  tooling.
+- **Per-object grants** were added by `admin-object-scope`: resource `admin.<area>`, dimension `object`, roles `ALL`
+  or `NONE`, objects granted per subject; `reconciliation` is the first adopter. Still open: adopt object scope in
+  `jobs` (job names) and `fileingest` (sources).
+- **Four-eyes approval** was added by `admin-four-eyes-approval`: `ludwig.admin.approval.required`, the
+  `/admin/v1/approvals` endpoints and job-core's store. Still open: approval chains (N of M), approver groups distinct
+  from operation holders, notifying approvers, and approval of replica controls once those exist.
 - **Administrative operations over gRPC.**
-- **Reconciliation run history.** A run is answered `202` with the task as its status resource because there is no
-  run table.
+- **Reconciliation run history** was added by `reconciliation-run-history`. Still open from it: run history for
+  enumeration walks, and for the `async-job` submit pass, which stay synchronous and unrecorded.
 
 ## 3. Small polish
 
@@ -71,6 +76,10 @@ Both items (`produces` on the discovery endpoint, missing description keys) were
 
 ## 4. Found while implementing `starter-admin-endpoints`
 
-- **The outbox has no retention purge.** `PUBLISHED`, `DEAD_LETTER` and now `DISCARDED` rows accumulate forever in
-  `outbox_message` and `outbox_status_history`. A purge job (on `job-core`, keyed on `published_at` / last
-  transition) and its retention properties are a change of their own.
+Both items (the outbox's missing retention purge, the cancelled file-action submission ending `APPLIED`) were fixed
+by `outbox-retention-purge` and `file-action-cancelled-state`.
+
+- **Administrative listings filter with OData** since `admin-listing-odata-filter`: the six paged listings over stored
+  rows take `$filter` only (their explicit filter parameters removed), keep keyset paging, and refuse the offset
+  options. Still open: the listings that are not JPA rows (approvals, run locks, database-log consumer positions,
+  jobs) keep explicit parameters; a cursor mode in the OData starter, should client-chosen ordering be wanted.

@@ -9,8 +9,7 @@ must never be sent - without SQL and without ever seeing a message's payload.
 `outbox-spring-boot-starter` SHALL declare `outbox.read`, `outbox.operate` and `outbox.privileged`, and serve under
 `outbox.read`:
 
-- `GET /admin/v1/outbox/messages?status=&eventType=&destination=&createdBefore=&cursor=` - newest first, at most
-  200 per page, keyset-paginated;
+- `GET /admin/v1/outbox/messages?$filter=&cursor=` - newest first, at most 200 per page, keyset-paginated;
 - `GET /admin/v1/outbox/messages/{id}` - one message with its status history and its last error as stored;
 - `GET /admin/v1/outbox/summary` - the count per status and destination.
 
@@ -18,7 +17,7 @@ No response SHALL contain the message payload or its headers' values, and a list
 error, whose text may quote the payload.
 
 #### Scenario: What is dead-lettered
-- **WHEN** an operator lists messages with status `DEAD_LETTER`
+- **WHEN** an operator lists messages with `$filter=status eq 'DEAD_LETTER'`
 - **THEN** each entry carries id, event type, destination, attempts and timestamps, and none carries the
   payload or the last error
 
@@ -58,3 +57,22 @@ history SHALL be kept and purged by the same retention as `DEAD_LETTER`.
 - **WHEN** the message is `PROCESSING`
 - **THEN** the response is `409`
 
+### Requirement: A retried message leaves retention
+When an administrator retries a `DEAD_LETTER` message, its `finished_at` SHALL be cleared, so that the purge does
+not delete it while it is being retried. If it reaches a terminal status again, its retention SHALL count from that
+new transition.
+
+#### Scenario: A dead letter retried on its twenty-ninth day
+- **WHEN** a `DEAD_LETTER` message that finished 29 days ago is retried, fails again and becomes `DEAD_LETTER`
+  again, and the purge runs two days later
+- **THEN** the message still exists
+
+### Requirement: Outbox messages are filterable on their routing and state
+`$filter` on `GET /admin/v1/outbox/messages` SHALL accept `status`, `eventType`, `eventVersion`, `aggregateType`,
+`aggregateId`, `destination`, `transport`, `attempts`, `createdAt`, `nextAttemptAt`, `publishedAt` and `finishedAt`.
+The payload, the last error, the idempotency key and the lock owner SHALL NOT be filterable.
+
+#### Scenario: Old dead letters of one event type
+- **WHEN** an operator lists `$filter=status eq 'DEAD_LETTER' and eventType eq 'OrderCreated' and createdAt lt
+  2026-10-26T00:00:00Z`
+- **THEN** only such messages are returned, without payload or error text

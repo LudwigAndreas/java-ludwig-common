@@ -125,6 +125,7 @@ SIEM никогда не узнаёт об откатившемся измене
 | `audit-0002` | Если есть `user_setting_audit`: копирует её строки в `audit_event` (`subject` → `on_behalf_of`, `actor` → `actor_subject`) |
 | `audit-0003` | Если есть `sync_audit_record`: копирует её строки (её `category` становится атрибутом) |
 | `audit-0004` | Заменяет маркер `[redacted]` в перенесённых строках на `***REDACTED***` |
+| `audit-0006` | Добавляет `actor_via` - сторону, через которую действовало лицо, с частичным индексом по `(actor_via, occurred_at)` |
 
 `audit-0002`/`0003` защищены предусловиями `tableExists` с `onFail="MARK_RAN"`; changeset, помеченный как
 выполненный, никогда не пересматривается, поэтому этот changelog выполняется после changelog-ов
@@ -140,6 +141,7 @@ user-settings и reconciliation (`@AutoConfigureAfter`). Исходные таб
 | `source_system` | Какое развёртывание записало строку (`ludwig.audit.source-system`) |
 | `category`, `action`, `outcome`, `reason` | Что произошло и чем закончилось |
 | `actor_subject`, `actor_type`, `actor_display_name`, `on_behalf_of` | Кто действовал и для кого |
+| `actor_via` | Сторона, через которую действовало лицо (`act.sub` по RFC 8693), например административный UI; null для прямого запроса |
 | `resource_type`, `resource_id`, `resource_name` | Что затронуто |
 | `correlation_id`, `trace_id` | Ключи связи с логами и трассами |
 | `attributes` (`jsonb`) | Детали модуля, уже отредактированные; без GIN-индекса (читаются целиком, фильтруются редко) |
@@ -199,7 +201,9 @@ user-settings и reconciliation (`@AutoConfigureAfter`). Исходные таб
 | `audit.operate` | в этом выпуске нет | Операций нет; журнал только дополняется. |
 | `audit.privileged` | в этом выпуске нет | Операций нет; журнал только дополняется. |
 
-Поиск охватывает не более 30 дней, вызывающий типа `USER` видит только события своего арендатора, и каждый поиск сам записывается в журнал.
+Поиск охватывает не более 30 дней, вызывающий типа `USER` видит только события своего арендатора, и каждый поиск сам записывается в журнал. Каждый результат содержит `via` - сторону, через которую действовало лицо; фильтр по ней - `$filter=actorVia eq 'admin-console'`.
+
+**Фильтрация `GET /admin/v1/audit/events`.** Список принимает OData `$filter` и никаких других параметров фильтрации; он листается через `cursor` и `size` в фиксированном порядке от новых к старым, поэтому `$orderby`, `$top`, `$skip` и `$count` - `400`, как и поле, не перечисленное здесь. Фильтр применяется поверх собственных правил области и может их только сузить. Фильтруемые поля: `occurredAt`, `category`, `action`, `outcome`, `actorSubject`, `actorType`, `actorVia`, `onBehalfOf`, `resourceType`, `resourceId`, `correlationId`. Индексированы, поэтому фильтруйте сначала по ним: `occurredAt`, `actorSubject`, `category`, `actorVia`, `resourceType` вместе с `resourceId`, `correlationId`. Не фильтруются: `reason`, отображаемые имена и имя ресурса, арендатор действующего лица, `attributes`. Без фильтра по `occurredAt` поиск охватывает последние 30 дней. Пример: `$filter=outcome eq 'DENIED' and startswith(action, 'pat.')`.
 
 Блок выдачи (имена ролей - собственные роли сервиса):
 

@@ -36,7 +36,8 @@ class SchemaInstallIT {
 
         LogStoreIT.migrate(dataSource, "shared_it", "service_b_changelog");
 
-        assertThat(tables("shared_it")).containsExactlyInAnyOrder("message_log", "partition_head", "consumer_offset");
+        assertThat(tables("shared_it"))
+                .containsExactlyInAnyOrder("message_log", "partition_head", "consumer_offset", "consumer_pause");
         assertThat(new JdbcTemplate(dataSource).queryForObject(
                 "SELECT next_offset FROM shared_it.partition_head WHERE topic = 'kept'", Long.class)).isEqualTo(7L);
     }
@@ -48,7 +49,8 @@ class SchemaInstallIT {
 
         CompletableFuture.allOf(first, second).get(60, TimeUnit.SECONDS);
 
-        assertThat(tables("race_it")).containsExactlyInAnyOrder("message_log", "partition_head", "consumer_offset");
+        assertThat(tables("race_it"))
+                .containsExactlyInAnyOrder("message_log", "partition_head", "consumer_offset", "consumer_pause");
     }
 
     private static void migrateQuietly(String changelogTable) {

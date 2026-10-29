@@ -145,9 +145,16 @@ class AuditEventQueryRepositoryImpl implements AuditEventQueryRepository {
      */
     @Override
     @Transactional(readOnly = true)
-    public List<AuditEventEntity> findPage(AuditTrailQuery query, boolean tenantConfined, String actorTenant,
-                                           Instant afterOccurredAt, UUID afterId) {
-        BooleanBuilder where = new BooleanBuilder(predicateFor(query));
+    @SuppressWarnings("checkstyle:ParameterNumber")
+    public List<AuditEventEntity> findPage(Predicate filter, Instant from, boolean tenantConfined, String actorTenant,
+                                           Instant afterOccurredAt, UUID afterId, int limit) {
+        BooleanBuilder where = new BooleanBuilder();
+        if (filter != null) {
+            where.and(filter);
+        }
+        if (from != null) {
+            where.and(EVENT.occurredAt.goe(from));
+        }
         if (tenantConfined) {
             where.and(actorTenant == null ? EVENT.actorTenant.isNull() : EVENT.actorTenant.eq(actorTenant));
         }
@@ -158,7 +165,7 @@ class AuditEventQueryRepositoryImpl implements AuditEventQueryRepository {
         return queryFactory.selectFrom(EVENT)
                 .where(where)
                 .orderBy(EVENT.occurredAt.desc(), EVENT.id.asc())
-                .limit(query.limit())
+                .limit(limit)
                 .fetch();
     }
 

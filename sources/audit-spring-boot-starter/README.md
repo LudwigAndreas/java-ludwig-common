@@ -125,6 +125,7 @@ have different legal bases. Agree values with the compliance owner before changi
 | `audit-0002` | If `user_setting_audit` exists: copies its rows into `audit_event` (`subject` → `on_behalf_of`, `actor` → `actor_subject`) |
 | `audit-0003` | If `sync_audit_record` exists: copies its rows (its `category` becomes an attribute) |
 | `audit-0004` | Rewrites the `[redacted]` marker in migrated rows to `***REDACTED***` |
+| `audit-0006` | Adds `actor_via`, the party the actor acted through, with a partial index on `(actor_via, occurred_at)` |
 
 `audit-0002`/`0003` are guarded by `tableExists` preconditions with `onFail="MARK_RAN"`; a changeset marked
 as ran is never reconsidered, so this changelog runs after the user-settings and reconciliation changelogs
@@ -140,6 +141,7 @@ them yourself.
 | `source_system` | Which deployment wrote the row (`ludwig.audit.source-system`) |
 | `category`, `action`, `outcome`, `reason` | What happened and how it ended |
 | `actor_subject`, `actor_type`, `actor_display_name`, `on_behalf_of` | Who acted, for whom |
+| `actor_via` | The party the actor acted through (RFC 8693 `act.sub`), e.g. an administrative UI; null for a direct request |
 | `resource_type`, `resource_id`, `resource_name` | What was touched |
 | `correlation_id`, `trace_id` | Join keys to logs and traces |
 | `attributes` (`jsonb`) | Module-specific details, already redacted; not GIN-indexed (read whole, rarely filtered) |
@@ -199,7 +201,9 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 | `audit.operate` | none in this release | No operation; the trail is append-only. |
 | `audit.privileged` | none in this release | No operation; the trail is append-only. |
 
-A search spans at most 30 days, a `USER` caller sees only their own tenant's events, and every search is itself recorded.
+A search spans at most 30 days, a `USER` caller sees only their own tenant's events, and every search is itself recorded. Every result carries `via`, the party the actor acted through; filter on it with `$filter=actorVia eq 'admin-console'`.
+
+**Filtering `GET /admin/v1/audit/events`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `occurredAt`, `category`, `action`, `outcome`, `actorSubject`, `actorType`, `actorVia`, `onBehalfOf`, `resourceType`, `resourceId`, `correlationId`. Indexed, so filter on these first: `occurredAt`, `actorSubject`, `category`, `actorVia`, `resourceType` with `resourceId`, `correlationId`. Not filterable: `reason`, the display and resource names, the actor's tenant, `attributes`. Without a filter on `occurredAt` a search covers the last 30 days. Example: `$filter=outcome eq 'DENIED' and startswith(action, 'pat.')`.
 
 Grant block (the role names are the service's own):
 

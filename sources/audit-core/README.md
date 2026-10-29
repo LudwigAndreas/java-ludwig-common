@@ -64,7 +64,7 @@ public record AuditEvent(
         Instant occurredAt,
         String category,                // see AuditCategories
         String action,                  // "run.completed", "access.denied", "setting.changed"
-        Actor actor,                    // subject, principalType, displayName, onBehalfOf
+        Actor actor,                    // subject, principalType, displayName, onBehalfOf, tenant, via
         Resource resource,              // type, id, name
         AuditOutcome outcome,           // SUCCESS | FAILURE | DENIED | PARTIAL, + reason
         String correlationId,
@@ -219,7 +219,7 @@ Nothing to deploy. Route the `ru.ludwigandreas.audit` logger to wherever the dep
 
 | Logger / level | Content |
 |---|---|
-| `ru.ludwigandreas.audit` / `INFO` | One line per event: `audit id=… at=… category=… action=… outcome=… actor=… actorType=… onBehalfOf=… resourceType=… resourceId=… correlationId=… traceId=… reason=… attributes=…` |
+| `ru.ludwigandreas.audit` / `INFO` | One line per event: `audit id=… at=… category=… action=… outcome=… actor=… actorType=… onBehalfOf=… via=… resourceType=… resourceId=… correlationId=… traceId=… reason=… attributes=…` |
 | `WARN` | `Audit sink <sink> failed for <category>/<action> (event <id>); the operation was not affected` (under `LOG_AND_CONTINUE`) |
 
 **Metrics.** None here. With the starter, sink failures are counted as `ludwig.audit.sink.failures`.

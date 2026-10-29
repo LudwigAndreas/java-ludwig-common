@@ -1,5 +1,6 @@
 package ru.ludwigandreas.audit.store.repository;
 
+import com.querydsl.core.types.Predicate;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -28,15 +29,20 @@ public interface AuditEventQueryRepository {
     /**
      * One keyset page of the trail, newest first, optionally confined to one actor tenant.
      *
-     * @param query          the criteria; its limit is the page size to read
-     * @param tenantConfined whether to confine to {@code actorTenant}
-     * @param actorTenant    the tenant a confined search sees; null confines to events with no actor tenant
+     * @param filter          the caller's parsed {@code $filter}, or null; ANDed under the confinement
+     * @param from            the earliest occurred-at to include, or null for no lower bound
+     * @param tenantConfined  whether to confine to {@code actorTenant}
+     * @param actorTenant     the tenant a confined search sees; null confines to events with no actor tenant
      * @param afterOccurredAt the last returned event's time, or null for the first page
-     * @param afterId        the last returned event's id, or null for the first page
+     * @param afterId         the last returned event's id, or null for the first page
+     * @param limit           the most events to read
      * @return the events, newest first, ties broken by id
      */
-    List<AuditEventEntity> findPage(AuditTrailQuery query, boolean tenantConfined, String actorTenant,
-                                    Instant afterOccurredAt, UUID afterId);
+    // SUPPRESS CHECKSTYLE ParameterNumber - a keyset page: the filter, the window, the confinement and the position
+    // are each independent, and a holder type for them would be read in exactly one place.
+    @SuppressWarnings("checkstyle:ParameterNumber")
+    List<AuditEventEntity> findPage(Predicate filter, Instant from, boolean tenantConfined, String actorTenant,
+                                    Instant afterOccurredAt, UUID afterId, int limit);
 
     /**
      * How many events in {@code category} are older than {@code cutoff}.

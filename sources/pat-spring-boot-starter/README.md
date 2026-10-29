@@ -240,6 +240,8 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 
 **Removed:** `pat:manage:any` (`PatAuthorities.MANAGE_ANY`); the self-service API acts only on the caller's own tokens and refuses (and audits) a request naming another owner. A caller presenting a personal access token is refused here with the credential-not-permitted problem even when `ludwig.admin.allow-personal-access-tokens=true`: a token may not mint, rotate or revoke a token.
 
+**Filtering `GET /admin/v1/pat/tokens`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `ownerSubject`, `expiresAt`, `revokedAt`, `lastUsedAt`, `useCount`. A live token is `revokedAt eq null and (expiresAt eq null or expiresAt gt <now>)`. Not filterable: the secret digests, the key ids, the name, the scopes, the last-used address, the revocation reason. Example: `$filter=revokedAt eq null and lastUsedAt lt 2026-07-31T00:00:00Z`.
+
 Grant block (the role names are the service's own):
 
 ```yaml

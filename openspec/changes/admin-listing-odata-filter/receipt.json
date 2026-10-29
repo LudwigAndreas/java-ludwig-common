@@ -1,0 +1,59 @@
+{
+  "change": "admin-listing-odata-filter",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "odata-filter-spring-boot-starter",
+    "db-core",
+    "security-spring-boot-starter",
+    "audit-spring-boot-starter",
+    "outbox-spring-boot-starter",
+    "reconciliation-spring-boot-starter",
+    "export-spring-boot-starter",
+    "file-action-spring-boot-starter",
+    "pat-spring-boot-starter"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "not run to completion (releases repository unreachable)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "api-docs check": "pass (after refresh)",
+    "mvn -q validate": "pass",
+    "manifest stale": "pass (rebuilt: six optional odata-filter edges)",
+    "maven reactor (the nine modules + all dependents incl. both services, -am -amd install)": "pass: 35 modules, 4678 tests, 0 failures",
+    "openspec validate --strict": "pass"
+  },
+  "tests": [
+    "AdminQueryFilterTest 3/3 (new, db-core)",
+    "AdminSurfaceMvcTest$PlatformChain 7/7 (+1)",
+    "AuditTrailSearchIntegrationTest 9/9 (rewritten +4)",
+    "OutboxAdminIntegrationTest 7/7 (+1)",
+    "ReconciliationRunHistoryIntegrationTest 9/9 (rewritten +1)",
+    "ExportAdminIntegrationTest 4/4 (+1)",
+    "ExportArchitectureTest 10/10 (rule split +1)",
+    "FileActionAdminIT 7/7 (rewritten)",
+    "PatAdminIT 5/5 (rewritten)"
+  ],
+  "deviations_from_design": [
+    "User decision before the first edit: no backward compatibility, so $filter replaces the explicit filter parameters (specs and design rewritten); status filters name stored fields and values",
+    "odata-filter-spring-boot-starter changed after all: ODataQuery gains filterSummary() so the audit records paths/operators without a second parse",
+    "User decision: export's dialect ArchUnit rule split - the entity package may reference odatafilter.annotation only",
+    "audit-spring-boot-starter gains spring-boot-starter-validation at test scope (the OData starter's provider is optional by design)",
+    "Reconciliation's admin service constructors collapsed into one; PAT's TokenStatus and the audit Filter record deleted"
+  ],
+  "retries": [
+    "checkstyle (complexity, line lengths, unused imports, parentheses, javadoc position)",
+    "an ExportAdminQueries edit cut at the wrong brace and was repaired",
+    "audit contexts lacked a validation provider"
+  ],
+  "rollback_commit": "061f467 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "check_api_baseline cannot run offline",
+    "removed parameters are silently ignored if an old client sends them",
+    "the admin-delegation-claim Unreleased CHANGELOG entry still says ?via= (fix at archive)",
+    "six completed changes await their archive move"
+  ]
+}

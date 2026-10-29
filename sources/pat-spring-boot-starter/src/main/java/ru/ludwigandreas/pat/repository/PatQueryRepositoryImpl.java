@@ -1,6 +1,7 @@
 package ru.ludwigandreas.pat.repository;
 
 import com.querydsl.core.BooleanBuilder;
+import com.querydsl.core.types.Predicate;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
@@ -57,19 +58,8 @@ public class PatQueryRepositoryImpl implements PatQueryRepository {
     }
 
     @Override
-    public List<PatEntity> findForAdministration(String ownerSubject, Boolean revoked, Boolean expired, Instant now,
-                                                 Instant afterCreatedAt, UUID afterId, int limit) {
-        BooleanBuilder where = new BooleanBuilder();
-        if (ownerSubject != null && !ownerSubject.isBlank()) {
-            where.and(PAT.ownerSubject.eq(ownerSubject));
-        }
-        if (revoked != null) {
-            where.and(revoked ? PAT.revokedAt.isNotNull() : PAT.revokedAt.isNull());
-        }
-        if (expired != null) {
-            where.and(expired ? PAT.expiresAt.loe(now)
-                    : PAT.expiresAt.isNull().or(PAT.expiresAt.gt(now)));
-        }
+    public List<PatEntity> findForAdministration(Predicate filter, Instant afterCreatedAt, UUID afterId, int limit) {
+        BooleanBuilder where = new BooleanBuilder(filter);
         if (afterCreatedAt != null && afterId != null) {
             where.and(PAT.createdAt.lt(afterCreatedAt)
                     .or(PAT.createdAt.eq(afterCreatedAt).and(PAT.id.lt(afterId))));

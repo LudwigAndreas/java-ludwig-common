@@ -337,6 +337,15 @@ Enumerations use `enumeration-defaults` the same way.
 
 `tasks.<name>.audit.persist` is still bound but has no effect (the trail goes through the platform `AuditSink`).
 
+**Run history** (`ludwig.reconciliation.runs.*`, restart required):
+
+| Property | Default | Meaning |
+|---|---|---|
+| `manual-concurrency` | `2` | Operator-triggered runs, dry runs and backfills executing at once per replica; beyond it a request is `429` |
+| `retention` | `30d` | How long a finished run stays readable |
+| `purge-interval` | `1h` | How often old runs are purged and abandoned ones ended |
+| `purge-batch-size` | `500` | Runs deleted per committed batch |
+
 | Refreshable (next pass) | Restart required |
 |---|---|
 | `retry.*`, `demand.max-records-per-run`, `demand.freshness-target`, `fetch.batch-size`, `fetch.page-size`, `fetch.max-concurrency`, `not-found`, `apply.batch-size`, `rate-limits.*`; enumeration `walk`, `sweep`, `refresh`, `retry` | `fetch.shape`, `schedule.*`, `cold-schedule.*`, `apply.fixed-delay`, `mode`, `quotas.*`, enumeration `schedule.*`, `discovery.fixed-delay`, adding/removing tasks, enumerations, quotas or rate limits |
@@ -415,11 +424,30 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 
 | Operation | Endpoints | Allows |
 |---|---|---|
-| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}` | See reconciliation tasks, enumerations, scopes, quotas and what is stuck. |
+| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}` | See reconciliation tasks, enumerations, scopes, quotas, what is stuck, and every run's outcome. |
 | `reconciliation.operate` | `POST /admin/v1/reconciliation/tasks/{task}/runs`<br>`POST /admin/v1/reconciliation/tasks/{task}/backfills`<br>`POST /admin/v1/reconciliation/tasks/{task}/cursor/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/discover`<br>`POST /admin/v1/reconciliation/tasks/{task}/members/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Run, backfill, requeue and reset reconciliation tasks and enumeration scopes. |
 | `reconciliation.privileged` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel`<br>`POST /admin/v1/reconciliation/leases/{leaseId}/release`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Cancel a remote job, release a quota lease or confirm a withheld sweep - actions that can make this system and the partner disagree. |
 
+**Runs are resources.** Every run that takes its lease - scheduled, manual, dry run or backfill - is recorded with
+its kind, who asked, the replica, its correlation id, timestamps, outcome and counts (keys demanded, records fetched,
+rows produced); its id is the run id the run's audit events carry. `POST .../runs` and `.../backfills` take the lease
+at once (`409` if any replica holds it), answer `202` with the run's envelope and `Location: .../runs/{runId}`, and
+run the pass after answering; poll the run resource, which carries `Retry-After` until it is finished. A dry run's
+report and a backfill's counts are the run's `result`. When every manual-run slot is busy the request is `429` with
+a `retryAfterSeconds` property and nothing is held. Running an enumeration, or a task using the `async-job` shape,
+still triggers its walk or submit pass synchronously and answers `200`; those passes are not recorded runs. Runs are
+kept for `runs.retention` and purged by `ludwig-reconciliation-run-purge` (listed under `GET /admin/v1/jobs`), which
+also ends a run whose replica died as `FAILED` with `run-abandoned`.
+
+**Per-task scope.** Every endpoint naming `{task}` treats the task (or enumeration) name as its administrative object,
+and `GET /admin/v1/reconciliation/tasks` lists only the tasks and enumerations the caller's `read` scope admits. With
+a data-scope policy for `admin.reconciliation`, a team can be granted the one task it owns: another task is `403` to
+operate and `404` to read, the answer a task that does not exist gets. Without one, holding an operation covers every
+task. Setup: [data-scope configuration](../../docs/data-scope-configuration.md#administrative-objects).
+
 **Removed:** the `reconciliation` actuator endpoint and `ludwig.reconciliation.endpoint.*`, including `allow-destructive-operations` and the `confirm` parameter. Whether a deployment permits the destructive actions is now whether any of its roles is granted `reconciliation.privileged`; adding `reconciliation` to the actuator exposure list exposes nothing.
+
+**Filtering `GET /admin/v1/reconciliation/tasks/{task}/runs`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `tier`, `kind` (`SCHEDULED`, `MANUAL`, `DRY_RUN`), `outcome` (`SUCCESS`, `FAILURE`, `TIMED_OUT`), `triggeredBy`, `instance`, `failureCode`, `correlationId`, `submittedAt`, `startedAt`, `finishedAt`, always within the path's task (indexed by task and `submittedAt`). A run in progress is `startedAt ne null and finishedAt eq null`. Not filterable: the result body. Example: `$filter=kind eq 'MANUAL' and outcome eq 'FAILURE'`.
 
 Grant block (the role names are the service's own):
 
@@ -438,9 +466,10 @@ Operator actions, all under `/admin/v1/reconciliation` (see [Administration](#ad
 
 | Action | Endpoint | Effect |
 |---|---|---|
-| run | `POST /tasks/{task}/runs` `{tier}` | Run a pass now; `409` if one is running |
-| dry run | `POST /tasks/{task}/runs` `{tier, dryRun: true}` | Fetch and report per outcome, **writing nothing** |
-| backfill | `POST /tasks/{task}/backfills` `{keys}` | Fetch explicit keys, bypassing demand; guard rails kept; watermark not advanced |
+| run | `POST /tasks/{task}/runs` `{tier}` | Start a pass now: `202` with the run, poll `Location`; `409` if one is running |
+| dry run | `POST /tasks/{task}/runs` `{tier, dryRun: true}` | Fetch and report per outcome, **staging nothing**; the report is the run's `result` |
+| backfill | `POST /tasks/{task}/backfills` `{keys}` | Fetch explicit keys, bypassing demand; guard rails kept; watermark not advanced; a run like the others |
+| runs | `GET /tasks/{task}/runs?tier=&status=&cursor=`, `GET /tasks/{task}/runs/{runId}` | Every run, newest first, with how it ended and what it counted |
 | reset cursor | `POST /tasks/{task}/cursor/reset` `{tier}` | Clear cursor and watermark |
 | requeue quarantined | `POST /tasks/{task}/quarantine/requeue` | Requeue with **reset** attempt counters |
 | requeue job | `POST /tasks/{task}/remotejobs/{jobId}/requeue` | Requeue a job's collected records |
@@ -461,6 +490,8 @@ action needs the `Admin-Reason` header.
 | `freshness.lag` climbing, nothing failing | Demand query stopped matching: `records.fetched` is zero while runs succeed |
 | Sweep withheld (`sweep.held`) | Read the scope. Real removal: `confirm-sweep`. Outage/permissions: `discard-sweep` and fix; the next walk is full. Scopes keep applying meanwhile |
 | Members quarantined | `GET .../{enumeration}` samples; fix; `requeue-members` (affected scopes get a full walk) |
+| A run is stuck `RUNNING` | Its replica probably died. The run purge ends it as `FAILED` with `run-abandoned` once it is older than the task's `run-timeout` plus five minutes; the lease expires at `run-timeout`, so the next run is not blocked |
+| Manual runs answer `429` | Every `runs.manual-concurrency` slot on that replica is busy; retry after `retryAfterSeconds`, or raise the setting |
 
 ## Testing
 

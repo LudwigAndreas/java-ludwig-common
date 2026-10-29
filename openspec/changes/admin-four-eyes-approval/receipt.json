@@ -1,0 +1,51 @@
+{
+  "change": "admin-four-eyes-approval",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "security-spring-boot-starter",
+    "job-core",
+    "notification-service (test only)"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "not run to completion (releases repository unreachable)",
+    "check_migrations": "pass (after git add -N of job-core 0002)",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "api-docs check": "pass (after refresh)",
+    "mvn -q validate": "pass",
+    "manifest stale": "pass",
+    "maven reactor (security, job-core + all dependents, -am -amd install)": "pass: 28 modules, 3902 tests, 0 failures",
+    "openspec validate --strict": "pass"
+  },
+  "tests": [
+    "AdminStartupChecksTest +3 (11/11)",
+    "AdminApprovalMvcTest 9/9 (new)",
+    "JdbcAdminApprovalStoreIT 4/4 (new)",
+    "OnApprovalRequiredTest 1/1 (new)",
+    "FourEyesApprovalIT 1/1 (new, notification-service)"
+  ],
+  "deviations_from_design": [
+    "Re-dispatch through a second DispatcherServlet over the same context, not RequestDispatcher.forward (a forward runs nothing under MockMvc and commits the approver's response in a container); servlet filters are not re-run",
+    "No caching request filter: the guard reads the held body itself, since the handler never runs for a held call",
+    "INTERRUPTED is its own state (envelope FAILED, code approval-interrupted)",
+    "Store SPI: expire/interrupt return the approvals moved so each is audited; list takes a keyset (requestedAt, id)",
+    "job-core's store and sweep live in ru.ludwigandreas.job.core.approval (JDBC is confined outside the analysed admin package)",
+    "The sweep is registered only when approval.required lists an operation, via a Binder-based condition",
+    "approval.required is set in notification-service's shared test base, to avoid another context and container"
+  ],
+  "retries": [
+    "checkstyle (MagicNumber, line length, try-resource indentation)",
+    "shared in-memory store across tests (cleared per test)",
+    "job-core ArchitectureTest: JDBC in the admin package; moved"
+  ],
+  "rollback_commit": "061f467 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "check_api_baseline cannot run offline",
+    "approvals are not tenant-confined: a holder sees every tenant's approvals of their operations (execution itself is confined to the approver)",
+    "a real servlet container was not exercised (tests use MockMvc; the executor avoids container forwarding by design)",
+    "five completed changes await their archive move"
+  ]
+}

@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import ru.ludwigandreas.cache.config.LudwigCacheAutoConfiguration;
 import ru.ludwigandreas.security.admin.AdminAccess;
+import ru.ludwigandreas.security.admin.AdminApprovalPolicy;
+import ru.ludwigandreas.security.admin.AdminApprovalStore;
 import ru.ludwigandreas.security.admin.AdminOperation;
 import ru.ludwigandreas.security.admin.AdminOperationCatalog;
 import ru.ludwigandreas.security.admin.AdminOperationContributor;
@@ -185,5 +187,51 @@ class AdminStartupChecksTest {
         runner.withUserConfiguration(Operations.class)
                 .withPropertyValues("ludwig.security.data.enabled=false")
                 .run(context -> assertThat(context).hasNotFailed().hasSingleBean(AdminSurfaceGuard.class));
+    }
+
+    @Test
+    @DisplayName("an approval requirement on a non-privileged or uncatalogued operation fails startup, naming it")
+    void approvalOnlyForPrivilegedOperations() {
+        runner.withUserConfiguration(Operations.class, Stores.class)
+                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.read",
+                        "ludwig.admin.approval.required[1]=fixture.dicsard")
+                .run(context -> assertThat(context).getFailure().rootCause()
+                        .isInstanceOf(SecurityConfigurationException.class)
+                        .hasMessageContaining("'fixture.read' is a read operation")
+                        .hasMessageContaining("'fixture.dicsard' is not an administrative operation"));
+    }
+
+    @Test
+    @DisplayName("an approval requirement with no approval store fails startup")
+    void approvalNeedsAStore() {
+        runner.withUserConfiguration(Operations.class)
+                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.privileged")
+                .run(context -> assertThat(context).getFailure().rootCause()
+                        .isInstanceOf(SecurityConfigurationException.class)
+                        .hasMessageContaining("no AdminApprovalStore"));
+    }
+
+    @Test
+    @DisplayName("a privileged operation with a store starts; an empty list needs no store")
+    void approvalConfigured() {
+        runner.withUserConfiguration(Operations.class, Stores.class)
+                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.privileged")
+                .run(context -> assertThat(context).hasNotFailed()
+                        .getBean(AdminApprovalPolicy.class).satisfies(policy -> {
+                            assertThat(policy.requires("fixture.privileged")).isTrue();
+                            assertThat(policy.requires("fixture.read")).isFalse();
+                        }));
+        runner.withUserConfiguration(Operations.class)
+                .run(context -> assertThat(context).hasNotFailed()
+                        .getBean(AdminApprovalPolicy.class).satisfies(policy ->
+                                assertThat(policy.isEnabled()).isFalse()));
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class Stores {
+        @Bean
+        AdminApprovalStore approvalStore() {
+            return new InMemoryAdminApprovalStore();
+        }
     }
 }

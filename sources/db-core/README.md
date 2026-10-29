@@ -154,6 +154,13 @@ So a missing row is a 404 even on code paths where the service did not convert i
 (this module knows the entity class, not its API name); a service throwing its own `LocalizedException`
 takes precedence.
 
+**`AdminQueryFilter`.** Administrative listings parse their OData `$filter` through this neutral seam, so none of
+them references the OData starter. Where `odata-filter-spring-boot-starter` runs, it parses the expression - with its
+`@Filterable` allow-list, depth and length limits and problem types - and returns the QueryDSL predicate together with
+the field paths and operators the filter named (never its values, for the audit). Without the starter, a listing
+answers unfiltered and a `$filter` is refused with `400` (`ludwig.admin.filter-unavailable`). The dependency is
+optional, so a service that does not filter gets no Olingo.
+
 ## Configuration
 
 | Property | Default | Meaning |

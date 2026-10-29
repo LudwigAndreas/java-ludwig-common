@@ -1,5 +1,6 @@
 package ru.ludwigandreas.export.admin.service;
 
+import com.querydsl.core.types.Predicate;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -7,6 +8,7 @@ import java.util.UUID;
 import java.util.stream.StreamSupport;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.export.entity.ExportReportRun;
 import ru.ludwigandreas.export.entity.ExportReportSubscription;
 import ru.ludwigandreas.export.exception.UnknownReportDefinitionException;
@@ -20,7 +22,6 @@ import ru.ludwigandreas.security.admin.AdminCursor;
 import ru.ludwigandreas.security.admin.AdminOutcome;
 import ru.ludwigandreas.security.admin.AdminPage;
 import ru.ludwigandreas.webcore.operation.OperationResponse;
-import ru.ludwigandreas.webcore.operation.OperationStatus;
 
 /**
  * The {@code exports} area's operations: every requester's runs and every subscription, which the requester-scoped
@@ -38,6 +39,7 @@ public class ExportAdminService {
     private final ExportReportSubscriptionRepository subscriptions;
     private final ExportRunService lifecycle;
     private final String basePath;
+    private final AdminQueryFilter filters;
     private final AdminAudit audit;
 
     /**
@@ -47,10 +49,13 @@ public class ExportAdminService {
      * @param subscriptions the subscription table
      * @param lifecycle     the run lifecycle, whose cancel this reuses
      * @param basePath      the requester API's base path, which the envelope is built against
+     * @param filters       parses the runs listing's {@code $filter}
      * @param audit         the administrative audit
      */
     public ExportAdminService(ExportReportRunRepository runs, ExportReportSubscriptionRepository subscriptions,
-                              ExportRunService lifecycle, String basePath, AdminAudit audit) {
+                              ExportRunService lifecycle, String basePath, AdminQueryFilter filters,
+                              AdminAudit audit) {
+        this.filters = filters;
         this.runs = runs;
         this.subscriptions = subscriptions;
         this.lifecycle = lifecycle;
@@ -61,15 +66,12 @@ public class ExportAdminService {
     /**
      * One page of runs, newest first.
      *
-     * @param requester     who asked for it, or null
-     * @param definitionKey which report, or null
-     * @param status        its state, or null
-     * @param cursor        the previous page's cursor, or null
-     * @param size          the page size, or null
+     * @param rawFilter an OData {@code $filter} over the run's filterable fields, or null
+     * @param cursor    the previous page's cursor, or null
+     * @param size      the requested page size, or null
      * @return the page
      */
-    public AdminPage<RunView> runs(String requester, String definitionKey, OperationStatus status, String cursor,
-                                   Integer size) {
+    public AdminPage<RunView> runs(String rawFilter, String cursor, Integer size) {
         int pageSize = AdminCursor.pageSize(size);
         Instant afterCreatedAt = null;
         UUID afterId = null;
@@ -78,9 +80,9 @@ public class ExportAdminService {
             afterCreatedAt = Instant.parse(position.get(0));
             afterId = UUID.fromString(position.get(1));
         }
-        List<RunView> rows = runs.findAll(ExportAdminQueries.runs(requester, definitionKey, status, afterCreatedAt,
-                        afterId), PageRequest.of(0, pageSize + 1, Sort.by(Sort.Order.desc("createdAt"),
-                        Sort.Order.desc("id"))))
+        Predicate filter = filters.parse(ExportReportRun.class, rawFilter).where().orElse(null);
+        List<RunView> rows = runs.findAll(ExportAdminQueries.runs(filter, afterCreatedAt, afterId),
+                        PageRequest.of(0, pageSize + 1, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))))
                 .stream().map(this::view).toList();
         return AdminPage.of(rows, pageSize, row -> AdminCursor.encode(row.createdAt().toString(), row.id().toString()));
     }

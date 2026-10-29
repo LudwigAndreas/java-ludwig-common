@@ -1,0 +1,50 @@
+{
+  "change": "admin-delegation-claim",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "audit-core",
+    "security-spring-boot-starter",
+    "audit-spring-boot-starter",
+    "hot-reload-spring-boot-starter (Actor constructor call only)"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "fail (releases repository unreachable)",
+    "check_migrations": "pass (after git add -N of audit 0006)",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "api-docs check": "pass (after refresh)",
+    "mvn -q validate": "pass",
+    "manifest stale": "pass (rebuilt after the revapi entry changed the root POM)",
+    "maven reactor (audit-core, security, audit + all dependents, -am -amd install)": "pass: 34 modules, 4565 tests, 0 failures",
+    "openspec validate --strict": "pass"
+  },
+  "tests": [
+    "DelegationClaimsTest 4/4 (new)",
+    "JwtPrincipalConverterTest 5/5 (new)",
+    "PrincipalActorResolverTest 4/4 (+2)",
+    "AdminSurfaceMvcTest$RequiredVia 3/3 (new)",
+    "AuditTrailSearchIntegrationTest 6/6 (+1)",
+    "ActorTest +1"
+  ],
+  "deviations_from_design": [
+    "DelegationClaims lives in security.authn.jwt, not beside PatClaims (which is in pat-core)",
+    "Delegation is attached by LudwigAuthentication.withDelegation (a copy), so AttenuatedAuthentications and its ArchUnit fence are unchanged",
+    "AdminAudit also fills via (it builds its Actor directly, bypassing the resolver)",
+    "A USER whose acting party is present but not in required-via is refused too, not only one with no acting party",
+    "Search results (EventView) carry via; the delta spec states it",
+    "AdminSurfaceGuard keeps its 3-arg constructor, so security has no binary break"
+  ],
+  "retries": [
+    "2.1: security compiled against the stale installed audit-core; installed it",
+    "3.2: two checkstyle line-length attempts in EventView.of"
+  ],
+  "rollback_commit": "061f467 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "check_api_baseline cannot run offline",
+    "audit README changeset table lacks an audit-0005 row (pre-existing)",
+    "messaging-db-consumer-controls still awaits its archive move"
+  ]
+}

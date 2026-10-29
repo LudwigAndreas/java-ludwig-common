@@ -70,14 +70,26 @@ class AdminRulesTest {
     }
 
     @Test
-    @DisplayName("a module with no handler under /admin/ breaks none of the four rules")
+    @DisplayName("@AdminObject on a request parameter is reported; on a path variable it is not")
+    void adminObjectOutsideAPathVariableIsReported() {
+        List<String> violations =
+                Fixtures.violationDescriptions(bad(), AdminRules.ADMIN_OBJECT_IS_A_PATH_VARIABLE);
+
+        assertThat(violations)
+                .anyMatch(description -> description.contains("ObjectAsQueryAdminController.poke"))
+                .noneMatch(description -> description.contains("GoodAdminController"));
+    }
+
+    @Test
+    @DisplayName("a module with no handler under /admin/ breaks none of the five rules")
     void moduleWithoutAdministrativeHandlersIsSilent() {
         assertThat(Fixtures.failingRuleIds(Fixtures.configurationFor("good").build()))
                 .doesNotContain(
                         AdminRules.HANDLER_DECLARES_AN_OPERATION.value(),
                         AdminRules.NO_SECOND_GATE.value(),
                         AdminRules.MAPPED_UNDER_THE_VERSIONED_PREFIX.value(),
-                        AdminRules.CONTROLLER_IS_A_THIN_ADAPTER.value());
+                        AdminRules.CONTROLLER_IS_A_THIN_ADAPTER.value(),
+                        AdminRules.ADMIN_OBJECT_IS_A_PATH_VARIABLE.value());
     }
 
     @Test

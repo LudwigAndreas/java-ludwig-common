@@ -62,6 +62,11 @@ public final class ScopePolicies {
         return byResource.keySet();
     }
 
+    /** @return the actions that have a policy entry for this resource */
+    public Set<String> actionsOf(String resourceType) {
+        return byResource.getOrDefault(resourceType, Map.of()).keySet();
+    }
+
     /** Every dimension any grant on this resource needs - what its mapping has to be able to bind. */
     public Set<ScopeDimension> dimensionsUsedBy(String resourceType) {
         Set<ScopeDimension> dimensions = new LinkedHashSet<>();

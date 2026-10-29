@@ -42,23 +42,17 @@ public class OutboxAdminController {
     /**
      * Messages matching the filter, newest first, without payloads or errors.
      *
-     * @param status        the state
-     * @param eventType     the event type
-     * @param destination   the destination
-     * @param createdBefore only messages created before this instant
-     * @param cursor        the previous page's cursor
-     * @param size          the page size, at most 200
+     * @param filter an OData {@code $filter} over the message's filterable fields
+     * @param cursor the previous page's cursor
+     * @param size   the page size, at most 200
      * @return one page
      */
     @GetMapping("/messages")
     @AdminAccess(OutboxAdminOperations.READ)
-    public AdminPage<MessageView> messages(@RequestParam(required = false) OutboxStatus status,
-                                           @RequestParam(required = false) String eventType,
-                                           @RequestParam(required = false) String destination,
-                                           @RequestParam(required = false) Instant createdBefore,
+    public AdminPage<MessageView> messages(@RequestParam(name = "$filter", required = false) String filter,
                                            @RequestParam(required = false) String cursor,
                                            @RequestParam(required = false) Integer size) {
-        return service.messages(new MessageFilter(status, eventType, destination, createdBefore), cursor, size);
+        return service.messages(filter, cursor, size);
     }
 
     /**

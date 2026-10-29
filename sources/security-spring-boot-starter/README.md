@@ -295,7 +295,9 @@ refuses, in order:
 | unauthenticated | `401` |
 | a partner | `403` |
 | a personal access token, unless `ludwig.admin.allow-personal-access-tokens=true` | `403`, `ludwig.pat.credential-not-permitted` - the PAT surface's own type |
+| a person (`USER`) not acting through one of `ludwig.admin.human-callers.required-via`, when that list is set | `403`, published as an authorization denial and audited |
 | an operation it does not hold | `403`, published as an authorization denial and audited |
+| an `@AdminObject` outside its data scope, where `admin.<area>` and the tier have a policy entry | `403`, or on a read the area's own not-found `404`; audited |
 | a `privileged` operation without `Admin-Reason` (1-500 characters) | `400`, `ludwig.admin.reason-required` - only after the grant check |
 | a handler under `/admin/` with neither annotation | `403` |
 
@@ -304,6 +306,40 @@ nobody holds is refused and listed once at startup; a misspelled grant key, an e
 uncatalogued id, an area missing a tier and a `public-paths` entry matching `/admin/v1/` each fail startup. The
 surface exists only with web-core's problem pipeline present, and is independent of method security
 (`ludwig.security.data.enabled=false` does not turn it off). `ludwig.admin.enabled=false` removes it.
+
+Acting party: a token's delegation claim (`ludwig.security.jwt.actor-claim`, default `act`, read as RFC 8693
+`act.sub`, nested `act` kept as a chain of at most 5) names the party the request came through, for example
+`admin-console`. It is identity only, never a source of roles, and is recorded as the audit actor's `via`. A present
+but unreadable claim (not an object, no `sub`, nested too deep) refuses the token with `401`; a blank `actor-claim`
+turns reading it off. With `ludwig.admin.human-callers.required-via: [admin-console]` a person reaches `/admin/**`
+only through that party, while service principals are unaffected: keep a break-glass service principal for a UI
+outage. Only a validated token's claim counts, never a header.
+
+Per-object scope: a handler marks the path variable naming its object with `@AdminObject` (its `notFound` is the
+area's own not-found code, so an out-of-scope read answers exactly as a missing object), and a listing filters
+through `AdminObjectScope.filter`. Opt-in per area and tier through a `ludwig.security.data.policies."admin.<area>"`
+entry whose roles are `ALL` or `NONE`, with objects granted per subject on dimension `object`; see
+[data-scope configuration](../../docs/data-scope-configuration.md#administrative-objects).
+
+Four-eyes approval: `ludwig.admin.approval.required` lists privileged operations whose calls a second holder must
+approve (empty by default; an uncatalogued or non-privileged id, or a list with no `AdminApprovalStore`, fails
+startup - job-core provides the JDBC store). Such a call, once authorized and with its reason, is not executed: the
+request (method, path, query, body up to 64 KiB - `413` above - and `Admin-Reason`) is recorded and answered `202`
+with an approval whose operation envelope is `PENDING`, `Location: /admin/v1/approvals/{id}`. Any caller the surface
+admits may use `/admin/v1/approvals`; what they see and decide is limited to the operations they hold:
+
+| Endpoint | Does |
+|---|---|
+| `GET /admin/v1/approvals?status=` | Approvals of the operations the caller holds, newest first; never request bodies |
+| `GET /admin/v1/approvals/{id}` | One approval; its body only to a holder other than the requester, while pending |
+| `POST .../{id}/approve` | A holder other than the requester approves: the requester's authority is re-checked (`409` if lost), then the stored request runs through the same handler as the approver, and its status and body (16 KiB) are recorded - envelope `SUCCEEDED` for a 2xx, `FAILED` otherwise |
+| `POST .../{id}/reject` | A holder other than the requester rejects (`CANCELLED`) |
+| `POST .../{id}/withdraw` | The requester withdraws (`CANCELLED`) |
+
+Self-approval is `403`; a decided, withdrawn or expired approval is `409`. Undecided after `ludwig.admin.approval.ttl`
+(`PT24H`) it expires (`EXPIRED`); one left executing by a stopped replica is marked interrupted after five minutes and
+never re-run. Request, decision, withdrawal and expiry are audited, and the executed operation's own event carries
+`requestedBy` and `approvedBy`. Tenant confinement and object scope apply to the approver at execution.
 
 Tenant confinement: a `USER` reaches only resources of exactly their own tenant (a user without one, only untenanted
 resources); a `SERVICE` is not confined. Modules apply `tenantScope()` to tables that carry a tenant.
@@ -337,6 +373,7 @@ ludwig:
       name-claim: name
       tenant-claim: tenant_id
       service-client-claim: client_id   # presence marks the token as a peer service's
+      actor-claim: act                  # RFC 8693 delegation, recorded as the audit actor's via; blank disables
       audiences: [my-service]
       require-audience: true
     mtls:

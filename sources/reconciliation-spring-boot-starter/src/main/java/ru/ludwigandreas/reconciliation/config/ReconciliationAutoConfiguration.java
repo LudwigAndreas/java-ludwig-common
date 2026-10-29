@@ -19,6 +19,11 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.transaction.PlatformTransactionManager;
+import ru.ludwigandreas.reconciliation.repository.SyncRunRepository;
+import ru.ludwigandreas.reconciliation.engine.RunPurge;
+import ru.ludwigandreas.reconciliation.engine.RunRecorder;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
 import ru.ludwigandreas.db.core.repository.BaseRepositoryImpl;
 import ru.ludwigandreas.job.core.claim.ClaimOwner;
 import ru.ludwigandreas.job.core.claim.JobInstanceIdentity;
@@ -448,6 +453,8 @@ public class ReconciliationAutoConfiguration {
      * @param metrics        instrumentation
      * @param auditLogger    the audit trail
      * @param correlationIds correlation for the run
+     * @param recorder       the run-history row
+     * @param manualRuns     where operator-triggered runs execute
      * @return the runner
      */
     @Bean
@@ -461,9 +468,70 @@ public class ReconciliationAutoConfiguration {
                                                SyncInboxRecordRepository repository,
                                                ReconciliationMetrics metrics,
                                                AuditSink auditLogger,
-                                               CorrelationIdSource correlationIds) {
+                                               CorrelationIdSource correlationIds,
+                                               RunRecorder recorder,
+                                               @Qualifier("reconciliationManualRunExecutor") TaskExecutor manualRuns) {
         return new TaskRunner(runLock, walker, staging, directApply, taskState, repository,
-                metrics, auditLogger, correlationIds);
+                metrics, auditLogger, correlationIds, recorder, manualRuns);
+    }
+
+    /**
+     * The run-history writer.
+     *
+     * @param runs                 the run table
+     * @param transactionManager   the application's transaction manager
+     * @param objectMapperProvider the application's mapper, when it has one
+     * @param metrics              where a failed write is counted
+     * @return the recorder
+     */
+    @Bean
+    @ConditionalOnMissingBean(RunRecorder.class)
+    public RunRecorder reconciliationRunRecorder(SyncRunRepository runs, PlatformTransactionManager transactionManager,
+                                                 ObjectProvider<ObjectMapper> objectMapperProvider,
+                                                 ReconciliationMetrics metrics) {
+        return new RunRecorder(runs, transactionManager,
+                objectMapperProvider.getIfAvailable(ReconciliationAutoConfiguration::defaultObjectMapper), metrics);
+    }
+
+    /**
+     * The run-history purge, which also ends runs whose replica died.
+     *
+     * @param runs       the run table
+     * @param registry   the tasks
+     * @param properties the module's settings
+     * @param runLock    the platform's distributed lock
+     * @param scheduler  the module's scheduler
+     * @return the job
+     */
+    @Bean
+    @ConditionalOnMissingBean(RunPurge.class)
+    public RunPurge reconciliationRunPurge(SyncRunRepository runs, TaskRegistry registry,
+                                           ReconciliationProperties properties, RunLock runLock,
+                                           @Qualifier("reconciliationTaskScheduler") TaskScheduler scheduler) {
+        ReconciliationProperties.Runs settings = properties.getRuns();
+        settings.validate();
+        return new RunPurge(scheduler, runs, registry, settings, runLock);
+    }
+
+    /**
+     * Where operator-triggered runs execute: {@code runs.manual-concurrency} threads and no queue, so a request
+     * beyond capacity is refused at once rather than parked behind passes that may take their whole run timeout.
+     *
+     * @param properties the module's settings
+     * @return the executor
+     */
+    @Bean(name = "reconciliationManualRunExecutor")
+    @ConditionalOnMissingBean(name = "reconciliationManualRunExecutor")
+    public ThreadPoolTaskExecutor reconciliationManualRunExecutor(ReconciliationProperties properties) {
+        ReconciliationProperties.Runs runs = properties.getRuns();
+        runs.validate();
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(runs.getManualConcurrency());
+        executor.setMaxPoolSize(runs.getManualConcurrency());
+        executor.setQueueCapacity(0);
+        executor.setThreadNamePrefix("reconciliation-manual-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        return executor;
     }
 
     /**

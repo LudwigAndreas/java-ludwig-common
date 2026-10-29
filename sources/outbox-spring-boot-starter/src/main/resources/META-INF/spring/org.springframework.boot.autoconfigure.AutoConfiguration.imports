@@ -4,3 +4,4 @@ ru.ludwigandreas.outbox.config.OutboxKafkaAutoConfiguration
 ru.ludwigandreas.outbox.config.OutboxRestAutoConfiguration
 ru.ludwigandreas.outbox.config.OutboxLiquibaseAutoConfiguration
 ru.ludwigandreas.outbox.config.OutboxAdminAutoConfiguration
+ru.ludwigandreas.outbox.config.OutboxRetentionAutoConfiguration

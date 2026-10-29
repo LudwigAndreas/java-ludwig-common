@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.outbox.admin.OutboxAdminOperations;
 import ru.ludwigandreas.outbox.admin.service.OutboxAdminService;
 import ru.ludwigandreas.outbox.admin.web.OutboxAdminController;
@@ -45,8 +46,9 @@ public class OutboxAdminAutoConfiguration {
     @ConditionalOnMissingBean
     public OutboxAdminService ludwigOutboxAdminService(OutboxAdminQueries queries,
                                                        OutboxStatusHistoryRepository history,
-                                                       OutboxAuditLogger transitions, AdminAudit audit) {
-        return new OutboxAdminService(queries, history, transitions, audit);
+                                                       OutboxAuditLogger transitions, AdminQueryFilter filters,
+                                                       AdminAudit audit) {
+        return new OutboxAdminService(queries, history, transitions, filters, audit);
     }
 
     @Bean

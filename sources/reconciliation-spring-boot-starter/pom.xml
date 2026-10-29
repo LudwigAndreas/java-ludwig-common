@@ -67,6 +67,13 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>db-core</artifactId>
         </dependency>
+        <!-- For @Filterable on the entities its administrative listings filter with $filter; the parsing
+             goes through db-core's AdminQueryFilter, so nothing here loads without the starter. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>odata-filter-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

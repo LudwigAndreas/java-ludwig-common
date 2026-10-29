@@ -1,14 +1,20 @@
 package ru.ludwigandreas.messaging.db.config;
 
+import java.util.Objects;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.listener.MessageListenerContainer;
 import ru.ludwigandreas.messaging.db.admin.MessagingAdminOperations;
 import ru.ludwigandreas.messaging.db.admin.service.MessagingAdminService;
 import ru.ludwigandreas.messaging.db.admin.web.MessagingAdminController;
 import ru.ludwigandreas.messaging.db.log.LogStore;
+import ru.ludwigandreas.security.admin.AdminAudit;
 import ru.ludwigandreas.security.admin.AdminOperationCatalog;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
@@ -34,8 +40,16 @@ public class MessagingDbAdminAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public MessagingAdminService ludwigMessagingAdminService(LogStore store) {
-        return new MessagingAdminService(store);
+    public MessagingAdminService ludwigMessagingAdminService(LogStore store,
+                                                             ObjectProvider<KafkaListenerEndpointRegistry> listeners,
+                                                             AdminAudit audit) {
+        // The groups this service's own listeners read as; another service's groups on a shared database are not this
+        // service's to pause or move.
+        return new MessagingAdminService(store, () -> listeners.stream()
+                .flatMap(registry -> registry.getAllListenerContainers().stream())
+                .map(MessageListenerContainer::getGroupId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()), audit);
     }
 
     @Bean

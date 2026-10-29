@@ -3,6 +3,7 @@ package ru.ludwigandreas.security.principal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -46,6 +47,9 @@ public class LudwigAuthentication extends AbstractAuthenticationToken {
      */
     private final Credential credential;
 
+    /** The parties the request came through, or null; read through {@link #delegation()}. */
+    private final Delegation delegation;
+
     /**
      * The ordinary case: an authentication with no long-lived credential behind it.
      *
@@ -69,10 +73,28 @@ public class LudwigAuthentication extends AbstractAuthenticationToken {
      * the token's scopes, and a second construction site is where that gets written as a union instead.
      */
     public LudwigAuthentication(LudwigPrincipal principal, Credential credential) {
+        this(principal, credential, null);
+    }
+
+    private LudwigAuthentication(LudwigPrincipal principal, Credential credential, Delegation delegation) {
         super(authorities(principal));
         this.principal = Objects.requireNonNull(principal, "principal");
         this.credential = credential == null ? Credential.DIRECT : credential;
+        this.delegation = delegation;
         setAuthenticated(true);
+    }
+
+    /**
+     * This authentication, recording the parties the request came through.
+     *
+     * <p>A copy with the same principal, authorities and credential: a delegation carries identity only and
+     * cannot change what the caller may do.
+     *
+     * @param delegation the parties, from the validated token
+     * @return the copy
+     */
+    public LudwigAuthentication withDelegation(Delegation delegation) {
+        return new LudwigAuthentication(principal, credential, Objects.requireNonNull(delegation, "delegation"));
     }
 
     /**
@@ -106,6 +128,15 @@ public class LudwigAuthentication extends AbstractAuthenticationToken {
      */
     public Credential credential() {
         return credential;
+    }
+
+    /**
+     * The parties the request came through, from its validated delegation claim.
+     *
+     * @return the delegation, or empty for a request made directly
+     */
+    public Optional<Delegation> delegation() {
+        return Optional.ofNullable(delegation);
     }
 
     @Override

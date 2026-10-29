@@ -1,6 +1,9 @@
 package ru.ludwigandreas.security.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
 import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -15,19 +18,27 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.security.authorization.AuthorizationEventPublisher;
 import org.springframework.security.authorization.SpringAuthorizationEventPublisher;
 import org.springframework.util.AntPathMatcher;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.admin.AdminAccessEvaluator;
+import ru.ludwigandreas.security.admin.AdminApprovalPolicy;
+import ru.ludwigandreas.security.admin.AdminApprovals;
+import ru.ludwigandreas.security.admin.AdminApprovalsController;
+import ru.ludwigandreas.security.admin.AdminApprovalStore;
 import ru.ludwigandreas.security.admin.AdminAudit;
 import ru.ludwigandreas.security.admin.AdminGrants;
 import ru.ludwigandreas.security.admin.AdminHandlerValidator;
+import ru.ludwigandreas.security.admin.AdminObjectScope;
 import ru.ludwigandreas.security.admin.AdminOperationCatalog;
 import ru.ludwigandreas.security.admin.AdminOperationContributor;
 import ru.ludwigandreas.security.admin.AdminOperationsController;
 import ru.ludwigandreas.security.admin.AdminProperties;
 import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.security.authz.AuthorityLookup;
+import ru.ludwigandreas.security.data.DataScopeProvider;
+import ru.ludwigandreas.security.data.ScopePolicies;
 import ru.ludwigandreas.security.exception.SecurityConfigurationException;
 import ru.ludwigandreas.webcore.problem.ProblemMessages;
 
@@ -64,6 +75,16 @@ public class AdminAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public AdminApprovalPolicy ludwigAdminApprovalPolicy(AdminProperties properties, AdminOperationCatalog catalog,
+                                                         ObjectProvider<AdminApprovalStore> store) {
+        // The store is read here, not injected: job-core declares it, and the surface must start without it while
+        // no operation requires approval.
+        return new AdminApprovalPolicy(properties.getApproval().getRequired(), properties.getApproval().getTtl(),
+                catalog, store.getIfAvailable() != null);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public AdminGrants ludwigAdminGrants(AdminProperties properties, AdminOperationCatalog catalog,
                                          SecurityProperties securityProperties) {
         refusePublicAdminPaths(securityProperties.getPublicPaths());
@@ -74,18 +95,46 @@ public class AdminAutoConfiguration {
     @ConditionalOnMissingBean
     public AdminAccessEvaluator ludwigAdminAccessEvaluator(AdminGrants grants,
                                                            ObjectProvider<AuthorizationEventPublisher> publisher,
-                                                           ApplicationEventPublisher events) {
+                                                           ApplicationEventPublisher events,
+                                                           AdminObjectScope objects) {
         // Method security's publisher when there is one, so denials share its audit path; a plain one otherwise,
         // because ludwig.security.data.enabled=false removes that bean and the denials must still be recorded.
         return new AdminAccessEvaluator(grants,
-                publisher.getIfAvailable(() -> new SpringAuthorizationEventPublisher(events)));
+                publisher.getIfAvailable(() -> new SpringAuthorizationEventPublisher(events)), objects);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AdminObjectScope ludwigAdminObjectScope(ObjectProvider<ScopePolicies> policies,
+                                                   ObjectProvider<DataScopeProvider> provider) {
+        // Both absent when ludwig.security.data.enabled=false: then nothing is scoped by object.
+        return new AdminObjectScope(policies.getIfAvailable(), provider.getIfAvailable());
     }
 
     @Bean
     @ConditionalOnMissingBean
     public AdminSurfaceGuard ludwigAdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator,
-                                                     AdminProperties properties) {
-        return new AdminSurfaceGuard(catalog, evaluator, properties.isAllowPersonalAccessTokens());
+                                                     AdminProperties properties, AdminApprovals approvals) {
+        return new AdminSurfaceGuard(catalog, evaluator, properties.isAllowPersonalAccessTokens(),
+                Set.copyOf(properties.getHumanCallers().getRequiredVia()), approvals);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @SuppressWarnings("checkstyle:ParameterNumber")
+    public AdminApprovals ludwigAdminApprovals(AdminApprovalPolicy policy, ObjectProvider<AdminApprovalStore> store,
+                                               AdminGrants grants, AuthorityLookup authorities, AdminAudit audit,
+                                               WebApplicationContext context, ObjectProvider<ObjectMapper> json,
+                                               ObjectProvider<Clock> clock) {
+        return AdminApprovals.create(policy, store.getIfAvailable(), grants, authorities, audit, context,
+                json.getIfAvailable(ObjectMapper::new).copy().findAndRegisterModules(),
+                clock.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AdminApprovalsController ludwigAdminApprovalsController(AdminApprovals approvals) {
+        return new AdminApprovalsController(approvals);
     }
 
     @Bean

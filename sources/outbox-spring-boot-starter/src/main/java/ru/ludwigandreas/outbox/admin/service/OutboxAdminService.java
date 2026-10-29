@@ -1,5 +1,6 @@
 package ru.ludwigandreas.outbox.admin.service;
 
+import com.querydsl.core.types.Predicate;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -8,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.outbox.admin.service.OutboxAdminViews.BulkRetryResult;
 import ru.ludwigandreas.outbox.admin.service.OutboxAdminViews.Count;
 import ru.ludwigandreas.outbox.admin.service.OutboxAdminViews.MessageDetail;
@@ -46,6 +48,7 @@ public class OutboxAdminService {
     private final OutboxAdminQueries queries;
     private final OutboxStatusHistoryRepository history;
     private final OutboxAuditLogger transitions;
+    private final AdminQueryFilter filters;
     private final AdminAudit audit;
 
     /**
@@ -54,10 +57,12 @@ public class OutboxAdminService {
      * @param queries     the administrative queries
      * @param history     the status history
      * @param transitions the outbox's transition recorder
+     * @param filters     parses a listing's {@code $filter}
      * @param audit       the administrative audit
      */
     public OutboxAdminService(OutboxAdminQueries queries, OutboxStatusHistoryRepository history,
-                              OutboxAuditLogger transitions, AdminAudit audit) {
+                              OutboxAuditLogger transitions, AdminQueryFilter filters, AdminAudit audit) {
+        this.filters = filters;
         this.queries = queries;
         this.history = history;
         this.transitions = transitions;
@@ -67,13 +72,13 @@ public class OutboxAdminService {
     /**
      * One page of messages, newest first.
      *
-     * @param filter what to match
-     * @param cursor the previous page's cursor, or null
-     * @param size   the requested page size, or null
+     * @param rawFilter an OData {@code $filter} over the message's filterable fields, or null
+     * @param cursor    the previous page's cursor, or null
+     * @param size      the requested page size, or null
      * @return the page
      */
     @Transactional(readOnly = true)
-    public AdminPage<MessageView> messages(MessageFilter filter, String cursor, Integer size) {
+    public AdminPage<MessageView> messages(String rawFilter, String cursor, Integer size) {
         int pageSize = AdminCursor.pageSize(size);
         Instant afterCreatedAt = null;
         UUID afterId = null;
@@ -82,7 +87,8 @@ public class OutboxAdminService {
             afterCreatedAt = Instant.parse(position.get(0));
             afterId = UUID.fromString(position.get(1));
         }
-        List<MessageView> rows = queries.page(toQuery(filter), afterCreatedAt, afterId, pageSize + 1).stream()
+        Predicate filter = filters.parse(OutboxMessage.class, rawFilter).where().orElse(null);
+        List<MessageView> rows = queries.page(filter, afterCreatedAt, afterId, pageSize + 1).stream()
                 .map(MessageView::of).toList();
         return AdminPage.of(rows, pageSize, row -> AdminCursor.encode(row.createdAt().toString(), row.id().toString()));
     }
@@ -180,6 +186,7 @@ public class OutboxAdminService {
         }
         OutboxStatus from = message.getStatus();
         message.setStatus(OutboxStatus.DISCARDED);
+        message.setFinishedAt(Instant.now());
         transitions.onTransition(message, from, OutboxStatus.DISCARDED, "discarded by an administrator");
         audit.record(RESOURCE, id.toString(), AdminOutcome.SUCCEEDED);
         return MessageView.of(message);
@@ -202,6 +209,8 @@ public class OutboxAdminService {
         message.setStatus(OutboxStatus.PENDING);
         message.setAttempts(0);
         message.setNextAttemptAt(Instant.now());
+        // Out of retention while it is being retried; a new terminal transition starts the clock again.
+        message.setFinishedAt(null);
         transitions.onTransition(message, from, OutboxStatus.PENDING, "retried by an administrator");
     }
 }

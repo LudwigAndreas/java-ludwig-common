@@ -206,4 +206,13 @@ public interface ReconciliationMetrics {
      */
     default void registerScopeAttention(String task, Supplier<Number> quarantined, Supplier<Number> sweepsHeld) {
     }
+
+    /**
+     * A run-history write failed. The run itself carried on: the history row is telemetry, and a missing row is
+     * visible as a gap, which is cheaper than a failed reconciliation.
+     *
+     * @param task task name
+     */
+    default void recordRunRecordFailed(String task) {
+    }
 }

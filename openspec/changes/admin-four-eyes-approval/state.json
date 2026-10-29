@@ -1,0 +1,49 @@
+{
+  "change": "admin-four-eyes-approval",
+  "contract": {
+    "goal": "configured privileged administrative operations require a second holder's approval: the call is recorded as a pending approval (202), and approving re-dispatches the stored request through the same handler as the approver, audited with requestedBy/approvedBy, as specified in specs/admin-approval",
+    "output": "ludwig.admin.approval.* properties + startup checks; AdminApprovalStore SPI; capture (64 KiB, 413) and 202 short-circuit; /admin/v1/approvals list/read/approve/reject/withdraw with conditional transitions and envelope mapping; re-dispatch; job-core changeset + JdbcAdminApprovalStore + expiry/interruption sweep; notification-service end-to-end IT; docs EN+RU; OpenAPI; follow-ups",
+    "constraints": [
+      "no POM changes",
+      "security-spring-boot-starter gains no DataSource",
+      "no handler is aware of approval",
+      "an approved request runs through the same handler, validation, authorization and audit",
+      "approver must hold the operation and not be the requester",
+      "requester's authority re-checked before execution (409 if lost)",
+      "transitions are conditional updates: one execution under a race",
+      "APPROVING never re-executed after a crash",
+      "request bodies never listed; deleted at a terminal state",
+      "empty approval.required changes nothing"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_migrations.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :security-spring-boot-starter,:job-core + every in-repo dependent -am verify (one reactor install)",
+      "openspec validate admin-four-eyes-approval --strict"
+    ]
+  },
+  "rollback_point": "061f467 (working tree carries the uncommitted earlier admin changes)",
+  "current_task": null,
+  "decisions": [
+    "1.1: ludwig.admin.approval.required (list, empty) and .ttl (PT24H) on AdminProperties.Approval. AdminApprovalPolicy validates at startup: every id catalogued and privileged, a store present when the list is non-empty, a positive ttl - one SecurityConfigurationException naming each problem. SPI AdminApprovalStore {create, find, list(operations, state, keyset, limit), transition(id, from, to, decidedBy, at, outcome), expire(now), interrupt(approvedBefore)} - expire/interrupt return what they moved so the caller can audit each. AdminApproval record with StoredRequest (method, path, query, contentType, acceptLanguage, reason, body) and Outcome (status, contentType, body capped 16 KiB). AdminApprovalState adds INTERRUPTED (design's 'FAILED with approval-interrupted') and maps to the envelope per the design table. Store read through ObjectProvider so the surface starts without job-core while nothing requires approval. In-memory store for tests. AdminStartupChecksTest 11/11 (+3).",
+    "1.2 (deviation from design decision 1): no caching request filter. A held call never reaches its handler, so the guard reads the body itself (readNBytes(64 KiB + 1), 413 above) after authorize, object scope and the reason check - a call refused by any of those records nothing.",
+    "1.3 (deviation from design decision 2): re-dispatch through a second DispatcherServlet over the same WebApplicationContext (AdminApprovalExecutor, initialised lazily from the approver's ServletContext, publishContext/publishEvents off), not RequestDispatcher.forward: a forward runs nothing under MockMvc and commits/closes the approver's response in a container. Consequence: servlet filters are not re-run (which also removes the design's double-filter risk); the guard - an interceptor - checks the approved call like any other, as the approver. ApprovedRequest exposes only the stored method/path/query/body and the allow-listed headers (Content-Type, Accept-Language, Admin-Reason; Accept fixed to application/json) with attributes of its own; CapturedResponse keeps the handler's status/headers/body off the approver's response.",
+    "1.3: AdminApprovals (service) + AdminApprovalsController (@AdminAuthenticated, /admin/v1/approvals): list (operations the caller holds; never bodies), get (404 unless holder or, for withdraw, requester; body only to a non-requester holder while pending), approve (403 own, 409 not pending / expired - expiring it on the spot, 409 requester no longer holds the operation via the live AuthorityLookup, conditional PENDING->APPROVING, execute, APPROVING->EXECUTED with the outcome), reject, withdraw (requester only, 403 otherwise). AdminApprovalContext (thread-local) carries requestedBy/approvedBy into AdminAudit while the approved request runs; AdminAudit.recordSystem audits expiry/interruption with the system actor. sweep() expires and interrupts (APPROVING older than PT5M -> INTERRUPTED, never re-run) - job-core schedules it. Envelope per the design table; SUCCEEDED carries result = the approval itself, FAILED carries execution-failed [status] or approval-interrupted. Beans always registered; with no store nothing requires approval and the endpoints show nothing. AdminSurfaceGuard gains a 5-arg constructor (4-arg kept). AdminApprovalMvcTest 9/9 (held 202 + Location + PENDING + audit, refusals record nothing, 413, peer approval runs the same handler as bob with requestedBy/approvedBy on its audit and a second approve 409, self-approval 403, requester lost operation 409, visibility, expiry with system audit, reject/withdraw). Module install 229 tests, 0 failures.",
+    "2.1: 0002-create-admin-approval.sql (job_admin_approval, request_body/outcome_body BYTEA, index (operation, state, requested_at)), git add -N; check_migrations 106 conforming. JdbcAdminApprovalStore in plain JDBC like JdbcRunLock: transitions are UPDATE ... WHERE id = ? AND state = ?, a terminal state nulls request_body, expire/interrupt are UPDATE ... RETURNING. Registered by JobAdminAutoConfiguration (@ConditionalOnMissingBean(AdminApprovalStore)) whenever job-core runs beside the admin surface. JdbcAdminApprovalStoreIT 4/4: round trip and body dropped on a terminal state, listing by operation/state/keyset, exactly one of eight racing approvers wins, expire and interrupt each report what they moved.",
+    "2.2: AdminApprovalSweep (SelfSchedulingLifecycle 'ludwig-admin-approval-expiry', fixed delay 1 min, under the run lock of that name) calls AdminApprovals.sweep(); it and its one-thread scheduler are registered only when OnApprovalRequired matches - a Binder-based condition that accepts both the indexed and the comma-separated form of ludwig.admin.approval.required (a property-presence condition would miss the latter). OnApprovalRequiredTest 1/1. job-core install: 98 unit + 21 IT, 0 failures.",
+    "3.1: FourEyesApprovalIT in notification-service 1/1: with approval.required=outbox.privileged, admin-anna's discard is 202 and the message stays FAILED, her own approval is 403, admin-boris's approval is 200 with envelope SUCCEEDED and outcome 200, the message is DISCARDED, decidedBy=admin-boris. Requester re-check goes through the real identity projection (fixtures give both NOTIFICATION_ADMIN). The property sits in NotificationTestBase's shared source, not a per-class one, because that base documents that each extra property set starts another context and container and has caused evictions; no other notification test calls a privileged outbox endpoint.",
+    "4.1: security README EN+RU four-eyes paragraph and endpoint table; job-core README EN+RU schema line (job-core-0002) and 'Four-eyes approval store' paragraph; admin guide EN+RU 'Four-eyes approval' with break-glass (keep the incident operation out of the list; no override header); follow-ups item rewritten as done, N-of-M, approver groups, notification and replica-control approval left open. api-docs refresh: both services' OpenAPI gain only /admin/v1/approvals and ApprovalView/OutcomeView (additive). Heading parity ok; api-docs missing ok; openspec validate --strict valid; check_image_pins pass. Delta spec gained 'an approval of an operation the caller does not hold is not found' (the code does). revapi entry for AdminAutoConfiguration.ludwigAdminSurfaceGuard (gains AdminApprovals).",
+    "5.1: script checks all pass; reactor install of security and job-core with all dependents BUILD SUCCESS, 28 modules, 3902 tests, 0 failures; check_api_baseline unreachable offline. receipt.json written.",
+    "archive: new capability spec openspec/specs/admin-approval/spec.md created exclusively (open 'x') from the delta - Purpose + 4 requirements, 7 scenarios; validate --specs --strict 68/68; CHANGELOG Added in both locales; revapi entry added at 4.1; manifest current; archived to openspec/changes/archive/2026-10-29-admin-four-eyes-approval."
+  ],
+  "failures": [
+    "1.1 attempt 1: checkstyle MagicNumber (200/300 -> HttpStatus.is2xxSuccessful) and a line length.",
+    "1.3 attempt 1: expiry test saw two expirations - the in-memory store kept pending approvals from other tests in the shared context; the test clears it before each test.",
+    "2.1 attempt 1: checkstyle try-resource indentation; fixed.",
+    "2.2 attempt 1: job-core's ArchitectureTest analyses ru.ludwigandreas.job.core.admin, and persistence-context-is-confined refused JDBC there; the store, sweep and condition moved to ru.ludwigandreas.job.core.approval, beside lock and claim, where job-core keeps its JDBC code."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

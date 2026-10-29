@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.reconciliation.admin.ReconciliationAdminOperations;
 import ru.ludwigandreas.reconciliation.admin.service.ReconciliationAdminService;
 import ru.ludwigandreas.reconciliation.admin.web.ReconciliationAdminController;
@@ -18,7 +19,9 @@ import ru.ludwigandreas.reconciliation.quota.DatabaseQuota;
 import ru.ludwigandreas.reconciliation.repository.QuotaLeaseRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncInboxRecordRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncRemoteJobRepository;
+import ru.ludwigandreas.reconciliation.repository.SyncRunRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
+import ru.ludwigandreas.security.admin.AdminObjectScope;
 import ru.ludwigandreas.security.admin.AdminOperationCatalog;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
@@ -55,9 +58,13 @@ public class ReconciliationAdminAutoConfiguration {
                                                                      DatabaseQuota quota,
                                                                      ReconciliationProperties properties,
                                                                      ObjectProvider<EnumerationOperations> enumerations,
-                                                                     AdminAudit audit) {
+                                                                     AdminAudit audit,
+                                                                     SyncRunRepository runs,
+                                                                     ObjectProvider<AdminObjectScope> objects,
+                                                                     AdminQueryFilter filters) {
         return new ReconciliationAdminService(new ReconciliationAdminService.Engine(registry, runtime, runner,
-                taskState, records, jobs, leases, quota, properties), enumerations.getIfAvailable(), audit);
+                taskState, records, jobs, leases, quota, properties, runs), enumerations.getIfAvailable(), audit,
+                objects.getIfAvailable(), filters);
     }
 
     @Bean

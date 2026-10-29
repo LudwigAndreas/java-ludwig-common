@@ -6,7 +6,8 @@ entry for resource `admin.<area>` and the operation's tier, a call to such a han
 caller's data scope for that resource and tier, along dimension `object`, admits the named object. Role entries in
 that policy SHALL be `ALL` or `NONE`. Per-subject grants with dimension `object` SHALL add objects. A refusal SHALL
 be `403` on an operate or privileged endpoint and `404` on a read endpoint, and SHALL be audited. When no such policy
-entry exists, holding the operation SHALL admit every object.
+entry exists, holding the operation SHALL admit every object. Startup SHALL also fail for an `admin.<area>`
+policy whose area no module declares, or whose action is not a tier.
 
 #### Scenario: A team operates only its own task
 - **WHEN** the policy maps `ROLE_SUPPLY_OPS` to `NONE` for `admin.reconciliation` `operate`, bob holds that role and

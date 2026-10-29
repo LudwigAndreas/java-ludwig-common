@@ -127,14 +127,31 @@ class ExportAdminIntegrationTest {
         run("bob", OperationStatus.RUNNING);
         run("bob", OperationStatus.PENDING);
 
-        String body = mvc.perform(get(RUNS).param("status", "RUNNING").with(operator())).andReturn().getResponse()
-                .getContentAsString();
+        String body = mvc.perform(get(RUNS).param("$filter", "status eq 'RUNNING'").with(operator())).andReturn()
+                .getResponse().getContentAsString();
 
         JsonNode page = JSON.readTree(body);
         assertThat(page.path("items").findValuesAsText("requester")).containsExactlyInAnyOrder("alice", "bob");
         assertThat(page.path("items").get(0).path("operation").path("result").isMissingNode()
                 || page.path("items").get(0).path("operation").path("result").isNull()).isTrue();
         assertThat(body).doesNotContain("/outputs/");
+    }
+
+    @Test
+    @DisplayName("one requester's failed runs; the stored filter expression is not filterable")
+    void filteredByRequesterAndStatus() throws Exception {
+        run("alice", OperationStatus.FAILED);
+        run("alice", OperationStatus.SUCCEEDED);
+        run("bob", OperationStatus.FAILED);
+
+        MvcResult failed = mvc.perform(get(RUNS).param("$filter", "requester eq 'alice' and status eq 'FAILED'")
+                .with(operator())).andReturn();
+        MvcResult expression = mvc.perform(get(RUNS).param("$filter", "filterExpression eq 'x'").with(operator()))
+                .andReturn();
+
+        assertThat(JSON.readTree(failed.getResponse().getContentAsString()).path("items")
+                .findValuesAsText("requester")).containsExactly("alice");
+        assertThat(expression.getResponse().getStatus()).isEqualTo(400);
     }
 
     @Test

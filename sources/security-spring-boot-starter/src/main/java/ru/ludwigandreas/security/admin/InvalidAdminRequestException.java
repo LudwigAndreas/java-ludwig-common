@@ -19,12 +19,19 @@ public final class InvalidAdminRequestException extends LocalizedException {
     /** The code of a page size outside the permitted range. */
     public static final String PAGE_SIZE_INVALID = "ludwig.admin.page-size-invalid";
 
+    /** An OData paging or counting option, which administrative listings do not take. */
+    public static final String QUERY_OPTION_UNSUPPORTED = "ludwig.admin.query-option-unsupported";
+
     private InvalidAdminRequestException(String code, Object... args) {
         super(ProblemStatus.INVALID, code, args);
     }
 
     static InvalidAdminRequestException cursor() {
         return new InvalidAdminRequestException(CURSOR_INVALID);
+    }
+
+    static InvalidAdminRequestException queryOption(String option) {
+        return new InvalidAdminRequestException(QUERY_OPTION_UNSUPPORTED, option);
     }
 
     static InvalidAdminRequestException pageSize(int requested) {

@@ -138,6 +138,13 @@ public class SecurityProperties {
         private String serviceClientClaim = "client_id";
 
         /**
+         * Claim naming the party the request was made through (RFC 8693 {@code act}, read as {@code act.sub}).
+         * Recorded as the audit actor's {@code via}; never a source of roles. A present but unreadable claim
+         * refuses the token. Blank disables reading it.
+         */
+        private String actorClaim = "act";
+
+        /**
          * Audiences this service accepts. Empty means the check is skipped, which in a mesh where every
          * service trusts the same issuer lets a token minted for any service be replayed here - so
          * {@link #requireAudience} makes an empty list a startup failure instead.
@@ -184,6 +191,14 @@ public class SecurityProperties {
 
         public void setServiceClientClaim(String serviceClientClaim) {
             this.serviceClientClaim = serviceClientClaim;
+        }
+
+        public String getActorClaim() {
+            return actorClaim;
+        }
+
+        public void setActorClaim(String actorClaim) {
+            this.actorClaim = actorClaim;
         }
 
         public List<String> getAudiences() {

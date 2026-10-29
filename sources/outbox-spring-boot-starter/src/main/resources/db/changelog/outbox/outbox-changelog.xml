@@ -21,5 +21,6 @@
     <include file="classpath:db/changelog/outbox/0003-index-ordering-key.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/outbox/0004-unique-idempotency-key.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/outbox/0005-create-status-history.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/outbox/0006-finished-at.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

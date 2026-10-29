@@ -6,7 +6,6 @@ import java.time.Instant;
 import java.util.UUID;
 import ru.ludwigandreas.export.entity.QExportReportRun;
 import ru.ludwigandreas.export.entity.QExportReportSubscription;
-import ru.ludwigandreas.webcore.operation.OperationStatus;
 
 /**
  * The predicates the administrative listings read with, over the generated Q-types.
@@ -20,27 +19,15 @@ public final class ExportAdminQueries {
     }
 
     /**
-     * Runs matching the filter, after a keyset position; every member is optional.
+     * The administrative runs listing: the caller's parsed {@code $filter}, after a keyset position.
      *
-     * @param requester       who asked for it
-     * @param definitionKey   which report
-     * @param status          its state
-     * @param afterCreatedAt  the last returned run's creation time
-     * @param afterId         the last returned run's id
+     * @param filter         the parsed filter, or null for every run
+     * @param afterCreatedAt the last returned run's creation time, or null for the first page
+     * @param afterId        the last returned run's id, or null for the first page
      * @return the predicate
      */
-    public static Predicate runs(String requester, String definitionKey, OperationStatus status,
-                                 Instant afterCreatedAt, UUID afterId) {
-        BooleanBuilder where = new BooleanBuilder();
-        if (requester != null && !requester.isBlank()) {
-            where.and(RUN.requester.eq(requester));
-        }
-        if (definitionKey != null && !definitionKey.isBlank()) {
-            where.and(RUN.definitionKey.eq(definitionKey));
-        }
-        if (status != null) {
-            where.and(RUN.status.eq(status));
-        }
+    public static Predicate runs(Predicate filter, Instant afterCreatedAt, UUID afterId) {
+        BooleanBuilder where = new BooleanBuilder(filter);
         if (afterCreatedAt != null && afterId != null) {
             where.and(RUN.createdAt.lt(afterCreatedAt).or(RUN.createdAt.eq(afterCreatedAt).and(RUN.id.lt(afterId))));
         }

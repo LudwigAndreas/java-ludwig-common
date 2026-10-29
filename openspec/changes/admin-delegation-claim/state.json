@@ -1,0 +1,43 @@
+{
+  "change": "admin-delegation-claim",
+  "contract": {
+    "goal": "a request's validated delegation claim (act.sub, configurable) is recorded as Actor.via on every audit event, searchable as via on the audit trail, and optionally required of USER principals on the administrative surface, as specified in specs/admin-authorization, audit-envelope, audit-trail-search",
+    "output": "Actor.via (factories unchanged); Delegation on LudwigAuthentication; DelegationClaims; ludwig.security.jwt.actor-claim; PrincipalActorResolver fills via; ludwig.admin.human-callers.required-via in AdminSurfaceGuard; audit 0006-actor-via.sql + entity + via filter; revapi entry; READMEs EN+RU of three modules; admin guide EN+RU; OpenAPI docs regenerated; follow-ups",
+    "constraints": [
+      "no POM structure changes (revapi entry only)",
+      "roles never from claims: act grants no authority",
+      "present-but-unreadable act is 401",
+      "only a validated token's claim counts, never a header",
+      "required-via applies to USER principals only",
+      "no new module dependency edge"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_migrations.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :audit-core,:security-spring-boot-starter,:audit-spring-boot-starter + every in-repo dependent -am verify (one reactor install)",
+      "openspec validate admin-delegation-claim --strict"
+    ]
+  },
+  "rollback_point": "061f467 (working tree carries the uncommitted earlier admin changes)",
+  "current_task": null,
+  "decisions": [
+    "1.1: via appended as Actor's last component (after tenant), so existing positional calls read the same with one more null; factories and onBehalfOf keep via/pass null; Slf4jAuditSink logs via= after onBehalfOf=. Canonical-constructor callers updated: AuditSinkConformanceTest, ActorTest (+ factoriesHaveNoVia), AccessDecision, HotReloadAuditEntry, AuditTrailSearchIntegrationTest (null); AdminAudit and PrincipalActorResolver are filled in 2.2. AuditEventEntity uses the accessors, not the constructor. mvn -pl :audit-core -am verify rc=0, 49 tests.",
+    "2.1: Delegation(List<String> chain) record in security.principal (Serializable, non-empty, actingParty()=head). LudwigAuthentication gains a private 3-arg constructor and withDelegation(d), a copy with the same principal/authorities/credential, so AttenuatedAuthentications (the one-attenuation-path fence) is untouched; delegation() returns Optional. DelegationClaims lives in security.authn.jwt, not beside PatClaims, because PatClaims is in pat-core and the claim is not a credential. Depth 5 read, 6th refused; non-object, missing/blank sub, unreadable nested level refused; the converter maps that to InvalidBearerTokenException (401) with metric reason malformed-actor-claim. ludwig.security.jwt.actor-claim default act, blank disables. Tests: DelegationClaimsTest 4/4, JwtPrincipalConverterTest 5/5 (act.roles grants nothing; claim renamed; blank off; malformed 401; PAT credential kept with delegation).",
+    "2.2: PrincipalActorResolver.currentActingParty() (static, Optional) reads the delegation from the current LudwigAuthentication; the resolver and AdminAudit (which builds its Actor directly, and is the path every administrative event takes) both fill via from it. PrincipalActorResolverTest 4/4, AdminAuditTest 4/4.",
+    "2.3: ludwig.admin.human-callers.required-via (list, default empty) on AdminProperties.HumanCallers; AdminSurfaceGuard gains a 4-arg constructor (the 3-arg one kept, delegating with an empty set, so it is not a break); the check runs after the PAT check and before handler resolution (surface-wide, /admin/v1/me/operations included), USER principals only, and a token whose acting party is not in the list is refused too. The refusal goes through a new AdminAccessEvaluator.refuse(authentication, handler, message) - authorize() now calls it - so it is published as an AuthorizationDeniedEvent and audited/metered like every denial. AdminSurfaceMvcTest$RequiredVia 3/3 (UI served; direct and other-party 403, both audited DENIED with actor alice and via null; service principal 200). Module install: 206 tests, 0 failures, ArchUnit fence included.",
+    "3.1: 0006-actor-via.sql (actor_via VARCHAR(255), partial index (actor_via, occurred_at) WHERE actor_via IS NOT NULL, rollback both; no backfill), included after 0005, git add -N; AuditEventEntity.actorVia mapped from Actor.via. check_migrations: 105 changesets, all conforming.",
+    "3.2: via threaded through AuditTrailQuery (component after onBehalfOf), the predicate (EVENT.actorVia.eq), AuditTrailSearch.Filter (after actorSubject), the controller's ?via= param, the audited search description, and EventView (via after onBehalfOf) so the result shows the channel. Tenant confinement untouched (applied before filters). AuditTrailSearchIntegrationTest 6/6 incl. throughTheUiYesterday (only p-1: through admin-console, inside yesterday; direct, other party and today excluded); ddl-auto=validate confirms the mapping. Module install: 88 tests, 0 failures. Breaking for revapi: AuditTrailQuery, Filter, EventView canonical constructors and AuditTrailController.events.",
+    "4.1: two revapi entries after messaging-db-consumer-controls': Actor::<init>, and AuditTrailQuery/Filter/EventView <init> + AuditTrailController::events. Security's changes are additive (AdminSurfaceGuard keeps its 3-arg constructor). mvn -q validate rc=0; check_api_baseline rc=1, releases repository unreachable (the task says 'where reachable').",
+    "4.2: READMEs EN+RU (heading parity kept): audit-core envelope comment and log format (via=); security guard table row for required-via, an 'Acting party' paragraph (claim, depth, 401, blank off, required-via, break-glass, header never counts) and actor-claim in the config block; audit store changeset audit-0006, actor_via column, ?via= on search. Admin guide EN+RU: an 'Administration through a UI' paragraph (IdP token exchange, via search, renamed claim, the 401 first check with the exact metric ludwig_security_authentication_total{reason=malformed-actor-claim}, required-via, break-glass) and the schema note now names both additive changesets. api-docs refresh: only notification-service's OpenAPI changed (via param + EventView.via); crud-service-example runs no audit store. Follow-ups item rewritten as done, with the chain-in-envelope and mTLS/PAT gaps left open. Delta spec audit-trail-search: each result carries via (the code does). Pre-existing gap noticed, not fixed: the audit README changeset table has no audit-0005 row.",
+    "5.1: gate.sh stops at check_api_baseline offline as for every change; every other check passes individually; reactor install of the three modules with all dependents: BUILD SUCCESS, 34 modules, 4565 tests, 0 failures. receipt.json written.",
+    "archive: ADDED requirements appended to admin-authorization, audit-envelope, audit-trail-search (validate --specs --strict 67/67); CHANGELOG Added + two Changed (401 on malformed act; Java API) in both locales; revapi entries were added at 4.1; manifest current; archived to openspec/changes/archive/2026-10-29-admin-delegation-claim."
+  ],
+  "failures": [
+    "2.1 attempt 1: security compiled against the installed audit-core (offline -pl without -am); installed audit-core, and the remaining Actor callers (AdminAudit, PrincipalActorResolver) were 2.2's, done together.",
+    "3.2 attempts 1-2: checkstyle line length in EventView.of; the first wrap missed the long line, the second rewrote the statement."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

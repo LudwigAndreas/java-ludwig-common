@@ -45,6 +45,7 @@ public class OutboxOutcomeRecorder {
         Instant publishedAt = Instant.now();
         message.setStatus(OutboxStatus.PUBLISHED);
         message.setPublishedAt(publishedAt);
+        message.setFinishedAt(publishedAt);
         message.setLastError(null);
         auditLogger.onTransition(message, OutboxStatus.PROCESSING, OutboxStatus.PUBLISHED, "dispatched");
         metrics.recordDispatchSucceeded(message.getEventType(), message.getTransport(), message.getDestination());
@@ -61,6 +62,7 @@ public class OutboxOutcomeRecorder {
         boolean exhausted = !retryable || message.getAttempts() >= message.getMaxAttempts();
         if (exhausted && properties.getDeadLetter().isEnabled()) {
             message.setStatus(OutboxStatus.DEAD_LETTER);
+            message.setFinishedAt(Instant.now());
             auditLogger.onTransition(message, OutboxStatus.PROCESSING, OutboxStatus.DEAD_LETTER, reason);
             metrics.recordDeadLettered(message.getEventType(), message.getTransport());
         } else {

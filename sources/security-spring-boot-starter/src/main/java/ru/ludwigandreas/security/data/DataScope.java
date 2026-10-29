@@ -80,6 +80,28 @@ public record DataScope(Access access, List<Restriction> alternatives) {
     }
 
     /**
+     * Whether this scope admits one value along one dimension, for things that are named rather than stored as rows
+     * - an administrative object, say.
+     *
+     * <p>Fail closed: a restricted alternative admits only when it restricts {@code dimension} alone and lists the
+     * value. An alternative that also restricts another dimension does not, because a named object has no value on
+     * that dimension to match.
+     *
+     * @param dimension the dimension the value is on
+     * @param value     the value
+     * @return whether the value is in scope
+     */
+    public boolean admits(ScopeDimension dimension, String value) {
+        return switch (access) {
+            case ALL -> true;
+            case NONE -> false;
+            case RESTRICTED -> value != null && alternatives.stream().anyMatch(alternative ->
+                    alternative.values().keySet().equals(Set.of(dimension))
+                            && alternative.values().get(dimension).contains(value));
+        };
+    }
+
+    /**
      * Combines two grants of the same caller. Most permissive wins, which is the only defensible rule
      * when the grants come from independent sources (a role default from configuration, an explicit
      * grant row from the identity projection): an explicit "you may see everything" must not be

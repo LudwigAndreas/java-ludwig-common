@@ -1,5 +1,15 @@
 components:
   schemas:
+    AdminPageApprovalView:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ApprovalView'
+          type: array
+        next:
+          type: string
+      title: AdminPage
+      type: object
     AdminPageMessageView:
       properties:
         items:
@@ -29,6 +39,52 @@ components:
         next:
           type: string
       title: AdminPage
+      type: object
+    ApprovalView:
+      properties:
+        body:
+          type: string
+        decidedAt:
+          format: date-time
+          type: string
+        decidedBy:
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        method:
+          type: string
+        operation:
+          type: string
+        operationEnvelope:
+          $ref: '#/components/schemas/OperationResponse'
+        outcome:
+          $ref: '#/components/schemas/OutcomeView'
+        path:
+          type: string
+        query:
+          type: string
+        reason:
+          type: string
+        requestedAt:
+          format: date-time
+          type: string
+        requestedBy:
+          type: string
+        state:
+          enum:
+          - PENDING
+          - APPROVING
+          - EXECUTED
+          - REJECTED
+          - WITHDRAWN
+          - EXPIRED
+          - INTERRUPTED
+          type: string
+      title: ApprovalView
       type: object
     BulkRetryRequest:
       properties:
@@ -438,6 +494,17 @@ components:
           format: int64
           type: integer
       title: OperationResult
+      type: object
+    OutcomeView:
+      properties:
+        body:
+          type: string
+        contentType:
+          type: string
+        status:
+          format: int32
+          type: integer
+      title: OutcomeView
       type: object
     PageResponseProductResponse:
       properties:
@@ -991,31 +1058,157 @@ info:
   version: v1
 openapi: 3.0.1
 paths:
-  /admin/v1/exports/runs:
+  /admin/v1/approvals:
     get:
-      operationId: runs
+      operationId: list
       parameters:
-      - in: query
-        name: requester
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: report
-        required: false
-        schema:
-          type: string
       - in: query
         name: status
         required: false
         schema:
           enum:
           - PENDING
-          - RUNNING
-          - SUCCEEDED
-          - FAILED
-          - CANCELLED
+          - APPROVING
+          - EXECUTED
+          - REJECTED
+          - WITHDRAWN
           - EXPIRED
+          - INTERRUPTED
+          type: string
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          format: int32
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPageApprovalView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - admin-approvals-controller
+  /admin/v1/approvals/{id}:
+    get:
+      operationId: get_1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - admin-approvals-controller
+  /admin/v1/approvals/{id}/approve:
+    post:
+      operationId: approve
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - admin-approvals-controller
+  /admin/v1/approvals/{id}/reject:
+    post:
+      operationId: reject
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - admin-approvals-controller
+  /admin/v1/approvals/{id}/withdraw:
+    post:
+      operationId: withdraw
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          format: uuid
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalView'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - admin-approvals-controller
+  /admin/v1/exports/runs:
+    get:
+      operationId: runs
+      parameters:
+      - in: query
+        name: $filter
+        required: false
+        schema:
           type: string
       - in: query
         name: cursor
@@ -1130,26 +1323,9 @@ paths:
       operationId: submissions
       parameters:
       - in: query
-        name: action
+        name: $filter
         required: false
         schema:
-          type: string
-      - in: query
-        name: submitter
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: status
-        required: false
-        schema:
-          enum:
-          - PENDING
-          - RUNNING
-          - SUCCEEDED
-          - FAILED
-          - CANCELLED
-          - EXPIRED
           type: string
       - in: query
         name: cursor
@@ -1597,32 +1773,9 @@ paths:
       operationId: messages
       parameters:
       - in: query
-        name: status
+        name: $filter
         required: false
         schema:
-          enum:
-          - PENDING
-          - PROCESSING
-          - PUBLISHED
-          - FAILED
-          - DEAD_LETTER
-          - DISCARDED
-          type: string
-      - in: query
-        name: eventType
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: destination
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: createdBefore
-        required: false
-        schema:
-          format: date-time
           type: string
       - in: query
         name: cursor

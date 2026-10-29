@@ -1,5 +1,6 @@
 package ru.ludwigandreas.pat.admin.service;
 
+import com.querydsl.core.types.Predicate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -7,6 +8,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
+import ru.ludwigandreas.pat.entity.PatEntity;
 import ru.ludwigandreas.pat.repository.PatQueryRepository;
 import ru.ludwigandreas.pat.service.IssueTokenCommand;
 import ru.ludwigandreas.pat.service.PatException;
@@ -30,6 +33,7 @@ public class PatAdminService {
 
     private final PatService tokens;
     private final PatQueryRepository queries;
+    private final AdminQueryFilter filters;
     private final AdminAudit audit;
     private final Clock clock;
 
@@ -38,37 +42,29 @@ public class PatAdminService {
      *
      * @param tokens  the token lifecycle
      * @param queries the token table's queries
+     * @param filters parses the token listing's {@code $filter}
      * @param audit   the administrative audit
      * @param clock   the clock expiry is judged against
      */
-    public PatAdminService(PatService tokens, PatQueryRepository queries, AdminAudit audit, Clock clock) {
+    public PatAdminService(PatService tokens, PatQueryRepository queries, AdminQueryFilter filters, AdminAudit audit,
+                           Clock clock) {
+        this.filters = filters;
         this.tokens = tokens;
         this.queries = queries;
         this.audit = audit;
         this.clock = clock;
     }
 
-    /** A token's state, as the administrative listing filters on it. */
-    public enum TokenStatus {
-        /** Neither revoked nor past its expiry. */
-        ACTIVE,
-        /** Past its expiry and not revoked. */
-        EXPIRED,
-        /** Revoked. */
-        REVOKED
-    }
-
     /**
      * One page of tokens, newest first.
      *
-     * @param owner  the owner, or null
-     * @param status the state, or null
-     * @param cursor the previous page's cursor, or null
-     * @param size   the page size, or null
+     * @param rawFilter an OData {@code $filter} over the token's filterable fields, or null
+     * @param cursor    the previous page's cursor, or null
+     * @param size      the page size, or null
      * @return the page
      */
     @Transactional(readOnly = true)
-    public AdminPage<PatSnapshot> tokens(String owner, TokenStatus status, String cursor, Integer size) {
+    public AdminPage<PatSnapshot> tokens(String rawFilter, String cursor, Integer size) {
         int pageSize = AdminCursor.pageSize(size);
         Instant afterCreatedAt = null;
         UUID afterId = null;
@@ -77,11 +73,9 @@ public class PatAdminService {
             afterCreatedAt = Instant.parse(position.get(0));
             afterId = UUID.fromString(position.get(1));
         }
-        Boolean revoked = status == null ? null : status == TokenStatus.REVOKED;
-        Boolean expired = status == null || status == TokenStatus.REVOKED ? null : status == TokenStatus.EXPIRED;
+        Predicate filter = filters.parse(PatEntity.class, rawFilter).where().orElse(null);
         Instant now = clock.instant();
-        List<PatSnapshot> rows = queries.findForAdministration(owner, revoked, expired, now, afterCreatedAt,
-                        afterId, pageSize + 1)
+        List<PatSnapshot> rows = queries.findForAdministration(filter, afterCreatedAt, afterId, pageSize + 1)
                 .stream().map(entity -> PatSnapshot.of(entity, now)).toList();
         return AdminPage.of(rows, pageSize, row -> AdminCursor.encode(row.createdAt().toString(),
                 row.id().toString()));

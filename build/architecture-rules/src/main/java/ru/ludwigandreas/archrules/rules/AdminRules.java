@@ -75,6 +75,16 @@ public final class AdminRules implements ArchitectureRuleSet {
     public static final RuleId CONTROLLER_IS_A_THIN_ADAPTER =
             RuleId.of(RuleGroup.ADMIN, "controller-is-a-thin-adapter");
 
+    /**
+     * {@code @AdminObject} marks only a {@code @PathVariable}: the surface guard reads the object from the matched URI
+     * template before the handler runs, so on any other parameter it would scope nothing.
+     */
+    public static final RuleId ADMIN_OBJECT_IS_A_PATH_VARIABLE =
+            RuleId.of(RuleGroup.ADMIN, "admin-object-is-a-path-variable");
+
+    private static final String ADMIN_OBJECT = "ru.ludwigandreas.security.admin.AdminObject";
+    private static final String PATH_VARIABLE = "org.springframework.web.bind.annotation.PathVariable";
+
     private static final String ADMIN_ACCESS = "ru.ludwigandreas.security.admin.AdminAccess";
     private static final String ADMIN_AUTHENTICATED = "ru.ludwigandreas.security.admin.AdminAuthenticated";
     private static final List<String> ADMIN_ANNOTATIONS = List.of(ADMIN_ACCESS, ADMIN_AUTHENTICATED);
@@ -116,7 +126,30 @@ public final class AdminRules implements ArchitectureRuleSet {
                 ArchitectureRule.of(CONTROLLER_IS_A_THIN_ADAPTER, controllerIsAThinAdapter(context),
                         "Delegate to the module's service instead of reading a repository from the controller."
                                 + " The service owns the transaction, the tenant predicate and the audit record of"
-                                + " the administrative change."));
+                                + " the administrative change."),
+                ArchitectureRule.of(ADMIN_OBJECT_IS_A_PATH_VARIABLE, adminObjectIsAPathVariable(),
+                        "Put @AdminObject on the @PathVariable that names the object. The surface guard checks the"
+                                + " object from the matched URI template before the handler runs; on a request"
+                                + " parameter or a body it is never read, and the operation is not scoped."));
+    }
+
+    private static ArchRule adminObjectIsAPathVariable() {
+        return ArchRuleDefinition.classes()
+                .should(new ArchCondition<JavaClass>("mark only path variables with @AdminObject") {
+                    @Override
+                    public void check(JavaClass item, ConditionEvents events) {
+                        for (JavaMethod method : item.getMethods()) {
+                            method.getParameters().stream()
+                                    .filter(parameter -> parameter.isAnnotatedWith(ADMIN_OBJECT))
+                                    .filter(parameter -> !parameter.isAnnotatedWith(PATH_VARIABLE))
+                                    .forEach(parameter -> events.add(SimpleConditionEvent.violated(item,
+                                            String.format("parameter %d of %s carries @AdminObject but is not a"
+                                                            + " @PathVariable, in %s", parameter.getIndex(),
+                                                    method.getFullName(), item.getSourceCodeLocation()))));
+                        }
+                    }
+                })
+                .as("@AdminObject marks a path variable");
     }
 
     private static ArchRule handlerDeclaresAnOperation() {

@@ -1,11 +1,13 @@
 package ru.ludwigandreas.archrules.fixture.bad.admin.web;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminAuthenticated;
+import ru.ludwigandreas.security.admin.AdminObject;
 import ru.ludwigandreas.archrules.fixture.bad.admin.service.ThingAdminService;
 
 /** The correct shape: every handler declares its operation, one gate, under /admin/v1/, through a service. */
@@ -27,7 +29,7 @@ public class GoodAdminController {
 
     @PostMapping("/{id}/discard")
     @AdminAccess("things.privileged")
-    public String discard(String id) {
+    public String discard(@PathVariable @AdminObject String id) {
         return service.discard(id);
     }
 

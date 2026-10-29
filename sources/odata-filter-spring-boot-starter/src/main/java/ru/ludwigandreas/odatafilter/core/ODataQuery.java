@@ -3,6 +3,7 @@ package ru.ludwigandreas.odatafilter.core;
 import com.querydsl.core.types.Predicate;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
+import ru.ludwigandreas.odatafilter.ast.FilterSummary;
 
 /**
  * Result of parsing a caller's OData query options for entity {@code T}: a QueryDSL
@@ -27,12 +28,24 @@ public final class ODataQuery<T> {
     private final Pageable pageable;
     private final String rawFilter;
     private final boolean countRequested;
+    private final FilterSummary filterSummary;
 
-    public ODataQuery(Predicate predicate, Pageable pageable, String rawFilter, boolean countRequested) {
+    public ODataQuery(Predicate predicate, Pageable pageable, String rawFilter, boolean countRequested,
+                      FilterSummary filterSummary) {
         this.predicate = predicate;
         this.pageable = pageable;
         this.rawFilter = rawFilter;
         this.countRequested = countRequested;
+        this.filterSummary = filterSummary == null ? FilterSummary.empty() : filterSummary;
+    }
+
+    /**
+     * The field paths and operators the filter named, never its values - what may be logged or audited about it.
+     *
+     * @return the summary, empty when there was no filter
+     */
+    public FilterSummary filterSummary() {
+        return filterSummary;
     }
 
     /** The translated {@code $filter}, or empty if the caller supplied none. */

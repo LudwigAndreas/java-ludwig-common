@@ -188,6 +188,8 @@ predecessor's work is an explicit reclaim step.
 (`lock_name` unique, `owner`, `run_id`, `acquired_at`, `heartbeat_at`, `expires_at`). Applied by
 `JobCoreLiquibaseAutoConfiguration` as an independent `SpringLiquibase` bean; set
 `ludwig.job-core.liquibase.enabled=false` to include it from your own master changelog instead.
+`job-core-0002` creates `job_admin_approval`, where the administrative surface keeps four-eyes approvals; it is
+written only when `ludwig.admin.approval.required` lists an operation.
 
 `expires_at` is the single source of truth for "held". A release clears `owner` and sets
 `expires_at = now()`; rows are not deleted, so the table holds one row per lock name.
@@ -254,6 +256,13 @@ ludwig:
       "[jobs.operate]": [ORDERS_ADMIN]
       "[jobs.privileged]": [ORDERS_ADMIN]
 ```
+
+**Four-eyes approval store.** Beside the administrative surface, job-core provides its `AdminApprovalStore`
+(`JdbcAdminApprovalStore`, table `job_admin_approval`): every state change is a conditional update, so two
+approvers racing produce one execution, and a request body is deleted once its approval is decided. Where
+`ludwig.admin.approval.required` lists an operation, the job `ludwig-admin-approval-expiry` (under the run lock of
+that name, every minute) expires undecided approvals and marks as interrupted those a stopped replica left
+executing. The approval endpoints themselves are the security starter's.
 
 ## Runbook
 

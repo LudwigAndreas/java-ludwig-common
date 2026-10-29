@@ -5,6 +5,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import ru.ludwigandreas.audit.Actor;
 import ru.ludwigandreas.audit.ActorResolver;
+import ru.ludwigandreas.security.principal.Delegation;
+import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 
 /**
@@ -32,10 +34,21 @@ public class PrincipalActorResolver implements ActorResolver {
         if (authentication.getPrincipal() instanceof LudwigPrincipal principal) {
             return Optional.of(new Actor(principal.subject(),
                     principal.type() == null ? null : principal.type().name(), null, null,
-                    principal.tenant().orElse(null)));
+                    principal.tenant().orElse(null), currentActingParty().orElse(null)));
         }
         return Optional.ofNullable(authentication.getName())
                 .filter(name -> !name.isBlank())
                 .map(Actor::of);
+    }
+
+    /**
+     * The party the current request came through, from its validated delegation claim - an actor's {@code via}.
+     *
+     * @return the immediate acting party, or empty for a direct request or no authentication
+     */
+    public static Optional<String> currentActingParty() {
+        return SecurityContextHolder.getContext().getAuthentication() instanceof LudwigAuthentication authentication
+                ? authentication.delegation().map(Delegation::actingParty)
+                : Optional.empty();
     }
 }

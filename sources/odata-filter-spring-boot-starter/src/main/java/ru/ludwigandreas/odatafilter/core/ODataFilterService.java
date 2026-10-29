@@ -123,9 +123,10 @@ public class ODataFilterService {
         Sort sort = toSort(requestedOrderBy, policy.defaultOrderBy());
         Pageable pageable = new OffsetPageRequest(offset, pageSize, sort);
 
-        recordAndPublish(new FilterAppliedEvent(entityType, FilterSummary.of(filterAst), callerRoles));
+        FilterSummary summary = FilterSummary.of(filterAst);
+        recordAndPublish(new FilterAppliedEvent(entityType, summary, callerRoles));
 
-        return new ODataQuery<>(predicate, pageable, filter, options.countRequested());
+        return new ODataQuery<>(predicate, pageable, filter, options.countRequested(), summary);
     }
 
     /**

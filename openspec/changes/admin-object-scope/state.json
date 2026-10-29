@@ -1,0 +1,48 @@
+{
+  "change": "admin-object-scope",
+  "contract": {
+    "goal": "an administrative operation on a named object can be narrowed to the objects a caller's data scope admits (resource admin.<area>, action = tier, dimension object), opt-in per area/tier by a data-scope policy entry, with reconciliation tasks as the first adopter, as specified in specs/admin-authorization and specs/reconciliation-admin",
+    "output": "ScopeDimension.OBJECT in BUILT_IN; DataScope.admits; DataScopePolicyValidator admin.* checks; @AdminObject + evaluation in AdminAccessEvaluator (403/404, audited); AdminObjectNotFoundException; AdminObjectScope.filter; ArchUnit admin-object-is-a-path-variable; reconciliation {task} endpoints + listing; docs EN+RU; follow-ups",
+    "constraints": [
+      "no POM changes",
+      "no new grant syntax: role entries for admin.* are ALL or NONE only",
+      "no policy entry for admin.<area> means no change",
+      "fail closed: an alternative restricting another dimension does not admit",
+      "out-of-scope read is 404, identical to a missing object",
+      "no new module dependency edge"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_migrations.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :security-spring-boot-starter,:reconciliation-spring-boot-starter,:architecture-rules + every in-repo dependent -am verify (one reactor install)",
+      "openspec validate admin-object-scope --strict"
+    ]
+  },
+  "rollback_point": "061f467 (working tree carries the uncommitted earlier admin changes)",
+  "current_task": null,
+  "decisions": [
+    "1.1: ScopeDimension.OBJECT ('object') added to BUILT_IN; strict-token error message lists OBJECT. DataScope.admits(dimension, value): ALL true, NONE false, RESTRICTED true only for an alternative whose restricted key set is exactly {dimension} and lists the value (null value false). DataScopeTest 6/6 (+2), ScopeGrantTest 7/7 (+1).",
+    "1.2: DataScopePolicyValidator: admin.* resources skip the mapping checks (named objects, not rows) and instead must name a catalogued area, use only read/operate/privileged actions, and map roles to ALL or NONE only (a RESTRICTED role entry, e.g. OBJECT, is refused naming the entry and 'granted per subject'). The catalog's areas come through a Supplier from ObjectProvider<AdminOperationCatalog>, read at validation (the admin auto-configuration runs after data's; with the surface off every admin.* policy is refused). The 2-arg constructor is kept (empty areas) so the public type has no break. ScopePolicies gains actionsOf(resource). DataScopePolicyValidatorTest 4/4 (new).",
+    "2.1 (deviation from design decision 2): the guard runs as a HandlerInterceptor before argument resolution, so the object is read from the matched URI template (HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE) by the @PathVariable's name, not from resolved arguments; the ArchUnit rule (2.2) is what makes that sound. A missing value fails closed.",
+    "2.1: identical 404: @AdminObject(notFound = <the area's not-found code>) - AdminObjectNotFoundException renders (NOT_FOUND, code, [object]) exactly as the area's own LocalizedException does; default code ludwig.admin.object-not-found (bundle EN+RU). AdminObjectScope(ScopePolicies, DataScopeProvider) - both null when data scoping is off - with isScoped(area, tier) = a policy entry exists for admin.<area>/tier, admits(principal, area, tier, object), filter(area, tier, names) for listings using the current AdminInvocation. AdminAccessEvaluator gains a 3-arg constructor (2-arg kept) and authorizeObject(...), called by the guard right after authorize(); denials are published like every other (audited). A role absent from the policy gets NONE (PolicyDataScopeProvider), so only grants admit - fail closed. Tests: AdminSurfaceMvcTest$ObjectScoped 2/2 (own 200 / other 403 audited DENIED for bob; out-of-scope read 404 with type/title/status/code equal to a really missing object), $NoObjectPolicy 1/1, role-level OBJECT fails startup naming the entry 1/1. Module install 217 tests, 0 failures.",
+    "2.2: AdminRules.ADMIN_OBJECT_IS_A_PATH_VARIABLE (admin.admin-object-is-a-path-variable): any parameter annotated ru.ludwigandreas.security.admin.AdminObject must also be @PathVariable (matched by name, as the module takes no security dependency; test stub AdminObject added). Violating fixture ObjectAsQueryAdminController (@RequestParam @AdminObject); GoodAdminController's discard gains @PathVariable @AdminObject and is not reported. README EN+RU rule tables gain the row. mvn -pl :architecture-rules -am verify rc=0, 102 tests, AdminRulesTest 8/8.",
+    "3.1 (deviation from the task wording): scoped scenarios live in ReconciliationObjectScopeIntegrationTest, not ReconciliationAdminIntegrationTest; the latter runs unchanged and is the no-policy case. ReconciliationAdminOperations gains TASK_NOT_FOUND and ENUMERATION_NOT_FOUND; read endpoints name the code their own missing-task answer uses (task, runs, run -> task-not-found; scope -> enumeration-not-found), all other {task} parameters carry plain @AdminObject. ReconciliationAdminService gains a 4-arg constructor with AdminObjectScope (3-arg kept, unscoped); overview filters tasks and enumerations by name through AdminObjectScope.filter(reconciliation, READ, ...); passes and quotas are not task objects and are unfiltered. Auto-configuration passes ObjectProvider<AdminObjectScope>.getIfAvailable(). Tests: ReconciliationObjectScopeIntegrationTest 3/3 (own discover 200 / other 403; other read 404 equal in type/title/status/code to a missing task; listing shows bob only item-catalogue and no tasks, admin sees all), ReconciliationAdminIntegrationTest 15/15. Module install: 318 tests, 0 failures.",
+    "4.1: docs EN+RU with heading parity: data-scope-configuration gains 'Administrative objects' (resource/action/dimension, opt-in, ALL/NONE only, startup refusals, a supplier-sync worked example with the real GrantRequest body, 404 non-disclosure, cache TTL, candidate areas) and OBJECT in the strict-token comment; security README guard row + per-object paragraph; reconciliation README 'Per-task scope'; admin guide paragraph; follow-ups item rewritten as done with 'adopt object scope in jobs and fileingest' left open. openspec validate --strict valid; check_image_pins pass.",
+    "revapi: auto-configuration bean methods are tracked (an existing entry covers UserSettingsWebAutoConfiguration's), so entries added for AdminAutoConfiguration.ludwigAdminAccessEvaluator, DataAuthorizationAutoConfiguration.ludwigDataScopePolicyValidator and ReconciliationAdminAutoConfiguration.ludwigReconciliationAdminService - and, as a late fix of messaging-db-consumer-controls' own omission, MessagingDbAdminAutoConfiguration.ludwigMessagingAdminService. Every other changed type keeps its previous constructor.",
+    "5.1: script checks all pass; reactor install of the three modules with all dependents BUILD SUCCESS, 35 modules, 4649 tests, 0 failures; check_api_baseline unreachable offline. receipt.json written.",
+    "archive: delta admin-authorization gained the startup refusal of an undeclared area or a non-tier action (the code enforces it); ADDED requirements synced to admin-authorization and reconciliation-admin; CHANGELOG Added + Changed in both locales; revapi entries were added at 4.1; manifest current; archived to openspec/changes/archive/2026-10-29-admin-object-scope."
+  ],
+  "failures": [
+    "1.1 attempt 1: checkstyle - {@code admin.<area>} read as an unclosed HTML tag, and the admits() javadoc landed between union()'s javadoc and union(); reworded and moved.",
+    "1.2 attempt 1: checkstyle JavadocStyle again on {@code admin.<area>}; reworded to admin.reconciliation.",
+    "2.1 attempt 1: checkstyle JavadocStyle on admin.<area> (twice) and a line length; fixed.",
+    "2.1 attempt 2: an unnamed @PathVariable resolved to a null object name (the HandlerMethod's MethodParameter had no name discoverer), so bob's own read was refused 404 - it failed closed, but wrongly; initParameterNameDiscovery(DefaultParameterNameDiscoverer) as Spring's resolvers do.",
+    "3.1 attempt 1: a @Nested context's @Import replaced the outer @Import(PostgresContainerConfiguration) - no DataSource; imported both.",
+    "3.1 attempts 2-3: the @Nested class's @TestPropertySource (grants and policies) did not take effect - bob was refused for want of the grant, then (given an already-granted role) nothing was scoped. Not pinned down: a probe test was declined at the permission prompt and not retried. Resolved by moving the scoped scenarios to their own class ReconciliationObjectScopeIntegrationTest configured through @SpringBootTest(properties), the mechanism proven in AdminSurfaceMvcTest.",
+    "archive attempt 1: the sync script wrote open(main,'w').write(open(main).read()+...), truncating admin-authorization and reconciliation-admin main specs before reading them. Rebuilt from git HEAD plus every delta synced since (admin-delegation-claim's ADDED; reconciliation-run-history's MODIFIED 'Safe actions are the operate tier' + 2 ADDED) plus this change's ADDED; HEAD verified to already hold admin-surface-polish's synced blocks verbatim. Result: 14 and 7 requirements, validate --specs --strict 67/67, check_image_pins pass."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

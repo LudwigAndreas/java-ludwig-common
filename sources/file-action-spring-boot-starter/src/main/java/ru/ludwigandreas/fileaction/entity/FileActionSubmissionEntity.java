@@ -16,6 +16,7 @@ import lombok.Setter;
 import ru.ludwigandreas.db.core.entity.GeneratedEntity;
 import ru.ludwigandreas.fileaction.api.FileActionState;
 import ru.ludwigandreas.fileaction.format.SourceFormat;
+import ru.ludwigandreas.odatafilter.annotation.Filterable;
 
 /**
  * One user-submitted file and what became of it.
@@ -48,10 +49,12 @@ import ru.ludwigandreas.fileaction.format.SourceFormat;
 public class FileActionSubmissionEntity extends GeneratedEntity<UUID> {
 
     /** The configured action this submission belongs to. */
+    @Filterable
     @Column(name = "action", nullable = false, length = 128, updatable = false)
     private String action;
 
     /** Where in this module's lifecycle it is. */
+    @Filterable
     @Enumerated(EnumType.STRING)
     @Column(name = "state", nullable = false, length = 32)
     private FileActionState state;
@@ -83,6 +86,7 @@ public class FileActionSubmissionEntity extends GeneratedEntity<UUID> {
     private String declaredContentType;
 
     /** What the content actually turned out to be. */
+    @Filterable
     @Enumerated(EnumType.STRING)
     @Column(name = "source_format", length = 16)
     private SourceFormat sourceFormat;
@@ -97,18 +101,22 @@ public class FileActionSubmissionEntity extends GeneratedEntity<UUID> {
      * <p>A subject string, not a foreign key. Identity is owned by {@code identity-provider-service}, and a
      * foreign key here would be a local copy of it that goes stale the first time somebody is renamed.
      */
+    @Filterable
     @Column(name = "submitted_by", length = 255, updatable = false)
     private String submittedBy;
 
     /** When it was accepted. */
+    @Filterable
     @Column(name = "submitted_at", nullable = false, updatable = false)
     private Instant submittedAt;
 
     /** When the read or the apply first started, or null while nothing has. */
+    @Filterable
     @Column(name = "started_at")
     private Instant startedAt;
 
     /** When it reached a terminal state, or null while it has not. */
+    @Filterable
     @Column(name = "finished_at")
     private Instant finishedAt;
 
@@ -144,6 +152,7 @@ public class FileActionSubmissionEntity extends GeneratedEntity<UUID> {
     private long rowsApplied;
 
     /** How many rows were refused. Counts toward the reject threshold. */
+    @Filterable
     @Column(name = "rows_rejected", nullable = false)
     private long rowsRejected;
 
@@ -152,6 +161,7 @@ public class FileActionSubmissionEntity extends GeneratedEntity<UUID> {
     private long rowsSkipped;
 
     /** Why a {@code REJECTED} submission was refused: a message code, never a formatted message. */
+    @Filterable
     @Column(name = "failure_code", length = 128)
     private String failureCode;
 

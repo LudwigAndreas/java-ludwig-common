@@ -28,4 +28,16 @@ public interface OutboxMetrics {
      * alerting an SLA on.
      */
     void recordEndToEndLatency(String eventType, String transport, Duration duration);
+
+    /**
+     * Messages the retention purge deleted in one committed batch.
+     *
+     * <p>A default, so an implementation written before retention existed keeps compiling and simply does not
+     * count purges.
+     *
+     * @param status the terminal status purged
+     * @param count  how many messages
+     */
+    default void recordPurged(String status, int count) {
+    }
 }

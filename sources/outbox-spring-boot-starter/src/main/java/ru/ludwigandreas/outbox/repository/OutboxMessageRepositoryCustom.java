@@ -1,6 +1,7 @@
 package ru.ludwigandreas.outbox.repository;
 
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
+import ru.ludwigandreas.outbox.entity.OutboxStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,4 +27,16 @@ public interface OutboxMessageRepositoryCustom {
      * @return the claimed rows, oldest first
      */
     List<OutboxMessage> pollBatch(int batchSize, Instant now, String lockOwner);
+
+    /**
+     * Deletes up to {@code limit} messages in {@code status} that became terminal before {@code cutoff}, with
+     * their history rows, in one committed transaction. Rows another transaction holds locked - a retry an
+     * administrator is making right now - are skipped rather than waited for.
+     *
+     * @param status the terminal status to purge
+     * @param cutoff messages whose {@code finished_at} is earlier than this are expired
+     * @param limit  at most this many messages
+     * @return how many messages were deleted
+     */
+    int purgeFinishedBefore(OutboxStatus status, Instant cutoff, int limit);
 }

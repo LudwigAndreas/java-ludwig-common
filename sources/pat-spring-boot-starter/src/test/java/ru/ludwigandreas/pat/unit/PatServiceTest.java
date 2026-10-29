@@ -342,9 +342,8 @@ class PatServiceTest {
         }
 
         @Override
-        public List<PatEntity> findForAdministration(String ownerSubject, Boolean revoked, Boolean expired,
-                                                     Instant now, Instant afterCreatedAt, java.util.UUID afterId,
-                                                     int limit) {
+        public List<PatEntity> findForAdministration(com.querydsl.core.types.Predicate filter, Instant afterCreatedAt,
+                                                     java.util.UUID afterId, int limit) {
             throw new UnsupportedOperationException("not used by PatService");
         }
 

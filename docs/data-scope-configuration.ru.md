@@ -112,7 +112,7 @@ guard.check("order", DataAction.READ, entity, OrderEntity::getId);
    ludwig:
      security:
        data:
-         strict-policy-tokens: false     # иначе принимаются только OWN/TENANT/PARTNER
+         strict-policy-tokens: false     # иначе принимаются только OWN/TENANT/PARTNER/OBJECT
          policies:
            order:
              read:
@@ -272,6 +272,45 @@ if (guard.scope(OrderAccess.RESOURCE, OrderAccess.CREATE).denies()) {
 | У команды много заказов; у заказа одна команда; пользователь состоит в одной команде | Столбец с идентификатором команды в заказе и атрибут `team`. Дополнительная таблица не нужна. |
 | Заказ обслуживают несколько команд | Коллекция связей заказа с командами в сущности, привязанная через `.bindCollection(TEAM, ...)`. Это доменные данные, а не таблица безопасности. |
 | Пользователь состоит в нескольких командах | `DataScopeProvider`, возвращающий множество идентификаторов команд. |
+
+## Административные объекты
+
+Административную операцию над именованным объектом - например, задачей сверки - можно сузить до объектов, выданных
+вызывающему. Ресурс - `admin.<area>` (например, `admin.reconciliation`), действие - уровень (`read`, `operate`,
+`privileged`), измерение - встроенное `object`, его значения - имена объектов. Включается отдельно для области и
+уровня: если для `admin.<area>` и уровня нет записи политики, владение операцией, как и прежде, допускает все
+объекты.
+
+Запись роли для административного ресурса - `ALL` (все объекты) или `NONE` (только объекты, выданные субъекту);
+что-либо другое роняет старт, потому что объекты выдаются субъектам, а не перечисляются для ролей. Роль без записи не
+получает ничего. Старт также падает для области, которую не объявляет ни один модуль, и для действия, не являющегося
+уровнем: иначе опечатка не ограничила бы ничего.
+
+Практический пример - команда поставок управляет `supplier-sync` и ничем больше, платформенная команда - всем:
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[reconciliation.read]": [SUPPLY_OPS, PLATFORM_ADMIN]
+      "[reconciliation.operate]": [SUPPLY_OPS, PLATFORM_ADMIN]
+  security:
+    data:
+      policies:
+        "[admin.reconciliation]":
+          read:    { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
+          operate: { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
+```
+
+Затем каждому участнику команды выдаётся задача - запросом `POST /admin/v1/identity/grants` с телом
+`{"subject": "bob", "principalType": "USER", "resourceType": "admin.reconciliation", "action": "operate",
+"dimension": "object", "dimensionValue": "supplier-sync"}` (и ещё раз с `"action": "read"`; для дежурного доступа
+подходит `expiresAt`). Запуск `supplier-sync` от Боба принимается, запуск `customer-sync` - `403`, а чтение
+`customer-sync` - `404`, тот же ответ, что и для несуществующей задачи. Список задач показывает ему только
+`supplier-sync`. Выдача доходит до других реплик в пределах TTL кэша областей данных, как любая выдача.
+
+Пока свои объекты ограничивает только `reconciliation`. Кандидаты - `jobs` (имена заданий) и `fileingest`
+(источники).
 
 ## Пользовательские провайдеры
 

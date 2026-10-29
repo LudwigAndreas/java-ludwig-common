@@ -6,6 +6,7 @@ import ru.ludwigandreas.audit.Actor;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.audit.Resource;
+import ru.ludwigandreas.security.audit.PrincipalActorResolver;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 
 /**
@@ -57,14 +58,39 @@ public class AdminAudit {
         LudwigPrincipal principal = invocation.principal();
         Map<String, Object> details = new LinkedHashMap<>(attributes);
         invocation.statedReason().ifPresent(reason -> details.put("reason", reason));
+        AdminApprovalContext.current().ifPresent(approval -> {
+            details.put("requestedBy", approval.requestedBy());
+            details.put("approvedBy", approval.approvedBy());
+        });
         sink.record(AuditEvent.builder()
                 .category(CATEGORY)
                 .action(invocation.operation().id())
                 .actor(new Actor(principal.subject(), principal.type().name(), principal.displayName(), null,
-                        principal.tenant().orElse(null)))
+                        principal.tenant().orElse(null), PrincipalActorResolver.currentActingParty().orElse(null)))
                 .resource(new Resource(resourceType, resourceId, null))
                 .outcome(outcome.toAuditOutcome())
                 .attributes(details)
+                .build());
+    }
+
+    /**
+     * Records an administrative event no person performed - an approval expiring - with the system as actor.
+     *
+     * @param operationId  the operation the object belongs to, the event's action
+     * @param resourceType the kind of object
+     * @param resourceId   the object's identity
+     * @param outcome      how it ended
+     * @param attributes   further, already-redacted facts
+     */
+    void recordSystem(String operationId, String resourceType, String resourceId, AdminOutcome outcome,
+                      Map<String, Object> attributes) {
+        sink.record(AuditEvent.builder()
+                .category(CATEGORY)
+                .action(operationId)
+                .actor(Actor.system())
+                .resource(new Resource(resourceType, resourceId, null))
+                .outcome(outcome.toAuditOutcome())
+                .attributes(attributes)
                 .build());
     }
 }

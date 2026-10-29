@@ -87,7 +87,7 @@ public record ScopeGrant(Kind kind, List<ScopeDimension> dimensions) {
         ScopeDimension dimension = ScopeDimension.of(token);
         if (strictTokens && !ScopeDimension.BUILT_IN.contains(dimension)) {
             throw new SecurityConfigurationException("Unknown scope token '" + token + "' in policy "
-                    + context + " ('" + raw + "'). Use ALL, NONE, OWN, TENANT or PARTNER, optionally "
+                    + context + " ('" + raw + "'). Use ALL, NONE, OWN, TENANT, PARTNER or OBJECT, optionally "
                     + "'+'-joined. To use a custom axis, bind it on the resource's DataScopeMapping and "
                     + "set ludwig.security.data.strict-policy-tokens=false.");
         }

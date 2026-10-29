@@ -50,6 +50,7 @@ public class LogStore {
     private final String log;
     private final String head;
     private final String offsets;
+    private final String pauses;
 
     /**
      * Creates the store.
@@ -74,6 +75,7 @@ public class LogStore {
         this.log = schema + ".message_log";
         this.head = schema + ".partition_head";
         this.offsets = schema + ".consumer_offset";
+        this.pauses = schema + ".consumer_pause";
     }
 
     /**
@@ -271,6 +273,10 @@ public class LogStore {
                         + " ON h.topic = o.topic AND h.log_partition = o.log_partition"
                         + " WHERE o.group_id = ? AND o.topic = ANY (?) AND o.next_attempt_at <= now()"
                         + " AND h.next_offset > o.committed_offset + 1"
+                        // An operator's pause is a row every replica's claim reads, so it holds cluster-wide from the
+                        // next claim, with nothing broadcast to any replica's memory.
+                        + " AND NOT EXISTS (SELECT 1 FROM " + pauses + " p"
+                        + " WHERE p.group_id = o.group_id AND p.topic = o.topic)"
                         + " ORDER BY o.next_attempt_at LIMIT 1 FOR UPDATE OF o SKIP LOCKED",
                 (rs, row) -> new Position(rs.getString("topic"), rs.getInt("log_partition"),
                         rs.getLong("committed_offset"), rs.getInt("attempts")),
@@ -300,6 +306,120 @@ public class LogStore {
         jdbc.update("UPDATE " + offsets + " SET committed_offset = ?, attempts = 0, last_error = NULL,"
                         + " next_attempt_at = now() WHERE group_id = ? AND topic = ? AND log_partition = ?",
                 record.offset(), groupId, position.topic(), position.partition());
+    }
+
+    /**
+     * Pauses one group on one topic, on every replica, from each one's next claim.
+     *
+     * @param groupId  the consumer group
+     * @param topic    the topic
+     * @param pausedBy who paused it
+     * @param reason   why, or null
+     * @return true when this call paused it, false when it was already paused
+     */
+    public boolean pause(String groupId, String topic, String pausedBy, String reason) {
+        return inTransaction(jdbc -> jdbc.update("INSERT INTO " + pauses + " (group_id, topic, paused_by, reason)"
+                + " VALUES (?, ?, ?, ?) ON CONFLICT (group_id, topic) DO NOTHING", groupId, topic, pausedBy, reason)
+                == 1);
+    }
+
+    /**
+     * Resumes one group on one topic.
+     *
+     * @param groupId the consumer group
+     * @param topic   the topic
+     * @return true when this call resumed it, false when it was not paused
+     */
+    public boolean resume(String groupId, String topic) {
+        return inTransaction(jdbc -> jdbc.update("DELETE FROM " + pauses + " WHERE group_id = ? AND topic = ?",
+                groupId, topic) == 1);
+    }
+
+    /**
+     * Every pause, ordered by group and topic.
+     *
+     * @return the pauses
+     */
+    public List<Pause> pauses() {
+        return inTransaction(jdbc -> jdbc.query("SELECT group_id, topic, paused_by, paused_at, reason FROM " + pauses
+                        + " ORDER BY group_id, topic",
+                (rs, row) -> new Pause(rs.getString("group_id"), rs.getString("topic"), rs.getString("paused_by"),
+                        rs.getTimestamp("paused_at").toInstant(), rs.getString("reason"))));
+    }
+
+    /**
+     * Whether a group has a position on a topic, i.e. whether it reads that topic from the log at all.
+     *
+     * @param groupId the consumer group
+     * @param topic   the topic
+     * @return true when at least one partition position exists
+     */
+    public boolean hasPositions(String groupId, String topic) {
+        return Boolean.TRUE.equals(inTransaction(jdbc -> jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM "
+                + offsets + " WHERE group_id = ? AND topic = ?)", Boolean.class, groupId, topic)));
+    }
+
+    /**
+     * Moves a paused group's committed position on one partition, or every partition, of a topic.
+     *
+     * <p>One transaction: the pause is checked, the targeted position rows are locked {@code FOR UPDATE} - waiting
+     * out a record still in flight from before the pause rather than skipping it - each target is resolved and
+     * clamped to the retained log, and retry state is reset. A position is "last handled", so every target is "next
+     * to deliver, minus one", and delivery itself is unchanged.
+     *
+     * @param groupId   the consumer group
+     * @param topic     the topic
+     * @param partition one partition, or null for all of them
+     * @param target    where to move to
+     * @return each moved partition's old and new position, or empty when the pair is not paused
+     */
+    public Optional<List<Moved>> movePosition(String groupId, String topic, Integer partition, MoveTarget target) {
+        return inTransaction(jdbc -> {
+            // Locks the pause row, so a resume cannot land half way through the move.
+            List<String> paused = jdbc.queryForList("SELECT group_id FROM " + pauses
+                    + " WHERE group_id = ? AND topic = ? FOR UPDATE", String.class, groupId, topic);
+            if (paused.isEmpty()) {
+                return Optional.<List<Moved>>empty();
+            }
+            List<Position> rows = jdbc.query("SELECT topic, log_partition, committed_offset, attempts FROM " + offsets
+                            + " WHERE group_id = ? AND topic = ? AND (CAST(? AS INT) IS NULL OR log_partition = ?)"
+                            + " ORDER BY log_partition FOR UPDATE",
+                    (rs, row) -> new Position(rs.getString("topic"), rs.getInt("log_partition"),
+                            rs.getLong("committed_offset"), rs.getInt("attempts")),
+                    groupId, topic, partition, partition);
+            List<Moved> moved = new ArrayList<>();
+            for (Position row : rows) {
+                long last = lastHandledFor(jdbc, row, target);
+                jdbc.update("UPDATE " + offsets + " SET committed_offset = ?, attempts = 0, next_attempt_at = now()"
+                        + " WHERE group_id = ? AND topic = ? AND log_partition = ?", last, groupId, topic,
+                        row.partition());
+                moved.add(new Moved(row.partition(), row.committedOffset(), last));
+            }
+            return Optional.of(moved);
+        });
+    }
+
+    /** The position, "last handled", that makes {@code target} the next record delivered, clamped to the log. */
+    private long lastHandledFor(JdbcTemplate jdbc, Position row, MoveTarget target) {
+        Long headOffset = jdbc.queryForObject("SELECT next_offset - 1 FROM " + head
+                + " WHERE topic = ? AND log_partition = ?", Long.class, row.topic(), row.partition());
+        // Offsets start at 0 and a position is "last handled", so an empty partition's position is -1.
+        long latest = headOffset == null ? -1 : headOffset;
+        Long oldest = jdbc.queryForObject("SELECT min(log_offset) FROM " + log
+                + " WHERE topic = ? AND log_partition = ?", Long.class, row.topic(), row.partition());
+        long earliest = oldest == null ? latest : oldest - 1;
+        long wanted = switch (target.kind()) {
+            case EARLIEST -> earliest;
+            case LATEST -> latest;
+            case OFFSET -> target.offset() - 1;
+            case TIMESTAMP -> {
+                Long first = jdbc.queryForObject("SELECT min(log_offset) FROM " + log
+                                + " WHERE topic = ? AND log_partition = ? AND produced_at >= ?", Long.class,
+                        row.topic(), row.partition(), Timestamp.from(target.timestamp()));
+                yield first == null ? latest : first - 1;
+            }
+        };
+        return Math.max(earliest, Math.min(latest, wanted));
     }
 
     private <T> T inTransaction(Function<JdbcTemplate, T> work) {
@@ -378,6 +498,60 @@ public class LogStore {
 
     /** A group's claimed position on one partition. */
     public record Position(String topic, int partition, long committedOffset, int attempts) {
+    }
+
+    /**
+     * A paused (group, topic).
+     *
+     * @param groupId  the consumer group
+     * @param topic    the topic
+     * @param pausedBy who paused it
+     * @param pausedAt when
+     * @param reason   why, or null
+     */
+    public record Pause(String groupId, String topic, String pausedBy, Instant pausedAt, String reason) {
+    }
+
+    /**
+     * One partition's position before and after a move; both are "last handled".
+     *
+     * @param partition the partition
+     * @param from      the position before
+     * @param to        the position after
+     */
+    public record Moved(int partition, long from, long to) {
+
+        /** Records that will not be delivered because the position moved forward past them. */
+        public long skipped() {
+            return Math.max(0, to - from);
+        }
+
+        /** Records that will be delivered again because the position moved back over them. */
+        public long replayed() {
+            return Math.max(0, from - to);
+        }
+    }
+
+    /**
+     * Where a move puts a group's position.
+     *
+     * @param kind      which kind of target
+     * @param offset    for {@link Kind#OFFSET}, the next offset to deliver
+     * @param timestamp for {@link Kind#TIMESTAMP}, deliver from the first record produced at or after it
+     */
+    public record MoveTarget(Kind kind, long offset, Instant timestamp) {
+
+        /** The kinds of target. */
+        public enum Kind {
+            /** The oldest record still in the log. */
+            EARLIEST,
+            /** Past the newest record, so only new records are delivered. */
+            LATEST,
+            /** An explicit offset, the next one to deliver. */
+            OFFSET,
+            /** The first record produced at or after a timestamp. */
+            TIMESTAMP
+        }
     }
 
     /** One group's distance behind the heads of one topic. */

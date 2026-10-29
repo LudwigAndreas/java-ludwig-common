@@ -65,7 +65,7 @@ An administrator can retry a `FAILED` or `DEAD_LETTER` message (back to `PENDING
 `PENDING`, `FAILED` or `DEAD_LETTER` one to `DISCARDED`, which is terminal and never claimed - see
 [Administrative endpoints](#administrative-endpoints). `DISCARDED` needed no migration: `status` is a `VARCHAR(20)`
 with no check constraint, and the poll index's predicate (`status IN ('PENDING', 'FAILED')`) already excludes it.
-This module has no retention purge, so discarded rows are kept like dead-lettered ones.
+Discarded rows are kept and purged by the same retention as dead-lettered ones (see [Deployment](#deployment)).
 
 A `PROCESSING` row whose owner died is returned to `PENDING` by the stale-claim reclaimer after
 `processing.stale-timeout`. On shutdown the poller finishes the cycle in progress (up to
@@ -173,6 +173,12 @@ caller's transaction with `DataIntegrityViolationException`; treat that as "alre
 | `ludwig.outbox.idempotency.enabled` | `true` | Honour `idempotencyKey` |
 | `ludwig.outbox.dead-letter.enabled` | `true` | Move exhausted messages to `DEAD_LETTER`; otherwise they stay `FAILED` |
 | `ludwig.outbox.audit.persist-history` | `false` | Also persist every transition to `outbox_status_history` |
+| `ludwig.outbox.retention.enabled` | `true` | Run the retention purge (needs a `RunLock`; without one, a startup WARN and no purge) |
+| `ludwig.outbox.retention.published` | `7d` | Keep a `PUBLISHED` message this long after publication; at least `1d` |
+| `ludwig.outbox.retention.terminal` | `30d` | Keep a `DEAD_LETTER` or `DISCARDED` message this long after it became terminal |
+| `ludwig.outbox.retention.interval` | `1h` | Delay between purge runs |
+| `ludwig.outbox.retention.batch-size` | `500` | Messages deleted per committed batch |
+| `ludwig.outbox.retention.drain-timeout` | `30s` | How long shutdown waits for an in-flight purge |
 | `ludwig.outbox.metrics.enabled` | `true` | Emit Micrometer metrics (when Micrometer is on the classpath) |
 | `ludwig.outbox.liquibase.enabled` | `true` | Apply the shipped changelog as a standalone `SpringLiquibase` bean |
 | `ludwig.outbox.rest.connect-timeout` / `read-timeout` | `5s` / `10s` | REST dispatcher timeouts |
@@ -211,8 +217,17 @@ from `spring.kafka.*` or the named cluster's configuration.
 **Scheduling.** The poller runs on a `TaskScheduler` owned by the starter; the service needs no
 `@EnableScheduling`.
 
-**Data growth.** `PUBLISHED` rows are not deleted by the starter. Plan a retention job (or partition
-`outbox_message`) appropriate to the event volume; see [Runbook](#runbook).
+**Data growth.** The retention purge (`ludwig-outbox-retention-purge`, a `job-core` job under its own run lock)
+deletes `PUBLISHED` messages 7 days after publication and `DEAD_LETTER` / `DISCARDED` messages 30 days after they
+became terminal, with their `outbox_status_history` rows, in committed batches of 500. `PENDING`, `PROCESSING` and
+`FAILED` messages are never deleted, and an administrator's retry takes a message out of retention until it is
+terminal again. Every batch is audited as `outbox.purged` (`PARTIAL` while expired messages remain) and counted in
+`ludwig.outbox.purged{status}`. It is listed by `GET /admin/v1/jobs` and can be run with `jobs.operate`.
+
+**`retention.published` is the idempotency window.** An idempotency key is deduplicated against rows that still
+exist, so once a published row is purged a duplicate carrying its key is accepted and sent again. Set it longer
+than any producer can retry; the `1d` minimum is a floor, not a recommendation. Upgrading: rows that were
+`DEAD_LETTER` or `DISCARDED` before migration `0006` count their retention from the migration.
 
 ## Observability
 
@@ -286,6 +301,8 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 | `outbox.operate` | `POST /admin/v1/outbox/messages/{id}/retry`<br>`POST /admin/v1/outbox/messages/retry` | Retry failed and dead-lettered outbox messages. |
 | `outbox.privileged` | `POST /admin/v1/outbox/messages/{id}/discard` | Discard an outbox message so that it is never sent. |
 
+**Filtering `GET /admin/v1/outbox/messages`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `status`, `eventType`, `eventVersion`, `aggregateType`, `aggregateId`, `destination`, `transport`, `attempts`, `createdAt`, `nextAttemptAt`, `publishedAt`, `finishedAt`. Indexed with `status`: `nextAttemptAt` (for `PENDING` and `FAILED`) and `finishedAt`. Not filterable: the payload, `lastError`, the idempotency key, the lock owner. Example: `$filter=status eq 'DEAD_LETTER' and eventType eq 'OrderCreated'`.
+
 Grant block (the role names are the service's own):
 
 ```yaml
@@ -308,7 +325,7 @@ ludwig:
 | Startup fails: route names an undeclared cluster | `transport=kafka:<name>` with no `ludwig.kafka.clusters.<name>` | Declare the cluster or fix the route |
 | Startup fails: event type declared twice | Two `OutboxEventTypes` beans disagree | Make the declarations agree |
 | Test fails: "undeclared event type" | `require-declared=true` and a new event type has no declaration | Add it to the service's `OutboxEventTypes` bean |
-| `outbox_message` grows without bound | No retention for `PUBLISHED` rows | Delete in batches, off-peak: `DELETE FROM outbox_message WHERE id IN (SELECT id FROM outbox_message WHERE status = 'PUBLISHED' AND published_at < now() - interval '7 days' LIMIT 10000);` |
+| `outbox_message` grows without bound | Retention disabled, no `RunLock` (startup WARN), or the purge cannot keep up | Check `ludwig.outbox.retention.enabled` and the startup log; if `outbox.purged` events stay `PARTIAL`, raise `retention.batch-size` or lower `retention.interval` |
 
 **Requeue dead letters** (after the cause is fixed):
 

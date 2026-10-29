@@ -19,6 +19,12 @@ public final class ReconciliationAdminOperations implements AdminOperationContri
     /** Cancel a remote job, release a quota lease, confirm a withheld sweep. */
     public static final String PRIVILEGED = "reconciliation.privileged";
 
+    /** The answer for a task that does not exist - and for one outside a read caller's scope. */
+    public static final String TASK_NOT_FOUND = "ludwig.reconciliation.admin.task-not-found";
+
+    /** The answer for an enumeration that does not exist - and for one outside a read caller's scope. */
+    public static final String ENUMERATION_NOT_FOUND = "ludwig.reconciliation.admin.enumeration-not-found";
+
     private static final String KEY = "ludwig.reconciliation.admin.";
 
     @Override

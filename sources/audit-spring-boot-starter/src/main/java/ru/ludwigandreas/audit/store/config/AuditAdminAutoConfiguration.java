@@ -11,6 +11,7 @@ import ru.ludwigandreas.audit.store.admin.AuditAdminOperations;
 import ru.ludwigandreas.audit.store.admin.service.AuditTrailSearch;
 import ru.ludwigandreas.audit.store.admin.web.AuditTrailController;
 import ru.ludwigandreas.audit.store.repository.AuditEventRepository;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.security.admin.AdminAudit;
 import ru.ludwigandreas.security.admin.AdminOperationCatalog;
 
@@ -31,9 +32,9 @@ public class AuditAdminAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public AuditTrailSearch ludwigAuditTrailSearch(AuditEventRepository events, AdminAudit audit,
-                                                   ObjectProvider<Clock> clock) {
-        return new AuditTrailSearch(events, audit, clock.getIfAvailable(Clock::systemUTC));
+    public AuditTrailSearch ludwigAuditTrailSearch(AuditEventRepository events, AdminQueryFilter filters,
+                                                   AdminAudit audit, ObjectProvider<Clock> clock) {
+        return new AuditTrailSearch(events, filters, audit, clock.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

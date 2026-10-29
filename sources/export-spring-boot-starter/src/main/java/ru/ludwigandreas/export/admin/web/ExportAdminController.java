@@ -17,7 +17,6 @@ import ru.ludwigandreas.export.admin.service.ExportAdminService.SubscriptionView
 import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
 import ru.ludwigandreas.webcore.operation.OperationResponses;
-import ru.ludwigandreas.webcore.operation.OperationStatus;
 
 /**
  * The {@code exports} administrative area: every requester's runs and subscriptions, and cancellation.
@@ -40,21 +39,17 @@ public class ExportAdminController {
     /**
      * Runs matching the filter, newest first.
      *
-     * @param requester who asked for it
-     * @param report    which report definition
-     * @param status    its state
-     * @param cursor    the previous page's cursor
-     * @param size      the page size, at most 200
+     * @param filter an OData {@code $filter} over the run's filterable fields
+     * @param cursor the previous page's cursor
+     * @param size   the page size, at most 200
      * @return one page
      */
     @GetMapping("/runs")
     @AdminAccess(ExportAdminOperations.READ)
-    public AdminPage<RunView> runs(@RequestParam(required = false) String requester,
-                                   @RequestParam(required = false) String report,
-                                   @RequestParam(required = false) OperationStatus status,
+    public AdminPage<RunView> runs(@RequestParam(name = "$filter", required = false) String filter,
                                    @RequestParam(required = false) String cursor,
                                    @RequestParam(required = false) Integer size) {
-        return service.runs(requester, report, status, cursor, size);
+        return service.runs(filter, cursor, size);
     }
 
     /**

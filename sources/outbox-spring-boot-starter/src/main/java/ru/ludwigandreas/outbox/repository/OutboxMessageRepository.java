@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.db.core.repository.BaseRepository;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
+import ru.ludwigandreas.outbox.entity.OutboxStatus;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -38,6 +39,15 @@ public interface OutboxMessageRepository extends BaseRepository<OutboxMessage, U
             + "m.lockedAt = null, m.lockedBy = null "
             + "where m.status = ru.ludwigandreas.outbox.entity.OutboxStatus.PROCESSING and m.lockedAt < :staleBefore")
     int reclaimStale(@Param("staleBefore") Instant staleBefore);
+
+    /**
+     * How many messages in {@code status} became terminal before {@code cutoff} - what a purge pass has left to do.
+     *
+     * @param status the terminal status
+     * @param cutoff the expiry instant
+     * @return the count
+     */
+    long countByStatusAndFinishedAtBefore(OutboxStatus status, Instant cutoff);
 
     Optional<OutboxMessage> findByIdempotencyKey(String idempotencyKey);
 }

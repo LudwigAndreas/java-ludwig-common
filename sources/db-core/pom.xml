@@ -110,6 +110,16 @@
             <artifactId>web-core-spring-boot-starter</artifactId>
             <optional>true</optional>
         </dependency>
+        <!--
+            For AdminQueryFilter only: administrative listings parse $filter through it, and the
+            implementation is registered only where the OData starter is present. Optional, so a service
+            without it gets no Olingo.
+        -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>odata-filter-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

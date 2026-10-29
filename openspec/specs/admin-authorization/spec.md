@@ -252,3 +252,86 @@ does not resolve in the default locale. The failure SHALL name the operation id 
 - **WHEN** `notification-service` and `crud-service-example` start with their configured grants
 - **THEN** startup succeeds, and every operation listed by `GET /admin/v1/me/operations` has a description that
   differs from its id
+
+### Requirement: People can be required to arrive through a sanctioned acting party
+When `ludwig.admin.human-callers.required-via` is non-empty, a request to the administrative surface by a `USER`
+principal SHALL be refused with `403` unless its validated token names, as the immediate acting party, one of the
+listed subjects. The refusal SHALL be audited as an administrative denial. Service, partner and system principals
+SHALL NOT be affected. When the list is empty, no acting party SHALL be required.
+
+#### Scenario: A person calls with a token from the administrative UI
+- **WHEN** `required-via` is `[admin-console]` and alice calls `GET /admin/v1/outbox/messages` with a token whose
+  `act.sub` is `admin-console` and she holds `outbox.read`
+- **THEN** the response is `200`
+
+#### Scenario: A person calls directly
+- **WHEN** `required-via` is `[admin-console]` and alice calls the same endpoint with a token that has no `act`
+  claim
+- **THEN** the response is `403`, and the audit trail records the denial with alice as actor and no acting party
+
+#### Scenario: Automation is unaffected
+- **WHEN** `required-via` is `[admin-console]` and a service principal holding `outbox.read` calls the endpoint
+  without an `act` claim
+- **THEN** the response is `200`
+
+### Requirement: An administrative operation can be scoped to named objects
+A handler MAY declare the parameter that names the object it acts on. When the deployment's data-scope policy has an
+entry for resource `admin.<area>` and the operation's tier, a call to such a handler SHALL be allowed only if the
+caller's data scope for that resource and tier, along dimension `object`, admits the named object. Role entries in
+that policy SHALL be `ALL` or `NONE`. Per-subject grants with dimension `object` SHALL add objects. A refusal SHALL
+be `403` on an operate or privileged endpoint and `404` on a read endpoint, and SHALL be audited. When no such policy
+entry exists, holding the operation SHALL admit every object. Startup SHALL also fail for an `admin.<area>`
+policy whose area no module declares, or whose action is not a tier.
+
+#### Scenario: A team operates only its own task
+- **WHEN** the policy maps `ROLE_SUPPLY_OPS` to `NONE` for `admin.reconciliation` `operate`, bob holds that role and
+  `reconciliation.operate`, and bob has a grant of `object` = `supplier-sync`
+- **THEN** bob's run of `supplier-sync` is accepted and his run of `customer-sync` is `403`
+
+#### Scenario: An object outside scope is not disclosed
+- **WHEN** the same deployment scopes `read` the same way and bob reads `customer-sync`
+- **THEN** the response is `404`, identical to the response for a task that does not exist
+
+#### Scenario: No policy entry keeps today's behaviour
+- **WHEN** the deployment has no data-scope policy for `admin.reconciliation`
+- **THEN** a holder of `reconciliation.operate` may run every task
+
+#### Scenario: A role-level object list is refused
+- **WHEN** a policy entry for `admin.reconciliation` maps a role to `OBJECT`
+- **THEN** the application fails to start, naming the entry and stating that objects are granted per subject
+
+### Requirement: A paged administrative listing over stored rows filters with OData, and only with OData
+Every paged administrative listing over stored rows SHALL take its filter as an OData `$filter` expression over the
+fields its area declares filterable, and SHALL take no other filter parameter; a path segment that names what is
+listed (a task) is not a filter. The expression SHALL be applied together with every server-side rule (tenant
+confinement, default time windows, path and object scope), so that a filter can only narrow what the caller could
+already list. The listing SHALL keep its fixed order and its `cursor`/`size` paging, and SHALL refuse `$orderby`,
+`$top`, `$skip` and `$count` with `400`. A field that is not declared filterable, and an expression the OData starter
+rejects (syntax, depth, length), SHALL be refused with `400` using the OData starter's problem types. In a service
+without the OData starter, a `$filter` SHALL be refused with `400`, and the listing SHALL still answer unfiltered.
+The listing's own audit event SHALL record the filter's field paths and operators, never its values.
+
+#### Scenario: A filter narrows a listing
+- **WHEN** an operator lists outbox messages with `$filter=status eq 'DEAD_LETTER' and eventType eq 'OrderCreated'`
+- **THEN** only dead-lettered `OrderCreated` messages are returned, newest first, with a `next` cursor when more exist
+
+#### Scenario: A filter cannot widen confinement
+- **WHEN** a `USER` administrator of tenant `acme` searches the audit trail with `$filter=actorSubject eq 'gary'`
+  and gary's events belong to tenant `globex`
+- **THEN** no event is returned
+
+#### Scenario: Offset paging is refused
+- **WHEN** a caller adds `$skip=40` to an administrative listing
+- **THEN** the response is `400` and nothing is listed
+
+#### Scenario: An unfilterable field is refused
+- **WHEN** a caller filters outbox messages on `lastError`
+- **THEN** the response is `400` naming the field as not filterable
+
+#### Scenario: A former filter parameter has no effect
+- **WHEN** a caller lists outbox messages with `?status=FAILED` and no `$filter`
+- **THEN** the parameter is ignored and the listing is not narrowed by it
+
+#### Scenario: The filter's values are not audited
+- **WHEN** an auditor searches with `$filter=actorSubject eq 'alice'`
+- **THEN** the search's audit event records the path `actorSubject` and operator `eq`, and not the value `alice`

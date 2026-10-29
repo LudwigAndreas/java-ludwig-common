@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.fileaction.admin.FileActionAdminOperations;
 import ru.ludwigandreas.fileaction.admin.service.FileActionAdminService;
 import ru.ludwigandreas.fileaction.admin.web.FileActionAdminController;
@@ -30,8 +31,9 @@ public class FileActionAdminAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public FileActionAdminService ludwigFileActionAdminService(FileActionSubmissionRepository submissions,
-                                                               FileActionService actions, AdminAudit audit) {
-        return new FileActionAdminService(submissions, actions, audit);
+                                                               FileActionService actions, AdminQueryFilter filters,
+                                                               AdminAudit audit) {
+        return new FileActionAdminService(submissions, actions, filters, audit);
     }
 
     @Bean

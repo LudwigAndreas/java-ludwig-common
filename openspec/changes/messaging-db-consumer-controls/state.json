@@ -1,0 +1,41 @@
+{
+  "change": "messaging-db-consumer-controls",
+  "contract": {
+    "goal": "an operator can pause and resume a database-log consumer group on a topic cluster-wide, and move a paused group's committed position, audited, as specified in specs/messaging-db-admin",
+    "output": "0005-create-consumer-pause.sql; LogStore claim excludes paused pairs; pause/resume/moveOffsets in the admin service and controller; listing shows pause state; ConsumerPauseIT, ConsumerOffsetMoveIT, MessagingAdminIT updated; README EN+RU; follow-ups",
+    "constraints": [
+      "no POM changes",
+      "no broadcast; the pause is a database row every claim reads",
+      "a move requires a pause (409 otherwise)",
+      "groups are resolved from the local listener registry",
+      "no payload in any response or audit event"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_migrations.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "mvn -pl :messaging-db-spring-boot-starter -am verify",
+      "openspec validate messaging-db-consumer-controls"
+    ]
+  },
+  "rollback_point": "44358a9 (plus uncommitted working tree)",
+  "current_task": null,
+  "decisions": [
+    "1.1: 0005-create-consumer-pause.sql (advisory lock, IF NOT EXISTS, no rollback, like 0001-0004); git add -N; 104 changesets conforming.",
+    "LogStore: pauses table; claim excludes paused (group, topic) via NOT EXISTS; pause (INSERT ON CONFLICT DO NOTHING), resume (DELETE), pauses(), hasPositions(); movePosition locks the pause row and the targeted position rows FOR UPDATE in one transaction, resolves earliest/latest/offset(next to deliver)/timestamp as 'last handled' clamped to [min retained - 1, head - 1], resets attempts and next_attempt_at, returns from/to per partition (skipped/replayed derived). Admin: MessagingAdminService(store, localGroups from KafkaListenerEndpointRegistry containers' groupIds, AdminAudit); 404 unless the group is local AND has positions on the topic; 409 not-paused; 400 invalid-target; listing rows gain paused/pausedBy/pausedAt (additive, same list shape). Endpoints POST /consumers/{group}/topics/{topic}/pause|resume (operate) and /offsets (privileged). Bundles EN+RU updated; parity ok. Unit 66/66.",
+    "1.2: ConsumerPauseIT 4/4 at LogStore level (three replicas = three callers of the same claim): a paused topic is delivered by no replica while another topic of the group and another group carry on, until resumed (pause/resume idempotent, pausedBy/reason kept); a move without a pause is refused and changes nothing; skip past a poison record (from 0 to 1, skipped 1, next delivered o3) and replay from a timestamp (replayed 3, all redelivered in order); explicit offsets clamped to [-1, head-1].",
+    "2.1: ConsumerOffsetMoveIT 4/4 over MVC and the guard: pause (operate) shows in the listing with pausedBy; move to offset 2 skips o1 and the poison record (from -1 to 1, skipped 2), audited with to/skipped/reason; resume delivers o3. Replay by timestamp after a full drain replays 3. A move without a pause is 409, audited refused-by-state, nothing changes. A group the service does not consume as is 404; operate-only caller moving is 403; unknown target or unparseable value is 400. The service bean is declared in the test (local group billing) because the log's auto-configuration and so the listener registry are excluded.",
+    "2.2: MessagingAdminIT's 405 scenario replaced by a read-only-caller scenario (listing carries paused=false; pause with only the read grant is 403; DELETE still 405; no grant 403). Module verify green, 34 ITs.",
+    "3.1: READMEs (both locales, heading parity kept): consumer_pause in Tables; Administration table now names the pause/resume/offsets endpoints with the 404/409/400 rules and the move body; two runbook rows (poison record: move to committed + 2; replay after a fix, with the caveat that consumer-side dedup keyed on ludwig-idempotency-key drops replayed records unless their entries are removed); new ITs listed under Testing. No service in the repo runs the starter, so no OpenAPI document to regenerate. Follow-ups list item rewritten as done (Kafka groups stay with Kafka tooling). Delta spec gained the 400 sentence the code already had; validate --strict passes.",
+    "4.1: gate.sh stops at check_api_baseline (releases repository unreachable, as for every change this session); the remaining checks run individually all pass, reactor install green with 34 ITs. receipt.json written.",
+    "archive: messaging-db-admin synced (Consumer lag is readable replaced; two requirements added; Purpose no longer says read-only; the 404 sentence names non-local groups, as the code does); CHANGELOG Added + Changed (Java API) in both locales; revapi entry for MessagingAdminService <init>/consumers and the controller's consumers; manifest rebuilt, stale exits 0; archived to openspec/changes/archive/2026-10-29-messaging-db-consumer-controls."
+  ],
+  "failures": [
+    "1.2 attempt 1: ConsumerPauseIT's move expectations assumed 1-based offsets; the log's offsets start at 0 and a fresh position is -1 (ensurePositions). The test arithmetic was wrong, not the store; corrected. One real fix found alongside: lastHandledFor defaulted an absent head to 0 instead of -1.",
+    "2.1 attempt 1: the test's capturing sink bean was named auditSink, which replaced audit-core's composite sink of that name and left AdminAudit with two candidates; renamed capturingAuditSink as JobAdminIT does.",
+    "2.2 attempt 1: SchemaInstallIT pinned the schema's table set; consumer_pause is the new table, expected - added to both assertions."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

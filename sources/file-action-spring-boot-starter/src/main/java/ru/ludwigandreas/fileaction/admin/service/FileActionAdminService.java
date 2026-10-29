@@ -1,13 +1,13 @@
 package ru.ludwigandreas.fileaction.admin.service;
 
+import com.querydsl.core.types.Predicate;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import ru.ludwigandreas.fileaction.api.FileActionState;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.fileaction.engine.FileActionService;
 import ru.ludwigandreas.fileaction.engine.SubmissionSnapshot;
 import ru.ludwigandreas.fileaction.entity.FileActionSubmissionEntity;
@@ -18,7 +18,6 @@ import ru.ludwigandreas.security.admin.AdminAudit;
 import ru.ludwigandreas.security.admin.AdminCursor;
 import ru.ludwigandreas.security.admin.AdminOutcome;
 import ru.ludwigandreas.security.admin.AdminPage;
-import ru.ludwigandreas.webcore.operation.OperationStatus;
 
 /**
  * The {@code fileactions} area's operations: every submitter's submissions and the means to cancel one, without
@@ -30,6 +29,7 @@ public class FileActionAdminService {
 
     private final FileActionSubmissionRepository submissions;
     private final FileActionService actions;
+    private final AdminQueryFilter filters;
     private final AdminAudit audit;
 
     /**
@@ -37,10 +37,12 @@ public class FileActionAdminService {
      *
      * @param submissions the submission table
      * @param actions     the file-action engine, whose cancel this reuses
+     * @param filters     parses the submissions listing's {@code $filter}
      * @param audit       the administrative audit
      */
     public FileActionAdminService(FileActionSubmissionRepository submissions, FileActionService actions,
-                                  AdminAudit audit) {
+                                  AdminQueryFilter filters, AdminAudit audit) {
+        this.filters = filters;
         this.submissions = submissions;
         this.actions = actions;
         this.audit = audit;
@@ -49,15 +51,12 @@ public class FileActionAdminService {
     /**
      * One page of submissions, newest first.
      *
-     * @param action    the action, or null
-     * @param submitter who submitted it, or null
-     * @param status    its envelope status, or null
+     * @param rawFilter an OData {@code $filter} over the submission's filterable fields, or null
      * @param cursor    the previous page's cursor, or null
      * @param size      the page size, or null
      * @return the page
      */
-    public AdminPage<Submission> submissions(String action, String submitter, OperationStatus status, String cursor,
-                                             Integer size) {
+    public AdminPage<Submission> submissions(String rawFilter, String cursor, Integer size) {
         int pageSize = AdminCursor.pageSize(size);
         Instant afterSubmittedAt = null;
         UUID afterId = null;
@@ -66,10 +65,9 @@ public class FileActionAdminService {
             afterSubmittedAt = Instant.parse(position.get(0));
             afterId = UUID.fromString(position.get(1));
         }
-        List<FileActionState> states = status == null ? null
-                : Arrays.stream(FileActionState.values()).filter(state -> state.status() == status).toList();
+        Predicate filter = filters.parse(FileActionSubmissionEntity.class, rawFilter).where().orElse(null);
         List<Submission> rows = submissions.findAll(
-                        FileActionAdminQueries.submissions(action, submitter, states, afterSubmittedAt, afterId),
+                        FileActionAdminQueries.submissions(filter, afterSubmittedAt, afterId),
                         PageRequest.of(0, pageSize + 1,
                                 Sort.by(Sort.Order.desc("submittedAt"), Sort.Order.desc("id"))))
                 .stream().map(Submission::of).toList();

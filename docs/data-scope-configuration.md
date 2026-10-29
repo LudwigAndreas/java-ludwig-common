@@ -121,7 +121,7 @@ A service adds its own axis with `ScopeDimension.of(...)`. Three things are need
    ludwig:
      security:
        data:
-         strict-policy-tokens: false     # otherwise only OWN/TENANT/PARTNER are accepted
+         strict-policy-tokens: false     # otherwise only OWN/TENANT/PARTNER/OBJECT are accepted
          policies:
            order:
              read:
@@ -296,6 +296,44 @@ the caller's subject", so the resolver copies the subject into an attribute. The
 | A team has many orders; an order has one team; a user is in one team | The team id column on the order plus the `team` attribute. No extra table. |
 | One order is handled by several teams | An order-to-team collection on the entity, bound with `.bindCollection(TEAM, ...)`. Domain data, not a security table. |
 | One user is in several teams | A `DataScopeProvider` that returns the set of team ids. |
+
+## Administrative objects
+
+An administrative operation on a named object - a reconciliation task, say - can be narrowed to the objects a caller
+is granted. The resource is `admin.<area>` (for example `admin.reconciliation`), the action is the tier (`read`,
+`operate`, `privileged`) and the dimension is the built-in `object`, whose values are object names. It is opt-in per
+area and tier: with no policy entry for `admin.<area>` and the tier, holding the operation admits every object, as
+before.
+
+A role entry for an administrative resource is `ALL` (every object) or `NONE` (only the objects granted per subject);
+anything else fails startup, because objects are granted per subject, never listed per role. A role with no entry
+gets nothing. Startup also fails for an area no module declares and for an action that is not a tier, since a typo
+would otherwise scope nothing.
+
+Worked example - the supply team operates `supplier-sync` and nothing else, the platform team everything:
+
+```yaml
+ludwig:
+  admin:
+    grants:
+      "[reconciliation.read]": [SUPPLY_OPS, PLATFORM_ADMIN]
+      "[reconciliation.operate]": [SUPPLY_OPS, PLATFORM_ADMIN]
+  security:
+    data:
+      policies:
+        "[admin.reconciliation]":
+          read:    { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
+          operate: { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
+```
+
+Then each member of the team is granted the task, with `POST /admin/v1/identity/grants` and the body
+`{"subject": "bob", "principalType": "USER", "resourceType": "admin.reconciliation", "action": "operate",
+"dimension": "object", "dimensionValue": "supplier-sync"}` (and again with `"action": "read"`; an `expiresAt` suits
+on-call access). Bob's run of `supplier-sync` is accepted, his run of `customer-sync` is `403`, and his read of
+`customer-sync` is `404` - the same answer as for a task that does not exist. The task listing shows him only
+`supplier-sync`. A grant reaches other replicas within the data-scope cache TTL, as every grant does.
+
+Only `reconciliation` scopes its objects so far. `jobs` (job names) and `fileingest` (sources) are the candidates.
 
 ## Custom providers
 

@@ -44,4 +44,20 @@ public final class ReconciliationAdminException extends LocalizedException {
     static ReconciliationAdminException alreadyRunning(String pass) {
         return new ReconciliationAdminException(ProblemStatus.CONFLICT, "already-running", pass);
     }
+
+    static ReconciliationAdminException runNotFound(UUID runId, String task) {
+        return new ReconciliationAdminException(ProblemStatus.NOT_FOUND, "run-not-found", runId, task);
+    }
+
+    static ReconciliationAdminException manualRunCapacity(String task, int capacity) {
+        ReconciliationAdminException refused = new ReconciliationAdminException(ProblemStatus.TOO_MANY_REQUESTS,
+                "manual-run-capacity", task, capacity);
+        // A property rather than a header: the problem pipeline renders exceptions, and this is how the platform's
+        // other 429 (export's quota) tells a client when to come back.
+        refused.withProperty("retryAfterSeconds", MANUAL_RUN_RETRY_AFTER_SECONDS);
+        return refused;
+    }
+
+    /** How long a client refused for manual-run capacity should wait before asking again. */
+    static final int MANUAL_RUN_RETRY_AFTER_SECONDS = 30;
 }

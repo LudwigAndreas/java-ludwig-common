@@ -2,6 +2,8 @@ package ru.ludwigandreas.reconciliation.engine;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 import ru.ludwigandreas.job.core.lock.RunLock;
 import ru.ludwigandreas.job.core.lock.RunLockHandle;
 import ru.ludwigandreas.reconciliation.api.DemandRequest;
@@ -13,6 +15,7 @@ import ru.ludwigandreas.reconciliation.audit.ReconciliationAuditEvent.Category;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.reconciliation.config.ProcessingMode;
 import ru.ludwigandreas.reconciliation.config.TaskSettings;
+import ru.ludwigandreas.reconciliation.entity.RunKind;
 import ru.ludwigandreas.reconciliation.metrics.ReconciliationMetrics;
 import ru.ludwigandreas.reconciliation.metrics.RunOutcome;
 import ru.ludwigandreas.reconciliation.repository.SyncInboxRecordRepository;
@@ -26,7 +29,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -52,6 +57,13 @@ public class TaskRunner {
     private final ReconciliationMetrics metrics;
     private final AuditSink auditLogger;
     private final CorrelationIdSource correlationIds;
+    private final RunRecorder recorder;
+
+    /**
+     * Where operator-triggered runs execute. Not the fetch executor: a run fans its fetches out onto that one, so a
+     * run occupying a fetch thread would wait for fetch threads.
+     */
+    private final TaskExecutor manualRuns;
 
     /**
      * Creates the runner.
@@ -65,6 +77,8 @@ public class TaskRunner {
      * @param metrics        instrumentation
      * @param auditLogger    the audit trail
      * @param correlationIds correlation id for the run
+     * @param recorder       the run-history row
+     * @param manualRuns     where operator-triggered runs execute; bounded, and refusing rather than queueing
      */
     @SuppressWarnings("checkstyle:ParameterNumber")
     public TaskRunner(RunLock runLock,
@@ -75,7 +89,9 @@ public class TaskRunner {
                       SyncInboxRecordRepository repository,
                       ReconciliationMetrics metrics,
                       AuditSink auditLogger,
-                      CorrelationIdSource correlationIds) {
+                      CorrelationIdSource correlationIds,
+                      RunRecorder recorder,
+                      TaskExecutor manualRuns) {
         this.runLock = runLock;
         this.walker = walker;
         this.staging = staging;
@@ -85,6 +101,8 @@ public class TaskRunner {
         this.metrics = metrics;
         this.auditLogger = auditLogger;
         this.correlationIds = correlationIds;
+        this.recorder = recorder;
+        this.manualRuns = manualRuns;
     }
 
     /**
@@ -108,24 +126,28 @@ public class TaskRunner {
 
         try (RunLockHandle lease = acquired.get();
              CorrelationIdSource.Scope scope = correlationIds.open()) {
-            return runHolding(task, tier, lease, scope.correlationId());
+            return runHolding(task, tier, lease, scope.correlationId(), RunKind.SCHEDULED);
         }
     }
 
     private int runHolding(RegisteredTask<?, ?, ?> task,
                            DemandTier tier,
                            RunLockHandle lease,
-                           String correlationId) {
+                           String correlationId,
+                           RunKind kind) {
         TaskSettings settings = task.settings();
         Instant started = Instant.now();
         RunContext context = new RunContext(settings.name(), tier, lease.runId(), correlationId,
                 started, started.plus(settings.runTimeout()));
+        recorder.started(context.runId(), settings.name(), tier, kind, lease.owner(), correlationId);
         audit(settings, "run.started", context, null);
 
         RunOutcome outcome = RunOutcome.SUCCESS;
+        RunTally tally = new RunTally();
         int produced = 0;
         try {
-            produced = execute(task, context);
+            produced = execute(task, context, tally);
+            tally.setProduced(produced);
             if (context.isExpired()) {
                 outcome = RunOutcome.TIMED_OUT;
             }
@@ -141,11 +163,74 @@ public class TaskRunner {
                     Duration.between(started, Instant.now()));
         }
         audit(settings, "run.finished", context, outcome + ", " + produced + " row(s)");
+        recorder.finished(context.runId(), settings.name(), outcome, failureCodeOf(outcome), tally, null);
         return produced;
     }
 
+    private static String failureCodeOf(RunOutcome outcome) {
+        return switch (outcome) {
+            case FAILURE -> RunFailureCodes.RUN_FAILED;
+            case TIMED_OUT -> RunFailureCodes.RUN_TIMED_OUT;
+            case SUCCESS, SKIPPED_LOCKED -> null;
+        };
+    }
+
+    /**
+     * Starts an operator's run, dry run or backfill and returns at once.
+     *
+     * <p>The lease is taken here, on the caller's thread, so "a run is already in progress on some replica" is
+     * answered exactly and immediately; the pass then runs on the manual-run executor and owns the lease from there.
+     * The run is recorded as pending before it is handed over, so its status resource exists before the caller is
+     * told where it is.
+     *
+     * @param task        the task
+     * @param tier        which half of demand; a backfill always runs on the hot lease
+     * @param kind        {@link RunKind#MANUAL}, {@link RunKind#DRY_RUN} or {@link RunKind#BACKFILL}
+     * @param keys        a backfill's keys in the task codec's form; ignored otherwise
+     * @param triggeredBy who asked
+     * @return the run id, or empty when the lease is held elsewhere
+     * @throws ManualRunCapacityException when every manual-run slot is busy; the lease is released again
+     */
+    public Optional<UUID> start(RegisteredTask<?, ?, ?> task, DemandTier tier, RunKind kind, List<String> keys,
+                                String triggeredBy) {
+        TaskSettings settings = task.settings();
+        DemandTier leaseTier = kind == RunKind.BACKFILL ? DemandTier.HOT : tier;
+        var acquired = runLock.tryAcquire(lockName(settings.name(), leaseTier), settings.runTimeout());
+        if (acquired.isEmpty()) {
+            return Optional.empty();
+        }
+        RunLockHandle lease = acquired.get();
+        UUID runId = lease.runId();
+        recorder.submitted(runId, settings.name(), leaseTier, kind, triggeredBy, lease.owner());
+        try {
+            manualRuns.execute(() -> runManual(task, leaseTier, kind, keys, lease));
+        } catch (TaskRejectedException full) {
+            recorder.discard(runId, settings.name());
+            lease.close();
+            throw new ManualRunCapacityException(settings.name());
+        }
+        return Optional.of(runId);
+    }
+
+    private void runManual(RegisteredTask<?, ?, ?> task, DemandTier tier, RunKind kind, List<String> keys,
+                           RunLockHandle lease) {
+        try (RunLockHandle held = lease;
+             CorrelationIdSource.Scope scope = correlationIds.open()) {
+            switch (kind) {
+                case DRY_RUN -> dryRunHolding(task, tier, held, scope.correlationId());
+                case BACKFILL -> backfillHolding(task, keys, held, scope.correlationId());
+                default -> runHolding(task, tier, held, scope.correlationId(), RunKind.MANUAL);
+            }
+        } catch (RuntimeException e) {
+            // CHECKSTYLE.OFF: IllegalCatch - this is the top of a pooled thread: whatever escaped has already been
+            // recorded on the run, and letting it out would only end up in the executor's default handler.
+            log.error("Manual {} of task '{}' failed", kind, task.settings().name(), e);
+            // CHECKSTYLE.ON: IllegalCatch
+        }
+    }
+
     /** Captures the task's wildcards so the whole run below is fully typed. */
-    private <I, K, O> int execute(RegisteredTask<I, K, O> task, RunContext context) {
+    private <I, K, O> int execute(RegisteredTask<I, K, O> task, RunContext context, RunTally tally) {
         TaskSettings settings = task.settings();
         DemandRequest request = new DemandRequest(settings.name(), context.tier(),
                 settings.demand().incremental()
@@ -154,6 +239,7 @@ public class TaskRunner {
 
         List<I> demand = task.task().demand().demand(request);
         Set<K> keys = keysOf(task, demand, context);
+        tally.setDemanded(keys.size());
 
         // The highest external timestamp this run actually staged, which is what the watermark may
         // advance to. Tracked from the outcomes rather than from the demand, because a record the
@@ -161,6 +247,7 @@ public class TaskRunner {
         AtomicReference<Instant> highWater = new AtomicReference<>();
 
         FetchSink<K, O> sink = outcomes -> {
+            tally.addFetched((int) outcomes.stream().filter(FetchOutcome.Found.class::isInstance).count());
             outcomes.stream()
                     .filter(FetchOutcome.Found.class::isInstance)
                     .map(o -> task.task().stampOf(((FetchOutcome.Found<K, O>) o).record()))
@@ -180,31 +267,34 @@ public class TaskRunner {
     }
 
     /**
-     * Fetches what a run would fetch and reports it, writing nothing.
+     * Fetches what a run would fetch and reports it, staging nothing.
      *
      * <p>What an operator reaches for before turning a new task on, or when one is behaving oddly:
      * it answers "what does the partner actually say about my demand right now?" without staging a
      * row, applying a record or moving a watermark. It does take the run lease, because a dry run
      * that raced a real one would report a partner interaction that the real run also made.
      *
-     * @param task the task
-     * @param tier which half of demand
-     * @return a count per outcome kind, plus a sample of the keys behind each
+     * <p>Started through {@link #start} with {@link RunKind#DRY_RUN}; the report becomes the run's result.
      */
-    public Map<String, Object> dryRun(RegisteredTask<?, ?, ?> task, DemandTier tier) {
+    private void dryRunHolding(RegisteredTask<?, ?, ?> task, DemandTier tier, RunLockHandle lease,
+                               String correlationId) {
         TaskSettings settings = task.settings();
-        var acquired = runLock.tryAcquire(lockName(settings.name(), tier), settings.runTimeout());
-        if (acquired.isEmpty()) {
-            return Map.of("ran", false,
-                    "note", "a run is in progress on another instance; nothing was fetched");
-        }
-        try (RunLockHandle lease = acquired.get();
-             CorrelationIdSource.Scope scope = correlationIds.open()) {
-            Instant started = Instant.now();
-            RunContext context = new RunContext(settings.name(), tier, lease.runId(),
-                    scope.correlationId(), started, started.plus(settings.runTimeout()));
-            audit(settings, "run.dry", context, null);
-            return inspect(task, context);
+        Instant started = Instant.now();
+        RunContext context = new RunContext(settings.name(), tier, lease.runId(),
+                correlationId, started, started.plus(settings.runTimeout()));
+        recorder.started(context.runId(), settings.name(), tier, RunKind.DRY_RUN, lease.owner(), correlationId);
+        audit(settings, "run.dry", context, null);
+        RunTally tally = new RunTally();
+        try {
+            Map<String, Object> report = inspect(task, context);
+            tally.setDemanded(((Number) report.get("demandSize")).intValue());
+            recorder.finished(context.runId(), settings.name(), RunOutcome.SUCCESS, null, tally, report);
+        } catch (RuntimeException e) {
+            // CHECKSTYLE.OFF: IllegalCatch - recorded on the run, then rethrown to the pass's own boundary.
+            recorder.finished(context.runId(), settings.name(), RunOutcome.FAILURE, RunFailureCodes.RUN_FAILED,
+                    tally, null);
+            throw e;
+            // CHECKSTYLE.ON: IllegalCatch
         }
     }
 
@@ -250,38 +340,50 @@ public class TaskRunner {
      * run, so a backfilled record is indistinguishable from a normally fetched one - including its
      * stale-write and idempotency guards, which is what stops a backfill from overwriting newer state.
      *
-     * @param task the task
-     * @param encodedKeys the keys, in the form the task's codec writes
-     * @return how many rows were staged
+     * <p>Started through {@link #start} with {@link RunKind#BACKFILL}; the requested and staged counts become the
+     * run's result.
      */
-    public int backfill(RegisteredTask<?, ?, ?> task, List<String> encodedKeys) {
-        return backfillTyped(task, encodedKeys);
+    private void backfillHolding(RegisteredTask<?, ?, ?> task, List<String> encodedKeys, RunLockHandle lease,
+                                 String correlationId) {
+        TaskSettings settings = task.settings();
+        Instant started = Instant.now();
+        RunContext context = new RunContext(settings.name(), DemandTier.HOT, lease.runId(),
+                correlationId, started, started.plus(settings.runTimeout()));
+        recorder.started(context.runId(), settings.name(), DemandTier.HOT, RunKind.BACKFILL, lease.owner(),
+                correlationId);
+        audit(settings, "run.backfill", context, encodedKeys.size() + " key(s)");
+        RunTally tally = new RunTally();
+        tally.setDemanded(encodedKeys.size());
+        try {
+            int staged = backfillTyped(task, encodedKeys, context, tally);
+            tally.setProduced(staged);
+            recorder.finished(context.runId(), settings.name(), RunOutcome.SUCCESS, null, tally,
+                    Map.of("requested", encodedKeys.size(), "staged", staged));
+        } catch (RuntimeException e) {
+            // CHECKSTYLE.OFF: IllegalCatch - recorded on the run, then rethrown to the pass's own boundary.
+            recorder.finished(context.runId(), settings.name(), RunOutcome.FAILURE, RunFailureCodes.RUN_FAILED,
+                    tally, null);
+            throw e;
+            // CHECKSTYLE.ON: IllegalCatch
+        }
     }
 
-    private <I, K, O> int backfillTyped(RegisteredTask<I, K, O> task, List<String> encodedKeys) {
+    private <I, K, O> int backfillTyped(RegisteredTask<I, K, O> task, List<String> encodedKeys, RunContext context,
+                                        RunTally tally) {
         TaskSettings settings = task.settings();
-        var acquired = runLock.tryAcquire(lockName(settings.name(), DemandTier.HOT), settings.runTimeout());
-        if (acquired.isEmpty()) {
-            return 0;
-        }
-        try (RunLockHandle lease = acquired.get();
-             CorrelationIdSource.Scope scope = correlationIds.open()) {
-            Instant started = Instant.now();
-            RunContext context = new RunContext(settings.name(), DemandTier.HOT, lease.runId(),
-                    scope.correlationId(), started, started.plus(settings.runTimeout()));
-            audit(settings, "run.backfill", context, encodedKeys.size() + " key(s)");
-
-            Set<K> keys = new LinkedHashSet<>();
-            encodedKeys.forEach(key -> keys.add(task.task().keyCodec().decode(key)));
-            FetchSink<K, O> sink = outcomes -> settings.mode() == ProcessingMode.DIRECT
+        Set<K> keys = new LinkedHashSet<>();
+        encodedKeys.forEach(key -> keys.add(task.task().keyCodec().decode(key)));
+        FetchSink<K, O> sink = outcomes -> {
+            tally.addFetched((int) outcomes.stream().filter(FetchOutcome.Found.class::isInstance).count());
+            return settings.mode() == ProcessingMode.DIRECT
                     ? directApply.apply(task, outcomes, context)
                     : staging.stage(task, outcomes, context, null);
+        };
 
-            // The watermark is deliberately not advanced: a backfill visits a chosen set of keys, not
-            // everything that changed since a point in time, so treating it as a completed sweep would
-            // move the watermark past records it never looked at.
-            return walker.walk(task, keys, context, sink);
-        }
+        // The watermark is deliberately not advanced: a backfill visits a chosen set of keys, not
+        // everything that changed since a point in time, so treating it as a completed sweep would
+        // move the watermark past records it never looked at.
+        return walker.walk(task, keys, context, sink);
     }
 
     /**

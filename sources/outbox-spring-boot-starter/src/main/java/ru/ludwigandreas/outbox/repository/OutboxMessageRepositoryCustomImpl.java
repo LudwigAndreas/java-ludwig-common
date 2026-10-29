@@ -5,6 +5,7 @@ import jakarta.persistence.PersistenceContext;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.job.core.claim.SkipLockedClaim;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
+import ru.ludwigandreas.outbox.entity.OutboxStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -64,5 +65,35 @@ public class OutboxMessageRepositoryCustomImpl implements OutboxMessageRepositor
         return SkipLockedClaim.claim(entityManager, OutboxMessage.class, TABLE,
                 CLAIM_SET_CLAUSE, DUE_PREDICATE, ORDER_BY, batchSize,
                 Map.of("lockOwner", lockOwner, "now", now));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Native, because neither JPQL nor QueryDSL can express it: a bounded delete needs {@code LIMIT} in the
+     * selecting subquery and {@code FOR UPDATE SKIP LOCKED} on it, and deleting the history rows in the same
+     * statement needs a data-modifying CTE. Both deletes see the same locked set of ids, so a message is never
+     * removed without its history or the other way round. Its own transaction, because the purge runs from a
+     * scheduler thread and each batch must commit on its own.
+     */
+    @Override
+    @Transactional
+    public int purgeFinishedBefore(OutboxStatus status, Instant cutoff, int limit) {
+        return entityManager.createNativeQuery("""
+                        WITH doomed AS (
+                            SELECT id FROM outbox_message
+                            WHERE status = :status AND finished_at < :cutoff
+                            ORDER BY finished_at
+                            LIMIT :limit
+                            FOR UPDATE SKIP LOCKED
+                        ), history AS (
+                            DELETE FROM outbox_status_history WHERE outbox_message_id IN (SELECT id FROM doomed)
+                        )
+                        DELETE FROM outbox_message WHERE id IN (SELECT id FROM doomed)
+                        """)
+                .setParameter("status", status.name())
+                .setParameter("cutoff", cutoff)
+                .setParameter("limit", limit)
+                .executeUpdate();
     }
 }

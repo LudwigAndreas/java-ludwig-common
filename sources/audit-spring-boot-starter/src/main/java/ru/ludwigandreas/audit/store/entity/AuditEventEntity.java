@@ -13,6 +13,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.db.core.entity.SnapshotEntity;
+import ru.ludwigandreas.odatafilter.annotation.Filterable;
 
 /**
  * One row of the platform's single audit trail.
@@ -59,12 +60,15 @@ import ru.ludwigandreas.db.core.entity.SnapshotEntity;
 public class AuditEventEntity extends SnapshotEntity<UUID> {
 
     /** When the audited thing happened, which is never the same column as when the row was written. */
+    @Filterable
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
+    @Filterable
     @Column(name = "category", nullable = false, length = 64)
     private String category;
 
+    @Filterable
     @Column(name = "action", nullable = false, length = 128)
     private String action;
 
@@ -73,9 +77,11 @@ public class AuditEventEntity extends SnapshotEntity<UUID> {
      * {@code db-core} stamps into {@code created_by} for the same actor. Never null: an event with no
      * attributable actor carries {@code system}.
      */
+    @Filterable
     @Column(name = "actor_subject", nullable = false, length = 255)
     private String actorSubject;
 
+    @Filterable
     @Column(name = "actor_type", length = 64)
     private String actorType;
 
@@ -83,6 +89,7 @@ public class AuditEventEntity extends SnapshotEntity<UUID> {
     private String actorDisplayName;
 
     /** The subject this was done for, when it differs from the actor. */
+    @Filterable
     @Column(name = "on_behalf_of", length = 255)
     private String onBehalfOf;
 
@@ -93,16 +100,24 @@ public class AuditEventEntity extends SnapshotEntity<UUID> {
     @Column(name = "actor_tenant", length = 255)
     private String actorTenant;
 
+    /** The party the actor acted through, e.g. an administrative UI; null for a direct request. */
+    @Filterable
+    @Column(name = "actor_via", length = 255)
+    private String actorVia;
+
+    @Filterable
     @Column(name = "resource_type", length = 128)
     private String resourceType;
 
     /** Null for an event about a set rather than an object. */
+    @Filterable
     @Column(name = "resource_id", length = 255)
     private String resourceId;
 
     @Column(name = "resource_name", length = 512)
     private String resourceName;
 
+    @Filterable
     @Column(name = "outcome", nullable = false, length = 16)
     private String outcome;
 
@@ -111,6 +126,7 @@ public class AuditEventEntity extends SnapshotEntity<UUID> {
     private String reason;
 
     /** What joins this row to the logs, traces and downstream calls of the same unit of work. */
+    @Filterable
     @Column(name = "correlation_id", length = 128)
     private String correlationId;
 
@@ -153,6 +169,7 @@ public class AuditEventEntity extends SnapshotEntity<UUID> {
         entity.setActorDisplayName(event.actor().displayName());
         entity.setOnBehalfOf(event.actor().onBehalfOf());
         entity.setActorTenant(event.actor().tenant());
+        entity.setActorVia(event.actor().via());
         if (event.resource() != null) {
             entity.setResourceType(event.resource().type());
             entity.setResourceId(event.resource().id());

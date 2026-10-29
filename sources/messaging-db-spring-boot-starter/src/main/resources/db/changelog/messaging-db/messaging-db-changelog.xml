@@ -19,5 +19,6 @@
     <include file="classpath:db/changelog/messaging-db/0002-create-message-log.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/messaging-db/0003-create-partition-head.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/messaging-db/0004-create-consumer-offset.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/messaging-db/0005-create-consumer-pause.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

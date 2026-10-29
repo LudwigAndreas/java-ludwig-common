@@ -250,18 +250,18 @@ class ReconciliationAdminIntegrationTest {
     }
 
     @Test
-    void runningAnEnumerationOnDemandRunsItsWalkPassAndAnswers202WithTheTaskAsStatus() throws Exception {
+    void runningAnEnumerationOnDemandRunsItsWalkPassAndAnswers200WithWhatItDid() throws Exception {
         partner.lists(SCOPE, item("I-1", "one"));
         json(post(BASE + TASK + "/discover").with(operator()));
 
         MvcResult result = perform(post(BASE + TASK + "/runs").with(operator()));
 
-        assertThat(result.getResponse().getStatus()).isEqualTo(202);
-        assertThat(result.getResponse().getHeader("Location")).isEqualTo(BASE + TASK);
+        // An enumeration's walk is not a recorded fetch run: it answers synchronously, with no run resource.
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(result.getResponse().getHeader("Location")).isNull();
         JsonNode body = JSON.readTree(result.getResponse().getContentAsString());
-        assertThat(body.path("operation").path("status").asText()).isEqualTo("SUCCEEDED");
-        assertThat(body.path("result").path("pass").asText()).isEqualTo(TASK + ":walk");
-        assertThat(body.path("result").path("ran").asBoolean()).isTrue();
+        assertThat(body.path("pass").asText()).isEqualTo(TASK + ":walk");
+        assertThat(body.path("ran").asBoolean()).isTrue();
         assertThat(fixture.memberKeys(TASK, SCOPE)).containsExactly("I-1");
     }
 

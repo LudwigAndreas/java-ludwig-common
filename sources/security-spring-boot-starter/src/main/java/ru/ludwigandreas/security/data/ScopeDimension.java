@@ -24,6 +24,13 @@ public record ScopeDimension(String name) implements Serializable, Comparable<Sc
     /** The external partner a row belongs to - "this partner sees only rows filed under its id". */
     public static final ScopeDimension PARTNER = new ScopeDimension("partner");
 
+    /**
+     * A named administrative object - a reconciliation task, say - for an administrative resource such as
+     * {@code admin.reconciliation}. Its values come only from per-subject grants; a role entry for an administrative
+     * resource is {@code ALL} or {@code NONE}.
+     */
+    public static final ScopeDimension OBJECT = new ScopeDimension("object");
+
     public ScopeDimension {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("scope dimension name must not be blank");
@@ -35,7 +42,7 @@ public record ScopeDimension(String name) implements Serializable, Comparable<Sc
      * The axes {@link PolicyDataScopeProvider} understands out of the box, and the ones a strict
      * policy is restricted to. Anything else is a custom axis and has to be opted into.
      */
-    public static final java.util.Set<ScopeDimension> BUILT_IN = java.util.Set.of(OWNER, TENANT, PARTNER);
+    public static final java.util.Set<ScopeDimension> BUILT_IN = java.util.Set.of(OWNER, TENANT, PARTNER, OBJECT);
 
     public static ScopeDimension of(String name) {
         return new ScopeDimension(name);

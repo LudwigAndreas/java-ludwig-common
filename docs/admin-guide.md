@@ -191,14 +191,48 @@ ludwig:
       # ... one line per operation of every area present
 ```
 
+**Administration through a UI: the `act` claim.** When people administer services through an administrative UI,
+have the identity provider issue the UI's calls as an RFC 8693 token exchange, so the token carries
+`act: {sub: admin-console}` (the UI's client id). Every audit event of such a call records the person as the actor
+and `admin-console` as `via`, and the trail can be searched with `GET /admin/v1/audit/events?$filter=actorVia eq 'admin-console'`. If
+the identity provider names the claim differently, set `ludwig.security.jwt.actor-claim`. A token whose claim is
+present but not an object with `sub` is refused with `401`: when requests start failing after an upgrade and
+`ludwig_security_authentication_total{outcome="failure",reason="malformed-actor-claim"}` rises, check this first, and set `actor-claim` to blank if the
+provider uses `act` for something else. To require that people come only through the UI, set
+`ludwig.admin.human-callers.required-via: [admin-console]`; a person calling directly is then refused `403` and the
+refusal is audited. Service principals are never affected, so keep a break-glass service principal holding the
+operations you need during a UI outage, and clear the list if people must act directly.
+
+**Filtering administrative listings.** The audit trail, outbox messages, reconciliation runs, export runs, file-action
+submissions and PATs filter with OData `$filter` only, for example
+`GET /admin/v1/outbox/messages?$filter=status eq 'DEAD_LETTER' and eventType eq 'OrderCreated'`, and page with
+`cursor`/`size`. `$orderby`, `$top`, `$skip` and `$count` are refused, and so is a field outside each listing's
+allow-list (free text, secrets and personal data never are on it). A filter never widens what the caller may see:
+tenant confinement, the audit's 30-day default and a path's task apply underneath. Each module's README lists its
+filterable fields. The former `?status=`, `?owner=` and similar parameters are gone and are ignored if sent.
+
+**Four-eyes approval.** To require a second administrator for privileged actions, list their operations, for example
+`ludwig.admin.approval.required: ["outbox.privileged", "identity.privileged"]`; the service needs job-core, whose
+table keeps the approvals. A listed call answers `202` and waits in `GET /admin/v1/approvals` for a different holder
+of the operation to approve (`POST /admin/v1/approvals/{id}/approve`), reject or let it expire after
+`ludwig.admin.approval.ttl` (24 hours). Approving runs the stored request as the approver. **Break-glass:** an
+operation left out of the list is the path for an emergency one person must take alone - keep the operation you would
+need during an incident (a lease force-release, say) out of it, or keep a second administrator reachable; there is no
+override header.
+
+**Per-object scope.** A team can be limited to the objects it owns - today, reconciliation tasks - with a data-scope
+policy for `admin.<area>` (roles `ALL` or `NONE`) and per-subject grants of dimension `object` through
+`POST /admin/v1/identity/grants`. Out-of-scope reads answer `404`, like a missing object. Set-up and a worked
+example: [data-scope configuration](data-scope-configuration.md#administrative-objects).
+
 **Upgrading to this release.** In each service: add the `ludwig.admin.grants` block (the startup log line
 "Administrative operations no role of this service holds" lists what is left); for administrative microservices add
 `ludwig.identity.service-roles`; remove `reconciliation` and `fileingest` from `management.endpoints.web.exposure.include`;
 delete `ludwig.reconciliation.endpoint.*`, `ludwig.ingest.endpoint.*`, `ludwig.user-settings.access.admin-authority` and
 `ludwig.user-settings.web.admin-base-path`; move holders of `pat:manage:any` and `ROLE_EXPORT_ADMIN` to grants of
 `pat.*` and `exports.*`; point administrative UIs at `/admin/v1/` (settings' `consents/as-of` is now `consents/asof`).
-The schema change is one additive changeset, `audit_event.actor_tenant`; rolling back the release means the previous
-major.
+The schema changes are two additive changesets, `audit_event.actor_tenant` and `audit_event.actor_via`; rolling back
+the release means the previous major.
 
 `ludwig.security.public-paths` replaces the default list rather than extending it: when adding a path,
 restate the actuator entries or the probes will require authentication.

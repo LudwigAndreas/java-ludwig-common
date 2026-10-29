@@ -20,5 +20,6 @@
     <include file="classpath:db/changelog/audit/0003-migrate-sync-audit-record.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/audit/0004-normalise-redaction-marker.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/audit/0005-actor-tenant.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/audit/0006-actor-via.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

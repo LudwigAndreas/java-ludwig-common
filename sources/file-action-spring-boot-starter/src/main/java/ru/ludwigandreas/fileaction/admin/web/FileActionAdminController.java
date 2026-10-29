@@ -18,7 +18,6 @@ import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
 import ru.ludwigandreas.webcore.operation.OperationResponse;
 import ru.ludwigandreas.webcore.operation.OperationResponses;
-import ru.ludwigandreas.webcore.operation.OperationStatus;
 
 /**
  * The {@code fileactions} administrative area: every submitter's submissions, and cancellation.
@@ -41,21 +40,17 @@ public class FileActionAdminController {
     /**
      * Submissions matching the filter, newest first.
      *
-     * @param action    the action
-     * @param submitter who submitted it
-     * @param status    its envelope status
-     * @param cursor    the previous page's cursor
-     * @param size      the page size, at most 200
+     * @param filter an OData {@code $filter} over the submission's filterable fields
+     * @param cursor the previous page's cursor
+     * @param size   the page size, at most 200
      * @return one page
      */
     @GetMapping
     @AdminAccess(FileActionAdminOperations.READ)
-    public AdminPage<SubmissionView> submissions(@RequestParam(required = false) String action,
-                                                 @RequestParam(required = false) String submitter,
-                                                 @RequestParam(required = false) OperationStatus status,
+    public AdminPage<SubmissionView> submissions(@RequestParam(name = "$filter", required = false) String filter,
                                                  @RequestParam(required = false) String cursor,
                                                  @RequestParam(required = false) Integer size) {
-        AdminPage<Submission> page = service.submissions(action, submitter, status, cursor, size);
+        AdminPage<Submission> page = service.submissions(filter, cursor, size);
         return new AdminPage<>(page.items().stream().map(SubmissionView::of).toList(), page.next());
     }
 

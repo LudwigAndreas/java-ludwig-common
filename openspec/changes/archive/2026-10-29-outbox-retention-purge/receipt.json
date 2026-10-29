@@ -1,0 +1,37 @@
+{
+  "change": "outbox-retention-purge",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "outbox-spring-boot-starter"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "fail (releases repository unreachable)",
+    "check_migrations": "pass (after git add -N of the new changeset)",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "maven reactor (outbox + 9 dependents, -am install)": "pass on the resumed run",
+    "openspec validate": "pass"
+  },
+  "tests": {
+    "attempt 1": "2891 run, 9 errors (messaging-db LogOnlyTransportIT, AuditSink ambiguity caused by this change)",
+    "resumed": "2782 run, 0 failures",
+    "OutboxRetentionPurgeIntegrationTest": "7/7",
+    "OutboxRetentionAutoConfigurationTest": "5/5",
+    "OutboxPropertiesValidationTest": "3/3",
+    "outbox module": "131/131"
+  },
+  "retries": [
+    "5.1: one fix (parameter renamed to auditSink) and a resume"
+  ],
+  "rollback_commit": "44358a9 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "the migration's backfill of pre-existing DEAD_LETTER/DISCARDED rows is covered by its SQL only, not by a test",
+    "the tasks' -Dit.test verification commands were vacuous in this module (its *IntegrationTest classes run under surefire); the IT was run with -Dtest instead",
+    "check_migrations reads only tracked files; a new changeset must be added to git (here: git add -N) before the check sees it",
+    "check_api_baseline cannot run without the releases repository"
+  ]
+}

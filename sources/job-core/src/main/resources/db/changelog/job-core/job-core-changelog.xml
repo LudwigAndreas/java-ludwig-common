@@ -15,5 +15,6 @@
       ludwig.job-core.liquibase.enabled=false. Postgres-only.
     -->
     <include file="classpath:db/changelog/job-core/0001-create-run-lock.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/job-core/0002-create-admin-approval.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

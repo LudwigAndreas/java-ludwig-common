@@ -112,7 +112,7 @@ class FileActionAdminIT extends PostgresBackedTest {
     void listsSubmissions() throws Exception {
         SubmissionSnapshot submitted = submit();
 
-        String body = mvc.perform(get(SUBMISSIONS).param("submitter", "it-user").with(support()))
+        String body = mvc.perform(get(SUBMISSIONS).param("$filter", "submittedBy eq 'it-user'").with(support()))
                 .andReturn().getResponse().getContentAsString();
 
         JsonNode page = JSON.readTree(body);
@@ -123,20 +123,24 @@ class FileActionAdminIT extends PostgresBackedTest {
     }
 
     @Test
-    @DisplayName("filters on submitter and envelope status narrow the listing")
+    @DisplayName("filters on submitter and stored state narrow the listing; the declared file name is not filterable")
     void filters() throws Exception {
         submit();
 
-        String otherSubmitter = mvc.perform(get(SUBMISSIONS).param("submitter", "nobody").with(support()))
+        String otherSubmitter = mvc.perform(get(SUBMISSIONS).param("$filter", "submittedBy eq 'nobody'")
+                        .with(support()))
                 .andReturn().getResponse().getContentAsString();
-        String pending = mvc.perform(get(SUBMISSIONS).param("status", "PENDING").with(support()))
+        String pending = mvc.perform(get(SUBMISSIONS).param("$filter", "state in ('UPLOADED', 'VALIDATED')")
+                        .with(support()))
                 .andReturn().getResponse().getContentAsString();
-        String succeeded = mvc.perform(get(SUBMISSIONS).param("status", "SUCCEEDED").with(support()))
+        String succeeded = mvc.perform(get(SUBMISSIONS).param("$filter", "state eq 'APPLIED'").with(support()))
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(JSON.readTree(otherSubmitter).path("items")).isEmpty();
         assertThat(JSON.readTree(pending).path("items")).hasSize(1);
         assertThat(JSON.readTree(succeeded).path("items")).isEmpty();
+        assertThat(mvc.perform(get(SUBMISSIONS).param("$filter", "declaredFilename eq 'x'").with(support()))
+                .andReturn().getResponse().getStatus()).isEqualTo(400);
     }
 
     @Test
@@ -182,7 +186,7 @@ class FileActionAdminIT extends PostgresBackedTest {
         mvc.perform(post(SUBMISSIONS + "/" + submitted.id() + "/cancel").with(operator()));
         worker().pollOnce();
 
-        String cancelled = mvc.perform(get(SUBMISSIONS).param("status", "CANCELLED").with(support()))
+        String cancelled = mvc.perform(get(SUBMISSIONS).param("$filter", "state eq 'CANCELLED'").with(support()))
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(JSON.readTree(cancelled).path("items")).hasSize(1);

@@ -1,0 +1,49 @@
+{
+  "change": "reconciliation-run-history",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "reconciliation-spring-boot-starter",
+    "job-core (test sources: JdbcRunLockIT)"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "fail (releases repository unreachable)",
+    "check_migrations": "pass (after git add -N of 0015)",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "maven reactor (reconciliation, job-core + 8 dependents, -am install)": "pass",
+    "openspec validate": "pass"
+  },
+  "tests": {
+    "reactor": "4090 run, 0 failures",
+    "ReconciliationRunHistoryIntegrationTest": "8/8",
+    "ManualRunCapacityTest": "2/2",
+    "RunViewsTest": "3/3",
+    "JdbcRunLockIT": "9/9",
+    "reconciliation module": "all pass"
+  },
+  "deviations_from_design": [
+    "no status column: status derived from timestamps + RunOutcome at the admin edge (engine must not use optional web-core)",
+    "no quarantined count",
+    "enumeration and async-job submit passes stay synchronous and unrecorded",
+    "429 carries retryAfterSeconds as a problem property, not a Retry-After header",
+    "abandoned runs found by age (run timeout + 5 min), not by reading the lease table",
+    "failure code is run-failed for any exception, not the exception's own code",
+    "the synchronous public TaskRunner.dryRun/backfill were replaced by start(...)",
+    "the service returns RunSnapshot and RunViews lives in admin.service, per the architecture rules"
+  ],
+  "retries": [
+    "2.x: architecture rules (entities in web signatures) forced the RunSnapshot restructuring",
+    "checkstyle fixes only otherwise"
+  ],
+  "rollback_commit": "44358a9 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "RUN_TIMED_OUT is covered by the mapping unit test only",
+    "the admin-level 429 translation has no test of its own",
+    "run history for enumeration walks and async-job submit passes",
+    "check_api_baseline cannot run without the releases repository"
+  ]
+}

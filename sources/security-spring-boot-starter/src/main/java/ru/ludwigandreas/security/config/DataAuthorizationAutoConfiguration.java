@@ -2,6 +2,7 @@ package ru.ludwigandreas.security.config;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -16,6 +17,8 @@ import org.springframework.security.access.expression.method.DefaultMethodSecuri
 import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import ru.ludwigandreas.audit.AuditSink;
+import ru.ludwigandreas.security.admin.AdminOperation;
+import ru.ludwigandreas.security.admin.AdminOperationCatalog;
 import ru.ludwigandreas.security.audit.AuthorizationDeniedAuditListener;
 import ru.ludwigandreas.security.data.CompositeDataScopeProvider;
 import ru.ludwigandreas.security.data.DataAccessGuard;
@@ -91,8 +94,14 @@ public class DataAuthorizationAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(DataScopePolicyValidator.class)
     public DataScopePolicyValidator ludwigDataScopePolicyValidator(ScopePolicies policies,
-                                                                    DataScopeRegistry registry) {
-        return new DataScopePolicyValidator(policies, registry);
+                                                                    DataScopeRegistry registry,
+                                                                    ObjectProvider<AdminOperationCatalog> catalog) {
+        // Read at validation, not here: the catalog belongs to the administrative surface's configuration, which
+        // runs after this one, and is absent when the surface is off.
+        return new DataScopePolicyValidator(policies, registry, () -> catalog.stream()
+                .flatMap(each -> each.all().stream())
+                .map(AdminOperation::area)
+                .collect(Collectors.toSet()));
     }
 
     /**

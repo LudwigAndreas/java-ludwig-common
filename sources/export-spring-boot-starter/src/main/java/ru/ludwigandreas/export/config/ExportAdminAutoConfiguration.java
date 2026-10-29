@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.export.admin.ExportAdminOperations;
 import ru.ludwigandreas.export.admin.service.ExportAdminService;
 import ru.ludwigandreas.export.admin.web.ExportAdminController;
@@ -33,8 +34,9 @@ public class ExportAdminAutoConfiguration {
     public ExportAdminService ludwigExportAdminService(ExportReportRunRepository runs,
                                                        ExportReportSubscriptionRepository subscriptions,
                                                        ExportRunService lifecycle, ExportProperties properties,
-                                                       AdminAudit audit) {
-        return new ExportAdminService(runs, subscriptions, lifecycle, properties.getWeb().getBasePath(), audit);
+                                                       AdminQueryFilter filters, AdminAudit audit) {
+        return new ExportAdminService(runs, subscriptions, lifecycle, properties.getWeb().getBasePath(), filters,
+                audit);
     }
 
     @Bean

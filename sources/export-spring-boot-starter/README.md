@@ -328,6 +328,8 @@ Operator endpoints are on the platform's administrative surface, `/admin/v1/{are
 
 **Removed:** `ROLE_EXPORT_ADMIN` (`ReportRunController.ADMIN_AUTHORITY`) no longer reaches other requesters' runs on the requester API, which answers `404` for them; administrators use this area. No administrative response carries an output link.
 
+**Filtering `GET /admin/v1/exports/runs`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `definitionKey`, `requester`, `status` (the envelope status the run stores), `attempts`, `failureCode`, `createdAt`, `startedAt`, `finishedAt`. Not filterable: the stored filter expression, the failure arguments, the idempotency key. The subscriptions listing is not paged and keeps `owner` and `report`. Example: `$filter=requester eq 'alice' and status eq 'FAILED'`.
+
 Grant block (the role names are the service's own):
 
 ```yaml

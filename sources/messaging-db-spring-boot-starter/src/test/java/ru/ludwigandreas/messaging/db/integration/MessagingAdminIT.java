@@ -84,7 +84,7 @@ class MessagingAdminIT {
     @BeforeEach
     void emptyTheLog() {
         new JdbcTemplate(dataSource).execute("TRUNCATE " + SCHEMA + ".message_log, " + SCHEMA + ".partition_head, "
-                + SCHEMA + ".consumer_offset");
+                + SCHEMA + ".consumer_offset, " + SCHEMA + ".consumer_pause");
     }
 
     @Test
@@ -119,12 +119,16 @@ class MessagingAdminIT {
     }
 
     @Test
-    @DisplayName("the area is read-only: no request but GET is mapped, and a caller without the grant is refused")
-    void readOnly() throws Exception {
+    @DisplayName("a read-only caller sees the pause state but cannot pause, and a caller without the grant is refused")
+    void readOnlyCaller() throws Exception {
+        store.ensurePositions("billing", List.of("it.orders"), true);
         var support = TestPrincipalBuilder.user("sam").roles("OPS_SUPPORT").postProcessor();
 
-        assertThat(mvc.perform(post("/admin/v1/messaging/consumers").with(support)).andReturn().getResponse()
-                .getStatus()).isEqualTo(405);
+        String body = mvc.perform(get("/admin/v1/messaging/consumers").with(support)).andReturn().getResponse()
+                .getContentAsString();
+        assertThat(JSON.readTree(body)).allSatisfy(row -> assertThat(row.path("paused").asBoolean()).isFalse());
+        assertThat(mvc.perform(post("/admin/v1/messaging/consumers/billing/topics/it.orders/pause").with(support))
+                .andReturn().getResponse().getStatus()).isEqualTo(403);
         assertThat(mvc.perform(delete("/admin/v1/messaging/consumers").with(support)).andReturn().getResponse()
                 .getStatus()).isEqualTo(405);
         assertThat(mvc.perform(get("/admin/v1/messaging/consumers")

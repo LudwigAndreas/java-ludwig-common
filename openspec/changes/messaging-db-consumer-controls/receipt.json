@@ -1,0 +1,40 @@
+{
+  "change": "messaging-db-consumer-controls",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "messaging-db-spring-boot-starter"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "fail (releases repository unreachable)",
+    "check_migrations": "pass (after git add -N of 0005)",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "maven reactor (messaging-db-spring-boot-starter -am install, no in-repo dependents)": "pass (34 ITs)",
+    "openspec validate": "pass"
+  },
+  "tests": [
+    "ConsumerPauseIT 4/4 (new)",
+    "ConsumerOffsetMoveIT 4/4 (new)",
+    "MessagingAdminIT: 405 scenario replaced by read-only caller",
+    "SchemaInstallIT: expects consumer_pause"
+  ],
+  "deviations_from_design": [
+    "Local groups come from KafkaListenerEndpointRegistry container group ids; a group of another service on a shared database is 404",
+    "Delta spec gained the 400 for an unrecognised target or unparseable value, which the design left implicit"
+  ],
+  "retries": [
+    "1.2: test arithmetic assumed 1-based offsets; corrected, and the no-head default fixed to -1",
+    "2.1: capture sink bean named auditSink shadowed audit-core's composite; renamed",
+    "2.2: SchemaInstallIT pinned the table set",
+    "checkstyle line-length fixes"
+  ],
+  "rollback_commit": "061f467 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "check_api_baseline cannot run offline",
+    "revapi entries for the MessagingAdminService constructor and consumers() return type are added at archive"
+  ]
+}

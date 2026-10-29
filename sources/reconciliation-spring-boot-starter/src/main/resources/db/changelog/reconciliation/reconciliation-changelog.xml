@@ -30,5 +30,6 @@
     <include file="classpath:db/changelog/reconciliation/0012-create-scope-state.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/reconciliation/0013-create-scope-member.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/reconciliation/0014-index-scope-state-due.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/reconciliation/0015-create-run.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

@@ -86,6 +86,9 @@ public class ReconciliationProperties {
     @Valid
     private final Reclaim reclaim = new Reclaim();
 
+    /** Run history and operator-triggered runs. */
+    private final Runs runs = new Runs();
+
     /** Settings inherited by every task that does not override them. */
     @Getter
     @Setter
@@ -557,6 +560,54 @@ public class ReconciliationProperties {
          */
         @NotNull
         private Duration staleRecordTimeout = Duration.ofMinutes(5);
+    }
+
+    /**
+     * Run history and operator-triggered runs.
+     *
+     * <p>Validated by {@link #validate()} where the beans that use it are created, so a bad value fails startup
+     * naming the property.
+     */
+    @Getter
+    @Setter
+    public static class Runs {
+
+        /** How many operator-triggered runs, dry runs and backfills may execute at once on one replica. */
+        private int manualConcurrency = 2;
+
+        /** How long a finished run stays readable. */
+        private Duration retention = Duration.ofDays(30);
+
+        /** How often finished runs past retention are purged, and abandoned runs ended. */
+        private Duration purgeInterval = Duration.ofHours(1);
+
+        /** How many runs one purge batch deletes. */
+        private int purgeBatchSize = 500;
+
+        /**
+         * Refuses a value that would purge immediately, never purge, or allow no manual run at all.
+         *
+         * @throws IllegalStateException naming the offending property
+         */
+        public void validate() {
+            if (manualConcurrency <= 0) {
+                throw new IllegalStateException("ludwig.reconciliation.runs.manual-concurrency must be positive, was "
+                        + manualConcurrency);
+            }
+            requirePositive("retention", retention);
+            requirePositive("purge-interval", purgeInterval);
+            if (purgeBatchSize <= 0) {
+                throw new IllegalStateException("ludwig.reconciliation.runs.purge-batch-size must be positive, was "
+                        + purgeBatchSize);
+            }
+        }
+
+        private static void requirePositive(String name, Duration value) {
+            if (value == null || value.isZero() || value.isNegative()) {
+                throw new IllegalStateException("ludwig.reconciliation.runs." + name
+                        + " must be a positive duration, was " + value);
+            }
+        }
     }
 
     /**
