@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-29T15:48:14.096256Z",
+    "generatedAt": "2026-10-30T22:23:49.552265Z",
     "revision": "1.1.0-SNAPSHOT",
-    "moduleCount": 42,
-    "commit": "f637178a8f97a03ade685ae4767fcf19b31c9aa7",
-    "commitShort": "f637178",
+    "moduleCount": 44,
+    "commit": "73f5ddcb88244104f91398cd27983fa98e7b9e6e",
+    "commitShort": "73f5ddc",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "1afc44866cd581a51b0ab69f44be172c205d4e1ee083854bbca7fdb423743057",
-      "newestPom": "pom.xml",
-      "newestPomModified": "2026-10-29T15:48:13.688534Z"
+      "pomSetSha": "02e2b8116749b9c1a4e3765c7f99447b62f3f5822b29ee236c247aeb02360a82",
+      "newestPom": "services/crud-service-example/pom.xml",
+      "newestPomModified": "2026-10-30T21:58:22.675950Z"
     }
   },
   "modules": [
@@ -535,7 +535,15 @@
           "scope": "compile"
         },
         {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "idempotency-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "identity-source-directory-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -552,6 +560,10 @@
         },
         {
           "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
           "scope": "compile"
         }
       ],
@@ -761,7 +773,7 @@
           "scope": "compile"
         },
         {
-          "artifactId": "identity-projection-spring-boot-starter",
+          "artifactId": "identity-source-kafka-spring-boot-starter",
           "scope": "compile"
         },
         {
@@ -922,7 +934,7 @@
         "architecture": "sources/export-spring-boot-starter/src/test/java/ru/ludwigandreas/export/architecture"
       },
       "testClasses": {
-        "surefire": 19,
+        "surefire": 20,
         "failsafe": 3
       },
       "pom": "sources/export-spring-boot-starter/pom.xml",
@@ -1671,6 +1683,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "identity-projection-spring-boot-starter",
           "scope": "compile"
         },
@@ -1699,6 +1715,10 @@
           "scope": "compile"
         },
         {
+          "artifactId": "rest-client-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "test-support-security",
           "scope": "compile"
         },
@@ -1720,7 +1740,7 @@
         "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
       },
       "testClasses": {
-        "surefire": 37,
+        "surefire": 39,
         "failsafe": 0
       },
       "pom": "sources/security-spring-boot-starter/pom.xml",
@@ -1834,11 +1854,6 @@
           "optional": false
         },
         {
-          "artifactId": "messaging-spring-boot-starter",
-          "scope": "compile",
-          "optional": true
-        },
-        {
           "artifactId": "security-spring-boot-starter",
           "scope": "compile",
           "optional": false
@@ -1865,6 +1880,14 @@
           "scope": "compile"
         },
         {
+          "artifactId": "identity-source-directory-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "identity-source-kafka-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "notification-service",
           "scope": "compile"
         }
@@ -1878,6 +1901,7 @@
         "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0005-create-security-grant.sql",
         "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0006-security-grant-dimension-check.sql",
         "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0007-security-user-contact.sql",
+        "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/0008-identity-sweep-listed.sql",
         "sources/identity-projection-spring-boot-starter/src/main/resources/db/changelog/identity/identity-changelog.xml"
       ],
       "i18nBundles": [
@@ -1893,12 +1917,132 @@
         "architecture": "sources/identity-projection-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/architecture"
       },
       "testClasses": {
-        "surefire": 4,
-        "failsafe": 1
+        "surefire": 8,
+        "failsafe": 2
       },
       "pom": "sources/identity-projection-spring-boot-starter/pom.xml",
       "readme": "sources/identity-projection-spring-boot-starter/README.md",
       "readmeRu": "sources/identity-projection-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "identity-source-kafka-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/identity-source-kafka-spring-boot-starter",
+      "artifactId": "identity-source-kafka-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.identity.kafka",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "messaging-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [
+        {
+          "artifactId": "crud-service-example",
+          "scope": "compile"
+        },
+        {
+          "artifactId": "notification-service",
+          "scope": "compile"
+        }
+      ],
+      "autoConfigImports": "sources/identity-source-kafka-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/identity-source-kafka-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/kafka/unit",
+        "architecture": "sources/identity-source-kafka-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/kafka/architecture"
+      },
+      "testClasses": {
+        "surefire": 5,
+        "failsafe": 0
+      },
+      "pom": "sources/identity-source-kafka-spring-boot-starter/pom.xml",
+      "readme": "sources/identity-source-kafka-spring-boot-starter/README.md",
+      "readmeRu": "sources/identity-source-kafka-spring-boot-starter/README.ru.md"
+    },
+    {
+      "name": "identity-source-directory-spring-boot-starter",
+      "dir": "sources",
+      "path": "sources/identity-source-directory-spring-boot-starter",
+      "artifactId": "identity-source-directory-spring-boot-starter",
+      "packaging": "jar",
+      "role": "starter",
+      "parentPom": "common",
+      "importsLudwigBom": true,
+      "packageRoot": "ru.ludwigandreas.identity.directory",
+      "inRepoDependencies": [
+        {
+          "artifactId": "architecture-rules",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "test",
+          "optional": false
+        }
+      ],
+      "inRepoDependents": [],
+      "autoConfigImports": "sources/identity-source-directory-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+      "liquibaseChangelogs": [
+        "sources/identity-source-directory-spring-boot-starter/src/main/resources/db/changelog/identity-directory/0001-create-identity-directory-state.sql",
+        "sources/identity-source-directory-spring-boot-starter/src/main/resources/db/changelog/identity-directory/identity-directory-changelog.xml"
+      ],
+      "i18nBundles": [],
+      "surfaces": [
+        "none"
+      ],
+      "testDirs": {
+        "unit": "sources/identity-source-directory-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/directory/unit",
+        "integration": "sources/identity-source-directory-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/directory/integration",
+        "architecture": "sources/identity-source-directory-spring-boot-starter/src/test/java/ru/ludwigandreas/identity/directory/architecture"
+      },
+      "testClasses": {
+        "surefire": 2,
+        "failsafe": 1
+      },
+      "pom": "sources/identity-source-directory-spring-boot-starter/pom.xml",
+      "readme": "sources/identity-source-directory-spring-boot-starter/README.md",
+      "readmeRu": "sources/identity-source-directory-spring-boot-starter/README.ru.md"
     },
     {
       "name": "hot-reload-spring-boot-starter",
@@ -1915,6 +2059,31 @@
           "artifactId": "audit-core",
           "scope": "compile",
           "optional": false
+        },
+        {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "web-core-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
         }
       ],
       "inRepoDependents": [
@@ -1937,14 +2106,19 @@
       ],
       "autoConfigImports": "sources/hot-reload-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
-      "i18nBundles": [],
-      "surfaces": [
-        "none"
+      "i18nBundles": [
+        "sources/hot-reload-spring-boot-starter/src/main/resources/i18n/ludwig-hotreload-messages.properties",
+        "sources/hot-reload-spring-boot-starter/src/main/resources/i18n/ludwig-hotreload-messages_ru.properties"
       ],
-      "testDirs": {},
+      "surfaces": [
+        "rest"
+      ],
+      "testDirs": {
+        "integration": "sources/hot-reload-spring-boot-starter/src/test/java/ru/ludwigandreas/hotreload/integration"
+      },
       "testClasses": {
-        "surefire": 13,
-        "failsafe": 0
+        "surefire": 14,
+        "failsafe": 1
       },
       "pom": "sources/hot-reload-spring-boot-starter/pom.xml",
       "readme": "sources/hot-reload-spring-boot-starter/README.md",
@@ -1999,12 +2173,20 @@
           "scope": "compile"
         },
         {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "compile"
+        },
+        {
           "artifactId": "idempotency-spring-boot-starter",
           "scope": "compile"
         },
         {
           "artifactId": "identity-projection-spring-boot-starter",
           "scope": "compile"
+        },
+        {
+          "artifactId": "identity-source-directory-spring-boot-starter",
+          "scope": "test"
         },
         {
           "artifactId": "job-core",
@@ -2219,6 +2401,11 @@
           "optional": false
         },
         {
+          "artifactId": "job-core",
+          "scope": "compile",
+          "optional": true
+        },
+        {
           "artifactId": "observability-spring-boot-starter",
           "scope": "compile",
           "optional": true
@@ -2226,6 +2413,21 @@
         {
           "artifactId": "outbound-token-core",
           "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "security-spring-boot-starter",
+          "scope": "compile",
+          "optional": true
+        },
+        {
+          "artifactId": "test-support",
+          "scope": "test",
+          "optional": false
+        },
+        {
+          "artifactId": "test-support-security",
+          "scope": "test",
           "optional": false
         },
         {
@@ -2254,7 +2456,10 @@
       ],
       "autoConfigImports": "sources/rest-client-spring-boot-starter/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "liquibaseChangelogs": [],
-      "i18nBundles": [],
+      "i18nBundles": [
+        "sources/rest-client-spring-boot-starter/src/main/resources/i18n/ludwig-restclient-messages.properties",
+        "sources/rest-client-spring-boot-starter/src/main/resources/i18n/ludwig-restclient-messages_ru.properties"
+      ],
       "surfaces": [
         "rest"
       ],
@@ -2263,8 +2468,8 @@
         "integration": "sources/rest-client-spring-boot-starter/src/test/java/ru/ludwigandreas/restclient/integration"
       },
       "testClasses": {
-        "surefire": 12,
-        "failsafe": 8
+        "surefire": 13,
+        "failsafe": 9
       },
       "pom": "sources/rest-client-spring-boot-starter/pom.xml",
       "readme": "sources/rest-client-spring-boot-starter/README.md",
@@ -2427,7 +2632,7 @@
       },
       "testClasses": {
         "surefire": 3,
-        "failsafe": 9
+        "failsafe": 10
       },
       "pom": "sources/grpc-server-spring-boot-starter/pom.xml",
       "readme": "sources/grpc-server-spring-boot-starter/README.md",
@@ -2679,6 +2884,14 @@
           "scope": "test"
         },
         {
+          "artifactId": "identity-source-directory-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "identity-source-kafka-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "job-core",
           "scope": "test"
         },
@@ -2727,7 +2940,7 @@
       ],
       "testDirs": {},
       "testClasses": {
-        "surefire": 15,
+        "surefire": 16,
         "failsafe": 1
       },
       "pom": "build/architecture-rules/pom.xml",
@@ -2783,11 +2996,23 @@
           "scope": "test"
         },
         {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "idempotency-spring-boot-starter",
           "scope": "test"
         },
         {
           "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "identity-source-directory-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "identity-source-kafka-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2820,6 +3045,10 @@
         },
         {
           "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -2905,6 +3134,10 @@
           "scope": "test"
         },
         {
+          "artifactId": "hot-reload-spring-boot-starter",
+          "scope": "test"
+        },
+        {
           "artifactId": "identity-projection-spring-boot-starter",
           "scope": "test"
         },
@@ -2926,6 +3159,10 @@
         },
         {
           "artifactId": "reconciliation-spring-boot-starter",
+          "scope": "test"
+        },
+        {
+          "artifactId": "rest-client-spring-boot-starter",
           "scope": "test"
         },
         {
@@ -3103,6 +3340,11 @@
           "optional": false
         },
         {
+          "artifactId": "identity-source-kafka-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
           "artifactId": "observability-spring-boot-starter",
           "scope": "compile",
           "optional": false
@@ -3209,6 +3451,11 @@
         },
         {
           "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-source-kafka-spring-boot-starter",
           "scope": "compile",
           "optional": false
         },
@@ -3406,6 +3653,16 @@
         },
         {
           "artifactId": "identity-projection-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-source-directory-spring-boot-starter",
+          "scope": "compile",
+          "optional": false
+        },
+        {
+          "artifactId": "identity-source-kafka-spring-boot-starter",
           "scope": "compile",
           "optional": false
         },

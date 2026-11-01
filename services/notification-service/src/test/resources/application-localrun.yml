@@ -49,6 +49,9 @@ ludwig:
   # the Spring Boot plugin keeps out of what runs, so a deployment has no preference store and
   # resolves every recipient from the configured defaults. The local run does the same.
   identity:
+    # The local seed's recipients come from their own source, so the OIDC topic's users never collide with them.
+    sources:
+      local: {}
     kafka:
       enabled: true
   observability:

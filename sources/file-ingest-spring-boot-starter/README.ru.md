@@ -180,7 +180,7 @@ ludwig:
 
 **Административная область** `/admin/v1/fileingest`: недавние запуски со счётчиками, конвертом `operation` и
 **контрольными точками** (движущаяся точка = большой файл; неподвижная = проблема); запуск задачи - операция
-`fileingest.operate`.
+`fileingest.run.start`.
 
 **Логи.** `INFO`: конфигурация проверена, расписания запущены, выбран писатель staging, пропуск уже загруженного,
 «ещё не читаю» (готовность), ручной запуск, квитанция записана, архив выполнен. `WARN`: нет завершённого запуска к
@@ -211,25 +211,28 @@ ludwig:
 
 ## Администрирование
 
-Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют и с какой областью, решает собственный `ludwig.security.roles` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, которой не владеет ни одна роль, запрещена всем. Операция `PRIVILEGED` требует заголовка `Operation-Reason` и не принимает персональный токен доступа, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /me/operations` показывает, какими операциями владеет вызывающий, а `GET /admin/v1/security/operations/{id}/holders` - какие роли владеют операцией.
 
-| Операция | Эндпоинты | Что разрешает |
-|---|---|---|
-| `fileingest.read` | `GET /admin/v1/fileingest/tasks`<br>`GET /admin/v1/fileingest/tasks/{task}`<br>`GET /admin/v1/fileingest/tasks/{task}/runs/{runId}` | Просмотр задач загрузки и их запусков с контрольной точкой и счётчиками каждого. |
-| `fileingest.operate` | `POST /admin/v1/fileingest/tasks/{task}/runs` | Запустить проход загрузки сейчас. |
-| `fileingest.privileged` | в этом выпуске нет | Операций пока нет; уровень зарезервирован, чтобы выдачи для этой области не менялись между выпусками. |
+| Операция | Чувствительность | Эндпоинты | Что разрешает |
+|---|---|---|---|
+| `fileingest.task.read` | `READ` | `GET /admin/v1/fileingest/tasks`<br>`GET /admin/v1/fileingest/tasks/{task}`<br>`GET /admin/v1/fileingest/tasks/{task}/runs/{runId}` | Просмотр задач загрузки и их запусков с контрольной точкой и счётчиками каждого. |
+| `fileingest.run.start` | `CHANGE` | `POST /admin/v1/fileingest/tasks/{task}/runs` | Запустить проход загрузки сейчас. |
 
-**Удалено:** actuator-эндпоинт `fileingest` и `ludwig.ingest.endpoint.*` (включая `allow-manual-run`); запуск прогона - операция `fileingest.operate`. Запрос прогона во время выполняющегося - `409`.
+**Удалено:** actuator-эндпоинт `fileingest` и `ludwig.ingest.endpoint.*` (включая `allow-manual-run`); запуск прогона - операция `fileingest.run.start`. Запрос прогона во время выполняющегося - `409`.
 
-Блок выдачи (имена ролей - собственные роли сервиса):
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[fileingest.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[fileingest.operate]": [ORDERS_ADMIN]
-      "[fileingest.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          fileingest.task.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          fileingest.run.start: ALL
 ```
 
 ## Runbook

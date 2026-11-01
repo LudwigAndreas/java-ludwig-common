@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.usersettings.admin.SettingsAdminOperations;
 import ru.ludwigandreas.usersettings.admin.web.AdminSettingsController;
 import ru.ludwigandreas.usersettings.admin.web.SettingsBackfillController;
@@ -27,7 +27,7 @@ import ru.ludwigandreas.usersettings.web.SettingsResponseRenderer;
 @AutoConfiguration(after = {UserSettingsWebAutoConfiguration.class, UserSettingsOwnerAutoConfiguration.class},
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
 @ConditionalOnProperty(prefix = "ludwig.user-settings.web", name = "enabled", havingValue = "true")
-@ConditionalOnBean({AdminOperationCatalog.class, SettingsResponseRenderer.class, SettingsWriter.class})
+@ConditionalOnBean({AdminSurfaceGuard.class, SettingsResponseRenderer.class, SettingsWriter.class})
 public class UserSettingsAdminAutoConfiguration {
 
     @Bean

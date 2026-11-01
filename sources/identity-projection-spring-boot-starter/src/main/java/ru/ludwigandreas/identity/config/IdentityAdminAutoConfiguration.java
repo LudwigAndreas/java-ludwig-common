@@ -11,12 +11,15 @@ import org.springframework.context.annotation.Bean;
 import ru.ludwigandreas.cache.api.LudwigCache;
 import ru.ludwigandreas.identity.admin.IdentityAdminOperations;
 import ru.ludwigandreas.identity.admin.service.IdentityAdminService;
+import ru.ludwigandreas.identity.admin.service.IdentitySourcesService;
 import ru.ludwigandreas.identity.admin.web.IdentityAdminController;
+import ru.ludwigandreas.identity.feed.IdentityFeed;
+import ru.ludwigandreas.identity.projection.IdentitySources;
 import ru.ludwigandreas.identity.repository.SecurityGrantRepository;
 import ru.ludwigandreas.identity.repository.SecurityPartnerRepository;
 import ru.ludwigandreas.identity.repository.SecurityUserRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.security.authz.Authorities;
 import ru.ludwigandreas.security.authz.AuthorityResolver;
 import ru.ludwigandreas.security.authz.PrincipalRef;
@@ -28,8 +31,8 @@ import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
  */
 @AutoConfiguration(after = IdentityProjectionAutoConfiguration.class,
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, SecurityPartnerRepository.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, SecurityPartnerRepository.class})
 public class IdentityAdminAutoConfiguration {
 
     @Bean
@@ -59,7 +62,16 @@ public class IdentityAdminAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public IdentityAdminController ludwigIdentityAdminController(IdentityAdminService service) {
-        return new IdentityAdminController(service);
+    public IdentitySourcesService ludwigIdentitySourcesService(IdentitySources sources,
+                                                               ObjectProvider<IdentityFeed> feeds,
+                                                               SecurityUserRepository users) {
+        return new IdentitySourcesService(sources, feeds, users);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public IdentityAdminController ludwigIdentityAdminController(IdentityAdminService service,
+                                                                 IdentitySourcesService sources) {
+        return new IdentityAdminController(service, sources);
     }
 }

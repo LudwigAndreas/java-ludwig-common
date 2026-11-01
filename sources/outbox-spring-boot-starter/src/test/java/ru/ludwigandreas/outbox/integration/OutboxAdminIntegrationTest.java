@@ -33,7 +33,7 @@ import ru.ludwigandreas.outbox.integration.testmodel.TransactionalPublishHelper;
 import ru.ludwigandreas.outbox.repository.OutboxMessageRepository;
 import ru.ludwigandreas.outbox.repository.OutboxStatusHistoryRepository;
 import ru.ludwigandreas.outbox.scheduler.OutboxProcessingService;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
@@ -45,10 +45,10 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "ludwig.security.enabled=true",
             "ludwig.security.jwt.enabled=false",
             "ludwig.outbox.audit.persist-history=true",
-            "ludwig.admin.grants.outbox.read[0]=OPS_SUPPORT",
-            "ludwig.admin.grants.outbox.read[1]=OPS_ADMIN",
-            "ludwig.admin.grants.outbox.operate[0]=OPS_ADMIN",
-            "ludwig.admin.grants.outbox.privileged[0]=OPS_ADMIN"})
+            "ludwig.security.roles.OPS_SUPPORT.operations[outbox.message.read]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[outbox.message.read]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[outbox.message.retry]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[outbox.message.discard]=ALL"})
 @Import({PostgresContainerConfiguration.class, OutboxAdminIntegrationTest.CapturingAudit.class})
 @AutoConfigureMockMvc
 class OutboxAdminIntegrationTest {
@@ -156,7 +156,7 @@ class OutboxAdminIntegrationTest {
                 .anyMatch(row -> row.getStatus() == OutboxStatus.PENDING
                         && "retried by an administrator".equals(row.getDetail()));
         assertThat(adminEvents()).singleElement().satisfies(event -> {
-            assertThat(event.action()).isEqualTo("outbox.operate");
+            assertThat(event.action()).isEqualTo("outbox.message.retry");
             assertThat(event.actor().subject()).isEqualTo("alice");
             assertThat(event.resource().id()).isEqualTo(id.toString());
         });
@@ -208,7 +208,7 @@ class OutboxAdminIntegrationTest {
         MvcResult noReason = mvc.perform(post("/admin/v1/outbox/messages/" + id + "/discard").with(admin()))
                 .andReturn();
         MvcResult discarded = mvc.perform(post("/admin/v1/outbox/messages/" + id + "/discard")
-                .header(AdminInvocation.REASON_HEADER, "superseded by INC-4411 fix").with(admin())).andReturn();
+                .header(OperationEvaluator.REASON_HEADER, "superseded by INC-4411 fix").with(admin())).andReturn();
 
         assertThat(byOperator.getResponse().getStatus()).isEqualTo(403);
         assertThat(noReason.getResponse().getStatus()).isEqualTo(400);

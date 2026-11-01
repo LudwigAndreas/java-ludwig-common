@@ -58,8 +58,8 @@ public class AdminAudit {
     }
 
     /**
-     * Records an administrative operation authorized programmatically rather than by {@code @AdminAccess} - one whose
-     * operation depends on the request, such as a replica control whose tier depends on its arguments.
+     * Records an administrative operation authorized programmatically rather than by {@code @RequiresOperation} - one
+     * whose operation depends on the request, such as a replica control whose operation depends on its arguments.
      *
      * @param invocation   the operation, the caller and the stated reason
      * @param resourceType the kind of object

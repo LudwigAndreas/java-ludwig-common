@@ -11,6 +11,7 @@ import ru.ludwigandreas.notification.repository.DeliveryContentRepository;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.entity.DeliveryStatus;
 import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntity;
+import ru.ludwigandreas.notification.security.NotificationOperations;
 import ru.ludwigandreas.notification.service.exception.DeliveryContentUnavailableException;
 import ru.ludwigandreas.notification.service.exception.DeliveryNotFoundException;
 import ru.ludwigandreas.notification.service.exception.IllegalDeliveryTransitionException;
@@ -22,7 +23,6 @@ import ru.ludwigandreas.notification.service.queue.DeliveryStatusRecorder;
 import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
 import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.security.data.DataAccessGuard;
-import ru.ludwigandreas.security.data.DataAction;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
 
@@ -48,9 +48,6 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
 @RequiredArgsConstructor
 public class DeliveryAdminService {
 
-    /** The name this resource's scope mapping and policies are registered under. */
-    private static final String RESOURCE_TYPE = "notification-delivery";
-
     private final NotificationDeliveryRepository deliveryRepository;
     private final DeliveryContentRepository contentRepository;
     private final DeliveryStatusRecorder statusRecorder;
@@ -73,12 +70,12 @@ public class DeliveryAdminService {
 
     @Transactional(readOnly = true)
     public DeliveryView get(UUID id) {
-        return mapper.toView(require(id, DataAction.READ));
+        return mapper.toView(require(id, NotificationOperations.DELIVERY_READ));
     }
 
     @Transactional(readOnly = true)
     public List<DeliveryTransition> history(UUID id) {
-        require(id, DataAction.READ);
+        require(id, NotificationOperations.DELIVERY_READ);
         return mapper.toTransitions(deliveryRepository.historyOf(id));
     }
 
@@ -92,7 +89,7 @@ public class DeliveryAdminService {
      */
     @Transactional(readOnly = true)
     public DeliveryContentView content(UUID id) {
-        NotificationDeliveryEntity delivery = require(id, DataAction.READ);
+        NotificationDeliveryEntity delivery = require(id, NotificationOperations.CONTENT_READ);
         log.info("Operator {} read the rendered content of delivery {}",
                 SecurityPrincipals.current().map(LudwigPrincipal::subject).orElse("unknown"), id);
         return contentRepository.findById(id)
@@ -114,7 +111,7 @@ public class DeliveryAdminService {
      */
     @Transactional
     public DeliveryView retry(UUID id) {
-        NotificationDeliveryEntity delivery = require(id, DataAction.WRITE);
+        NotificationDeliveryEntity delivery = require(id, NotificationOperations.DELIVERY_RETRY);
         if (delivery.getStatus() != DeliveryStatus.DEAD) {
             throw new IllegalDeliveryTransitionException(id, delivery.getStatus().name(), "retry");
         }
@@ -139,7 +136,7 @@ public class DeliveryAdminService {
      */
     @Transactional
     public DeliveryView cancel(UUID id) {
-        NotificationDeliveryEntity delivery = require(id, DataAction.WRITE);
+        NotificationDeliveryEntity delivery = require(id, NotificationOperations.DELIVERY_CANCEL);
         boolean cancellable = switch (delivery.getStatus()) {
             case PENDING, FAILED, BATCHED -> true;
             default -> false;
@@ -156,14 +153,14 @@ public class DeliveryAdminService {
     /**
      * Loads a delivery and checks the caller may act on it.
      *
-     * <p>The read/write distinction is passed in rather than collapsed into one "access" check,
-     * because they are genuinely different grants: a support role reads every delivery in its tenant
-     * and changes none of them, and a single check could only ever enforce the wider of the two.
+     * <p>The operation is passed in rather than collapsed into one "access" check, because each is a
+     * different grant: a support role reads every delivery in its tenant and retries none of them, and
+     * a single check could only ever enforce the widest.
      */
-    private NotificationDeliveryEntity require(UUID id, String action) {
+    private NotificationDeliveryEntity require(UUID id, String operation) {
         NotificationDeliveryEntity delivery = deliveryRepository.findById(id)
                 .orElseThrow(() -> new DeliveryNotFoundException(id));
-        dataAccessGuard.check(RESOURCE_TYPE, action, delivery, NotificationDeliveryEntity::getId);
+        dataAccessGuard.check(operation, delivery, NotificationDeliveryEntity::getId);
         return delivery;
     }
 }

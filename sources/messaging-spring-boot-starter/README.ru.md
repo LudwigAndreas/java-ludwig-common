@@ -13,7 +13,7 @@ payload; всё остальное берётся отсюда.
 |---|---|
 | Роль | starter |
 | Зависит от (в репозитории) | [`audit-core`](../audit-core); опционально: [`idempotency-spring-boot-starter`](../idempotency-spring-boot-starter), [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) |
-| Используется | стартерами `outbox`, `asyncapi`, `identity-projection`, `messaging-db`, `user-settings`; `notification-service` |
+| Используется | стартерами `outbox`, `asyncapi`, `identity-source-kafka`, `messaging-db`, `user-settings`; `notification-service` |
 | Поверхности | Kafka (входящие; исходящие - в dead-letter топики) |
 
 Пакеты:
@@ -252,7 +252,7 @@ type-заголовками класс, который Jackson создаёт у
 |---|---|
 | ingress уведомлений (`ludwig.notification.ingress.topic`) | `<topic>.dlt` |
 | `ludwig.user-settings.projection.topic` (по умолчанию `user.settings`) | `user.settings.dlt` |
-| `ludwig.identity.kafka.topic` (по умолчанию `oidc.users`) | `oidc.users.dlt` |
+| `ludwig.identity.kafka.subscriptions.<source>.topic` (identity-source-kafka) | `<topic>.dlt` |
 | любой другой топик потребителя | `<topic><dead-letter.suffix>` |
 
 Число партиций и репликация могут не совпадать с исходным топиком (recoverer отправляет в партицию `-1`).

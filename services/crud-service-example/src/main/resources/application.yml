@@ -358,35 +358,6 @@ ludwig:
             # queueing invisibly inside it.
             max-concurrent-calls: 16
 
-  # --- administrative surface (/admin/v1/) ------------------------------------------------------
-  # Which of this service's roles may perform each administrative operation of the starters it uses.
-  # The roles come from the authority resolver (the identity projection), never from token claims. A key
-  # naming an area this service does not have fails startup, so the list is exactly the areas present:
-  # exports, fileactions, identity, jobs (job-core) and outbox. Bracketed because the ids contain a dot.
-  admin:
-    grants:
-      "[caches.read]": [CATALOG_ADMIN]
-      "[caches.operate]": [CATALOG_ADMIN]
-      "[caches.privileged]": [CATALOG_ADMIN]
-      "[exports.read]": [CATALOG_ADMIN]
-      "[exports.operate]": [CATALOG_ADMIN]
-      "[exports.privileged]": [CATALOG_ADMIN]
-      "[fileactions.read]": [CATALOG_ADMIN]
-      "[fileactions.operate]": [CATALOG_ADMIN]
-      "[fileactions.privileged]": [CATALOG_ADMIN]
-      "[identity.read]": [CATALOG_ADMIN]
-      "[identity.operate]": [CATALOG_ADMIN]
-      "[identity.privileged]": [CATALOG_ADMIN]
-      "[jobs.read]": [CATALOG_ADMIN]
-      "[jobs.operate]": [CATALOG_ADMIN]
-      "[jobs.privileged]": [CATALOG_ADMIN]
-      "[outbox.read]": [CATALOG_ADMIN]
-      "[outbox.operate]": [CATALOG_ADMIN]
-      "[outbox.privileged]": [CATALOG_ADMIN]
-      "[replicas.read]": [CATALOG_ADMIN]
-      "[replicas.operate]": [CATALOG_ADMIN]
-      "[replicas.privileged]": [CATALOG_ADMIN]
-
   # --- ludwig security -------------------------------------------------------------------------
   security:
     # Audience is what makes a token service-specific. Without it, any token the same issuer minted
@@ -423,28 +394,65 @@ ludwig:
         # change, so this is the backstop for a missed Kafka event, not the normal path.
         ttl: 60s
 
-    data:
-      # Anything without a policy below is denied. The only safe default.
-      default-access: NONE
-      policies:
-        product:
-          read:
-            ROLE_CATALOG_ADMIN: ALL
-            ROLE_CATALOG_READER: ALL
-            # Editors see the whole catalog but write only what they created - see below.
-            ROLE_CATALOG_EDITOR: ALL
-            # A partner sees only products filed under its own partner code.
-            ROLE_CATALOG_PARTNER: PARTNER
-            # ROLE_CATALOG_WATCHER is deliberately absent here: "every product I am named on" compares a
-            # custom axis against the caller's own subject, which this policy language cannot express.
-            # It is granted by watcherDataScopeProvider in SecurityConfig, and unioned with whatever the
-            # policies above allow.
-          write:
-            ROLE_CATALOG_ADMIN: ALL
-            ROLE_CATALOG_EDITOR: OWN
-            ROLE_CATALOG_PARTNER: PARTNER
-          delete:
-            ROLE_CATALOG_ADMIN: ALL
+    # Which of this service's roles hold which operation, and over which rows. The only place a role
+    # means anything: code names operations, never roles. The roles come from the authority resolver
+    # (the identity projection), never from token claims. An operation no role lists is refused to
+    # everyone, and an entry naming an operation this service does not catalogue fails startup, so the
+    # administrative entries are exactly the areas present: caches, jobs and replicas (job-core),
+    # exports, file actions, identity, outbox, outbound clients and the security area itself.
+    roles:
+      CATALOG_READER:
+        operations:
+          catalog.product.read: ALL
+      CATALOG_EDITOR:
+        # Editors see the whole catalog but change only what they created.
+        includes: [CATALOG_READER]
+        operations:
+          catalog.product.update: OWN
+      CATALOG_PARTNER:
+        # A partner sees and changes only products filed under its own partner code.
+        operations:
+          catalog.product.read: PARTNER
+          catalog.product.update: PARTNER
+      # CATALOG_WATCHER is deliberately absent: "every product I am named on" compares a custom axis
+      # against the caller's own subject, which a configured scope cannot express. It is granted by
+      # watcherDataScopeProvider in SecurityConfig, and unioned with whatever the roles above allow.
+      CATALOG_ADMIN:
+        operations:
+          catalog.product.read: ALL
+          catalog.product.update: ALL
+          catalog.product.delete: ALL
+          cache.definition.read: ALL
+          cache.performance.evict: ALL
+          cache.security.evict: ALL
+          export.run.read: ALL
+          export.run.cancel: ALL
+          export.subscription.read: ALL
+          fileaction.submission.read: ALL
+          fileaction.submission.cancel: ALL
+          identity.partner.read: ALL
+          identity.partner.onboard: ALL
+          identity.partner.replace: ALL
+          identity.partner.suspend: ALL
+          identity.partner.activate: ALL
+          identity.grant.read: ALL
+          identity.grant.create: ALL
+          identity.grant.revoke: ALL
+          identity.authority.read: ALL
+          job.definition.read: ALL
+          job.definition.run: ALL
+          job.lease.read: ALL
+          job.lease.release: ALL
+          outbox.message.read: ALL
+          outbox.message.retry: ALL
+          outbox.message.discard: ALL
+          replica.instance.read: ALL
+          replica.command.read: ALL
+          restclient.client.read: ALL
+          restclient.breaker.read: ALL
+          restclient.token.reset: ALL
+          restclient.breaker.set: ALL
+          security.operation.read: ALL
 
   # --- ludwig identity projection --------------------------------------------------------------
   identity:
@@ -452,11 +460,17 @@ ludwig:
     # apply it as a second, standalone SpringLiquibase.
     liquibase:
       enabled: false
+    # The one identity provider this service projects: the OIDC provider, whose role names are already the
+    # platform's, so nothing is mapped. Every feed names a declared source.
+    sources:
+      oidc: {}
     kafka:
       enabled: ${IDENTITY_PROJECTION_ENABLED:true}
-      topic: ${OIDC_USER_TOPIC:corp.identity.users}
       # Every service keeps its own projection and therefore needs its own consumer group.
       group-id: product-catalog-identity-projection
+      subscriptions:
+        oidc:
+          topic: ${OIDC_USER_TOPIC:corp.identity.users}
     # Peer services calling this one, keyed by workload identity. In configuration rather than in a
     # table because which service may call which is part of the deployment topology.
     service-roles:

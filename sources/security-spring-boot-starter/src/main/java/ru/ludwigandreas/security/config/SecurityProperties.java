@@ -42,19 +42,29 @@ public class SecurityProperties {
     private final SystemPrincipal systemPrincipal = new SystemPrincipal();
     private final Pat pat = new Pat();
 
-    public Pat getPat() {
-        return pat;
+    /**
+     * The service's roles, each defined by the operations it holds and their scope - the only place a role is named.
+     * Keyed by role name, with or without {@code ROLE_}.
+     */
+    private Map<String, Role> roles = new LinkedHashMap<>();
+
+    /** Rules every operation's enforcement shares. */
+    private final Operations operations = new Operations();
+
+    public Map<String, Role> getRoles() {
+        return roles;
     }
 
-    public enum DefaultAccess {
-        /** Anything without a matching policy is denied. The only safe default. */
-        NONE,
-        /**
-         * Anything without a matching policy is unrestricted. For migrating an existing service: turn
-         * it on, watch {@code ludwig.security.data.scope} for resources reporting {@code ALL}, write
-         * their policies, then turn it off. Not a resting state.
-         */
-        ALL
+    public void setRoles(Map<String, Role> roles) {
+        this.roles = roles;
+    }
+
+    public Operations getOperations() {
+        return operations;
+    }
+
+    public Pat getPat() {
+        return pat;
     }
 
     public boolean isEnabled() {
@@ -388,21 +398,12 @@ public class SecurityProperties {
 
         private boolean enabled = true;
 
-        /** What applies to a resource/action pair with no policy. */
-        private DefaultAccess defaultAccess = DefaultAccess.NONE;
-
-        /** Reject policy tokens other than ALL/NONE/OWN/TENANT/PARTNER. Turn off to use custom axes. */
-        private boolean strictPolicyTokens = true;
-
         /**
          * Resources deliberately exempt from scoping - reference data, public catalogs. Being on this
          * list is the only way an unmapped resource is allowed through, so adding an entry is a
          * reviewable decision rather than an omission.
          */
         private List<String> unscopedResources = new ArrayList<>();
-
-        /** resource -> action -> role -> grant ({@code ALL}, {@code NONE}, {@code OWN+TENANT}, ...). */
-        private Map<String, Map<String, Map<String, String>>> policies = new LinkedHashMap<>();
 
         public boolean isEnabled() {
             return enabled;
@@ -412,36 +413,12 @@ public class SecurityProperties {
             this.enabled = enabled;
         }
 
-        public DefaultAccess getDefaultAccess() {
-            return defaultAccess;
-        }
-
-        public void setDefaultAccess(DefaultAccess defaultAccess) {
-            this.defaultAccess = defaultAccess;
-        }
-
-        public boolean isStrictPolicyTokens() {
-            return strictPolicyTokens;
-        }
-
-        public void setStrictPolicyTokens(boolean strictPolicyTokens) {
-            this.strictPolicyTokens = strictPolicyTokens;
-        }
-
         public List<String> getUnscopedResources() {
             return unscopedResources;
         }
 
         public void setUnscopedResources(List<String> unscopedResources) {
             this.unscopedResources = unscopedResources;
-        }
-
-        public Map<String, Map<String, Map<String, String>>> getPolicies() {
-            return policies;
-        }
-
-        public void setPolicies(Map<String, Map<String, Map<String, String>>> policies) {
-            this.policies = policies;
         }
     }
 
@@ -678,6 +655,53 @@ public class SecurityProperties {
 
         public void setRoles(List<String> roles) {
             this.roles = roles;
+        }
+    }
+
+    /** One role: the operations it holds with their scope, and the roles whose operations it also holds. */
+    public static class Role {
+
+        /** Roles whose operations this one holds as well, resolved transitively. */
+        private List<String> includes = new ArrayList<>();
+
+        /**
+         * Operation id to scope: {@code ALL}, or dimensions joined by {@code +} such as {@code OWN+TENANT}. In a
+         * {@code .properties} file a dotted key needs the bracket form, {@code operations[outbox.message.read]=ALL}.
+         */
+        private Map<String, String> operations = new LinkedHashMap<>();
+
+        public List<String> getIncludes() {
+            return includes;
+        }
+
+        public void setIncludes(List<String> includes) {
+            this.includes = includes;
+        }
+
+        public Map<String, String> getOperations() {
+            return operations;
+        }
+
+        public void setOperations(Map<String, String> operations) {
+            this.operations = operations;
+        }
+    }
+
+    /** Rules every operation's enforcement shares. */
+    public static class Operations {
+
+        /**
+         * Whether a call made with a personal access token may perform a {@code PRIVILEGED} operation, or reach the
+         * administrative surface at all. Off: a PAT is a convenience credential, not an administrator's.
+         */
+        private boolean allowPersonalAccessTokens;
+
+        public boolean isAllowPersonalAccessTokens() {
+            return allowPersonalAccessTokens;
+        }
+
+        public void setAllowPersonalAccessTokens(boolean allowPersonalAccessTokens) {
+            this.allowPersonalAccessTokens = allowPersonalAccessTokens;
         }
     }
 }

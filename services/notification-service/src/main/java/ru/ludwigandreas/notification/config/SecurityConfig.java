@@ -6,7 +6,9 @@ import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntit
 import ru.ludwigandreas.notification.repository.entity.NotificationRequestEntity;
 import ru.ludwigandreas.notification.repository.entity.QNotificationDeliveryEntity;
 import ru.ludwigandreas.notification.repository.entity.QNotificationRequestEntity;
+import ru.ludwigandreas.notification.security.NotificationOperations;
 import ru.ludwigandreas.security.data.DataScopeMapping;
+import ru.ludwigandreas.security.operation.OperationContributor;
 
 /**
  * The only security code this service writes: which columns carry which scope dimension for the one
@@ -14,7 +16,7 @@ import ru.ludwigandreas.security.data.DataScopeMapping;
  *
  * <p>Everything else - who the caller is, where roles come from, how a 403 is rendered, how a scope
  * becomes a predicate - is autoconfigured by {@code security-spring-boot-starter} and driven by
- * {@code ludwig.security.data.policies} in {@code application.yml}. What cannot be configured is
+ * {@code ludwig.security.roles} in {@code application.yml}. What cannot be configured is
  * this: the module has no way to know which column of a delivery carries its tenant, so the service
  * states it once, here, in compile-time-checked terms.
  *
@@ -24,12 +26,6 @@ import ru.ludwigandreas.security.data.DataScopeMapping;
  */
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfig {
-
-    /** The name the delivery's policies and scope mapping are registered under. */
-    public static final String DELIVERY_RESOURCE = "notification-delivery";
-
-    /** The name the request's policies and scope mapping are registered under. */
-    public static final String REQUEST_RESOURCE = "notification-request";
 
     /**
      * Two dimensions, one path and one accessor each.
@@ -46,9 +42,14 @@ public class SecurityConfig {
      * principal is on the request, which has its own mapping below.
      */
     @Bean
+    public OperationContributor notificationOperations() {
+        return new NotificationOperations();
+    }
+
+    @Bean
     public DataScopeMapping<NotificationDeliveryEntity> deliveryDataScopeMapping() {
         QNotificationDeliveryEntity delivery = QNotificationDeliveryEntity.notificationDeliveryEntity;
-        return DataScopeMapping.forResource(DELIVERY_RESOURCE, NotificationDeliveryEntity.class)
+        return DataScopeMapping.forResource(NotificationOperations.DELIVERY_RESOURCE, NotificationDeliveryEntity.class)
                 .tenant(delivery.tenantId, NotificationDeliveryEntity::getTenantId)
                 .build();
     }
@@ -69,7 +70,7 @@ public class SecurityConfig {
     @Bean
     public DataScopeMapping<NotificationRequestEntity> requestDataScopeMapping() {
         QNotificationRequestEntity request = QNotificationRequestEntity.notificationRequestEntity;
-        return DataScopeMapping.forResource(REQUEST_RESOURCE, NotificationRequestEntity.class)
+        return DataScopeMapping.forResource(NotificationOperations.REQUEST_RESOURCE, NotificationRequestEntity.class)
                 .tenant(request.tenantId, NotificationRequestEntity::getTenantId)
                 .owner(request.createdBy, NotificationRequestEntity::getCreatedBy)
                 .build();

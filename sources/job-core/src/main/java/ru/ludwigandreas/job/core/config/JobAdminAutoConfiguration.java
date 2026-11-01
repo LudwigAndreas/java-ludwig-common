@@ -25,19 +25,19 @@ import ru.ludwigandreas.job.core.schedule.SelfSchedulingLifecycle;
 import ru.ludwigandreas.security.admin.AdminApprovalStore;
 import ru.ludwigandreas.security.admin.AdminApprovals;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
  * The {@code jobs} administrative area, registered only where the administrative surface exists.
  *
- * <p>Conditional on the security starter's {@link AdminOperationCatalog}, which exists only with the security
- * starter, web-core's problem pipeline and the surface switched on - so a service using job-core without them gets
- * no endpoint, never an unguarded one.
+ * <p>Conditional on the security starter's {@link AdminSurfaceGuard}, which exists only with the security starter,
+ * web-core's problem pipeline and the surface switched on - so a service using job-core without them gets no endpoint,
+ * never an unguarded one.
  */
 @AutoConfiguration(afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, DataSource.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, DataSource.class})
 public class JobAdminAutoConfiguration {
 
     @Bean

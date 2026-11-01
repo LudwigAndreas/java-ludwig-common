@@ -208,7 +208,7 @@ if (!result.complete()) { /* run it again; there is no cursor */ }
 - `tenantId == null` means every tenant (not expressible through REST).
 - `POST /admin/v1/settings/backfill` (`{ "settingKeys": [...], "includeConsents": false, "maxRows": 50000 }` →
   `{ "settingRows": 41230, "consentRows": 0, "batches": 83, "complete": false }`) requires `web.enabled`,
-  `web.backfill-enabled` and owner mode, plus the `settings.operate` operation; it pins the caller's tenant.
+  `web.backfill-enabled` and owner mode, plus the `settings.backfill.start` operation; it pins the caller's tenant.
 - It cannot recover intermediate values a consumer missed - only current state (and the full consent ledger).
 
 ### Caching
@@ -368,25 +368,32 @@ redaction. **Consents are evidenced by the `user_consent` ledger**, not by `audi
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `settings.read` | `GET /admin/v1/settings/subjects/{subject}`<br>`GET /admin/v1/settings/subjects/{subject}/consents`<br>`GET /admin/v1/settings/subjects/{subject}/consents/asof` | Read another subject's resolved settings and consent history. |
-| `settings.operate` | `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}`<br>`POST /admin/v1/settings/backfill` | Write settings at a user, role or tenant scope, and run a backfill. |
-| `settings.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `settings.subject.read` | `READ` | `GET /admin/v1/settings/subjects/{subject}` | Read another subject's resolved settings. |
+| `settings.consent.read` | `READ` | `GET /admin/v1/settings/subjects/{subject}/consents`<br>`GET /admin/v1/settings/subjects/{subject}/consents/asof` | Read another subject's consent history. |
+| `settings.scope.set` | `CHANGE` | `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}` | Write settings at a user, role or tenant scope. |
+| `settings.backfill.start` | `CHANGE` | `POST /admin/v1/settings/backfill` | Run a backfill. |
 
 **Removed:** `/admin/settings/**`, `ludwig.user-settings.access.admin-authority` and `ludwig.user-settings.web.admin-base-path`; `consents/as-of` is now `consents/asof`. Mounted only with `ludwig.user-settings.web.enabled=true` in owner mode (the backfill also needs `web.backfill-enabled=true`). Another tenant's subject is `404` (it was `403`); the self-service endpoints keep their `403`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[settings.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[settings.operate]": [ORDERS_ADMIN]
-      "[settings.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          settings.subject.read: ALL
+          settings.consent.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          settings.scope.set: ALL
+          settings.backfill.start: ALL
 ```
 
 ## Runbook

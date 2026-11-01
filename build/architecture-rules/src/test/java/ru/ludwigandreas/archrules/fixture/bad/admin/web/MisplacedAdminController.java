@@ -3,15 +3,15 @@ package ru.ludwigandreas.archrules.fixture.bad.admin.web;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ludwigandreas.security.admin.AdminAccess;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
-/** Violates mapped-under-the-versioned-prefix: annotated, but mapped where the guard never runs. */
+/** Violates mapped-under-the-versioned-prefix: under /admin/, but outside the versioned /admin/v1/. */
 @RestController
-@RequestMapping("/api/v1/locks")
+@RequestMapping("/admin/locks")
 public class MisplacedAdminController {
 
     @GetMapping
-    @AdminAccess("locks.read")
+    @RequiresOperation("locks.lock.read")
     public String list() {
         return "locks";
     }

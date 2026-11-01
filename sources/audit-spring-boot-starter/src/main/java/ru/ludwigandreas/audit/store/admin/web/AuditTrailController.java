@@ -7,8 +7,8 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.audit.store.admin.AuditAdminOperations;
 import ru.ludwigandreas.audit.store.admin.service.AuditTrailSearch;
 import ru.ludwigandreas.audit.store.admin.service.AuditTrailSearch.EventView;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /**
  * The {@code audit} administrative area: search the stored trail.
@@ -38,7 +38,7 @@ public class AuditTrailController {
      * @return one page
      */
     @GetMapping("/events")
-    @AdminAccess(AuditAdminOperations.READ)
+    @RequiresOperation(AuditAdminOperations.EVENT_READ)
     public AdminPage<EventView> events(@RequestParam(name = "$filter", required = false) String filter,
                                        @RequestParam(required = false) String cursor,
                                        @RequestParam(required = false) Integer size) {

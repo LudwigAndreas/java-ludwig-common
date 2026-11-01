@@ -1,149 +1,176 @@
 package ru.ludwigandreas.identity.projection;
 
-import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ludwigandreas.cache.api.LudwigCache;
 import ru.ludwigandreas.identity.entity.SecurityUserEntity;
 import ru.ludwigandreas.identity.entity.UserStatus;
-import ru.ludwigandreas.identity.kafka.OidcUserEvent;
-import ru.ludwigandreas.identity.kafka.OidcUserEventMapper;
+import ru.ludwigandreas.identity.feed.ApplyOutcome;
+import ru.ludwigandreas.identity.feed.IdentityChange;
+import ru.ludwigandreas.identity.feed.IdentityProjection;
+import ru.ludwigandreas.identity.feed.IdentitySweep;
 import ru.ludwigandreas.identity.repository.SecurityUserRepository;
 import ru.ludwigandreas.security.authz.Authorities;
 import ru.ludwigandreas.security.authz.PrincipalRef;
+import ru.ludwigandreas.security.principal.PrincipalDisabledEvent;
 
 /**
- * Applies one user event to the local projection.
+ * The identity projection's one write path: applies a source's changes to {@code security_user}.
  *
- * <p>Two properties make this safe to run against an at-least-once, partially-ordered stream:
+ * <h2>Ordering</h2>
  *
- * <p><b>Idempotence.</b> Every event carries the user's complete state, so applying the same event twice
- * produces the same row. Nothing here is incremental.
+ * <p>A change whose {@code occurredAt} is not newer than the stored {@code source_timestamp} is skipped as stale. A
+ * feed delivers changes in whatever order its transport does - Kafka orders only within a partition, a pulled page
+ * re-reads its boundary - and comparing on when the change happened at the source is what makes a replay or a
+ * reordering converge instead of restoring a revoked role.
  *
- * <p><b>Order tolerance.</b> Kafka guarantees order only within a partition, and a user's events move
- * between partitions when the topic is scaled or the key changes. An event older than what is already
- * stored is therefore not an error - it is normal - and is dropped by comparing
- * {@code occurredAt}. Without that check a replay would resurrect a role that was revoked days ago, which
- * is the worst kind of bug here: silent, delayed, and a privilege escalation.
+ * <h2>Concurrency</h2>
  *
- * <p>The authority cache is evicted <em>after commit</em>, not during. Evicting inside the transaction
- * opens a window where another thread re-reads the old row and re-populates the cache with stale roles,
- * and the eviction would still have happened had the transaction then rolled back. That discipline used to
- * be a {@code TransactionSynchronization} registered by hand in this class, which was the second copy of
- * the same helper - {@code user-settings} had the first - and is now one call into
- * {@link ru.ludwigandreas.cache.api.LudwigCache#evictAfterCommit}, where the reasoning is written down
- * once.
+ * <p>Two replicas applying the first change for the same new subject both see no row and both insert; one loses on
+ * the primary key. That exception is deliberately left to propagate: the feed retries, and the retry finds the
+ * winner's row and updates it. Catching it here would also swallow a genuinely malformed change.
  *
- * <p><b>Concurrent first events for one subject</b> - two partitions delivering the same new user at the
- * same moment - both see no row and both insert, and one loses on the primary key. That exception is
- * deliberately left to propagate: the listener does not acknowledge, the container redelivers, and the
- * retry finds the row the winner wrote and updates it instead. Catching and ignoring it here would be
- * wrong in the case that looks identical from inside the transaction but is not - a constraint violation
- * from a genuinely malformed event, which would then be dropped silently.
+ * <h2>Ownership</h2>
+ *
+ * <p>A subject belongs to the source that first projected it ({@code source_system}). A change for it from another
+ * source is refused rather than applied, because two providers issuing one subject is a configuration error that
+ * silently merging would turn into one person holding another's roles.
  */
 @Slf4j
-@RequiredArgsConstructor
-public class IdentityProjectionService {
+public class IdentityProjectionService implements IdentityProjection {
 
     private final SecurityUserRepository repository;
-    private final OidcUserEventMapper mapper;
+    private final IdentityChangeMapper mapper;
+    private final IdentitySources sources;
     private final LudwigCache<PrincipalRef, Authorities> authorityCache;
+    private final ApplicationEventPublisher events;
+    private final IdentityMetrics metrics;
+    private final SweepStore sweeps;
 
     /**
-     * Announces a disabled principal to anything holding state keyed on a subject.
-     *
-     * <p>An {@link org.springframework.context.ApplicationEventPublisher} rather than a direct call to the
-     * interested modules, because this module should not know what they are. Today the only listener is the
-     * personal-access-token issuer, which revokes the subject's live tokens so that a token list matches
-     * reality; tomorrow it could be anything else keyed on a subject.
-     */
-    private final org.springframework.context.ApplicationEventPublisher events;
-
-    /**
-     * Whether the projection keeps the user's contact data.
-     *
-     * <p>Cleared rather than never mapped, because the mapper is generated and mapping by name is what
-     * makes a new field on either side a build failure rather than a silent omission. Dropping the
-     * values here instead keeps that property and puts the decision in one visible place.
+     * Whether the projection keeps contact data. Cleared rather than never merged, so switching the flag off removes
+     * what an earlier configuration stored: the next change for each user scrubs their row.
      */
     private final boolean storeContactData;
 
+    /**
+     * Creates the projection.
+     *
+     * @param repository       the user table
+     * @param mapper           merges a profile into a row
+     * @param sources          the declared sources and their role mappings
+     * @param authorityCache   evicted after a change commits
+     * @param events           announces disabled principals
+     * @param metrics          counts changes and sweeps
+     * @param sweeps           stages and completes sweeps
+     * @param storeContactData {@code ludwig.identity.contact.enabled}
+     */
+    public IdentityProjectionService(SecurityUserRepository repository, IdentityChangeMapper mapper,
+                                     IdentitySources sources, LudwigCache<PrincipalRef, Authorities> authorityCache,
+                                     ApplicationEventPublisher events, IdentityMetrics metrics, SweepStore sweeps,
+                                     boolean storeContactData) {
+        this.repository = repository;
+        this.mapper = mapper;
+        this.sources = sources;
+        this.authorityCache = authorityCache;
+        this.events = events;
+        this.metrics = metrics;
+        this.sweeps = sweeps;
+        this.storeContactData = storeContactData;
+    }
+
+    @Override
     @Transactional
-    public void apply(OidcUserEvent event) {
-        if (event == null || event.subject() == null || event.subject().isBlank()) {
-            log.warn("Discarding user event with no subject (eventId={})",
-                    event == null ? null : event.eventId());
-            return;
-        }
+    public ApplyOutcome apply(IdentityChange change) {
+        IdentitySources.RoleMapping roles = sources.require(change.source());
+        ApplyOutcome outcome = applyOne(change, roles);
+        metrics.change(change.source(), change.type(), outcome);
+        return outcome;
+    }
 
-        Optional<SecurityUserEntity> existing = repository.findById(event.subject());
-        if (existing.isPresent() && isStale(event, existing.get())) {
-            log.debug("Skipping user event {} for {}: occurredAt={} is not newer than the stored {}",
-                    event.eventId(), event.subject(), event.occurredAt(),
-                    existing.get().getSourceTimestamp());
-            return;
+    @Override
+    @Transactional
+    public List<ApplyOutcome> applyAll(List<? extends IdentityChange> changes) {
+        changes.forEach(change -> sources.require(change.source()));
+        List<ApplyOutcome> outcomes = new ArrayList<>(changes.size());
+        for (IdentityChange change : changes) {
+            ApplyOutcome outcome = applyOne(change, sources.require(change.source()));
+            metrics.change(change.source(), change.type(), outcome);
+            outcomes.add(outcome);
         }
+        return outcomes;
+    }
 
-        SecurityUserEntity entity = existing.orElse(null);
-        if (entity == null) {
-            entity = mapper.toEntity(event);
+    @Override
+    public IdentitySweep beginSweep(String source) {
+        sources.require(source);
+        return sweeps.begin(source);
+    }
+
+    private ApplyOutcome applyOne(IdentityChange change, IdentitySources.RoleMapping roles) {
+        if (change.subject() == null || change.subject().isBlank()) {
+            log.warn("Discarding a {} change from source {} with no subject", change.type(), change.source());
+            return ApplyOutcome.DISCARDED;
+        }
+        Optional<SecurityUserEntity> existing = repository.findById(change.subject());
+        if (existing.isPresent()) {
+            SecurityUserEntity stored = existing.get();
+            if (!change.source().equals(stored.getSourceSystem())) {
+                log.error("Refusing a {} change for subject {} from source {}: the subject belongs to source {}",
+                        change.type(), change.subject(), change.source(), stored.getSourceSystem());
+                return ApplyOutcome.FOREIGN_SOURCE;
+            }
+            if (stored.getSourceTimestamp() != null && !change.occurredAt().isAfter(stored.getSourceTimestamp())) {
+                log.debug("Skipping a {} change for {}: occurredAt={} is not newer than the stored {}",
+                        change.type(), change.subject(), change.occurredAt(), stored.getSourceTimestamp());
+                return ApplyOutcome.STALE;
+            }
+        }
+        SecurityUserEntity entity = existing.orElseGet(() -> newUser(change));
+        UserStatus status;
+        if (change instanceof IdentityChange.Upsert upsert) {
+            mapper.merge(upsert, entity);
+            if (upsert.profile().roles() != null) {
+                entity.getRoles().clear();
+                entity.getRoles().addAll(roles.map(upsert.profile().roles()));
+            }
+            status = UserStatus.ACTIVE;
         } else {
-            mapper.update(event, entity);
+            status = change instanceof IdentityChange.Remove ? UserStatus.REMOVED : UserStatus.DISABLED;
         }
-        entity.setStatus(statusFor(event));
+        entity.setStatus(status);
+        entity.setSourceTimestamp(change.occurredAt());
+        entity.setSourceVersion(change.sourceVersion());
         if (!storeContactData) {
             clearContactData(entity);
         }
         repository.save(entity);
-
-        evictAfterCommit(event.subject());
-
-        // Published after the save and only for a disabling event. Not for UPSERT, which is the vast
-        // majority of traffic - a listener firing on every ordinary user update would be a listener
-        // somebody switches off.
-        if (statusFor(event) == UserStatus.DISABLED) {
-            events.publishEvent(new ru.ludwigandreas.security.principal.PrincipalDisabledEvent(
-                    event.subject(), event.type().name()));
+        authorityCache.evictAfterCommit(PrincipalRef.user(change.subject()));
+        if (status != UserStatus.ACTIVE) {
+            // Only for a deactivating change: an announcement on every ordinary update would be one somebody
+            // switches off.
+            events.publishEvent(new PrincipalDisabledEvent(change.subject(), change.type()));
         }
+        return ApplyOutcome.APPLIED;
     }
 
-    /**
-     * An event with no {@code occurredAt} is always applied: the alternative - treating "unknown" as old
-     * and dropping it - would silently stop projecting from a producer that omits the field.
-     */
-    private boolean isStale(OidcUserEvent event, SecurityUserEntity stored) {
-        Instant incoming = event.occurredAt();
-        Instant current = stored.getSourceTimestamp();
-        return incoming != null && current != null && !incoming.isAfter(current);
+    private static SecurityUserEntity newUser(IdentityChange change) {
+        SecurityUserEntity entity = new SecurityUserEntity();
+        entity.setId(change.subject());
+        entity.setSourceSystem(change.source());
+        return entity;
     }
 
-    /**
-     * Removes contact data from a row this deployment has not opted into keeping.
-     *
-     * <p>Cleared on every apply rather than only on insert, so switching the flag off actually removes
-     * what an earlier configuration stored - the next event for each user scrubs their row. A flag that
-     * only stopped new writes would leave the old values sitting there indefinitely, which is the
-     * failure mode that matters for personal data.
-     */
-    private void clearContactData(SecurityUserEntity entity) {
+    private static void clearContactData(SecurityUserEntity entity) {
         entity.setEmail(null);
         entity.setAlternateEmail(null);
         entity.setPhoneNumber(null);
         entity.setChatHandle(null);
         entity.setEmailVerified(null);
         entity.setPhoneVerified(null);
-    }
-
-    private UserStatus statusFor(OidcUserEvent event) {
-        return switch (event.type()) {
-            case UPSERT -> UserStatus.ACTIVE;
-            case DISABLE, DELETE -> UserStatus.DISABLED;
-        };
-    }
-
-    private void evictAfterCommit(String subject) {
-        authorityCache.evictAfterCommit(PrincipalRef.user(subject));
     }
 }

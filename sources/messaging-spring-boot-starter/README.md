@@ -12,7 +12,7 @@ writes. A service declares its listener, topic and payload type; everything else
 |---|---|
 | Role | starter |
 | Depends on (in-repo) | [`audit-core`](../audit-core); optional: [`idempotency-spring-boot-starter`](../idempotency-spring-boot-starter), [`web-core-spring-boot-starter`](../web-core-spring-boot-starter) |
-| Used by | `outbox`, `asyncapi`, `identity-projection`, `messaging-db`, `user-settings` starters; `notification-service` |
+| Used by | `outbox`, `asyncapi`, `identity-source-kafka`, `messaging-db`, `user-settings` starters; `notification-service` |
 | Surfaces | Kafka (inbound; outbound to dead-letter topics) |
 
 Packages:
@@ -249,7 +249,7 @@ dead-letter, its offset is committed, and the record is lost (`ludwig.messaging.
 |---|---|
 | notification ingress (`ludwig.notification.ingress.topic`) | `<topic>.dlt` |
 | `ludwig.user-settings.projection.topic` (default `user.settings`) | `user.settings.dlt` |
-| `ludwig.identity.kafka.topic` (default `oidc.users`) | `oidc.users.dlt` |
+| `ludwig.identity.kafka.subscriptions.<source>.topic` (identity-source-kafka) | `<topic>.dlt` |
 | any other consumer topic | `<topic><dead-letter.suffix>` |
 
 Partition count and replication need not match the source (the recoverer sends to partition `-1`).

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import ru.ludwigandreas.example.catalog.client.dto.SupplierSummary;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductEntity;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductStatus;
+import ru.ludwigandreas.example.catalog.security.CatalogOperations;
 import ru.ludwigandreas.export.api.Aggregate;
 import ru.ludwigandreas.export.api.CallIdentity;
 import ru.ludwigandreas.export.api.CellFormat;
@@ -176,10 +177,9 @@ public class CatalogReports implements ReportDefinitionSource {
                 // report advertises.
                 .filterableColumns(Set.of(COLUMN_SKU, COLUMN_NAME, COLUMN_PRICE, COLUMN_STATUS))
                 .filterEntityType(ProductEntity.class)
-                // The resource the product data-scope mapping is registered under, so an export is
-                // scoped by the same rules a paged read is - including the custom "products I watch"
-                // axis, which no annotation expresses.
-                .scopeResourceType("product")
+                // The read operation, so an export is scoped exactly as wide as a paged read - including the
+                // custom "products I watch" axis, which no annotation expresses.
+                .scopedBy(CatalogOperations.PRODUCT_READ)
                 .totalsRow(true)
                 .build();
     }

@@ -46,8 +46,9 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
             "ludwig.export.poller.enabled=false",
             "ludwig.export.sink.type=testReportSink",
             "ludwig.security.jwt.enabled=false",
-            "ludwig.admin.grants.exports.read[0]=EXPORT_OPERATOR",
-            "ludwig.admin.grants.exports.operate[0]=EXPORT_OPERATOR"})
+            "ludwig.security.roles.EXPORT_OPERATOR.operations[export.run.read]=ALL",
+            "ludwig.security.roles.EXPORT_OPERATOR.operations[export.subscription.read]=ALL",
+            "ludwig.security.roles.EXPORT_OPERATOR.operations[export.run.cancel]=ALL"})
 @Import(PostgresContainerConfiguration.class)
 @AutoConfigureMockMvc
 class ExportAdminIntegrationTest {

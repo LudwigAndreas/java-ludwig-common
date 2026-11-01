@@ -27,6 +27,16 @@ public class VaultLeaseSecretSource implements ReloadableSource {
 
     @Override
     public String id() {
+        return idFor(path);
+    }
+
+    /**
+     * The id of the lease source for {@code path}.
+     *
+     * @param path the secret's path
+     * @return the id
+     */
+    public static String idFor(String path) {
         return "vault-lease:" + path;
     }
 

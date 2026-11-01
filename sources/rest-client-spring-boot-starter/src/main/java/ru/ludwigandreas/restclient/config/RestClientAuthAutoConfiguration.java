@@ -21,6 +21,7 @@ import ru.ludwigandreas.restclient.auth.provider.ApiKeyAuthenticationProvider;
 import ru.ludwigandreas.restclient.auth.provider.BasicAuthenticationProvider;
 import ru.ludwigandreas.restclient.auth.provider.BearerAuthenticationProvider;
 import ru.ludwigandreas.restclient.auth.provider.ClientCredentialsAuthenticationProvider;
+import ru.ludwigandreas.restclient.auth.provider.ClientTokenSources;
 import ru.ludwigandreas.restclient.auth.provider.CustomAuthenticationProvider;
 import ru.ludwigandreas.restclient.auth.provider.NoneAuthenticationProvider;
 import ru.ludwigandreas.restclient.auth.provider.TokenRelayAuthenticationProvider;
@@ -103,9 +104,21 @@ public class RestClientAuthAutoConfiguration {
     @ConditionalOnBean(ClientRegistrationRepository.class)
     public ClientAuthenticationProvider ludwigClientCredentialsAuthenticationProvider(
             ClientRegistrationRepository registrations, Executor ludwigTokenRefreshExecutor,
-            Clock ludwigRestClientClock, TokenRefreshCounter counter) {
+            Clock ludwigRestClientClock, TokenRefreshCounter counter, ClientTokenSources tokenSources) {
         return new ClientCredentialsAuthenticationProvider(registrations, ludwigTokenRefreshExecutor,
-                ludwigRestClientClock, counter);
+                ludwigRestClientClock, counter, tokenSources);
+    }
+
+    /**
+     * Every client-credentials client's token cache, by client name - present whether or not OAuth2 is, so the
+     * administrative token reset can say "this client has no machine token" rather than fail to start.
+     *
+     * @return the registry
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public ClientTokenSources ludwigClientTokenSources() {
+        return new ClientTokenSources();
     }
 
     @Bean

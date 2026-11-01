@@ -363,27 +363,30 @@ Recorded: filename, content hash, size, counts, scanner answer, outcome - **neve
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `fileactions.read` | `GET /admin/v1/fileactions/submissions`<br>`GET /admin/v1/fileactions/submissions/{id}` | See every submitter's file-action submissions, without the file or any row. |
-| `fileactions.operate` | `POST /admin/v1/fileactions/submissions/{id}/cancel` | Cancel anybody's file-action submission. |
-| `fileactions.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `fileaction.submission.read` | `READ` | `GET /admin/v1/fileactions/submissions`<br>`GET /admin/v1/fileactions/submissions/{id}` | See every submitter's file-action submissions, without the file or any row. |
+| `fileaction.submission.cancel` | `CHANGE` | `POST /admin/v1/fileactions/submissions/{id}/cancel` | Cancel anybody's file-action submission. |
 
 Responses carry no file, no row content and no error-report link. Cancel is the submitter's own cancel: `202` while the stop is pending, or `200` with the envelope when the submission is terminal - including one it ended `CANCELLED` itself, as a `VALIDATED` one is.
 
 **Filtering `GET /admin/v1/fileactions/submissions`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `action`, `state` (`UPLOADED`, `VALIDATED`, `APPLYING`, `APPLIED`, `REJECTED`, `EXPIRED`, `CANCELLED`), `submittedBy`, `sourceFormat`, `failureCode`, `rowsRejected`, `submittedAt`, `startedAt`, `finishedAt`. Not filterable: the object location, the declared file name, the failure arguments. Example: `$filter=action eq 'product-import' and rowsRejected gt 0`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[fileactions.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[fileactions.operate]": [ORDERS_ADMIN]
-      "[fileactions.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          fileaction.submission.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          fileaction.submission.cancel: ALL
 ```
 
 ## Runbook

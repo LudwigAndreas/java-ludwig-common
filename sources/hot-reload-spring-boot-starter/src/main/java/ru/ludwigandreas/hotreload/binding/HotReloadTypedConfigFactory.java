@@ -31,8 +31,8 @@ public class HotReloadTypedConfigFactory {
     public <T> RefreshableConfig<T> create(String prefix, Class<T> type) {
         RefreshableConfig<T> config = new RefreshableConfig<>(environment, prefix, type, binder);
         coordinator.addListener(event -> {
-            if (touchesPrefix(prefix, event.changedKeys())) {
-                config.refresh(environment);
+            if (touchesPrefix(prefix, event.changedKeys()) && !config.refresh(environment)) {
+                coordinator.rejected(event.sourceId());
             }
         });
         return config;

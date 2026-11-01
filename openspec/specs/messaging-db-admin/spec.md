@@ -7,8 +7,9 @@ to skip a poison record or replay after a fix.
 ## Requirements
 ### Requirement: Consumer lag is readable
 
-`messaging-db-spring-boot-starter` SHALL declare `messaging.read`, `messaging.operate` and `messaging.privileged`, and
-serve `GET /admin/v1/messaging/consumers` (`messaging.read`): for each consumer group and partition, the committed
+`messaging-db-spring-boot-starter` SHALL declare, on the `ADMIN` surface,
+`messaging.consumer.read` (`READ`), `messaging.consumer.pause` and `messaging.consumer.resume` (`CHANGE`), and
+`messaging.offset.move` (`PRIVILEGED`), and serve `GET /admin/v1/messaging/consumers` (`messaging.consumer.read`): for each consumer group and partition, the committed
 offset, the partition head, the lag, and the consumer's retry state (attempts, next attempt time), and for each consumer group and topic whether it is
 paused, by whom and since when. The stored last error SHALL NOT be returned, because its text may quote a payload.
 
@@ -21,7 +22,8 @@ paused, by whom and since when. The stored last error SHALL NOT be returned, bec
 - **THEN** the listing shows that pair as paused with the subject who paused it and when
 
 ### Requirement: A consumer group can be paused and resumed on a topic
-`POST /admin/v1/messaging/consumers/{group}/topics/{topic}/pause` and `.../resume` (`messaging.operate`) SHALL pause or
+`POST /admin/v1/messaging/consumers/{group}/topics/{topic}/pause` (`messaging.consumer.pause`) and `.../resume`
+(`messaging.consumer.resume`) SHALL pause or
 resume delivery of that topic's log records to that group on every replica. A pause SHALL take effect no later than
 each replica's next claim, after at most one in-flight record per partition completes. Both SHALL be idempotent and
 audited. A group this service's own listeners do not consume as, or a group with no position on the topic,
@@ -37,7 +39,7 @@ SHALL be `404`.
 - **THEN** delivery continues from the committed position
 
 ### Requirement: A paused group's position can be moved
-`POST /admin/v1/messaging/consumers/{group}/topics/{topic}/offsets` (`messaging.privileged`, reason required) SHALL move
+`POST /admin/v1/messaging/consumers/{group}/topics/{topic}/offsets` (`messaging.offset.move`, reason required) SHALL move
 the group's committed position on one partition or all partitions of the topic to `earliest`, `latest`, an explicit
 offset, or the first record at or after a timestamp, clamped to the retained log. It SHALL be refused with `409`
 unless the pair is paused, and with `400` for an unrecognised target or unparseable value. It SHALL reset the partitions' retry state, and SHALL answer with each partition's old and

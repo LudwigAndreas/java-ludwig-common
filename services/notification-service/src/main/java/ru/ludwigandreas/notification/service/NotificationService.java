@@ -37,7 +37,7 @@ public interface NotificationService {
      *
      * <p>Scoped like the delivery history it exposes: a caller sees requests in its own tenant unless
      * its role says otherwise. See {@code SecurityConfig} for the mapping and
-     * {@code ludwig.security.data.policies} for who gets what.
+     * {@code ludwig.security.roles} ({@code notification.request.read}) for who gets what.
      *
      * @throws ru.ludwigandreas.notification.service.exception.RequestNotFoundException if no such
      *         request exists

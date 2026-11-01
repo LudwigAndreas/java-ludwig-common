@@ -6,7 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static ru.ludwigandreas.security.unit.OrderFixture.ORDER;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,12 +18,11 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.data.DataAccessGuard;
-import ru.ludwigandreas.security.data.DataAction;
 import ru.ludwigandreas.security.data.DataScope;
 import ru.ludwigandreas.security.data.DataScopeMapping;
 import ru.ludwigandreas.security.data.DataScopePredicateFactory;
-import ru.ludwigandreas.security.data.DataScopeProvider;
 import ru.ludwigandreas.security.data.DataScopeRegistry;
+import ru.ludwigandreas.security.data.ScopeLookup;
 import ru.ludwigandreas.security.exception.DataScopeMappingNotFoundException;
 import ru.ludwigandreas.security.exception.PrincipalUnavailableException;
 import ru.ludwigandreas.security.metrics.NoopSecurityMetrics;
@@ -40,9 +41,24 @@ class DataAccessGuardTest {
                 .build();
     }
 
-    private DataAccessGuard guard(DataScopeProvider provider, Set<String> unscoped) {
+    /** Operations on the fixture resources: reading orders, reading reference data, reading an unmapped widget. */
+    private static final Map<String, String> RESOURCES = Map.of(
+            "test.order.read", "order", "test.reference.read", "reference-data", "test.widget.read", "widget");
+
+    private DataAccessGuard guard(BiFunction<LudwigPrincipal, String, DataScope> scopes, Set<String> unscoped) {
         DataScopeRegistry registry = new DataScopeRegistry(List.of(orderMapping()), unscoped);
-        return new DataAccessGuard(provider, registry, new DataScopePredicateFactory(), NO_AUDIT,
+        ScopeLookup lookup = new ScopeLookup() {
+            @Override
+            public String resourceOf(String operationId) {
+                return RESOURCES.get(operationId);
+            }
+
+            @Override
+            public DataScope scopeFor(LudwigPrincipal principal, String operationId) {
+                return scopes.apply(principal, operationId);
+            }
+        };
+        return new DataAccessGuard(lookup, registry, new DataScopePredicateFactory(), NO_AUDIT,
                 new NoopSecurityMetrics(), false);
     }
 
@@ -70,45 +86,44 @@ class DataAccessGuardTest {
     @Test
     @DisplayName("every guard entry point honours unscoped-resources, including the query one")
     void unscopedResourcesAreUnrestrictedThroughEveryEntryPoint() {
-        DataAccessGuard guard = guard((principal, resource, action) -> DataScope.none(),
-                Set.of("reference-data"));
+        DataAccessGuard guard = guard((principal, operation) -> DataScope.none(), Set.of("reference-data"));
 
-        assertThat(guard.scope("reference-data", DataAction.READ).isUnrestricted()).isTrue();
-        assertThat(guard.permits("reference-data", DataAction.READ, new Order("someone"))).isTrue();
-        assertThatCode(() -> guard.check("reference-data", DataAction.READ, new Order("someone")))
+        assertThat(guard.scope("test.reference.read").isUnrestricted()).isTrue();
+        assertThat(guard.permits("test.reference.read", new Order("someone"))).isTrue();
+        assertThatCode(() -> guard.check("test.reference.read", new Order("someone")))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> guard.predicate("reference-data", DataAction.READ))
+        assertThatCode(() -> guard.predicate("test.reference.read"))
                 .doesNotThrowAnyException();
-        assertThat(guard.predicate("reference-data", DataAction.READ).toString())
+        assertThat(guard.predicate("test.reference.read").toString())
                 .isEqualTo("true = true");
     }
 
     @Test
     @DisplayName("a resource that is neither mapped nor declared unscoped fails closed, loudly")
     void unknownResourceStillFailsClosed() {
-        DataAccessGuard guard = guard((principal, resource, action) -> DataScope.all(), Set.of());
+        DataAccessGuard guard = guard((principal, operation) -> DataScope.all(), Set.of());
 
-        assertThatThrownBy(() -> guard.predicate("widget", DataAction.READ))
+        assertThatThrownBy(() -> guard.predicate("test.widget.read"))
                 .isInstanceOf(DataScopeMappingNotFoundException.class);
     }
 
     @Test
     @DisplayName("a caller entitled to nothing gets an empty page, not an error that confirms rows exist")
     void deniedScopeCompilesToAnEmptyResultRatherThanAnException() {
-        DataAccessGuard guard = guard((principal, resource, action) -> DataScope.none(), Set.of());
+        DataAccessGuard guard = guard((principal, operation) -> DataScope.none(), Set.of());
 
-        assertThat(guard.predicate("order", DataAction.READ).toString()).isEqualTo("true = false");
+        assertThat(guard.predicate("test.order.read").toString()).isEqualTo("true = false");
     }
 
     @Test
     void checkRefusesAnObjectOutsideTheScopeAndAcceptsOneInside() {
-        DataAccessGuard guard = guard((principal, resource, action) ->
+        DataAccessGuard guard = guard((principal, operation) ->
                 DataScope.restrictedTo(ru.ludwigandreas.security.data.ScopeDimension.OWNER,
                         principal.subject()), Set.of());
 
-        assertThatCode(() -> guard.check("order", DataAction.READ, new Order("alice")))
+        assertThatCode(() -> guard.check("test.order.read", new Order("alice")))
                 .doesNotThrowAnyException();
-        assertThatThrownBy(() -> guard.check("order", DataAction.READ, new Order("bob")))
+        assertThatThrownBy(() -> guard.check("test.order.read", new Order("bob")))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageNotContaining("bob");
     }
@@ -120,9 +135,9 @@ class DataAccessGuardTest {
     @Test
     void refusesToGuessWhenThereIsNoCaller() {
         SecurityContextHolder.clearContext();
-        DataAccessGuard guard = guard((principal, resource, action) -> DataScope.all(), Set.of());
+        DataAccessGuard guard = guard((principal, operation) -> DataScope.all(), Set.of());
 
-        assertThatThrownBy(() -> guard.predicate("order", DataAction.READ))
+        assertThatThrownBy(() -> guard.predicate("test.order.read"))
                 .isInstanceOf(PrincipalUnavailableException.class);
     }
 }

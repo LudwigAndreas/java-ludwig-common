@@ -41,7 +41,7 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
         "spring.liquibase.change-log=classpath:db/changelog/db.changelog-master.xml",
         "spring.jpa.hibernate.ddl-auto=validate",
         "ludwig.security.jwt.enabled=false",
-        "ludwig.admin.grants.audit.read[0]=AUDITOR"})
+        "ludwig.security.roles.AUDITOR.operations[audit.event.read]=ALL"})
 @Import(PostgresContainerConfiguration.class)
 @ContextConfiguration(initializers = LegacyAuditTablesInitializer.class)
 @AutoConfigureMockMvc
@@ -166,7 +166,7 @@ class AuditTrailSearchIntegrationTest {
 
         JsonNode trail = page(filtered("category eq 'admin'").with(auditService()));
         JsonNode search = trail.path("items").get(trail.path("items").size() - 1);
-        assertThat(search.path("action").asText()).isEqualTo("audit.read");
+        assertThat(search.path("action").asText()).isEqualTo("audit.event.read");
         assertThat(search.path("attributes").path("filterPaths").toString()).isEqualTo("[\"actorSubject\"]");
         assertThat(search.path("attributes").path("filterOperators").toString()).isEqualTo("[\"actorSubject eq\"]");
         assertThat(search.path("attributes").toString()).doesNotContain("alice");

@@ -42,8 +42,8 @@ public interface BuiltInServerInterceptor extends ServerInterceptor {
         AUTHENTICATION,
         /** Thread-locals restored around every callback. */
         CONTEXT,
-        /** {@code @AdminAccess}: the operation, the reason, and the bound invocation - inside the context bridge. */
-        ADMIN,
+        /** {@code @RequiresOperation}: the operation, the reason, the bound invocation - inside the context bridge. */
+        OPERATION,
         /** Idempotent replay of an opted-in unary method. */
         REPLAY
     }

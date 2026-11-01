@@ -241,18 +241,19 @@ try (RunLockHandle lease = held.get()) {
 
 ## Администрирование
 
-Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют и с какой областью, решает собственный `ludwig.security.roles` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, которой не владеет ни одна роль, запрещена всем. Операция `PRIVILEGED` требует заголовка `Operation-Reason` и не принимает персональный токен доступа, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /me/operations` показывает, какими операциями владеет вызывающий, а `GET /admin/v1/security/operations/{id}/holders` - какие роли владеют операцией.
 
-| Операция | Эндпоинты | Что разрешает |
-|---|---|---|
-| `jobs.read` | `GET /admin/v1/jobs`<br>`GET /admin/v1/jobs/locks` | Просмотр плановых заданий и владельцев их блокировок запуска. |
-| `jobs.operate` | `POST /admin/v1/jobs/{name}/run` | Запустить плановое задание сейчас. |
-| `replicas.read` | `GET /admin/v1/replicas`<br>`GET /admin/v1/replicas/commands/{id}` | Просмотр живых реплик и ответа каждой на разосланную команду. |
-| `replicas.operate`, `replicas.privileged` | нет | Зарезервированы: команда авторизуется операцией своего модуля. |
-| `caches.read` | `GET /admin/v1/caches` | Просмотр кэшей сервиса с назначением, уровнями и TTL; значения - никогда. |
-| `caches.operate` | `POST /admin/v1/replicas/controls/cacheevict` для кэша `PERFORMANCE` | Очистка кэша производительности на всех репликах. |
-| `caches.privileged` | `POST /admin/v1/replicas/controls/cacheevict` для кэша `SECURITY`, с `Admin-Reason` | Очистка кэша безопасности на всех репликах. |
-| `jobs.privileged` | `POST /admin/v1/jobs/locks/{name}/release` | Принудительно освободить блокировку запуска, владелец которой исчез. |
+| Операция | Чувствительность | Эндпоинты | Что разрешает |
+|---|---|---|---|
+| `cache.performance.evict` | `CHANGE` | контроль `cacheevict` для кэша `PERFORMANCE` | Очистка кэша производительности на всех репликах. |
+| `cache.security.evict` | `PRIVILEGED` | контроль `cacheevict` для кэша `SECURITY` | Очистка кэша безопасности (полномочия, отзыв) на всех репликах. |
+| `cache.definition.read` | `READ` | `GET /admin/v1/caches` | Просмотр кэшей сервиса с их назначением, уровнями и временем жизни. |
+| `job.definition.read` | `READ` | `GET /admin/v1/jobs` | Просмотр плановых заданий сервиса с их расписанием и блокировкой. |
+| `job.definition.run` | `CHANGE` | `POST /admin/v1/jobs/{name}/run` | Запустить плановое задание сейчас. |
+| `job.lease.read` | `READ` | `GET /admin/v1/jobs/locks` | Просмотр всех блокировок запуска и экземпляров, которые их держат. |
+| `job.lease.release` | `PRIVILEGED` | `POST /admin/v1/jobs/locks/{name}/release` | Принудительно освободить блокировку запуска, владелец которой исчез. |
+| `replica.instance.read` | `READ` | `GET /admin/v1/replicas` | Просмотр живых реплик сервиса. |
+| `replica.command.read` | `READ` | `GET /admin/v1/replicas/commands/{id}` | Просмотр разосланной команды и ответа каждой реплики. |
 
 **Команды реплик.** Часть административных действий меняет память каждой реплики - локальный кэш, - поэтому вызов,
 попавший на одну реплику, изменил бы только её. Модуль предоставляет `ReplicaControl` (имя, тип аргументов, операцию,
@@ -269,15 +270,26 @@ try (RunLockHandle lease = held.get()) {
 хранятся `control.retention` (`P7D`). Первая команда - `cacheevict` (`{"cache": "<имя>"}`), она регистрируется там,
 где работает стартер кэша.
 
-Блок выдачи (имена ролей - собственные роли сервиса):
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[jobs.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[jobs.operate]": [ORDERS_ADMIN]
-      "[jobs.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          cache.definition.read: ALL
+          job.definition.read: ALL
+          job.lease.read: ALL
+          replica.instance.read: ALL
+          replica.command.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          cache.performance.evict: ALL
+          cache.security.evict: ALL
+          job.definition.run: ALL
+          job.lease.release: ALL
 ```
 
 **Хранилище согласований «четырёх глаз».** Рядом с административной поверхностью job-core предоставляет её

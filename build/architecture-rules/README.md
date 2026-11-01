@@ -626,9 +626,9 @@ resource, which bytecode analysis cannot see, and `scripts/check_protos.sh` owns
 
 | Rule | What it requires |
 |------|------------------|
-| `admin.handler-declares-an-operation` | A handler method whose mapping (class path + method path, a `${key:default}` placeholder read as its default) begins with `/admin/` carries `@AdminAccess` or `@AdminAuthenticated` |
-| `admin.no-second-gate` | A class declaring administrative handlers, and those handlers, carry none of `@PreAuthorize`, `@PostAuthorize`, `@Secured`, `@RolesAllowed` |
-| `admin.mapped-under-the-versioned-prefix` | A handler carrying either annotation is mapped under `/admin/v1/` |
+| `admin.handler-declares-an-operation` | A handler method whose mapping (class path + method path, a `${key:default}` placeholder read as its default) begins with `/admin/` carries `@RequiresOperation` or `@RequiresAuthentication` |
+| `admin.no-second-gate` | A handler declaring an operation - on any surface - and its class carry none of `@PreAuthorize`, `@PostAuthorize`, `@Secured`, `@RolesAllowed` |
+| `admin.mapped-under-the-versioned-prefix` | A handler under `/admin/` is mapped under `/admin/v1/` (that an operation's surface matches its path is checked at startup by the security starter) |
 | `admin.controller-is-a-thin-adapter` | A class declaring administrative handlers depends on no repository |
 | `admin.admin-object-is-a-path-variable` | `@AdminObject` appears only on a parameter that is also `@PathVariable` |
 
@@ -636,9 +636,9 @@ On by default, and vacuous for a module with no handler under `/admin/`. A place
 resolved from bytecode; that method is skipped by the path-based rules rather than guessed at. Annotations are
 matched by name, so a module enabling the rules inherits neither Spring MVC nor the security starter from them.
 
-**Roles belong to the consuming service.** A library that writes `hasRole('ADMIN')` on an administrative endpoint
-has decided, for every service that will ever use it, which role administers it. The service decides that in
-`ludwig.admin.grants`; `@AdminAccess` names the operation and nothing else.
+**Roles belong to the consuming service's configuration.** Code that writes `hasRole('ADMIN')` has decided, for every
+service that will ever use it, which role may act. The service decides that in `ludwig.security.roles`;
+`@RequiresOperation` names the operation and nothing else.
 
 #### The three rules in this area that no build can check
 
@@ -648,6 +648,18 @@ has decided, for every service that will ever use it, which role administers it.
    operations.
 3. **That a module's endpoints are absent without the security starter.** A property of the assembled context,
    tested by each declaring module's auto-configuration test.
+
+### `identity` - users are written through the identity projection
+
+| Rule | What it requires |
+|------|------------------|
+| `identity.writes-go-through-the-projection` | No class outside `ru.ludwigandreas.identity` calls a `save*` or `delete*` method of a repository in `ru.ludwigandreas.identity.repository` |
+
+On by default, and vacuous for a module that does not use the projection. Reading the repositories stays allowed.
+A feed - a webhook, a seed, a pulled directory - applies an `IdentityChange` through `IdentityProjection`, which
+orders changes by `occurredAt`, refuses a subject another source owns, maps the source's roles and evicts the
+authority cache after commit; a direct save does none of that. Matched by name, so a module enabling the rules
+does not depend on the projection.
 
 ## Configuring the conventions
 

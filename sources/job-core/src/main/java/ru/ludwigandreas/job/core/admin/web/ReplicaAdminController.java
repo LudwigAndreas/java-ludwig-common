@@ -18,12 +18,12 @@ import ru.ludwigandreas.job.core.admin.ReplicaAdminOperations;
 import ru.ludwigandreas.job.core.admin.service.ReplicaAdminService;
 import ru.ludwigandreas.job.core.admin.service.ReplicaCommandViews.CommandView;
 import ru.ludwigandreas.job.core.admin.service.ReplicaCommandViews.InstanceView;
-import ru.ludwigandreas.security.admin.AdminAccess;
-import ru.ludwigandreas.security.admin.AdminAuthenticated;
-import ru.ludwigandreas.security.admin.AdminInvocation;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
 import ru.ludwigandreas.webcore.operation.OperationLocationHeader;
 import ru.ludwigandreas.webcore.operation.OperationResponses;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.RequiresAuthentication;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /**
  * The {@code replicas} area: live replicas, controls broadcast to all of them, and what each replica answered.
@@ -52,7 +52,7 @@ public class ReplicaAdminController {
      * @return them
      */
     @GetMapping
-    @AdminAccess(ReplicaAdminOperations.READ)
+    @RequiresOperation(ReplicaAdminOperations.INSTANCE_READ)
     public List<InstanceView> replicas() {
         return service.replicas();
     }
@@ -66,10 +66,10 @@ public class ReplicaAdminController {
      * @return {@code 202} with the command and {@code Location} naming it
      */
     @PostMapping("/controls/{control}")
-    @AdminAuthenticated
+    @RequiresAuthentication
     public ResponseEntity<CommandView> submit(@PathVariable String control,
                                               @RequestBody(required = false) JsonNode body,
-                                              @RequestHeader(name = AdminInvocation.REASON_HEADER, required = false)
+                                              @RequestHeader(name = OperationEvaluator.REASON_HEADER, required = false)
                                               String reason) {
         CommandView command = service.submit(control, body, SecurityPrincipals.require(),
                 SecurityContextHolder.getContext().getAuthentication(), this, reason);
@@ -84,7 +84,7 @@ public class ReplicaAdminController {
      * @return the command; a running one carries {@code Retry-After}
      */
     @GetMapping("/commands/{id}")
-    @AdminAccess(ReplicaAdminOperations.READ)
+    @RequiresOperation(ReplicaAdminOperations.COMMAND_READ)
     public ResponseEntity<CommandView> command(@PathVariable UUID id) {
         CommandView command = service.command(id);
         return OperationResponses.poll(command.operationEnvelope(), command, POLL_INTERVAL);

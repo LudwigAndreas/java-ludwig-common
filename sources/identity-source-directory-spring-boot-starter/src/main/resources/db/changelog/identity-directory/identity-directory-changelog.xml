@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      Includes only. Every changeset is formatted SQL in its own NNNN-<slug>.sql file beside this
+      one - see the database-migration capability. This file stays XML because Liquibase's
+      formatted-SQL parser has no include directive; it is wiring, not a migration.
+
+      Schema for identity-source-directory-spring-boot-starter. Changeset ids and author are namespaced
+      ("identity-directory-NNNN", "ludwig-identity-directory") so they never collide with a consuming
+      application's own changesets in the shared DATABASECHANGELOG table - see
+      IdentityDirectoryLiquibaseAutoConfiguration, which registers this changelog as an independent
+      SpringLiquibase bean.
+    -->
+    <include file="classpath:db/changelog/identity-directory/0001-create-identity-directory-state.sql" relativeToChangelogFile="false"/>
+</databaseChangeLog>

@@ -7,7 +7,7 @@ reports per replica whether it took effect, instead of reporting success from wh
 ## Requirements
 ### Requirement: Live replicas are known from heartbeats
 Every replica running `job-core` SHALL record a heartbeat at least once per `ludwig.job-core.control.poll-interval`.
-`GET /admin/v1/replicas` (`replicas.read`) SHALL list the instances whose last heartbeat is within three poll
+`GET /admin/v1/replicas` (`replica.instance.read`) SHALL list the instances whose last heartbeat is within three poll
 intervals, each with its owner id, start time and last-seen time, and the same answer from any replica.
 
 #### Scenario: A replica is scaled away
@@ -31,11 +31,11 @@ command at most once per process lifetime and acknowledge it with success or a f
 - **THEN** the response is `400` and no command is recorded
 
 #### Scenario: The caller lacks the control's operation
-- **WHEN** a caller holding `replicas.read` but not the control's declared operation submits it
+- **WHEN** a caller holding `replica.instance.read` but not the control's declared operation submits it
 - **THEN** the response is `403` and no command is recorded
 
 ### Requirement: A command's status is the replicas' acknowledgements
-`GET /admin/v1/replicas/commands/{id}` (`replicas.read`) SHALL return the command as the platform operation envelope
+`GET /admin/v1/replicas/commands/{id}` (`replica.command.read`) SHALL return the command as the platform operation envelope
 with one entry per targeted instance, each carrying the control's per-replica result when it returned one (at most
 4 KiB). The status SHALL be `SUCCEEDED` when every target acknowledged success,
 `FAILED` when any acknowledged failure, `FAILED` with code `ludwig.job.error.control-unacknowledged` when
@@ -57,8 +57,8 @@ named, never counted as done.
 
 ### Requirement: Every control submission is audited
 Submitting a control SHALL record one administrative audit event naming the control, its arguments as the envelope
-redacts them, the targeted instances and the command id. A privileged control SHALL require `Admin-Reason`.
+redacts them, the targeted instances and the command id. A control whose operation is `PRIVILEGED` SHALL require `Operation-Reason`.
 
 #### Scenario: A privileged control without a reason
-- **WHEN** a control declaring a privileged operation is submitted without `Admin-Reason`
+- **WHEN** a control declaring a `PRIVILEGED` operation is submitted without `Operation-Reason`
 - **THEN** the response is `400` and no command is recorded

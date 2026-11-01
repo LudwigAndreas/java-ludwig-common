@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.security.admin.AdminApprovals.ApprovalView;
+import ru.ludwigandreas.security.operation.RequiresAuthentication;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
 
 /**
@@ -41,7 +42,7 @@ public class AdminApprovalsController {
      * @return the page
      */
     @GetMapping
-    @AdminAuthenticated
+    @RequiresAuthentication
     public AdminPage<ApprovalView> list(@RequestParam(required = false) AdminApprovalState status,
                                         @RequestParam(required = false) String cursor,
                                         @RequestParam(required = false) Integer size) {
@@ -55,7 +56,7 @@ public class AdminApprovalsController {
      * @return the approval
      */
     @GetMapping("/{id}")
-    @AdminAuthenticated
+    @RequiresAuthentication
     public ApprovalView get(@PathVariable UUID id) {
         return approvals.get(SecurityPrincipals.require(), id);
     }
@@ -69,7 +70,7 @@ public class AdminApprovalsController {
      * @return the approval, with the execution's outcome
      */
     @PostMapping("/{id}/approve")
-    @AdminAuthenticated
+    @RequiresAuthentication
     public ApprovalView approve(@PathVariable UUID id, HttpServletRequest request, HttpServletResponse response) {
         return approvals.approve(SecurityPrincipals.require(), id, request, response);
     }
@@ -81,7 +82,7 @@ public class AdminApprovalsController {
      * @return the approval
      */
     @PostMapping("/{id}/reject")
-    @AdminAuthenticated
+    @RequiresAuthentication
     public ApprovalView reject(@PathVariable UUID id) {
         return approvals.reject(SecurityPrincipals.require(), id);
     }
@@ -93,7 +94,7 @@ public class AdminApprovalsController {
      * @return the approval
      */
     @PostMapping("/{id}/withdraw")
-    @AdminAuthenticated
+    @RequiresAuthentication
     public ApprovalView withdraw(@PathVariable UUID id) {
         return approvals.withdraw(SecurityPrincipals.require(), id);
     }

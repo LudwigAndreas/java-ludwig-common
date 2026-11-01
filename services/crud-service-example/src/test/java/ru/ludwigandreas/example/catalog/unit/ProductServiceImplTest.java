@@ -44,7 +44,6 @@ import ru.ludwigandreas.outbox.api.OutboxEvent;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import ru.ludwigandreas.security.data.DataAccessGuard;
-import ru.ludwigandreas.security.data.DataAction;
 
 /**
  * Business rules of the service layer, with no database and no Spring context. The MapStruct
@@ -220,7 +219,7 @@ class ProductServiceImplTest {
         ProductEntity stored = storedProduct();
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(stored));
         doThrow(new AccessDeniedException("out of scope"))
-                .when(dataAccessGuard).check(eq("product"), eq(DataAction.READ), eq(stored), any());
+                .when(dataAccessGuard).check(eq("catalog.product.read"), eq(stored), any());
 
         assertThatThrownBy(() -> service.get(PRODUCT_ID))
                 .isInstanceOf(AccessDeniedException.class);

@@ -285,8 +285,8 @@ modules.
 
 **Clearing a cache on every replica.** `LudwigCacheRegistry.evictAll(name)` clears one cache's local tier and, where
 the cache has one, its shared tier. To clear it on every replica, an operator submits job-core's `cacheevict` replica
-control (`POST /admin/v1/replicas/controls/cacheevict`, `caches.operate`, or `caches.privileged` with a reason for a
-`SECURITY` cache); `GET /admin/v1/caches` lists the caches with purpose, tiers and TTL. This module adds no dependency
+control (`POST /admin/v1/replicas/controls/cacheevict`, `cache.performance.evict`, or `cache.security.evict` with a reason
+for a `SECURITY` cache); `GET /admin/v1/caches` lists the caches with purpose, tiers and TTL. This module adds no dependency
 for it: the administrative area lives in job-core.
 
 ## Runbook

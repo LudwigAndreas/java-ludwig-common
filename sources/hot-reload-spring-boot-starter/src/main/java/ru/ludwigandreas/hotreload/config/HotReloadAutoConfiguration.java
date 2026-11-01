@@ -19,6 +19,7 @@ import ru.ludwigandreas.hotreload.audit.AuditingSourceChangeListener;
 import ru.ludwigandreas.hotreload.binding.ConfigurationBinder;
 import ru.ludwigandreas.hotreload.binding.HotReloadTypedConfigFactory;
 import ru.ludwigandreas.hotreload.core.FileBackedSource;
+import ru.ludwigandreas.hotreload.core.ReloadableSourceRegistry;
 import ru.ludwigandreas.hotreload.core.SourceReloadCoordinator;
 import ru.ludwigandreas.hotreload.core.watch.FileResourceWatcher;
 import ru.ludwigandreas.hotreload.metrics.HotReloadMetrics;
@@ -53,6 +54,12 @@ public class HotReloadAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public ReloadableSourceRegistry hotReloadSourceRegistry() {
+        return new ReloadableSourceRegistry();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public ConfigurationBinder hotReloadConfigurationBinder(ObjectProvider<Validator> validatorProvider) {
         Validator validator = validatorProvider.getIfAvailable(HotReloadAutoConfiguration::defaultValidatorOrNull);
         return new ConfigurationBinder(validator);
@@ -62,7 +69,10 @@ public class HotReloadAutoConfiguration {
     @ConditionalOnMissingBean
     public HotReloadTypedConfigFactory hotReloadTypedConfigFactory(ConfigurableEnvironment environment,
                                                                      ConfigurationBinder binder,
-                                                                     SourceReloadCoordinator coordinator) {
+                                                                     SourceReloadCoordinator coordinator,
+                                                                     EnvironmentPropertySourceBridge bridge) {
+        // The bridge first: a typed configuration's listener rebinds from the Environment, so the bridge must have
+        // updated it already. Listeners run in registration order, and this parameter is what fixes that order.
         return new HotReloadTypedConfigFactory(environment, binder, coordinator);
     }
 
@@ -80,11 +90,13 @@ public class HotReloadAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = "hotReloadFileWatcherLifecycle")
     public ResourceWatcherLifecycle hotReloadFileWatcherLifecycle(HotReloadProperties properties,
-                                                                    SourceReloadCoordinator coordinator) {
+                                                                    SourceReloadCoordinator coordinator,
+                                                                    ReloadableSourceRegistry registry) {
         List<FileBackedSource> sources = properties.getFiles().stream()
                 .filter(file -> file.getPath() != null && !file.getPath().isBlank())
                 .<FileBackedSource>map(file -> new PropertyFileSource(Path.of(file.getPath()), file.getKeyPrefix()))
                 .toList();
+        sources.forEach(source -> registry.register(ReloadableSourceRegistry.Kind.FILE, source, coordinator));
         FileResourceWatcher watcher =
                 new FileResourceWatcher(sources, coordinator, properties.getFileWatch().getDebounce());
         return new ResourceWatcherLifecycle(watcher);

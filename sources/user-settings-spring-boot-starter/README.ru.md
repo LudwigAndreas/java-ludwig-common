@@ -213,7 +213,7 @@ if (!result.complete()) { /* запустить снова; курсора не�
 - `tenantId == null` означает все тенанты (через REST невыразимо).
 - `POST /admin/v1/settings/backfill` (`{ "settingKeys": [...], "includeConsents": false, "maxRows": 50000 }` →
   `{ "settingRows": 41230, "consentRows": 0, "batches": 83, "complete": false }`) требует `web.enabled`,
-  `web.backfill-enabled` и режим владельца, плюс операцию `settings.operate`; тенант - тенант вызывающего.
+  `web.backfill-enabled` и режим владельца, плюс операцию `settings.backfill.start`; тенант - тенант вызывающего.
 - Промежуточные значения, пропущенные потребителем, не восстанавливаются - только текущее состояние (и весь журнал
   согласий).
 
@@ -374,25 +374,32 @@ ludwig:
 
 ## Администрирование
 
-Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют и с какой областью, решает собственный `ludwig.security.roles` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, которой не владеет ни одна роль, запрещена всем. Операция `PRIVILEGED` требует заголовка `Operation-Reason` и не принимает персональный токен доступа, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /me/operations` показывает, какими операциями владеет вызывающий, а `GET /admin/v1/security/operations/{id}/holders` - какие роли владеют операцией.
 
-| Операция | Эндпоинты | Что разрешает |
-|---|---|---|
-| `settings.read` | `GET /admin/v1/settings/subjects/{subject}`<br>`GET /admin/v1/settings/subjects/{subject}/consents`<br>`GET /admin/v1/settings/subjects/{subject}/consents/asof` | Просмотр итоговых настроек и истории согласий другого субъекта. |
-| `settings.operate` | `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}`<br>`POST /admin/v1/settings/backfill` | Изменение настроек на уровне пользователя, роли или арендатора и запуск повторной публикации. |
-| `settings.privileged` | в этом выпуске нет | Операций пока нет; уровень зарезервирован, чтобы выдачи для этой области не менялись между выпусками. |
+| Операция | Чувствительность | Эндпоинты | Что разрешает |
+|---|---|---|---|
+| `settings.subject.read` | `READ` | `GET /admin/v1/settings/subjects/{subject}` | Просмотр итоговых настроек другого субъекта. |
+| `settings.consent.read` | `READ` | `GET /admin/v1/settings/subjects/{subject}/consents`<br>`GET /admin/v1/settings/subjects/{subject}/consents/asof` | Просмотр истории согласий другого субъекта. |
+| `settings.scope.set` | `CHANGE` | `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}` | Изменение настроек на уровне пользователя, роли или арендатора. |
+| `settings.backfill.start` | `CHANGE` | `POST /admin/v1/settings/backfill` | Запуск повторной публикации. |
 
 **Удалено:** `/admin/settings/**`, `ludwig.user-settings.access.admin-authority` и `ludwig.user-settings.web.admin-base-path`; `consents/as-of` теперь `consents/asof`. Подключается только при `ludwig.user-settings.web.enabled=true` в режиме владельца (для повторной публикации также `web.backfill-enabled=true`). Субъект другого арендатора - `404` (было `403`); эндпоинты самообслуживания сохраняют `403`.
 
-Блок выдачи (имена ролей - собственные роли сервиса):
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[settings.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[settings.operate]": [ORDERS_ADMIN]
-      "[settings.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          settings.subject.read: ALL
+          settings.consent.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          settings.scope.set: ALL
+          settings.backfill.start: ALL
 ```
 
 ## Runbook

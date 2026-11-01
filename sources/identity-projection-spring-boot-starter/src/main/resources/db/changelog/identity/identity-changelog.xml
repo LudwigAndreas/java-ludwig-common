@@ -22,5 +22,6 @@
     <include file="classpath:db/changelog/identity/0005-create-security-grant.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/identity/0006-security-grant-dimension-check.sql" relativeToChangelogFile="false"/>
     <include file="classpath:db/changelog/identity/0007-security-user-contact.sql" relativeToChangelogFile="false"/>
+    <include file="classpath:db/changelog/identity/0008-identity-sweep-listed.sql" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

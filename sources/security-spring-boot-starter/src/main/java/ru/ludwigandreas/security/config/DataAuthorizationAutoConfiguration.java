@@ -2,7 +2,6 @@ package ru.ludwigandreas.security.config;
 
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -15,10 +14,7 @@ import org.springframework.security.authorization.AuthorizationEventPublisher;
 import org.springframework.security.authorization.SpringAuthorizationEventPublisher;
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
 import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import ru.ludwigandreas.audit.AuditSink;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
 import ru.ludwigandreas.security.audit.AuthorizationDeniedAuditListener;
 import ru.ludwigandreas.security.data.CompositeDataScopeProvider;
 import ru.ludwigandreas.security.data.DataAccessGuard;
@@ -27,23 +23,19 @@ import ru.ludwigandreas.security.data.DataScopePermissionEvaluator;
 import ru.ludwigandreas.security.data.DataScopePredicateFactory;
 import ru.ludwigandreas.security.data.DataScopeProvider;
 import ru.ludwigandreas.security.data.DataScopeRegistry;
-import ru.ludwigandreas.security.data.DataScopePolicyValidator;
-import ru.ludwigandreas.security.data.PolicyDataScopeProvider;
-import ru.ludwigandreas.security.data.ScopePolicies;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
+import ru.ludwigandreas.security.operation.OperationAuthority;
 
 /**
  * Wires data-level authorization: the mapping registry, the scope providers, the guard the service
  * calls, and the {@link PermissionEvaluator} that makes {@code hasPermission(...)} work in
  * {@code @PreAuthorize}/{@code @PostAuthorize}.
  *
- * <p>Enabling method security here rather than leaving it to the service is deliberate: the
- * annotations are the most-used half of the module, and a service that forgets
- * {@code @EnableMethodSecurity} gets code that looks protected, compiles, passes review and enforces
- * nothing. Failing to enable it is invisible; enabling it when the service did not expect it is not.
+ * <p>Method security itself is enabled by {@link OperationAutoConfiguration}, whatever this configuration's switch
+ * says: a service that forgets {@code @EnableMethodSecurity} gets code that looks protected and enforces nothing, and
+ * turning row scoping off must not turn operation checks off with it.
  */
-@AutoConfiguration
-@EnableMethodSecurity
+@AutoConfiguration(after = OperationAutoConfiguration.class)
 // Both names must be true: turning the module off as a whole must also take the guard and the
 // permission evaluator with it, or the context fails on beans whose collaborators are gone.
 @ConditionalOnProperty(prefix = "ludwig.security", name = {"enabled", "data.enabled"},
@@ -65,74 +57,37 @@ public class DataAuthorizationAutoConfiguration {
     }
 
     /**
-     * The policy tree, parsed and normalized once. Creating it here rather than inside the provider
-     * means a malformed grant expression fails context startup, and lets the validator below walk the
-     * same compiled structure the provider will use at runtime.
-     */
-    @Bean
-    @ConditionalOnMissingBean(ScopePolicies.class)
-    public ScopePolicies ludwigScopePolicies(SecurityProperties properties) {
-        return ScopePolicies.compile(properties);
-    }
-
-    /**
-     * The configuration-driven provider is registered under its own concrete type, so a service adding
-     * its own {@link DataScopeProvider} bean composes with it rather than replacing it - grants from
-     * configuration and grants from a lookup are both real and both have to be honored.
-     */
-    @Bean
-    @ConditionalOnMissingBean(PolicyDataScopeProvider.class)
-    public PolicyDataScopeProvider ludwigPolicyDataScopeProvider(ScopePolicies policies,
-                                                                  SecurityProperties properties) {
-        return new PolicyDataScopeProvider(policies, properties);
-    }
-
-    /**
-     * Fails startup when a policy names a resource or a dimension nothing can enforce. Without it the
-     * same mistakes surface as exceptions from whichever request first exercises the combination.
-     */
-    @Bean
-    @ConditionalOnMissingBean(DataScopePolicyValidator.class)
-    public DataScopePolicyValidator ludwigDataScopePolicyValidator(ScopePolicies policies,
-                                                                    DataScopeRegistry registry,
-                                                                    ObjectProvider<AdminOperationCatalog> catalog) {
-        // Read at validation, not here: the catalog belongs to the administrative surface's configuration, which
-        // runs after this one, and is absent when the surface is off.
-        return new DataScopePolicyValidator(policies, registry, () -> catalog.stream()
-                .flatMap(each -> each.all().stream())
-                .map(AdminOperation::area)
-                .collect(Collectors.toSet()));
-    }
-
-    /**
-     * Primary because it is the only one that speaks for all of them: injecting a bare
-     * {@code DataScopeProvider} anywhere else would otherwise be ambiguous between this, the
-     * configuration-driven one, and every provider the service added - and picking any single one of
-     * those silently drops the grants the others carry.
+     * The per-subject grant providers a service or module contributes - the identity projection's grant rows, say -
+     * united. The roles' scopes come from {@code ludwig.security.roles} through the operation model, which adds these
+     * on top. Primary because it is the only one that speaks for all of them: injecting a bare
+     * {@code DataScopeProvider} anywhere else would otherwise be ambiguous, and picking any single one silently drops
+     * the grants the others carry.
      */
     @Bean
     @Primary
     @ConditionalOnMissingBean(CompositeDataScopeProvider.class)
     public CompositeDataScopeProvider ludwigDataScopeProvider(ObjectProvider<DataScopeProvider> providers) {
-        return new CompositeDataScopeProvider(providers.orderedStream().toList());
+        // Resolved on first use: with no contributed provider, resolving now would find only this bean itself.
+        return new CompositeDataScopeProvider(() -> providers.orderedStream().toList());
     }
 
     @Bean
     @ConditionalOnMissingBean(DataAccessGuard.class)
-    public DataAccessGuard ludwigDataAccessGuard(CompositeDataScopeProvider scopeProvider,
+    public DataAccessGuard ludwigDataAccessGuard(OperationAuthority scopes,
                                                   DataScopeRegistry registry,
                                                   DataScopePredicateFactory predicateFactory,
                                                   AuditSink auditSink,
                                                   SecurityMetrics metrics,
                                                   SecurityProperties properties) {
-        return new DataAccessGuard(scopeProvider, registry, predicateFactory, auditSink, metrics,
+        return new DataAccessGuard(scopes, registry, predicateFactory, auditSink, metrics,
                 properties.getAudit().isEnabled() && properties.getAudit().isLogGrants());
     }
 
     @Bean
     @ConditionalOnMissingBean(PermissionEvaluator.class)
-    public PermissionEvaluator ludwigPermissionEvaluator(DataAccessGuard guard, DataScopeRegistry registry) {
-        return new DataScopePermissionEvaluator(guard, registry);
+    public PermissionEvaluator ludwigPermissionEvaluator(DataAccessGuard guard, DataScopeRegistry registry,
+                                                         OperationAuthority scopes) {
+        return new DataScopePermissionEvaluator(guard, registry, scopes);
     }
 
     /**

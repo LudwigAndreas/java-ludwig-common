@@ -1,0 +1,2 @@
+ru.ludwigandreas.identity.directory.config.IdentityDirectoryAutoConfiguration
+ru.ludwigandreas.identity.directory.config.IdentityDirectoryLiquibaseAutoConfiguration

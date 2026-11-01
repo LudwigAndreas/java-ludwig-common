@@ -27,7 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.pat.repository.PatRepository;
 import ru.ludwigandreas.pat.service.PatService;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.security.principal.Credential;
 import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
@@ -44,10 +44,11 @@ import ru.ludwigandreas.testsupport.image.LudwigTestImages;
 @SpringBootTest(classes = ExchangeTestSupport.class,
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
-            "ludwig.admin.allow-personal-access-tokens=true",
-            "ludwig.admin.grants.pat.read[0]=PAT_SUPPORT",
-            "ludwig.admin.grants.pat.read[1]=PAT_ADMIN",
-            "ludwig.admin.grants.pat.privileged[0]=PAT_ADMIN"})
+            "ludwig.security.operations.allow-personal-access-tokens=true",
+            "ludwig.security.roles.PAT_SUPPORT.operations[pat.token.read]=ALL",
+            "ludwig.security.roles.PAT_ADMIN.operations[pat.token.read]=ALL",
+            "ludwig.security.roles.PAT_ADMIN.operations[pat.token.issue]=ALL",
+            "ludwig.security.roles.PAT_ADMIN.operations[pat.token.revoke]=ALL"})
 @AutoConfigureMockMvc
 @Testcontainers
 class PatAdminIT {
@@ -113,7 +114,7 @@ class PatAdminIT {
     @DisplayName("an administrator issues for bob: the secret is returned once and the reason is audited")
     void issuesForAnotherOwner() throws Exception {
         MvcResult issued = mvc.perform(post(TOKENS).contentType(MediaType.APPLICATION_JSON).content(issueFor("bob"))
-                        .header(AdminInvocation.REASON_HEADER, "pipeline handover").with(admin()))
+                        .header(OperationEvaluator.REASON_HEADER, "pipeline handover").with(admin()))
                 .andReturn();
 
         assertThat(issued.getResponse().getStatus()).isEqualTo(201);
@@ -131,7 +132,7 @@ class PatAdminIT {
         assertThat(reread).doesNotContain(secret).doesNotContain("lpat_").doesNotContain("digest");
         assertThat(JSON.readTree(listed).path("items")).hasSize(1);
 
-        AuditEvent admin = auditSink.lastOf("pat.privileged");
+        AuditEvent admin = auditSink.lastOf("pat.token.issue");
         assertThat(admin.attributes()).containsEntry("owner", "bob");
         assertThat(admin.toString()).contains("pipeline handover");
         assertThat(auditSink.lastOf("pat.issued").attributes()).containsEntry("issuedBy", "olga");
@@ -151,11 +152,11 @@ class PatAdminIT {
     @DisplayName("an administrator revokes bob's token; it is no longer live, and status filters see it")
     void revokesAnotherOwnersToken() throws Exception {
         String id = JSON.readTree(mvc.perform(post(TOKENS).contentType(MediaType.APPLICATION_JSON)
-                        .content(issueFor("bob")).header(AdminInvocation.REASON_HEADER, "setup").with(admin()))
+                        .content(issueFor("bob")).header(OperationEvaluator.REASON_HEADER, "setup").with(admin()))
                 .andReturn().getResponse().getContentAsString()).path("token").path("id").asText();
 
         MvcResult revoked = mvc.perform(post(TOKENS + "/" + id + "/revoke")
-                .header(AdminInvocation.REASON_HEADER, "leaked in a public repository").with(admin())).andReturn();
+                .header(OperationEvaluator.REASON_HEADER, "leaked in a public repository").with(admin())).andReturn();
 
         assertThat(revoked.getResponse().getStatus()).isEqualTo(200);
         assertThat(JSON.readTree(revoked.getResponse().getContentAsString()).path("live").asBoolean()).isFalse();
@@ -176,7 +177,7 @@ class PatAdminIT {
     @DisplayName("read alone may not issue")
     void readMayNotIssue() throws Exception {
         int status = mvc.perform(post(TOKENS).contentType(MediaType.APPLICATION_JSON).content(issueFor("bob"))
-                        .header(AdminInvocation.REASON_HEADER, "x").with(as("sam", "PAT_SUPPORT", null)))
+                        .header(OperationEvaluator.REASON_HEADER, "x").with(as("sam", "PAT_SUPPORT", null)))
                 .andReturn().getResponse().getStatus();
 
         assertThat(status).isEqualTo(403);
@@ -186,7 +187,7 @@ class PatAdminIT {
     @DisplayName("a PAT-credentialed caller is refused even with the surface opened to PATs")
     void personalAccessTokenRefused() throws Exception {
         MvcResult result = mvc.perform(post(TOKENS).contentType(MediaType.APPLICATION_JSON).content(issueFor("bob"))
-                        .header(AdminInvocation.REASON_HEADER, "x")
+                        .header(OperationEvaluator.REASON_HEADER, "x")
                         .with(as("olga", "PAT_ADMIN", Credential.personalAccessToken("pat-leaked"))))
                 .andReturn();
 

@@ -105,7 +105,7 @@
 
         <!--
             Optional: trail search (ru.ludwigandreas.audit.store.admin) exists only where the security starter's
-            administrative surface does, behind @ConditionalOnBean(AdminOperationCatalog).
+            administrative surface does, behind @ConditionalOnBean(AdminSurfaceGuard).
         -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>

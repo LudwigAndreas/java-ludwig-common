@@ -1,6 +1,10 @@
 package ru.ludwigandreas.security.admin;
 
 import java.util.Optional;
+import ru.ludwigandreas.security.operation.Authorization;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.Surface;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
 
@@ -14,15 +18,9 @@ import ru.ludwigandreas.security.principal.PrincipalType;
  *
  * @param operation the operation the handler declared
  * @param principal the authorized caller
- * @param reason    the {@code Admin-Reason} the caller stated, or null
+ * @param reason    the {@link OperationEvaluator#REASON_HEADER} the caller stated, or null
  */
-public record AdminInvocation(AdminOperation operation, LudwigPrincipal principal, String reason) {
-
-    /** The header carrying the caller's reason. Mandatory for a privileged operation. */
-    public static final String REASON_HEADER = "Admin-Reason";
-
-    /** The longest reason accepted, after trimming. */
-    public static final int MAX_REASON_LENGTH = 500;
+public record AdminInvocation(Operation operation, LudwigPrincipal principal, String reason) {
 
     private static final ThreadLocal<AdminInvocation> CURRENT = new ThreadLocal<>();
 
@@ -43,14 +41,28 @@ public record AdminInvocation(AdminOperation operation, LudwigPrincipal principa
      */
     public static AdminInvocation require() {
         return current().orElseThrow(() -> new IllegalStateException("No administrative operation is being"
-                + " performed on this thread. AdminInvocation is bound only while an @AdminAccess handler runs."));
+                + " performed on this thread. AdminInvocation is bound only while an administrative"
+                + " @RequiresOperation handler runs."));
     }
 
     /**
-     * Binds an invocation to this thread until the returned scope is closed, which restores whatever was bound before.
-     * Package-private: an invocation is bound only by {@link AdminAccessEvaluator#authorize}, after the caller has
-     * been found to hold the operation.
+     * Binds an authorized administrative call to this thread until the returned scope is closed, which restores
+     * whatever was bound before. Only {@link OperationEvaluator#authorize} creates an {@link Authorization}, so nothing
+     * unauthorized can be bound.
+     *
+     * @param authorization the authorized call
+     * @return the binding; close it when the call completes
+     * @throws IllegalArgumentException when the operation is not administrative
      */
+    public static Scope open(Authorization authorization) {
+        if (authorization.operation().surface() != Surface.ADMIN) {
+            throw new IllegalArgumentException("Operation " + authorization.operation().id() + " is not administrative;"
+                    + " only an administrative call binds an AdminInvocation");
+        }
+        return open(new AdminInvocation(authorization.operation(), authorization.principal(),
+                authorization.reason().orElse(null)));
+    }
+
     static Scope open(AdminInvocation invocation) {
         AdminInvocation previous = CURRENT.get();
         CURRENT.set(invocation);

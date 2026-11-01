@@ -240,18 +240,19 @@ operations.
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `jobs.read` | `GET /admin/v1/jobs`<br>`GET /admin/v1/jobs/locks` | See the scheduled jobs and who holds each run lease. |
-| `jobs.operate` | `POST /admin/v1/jobs/{name}/run` | Run a scheduled job now. |
-| `replicas.read` | `GET /admin/v1/replicas`<br>`GET /admin/v1/replicas/commands/{id}` | See the live replicas and what each answered to a broadcast control. |
-| `replicas.operate`, `replicas.privileged` | none | Reserved: a control is authorized by its own module's operation. |
-| `caches.read` | `GET /admin/v1/caches` | See the caches this service runs, with purpose, tiers and TTL; never a value. |
-| `caches.operate` | `POST /admin/v1/replicas/controls/cacheevict` for a `PERFORMANCE` cache | Clear a performance cache on every replica. |
-| `caches.privileged` | `POST /admin/v1/replicas/controls/cacheevict` for a `SECURITY` cache, with `Admin-Reason` | Clear a security cache on every replica. |
-| `jobs.privileged` | `POST /admin/v1/jobs/locks/{name}/release` | Force-release a run lease whose holder is gone. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `cache.performance.evict` | `CHANGE` | control `cacheevict` for a `PERFORMANCE` cache | Clear a performance cache on every replica. |
+| `cache.security.evict` | `PRIVILEGED` | control `cacheevict` for a `SECURITY` cache | Clear a security cache (authority, revocation) on every replica. |
+| `cache.definition.read` | `READ` | `GET /admin/v1/caches` | See the caches this service runs, with their purpose, tiers and time to live. |
+| `job.definition.read` | `READ` | `GET /admin/v1/jobs` | See the scheduled jobs registered in this service, with their schedule and lease. |
+| `job.definition.run` | `CHANGE` | `POST /admin/v1/jobs/{name}/run` | Run a scheduled job now. |
+| `job.lease.read` | `READ` | `GET /admin/v1/jobs/locks` | See every run lease and which instance holds it. |
+| `job.lease.release` | `PRIVILEGED` | `POST /admin/v1/jobs/locks/{name}/release` | Force-release a run lease whose holder is gone. |
+| `replica.instance.read` | `READ` | `GET /admin/v1/replicas` | See the live replicas of this service. |
+| `replica.command.read` | `READ` | `GET /admin/v1/replicas/commands/{id}` | See a broadcast control and what each replica answered. |
 
 **Replica controls.** Some administrative controls act on memory each replica holds - a local cache - so a call that
 landed on one replica would change only that one. A module contributes a `ReplicaControl` (name, argument type, the
@@ -267,15 +268,26 @@ It must also be quick: it runs with `control.handler-timeout` (`PT10S`). Polling
 per interval - 100 replicas at `PT2S` is 50 queries a second. Commands are kept for `control.retention` (`P7D`).
 The first control is `cacheevict` (`{"cache": "<name>"}`), registered where the cache starter runs.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[jobs.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[jobs.operate]": [ORDERS_ADMIN]
-      "[jobs.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          cache.definition.read: ALL
+          job.definition.read: ALL
+          job.lease.read: ALL
+          replica.instance.read: ALL
+          replica.command.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          cache.performance.evict: ALL
+          cache.security.evict: ALL
+          job.definition.run: ALL
+          job.lease.release: ALL
 ```
 
 **Four-eyes approval store.** Beside the administrative surface, job-core provides its `AdminApprovalStore`

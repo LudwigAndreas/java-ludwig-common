@@ -305,6 +305,42 @@ class BillingApiTest {
 
 The slice boots only this starter and discovers interfaces as production does.
 
+## Administration
+
+Where `security-spring-boot-starter`'s administrative surface and `job-core`'s replica-control channel both run (both
+optional dependencies), the starter contributes the `restclient` area; without either it contributes nothing. Tokens
+and breakers are held per replica, so they are replica controls under `POST /admin/v1/replicas/controls/{control}`.
+
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `restclient.breaker.read` | `READ` | control `restclientbreakers` (`{}`) | See every replica's circuit breakers, with state and failure rate. |
+| `restclient.token.reset` | `CHANGE` | control `restclienttokenreset` with `{"client": "<name>"}` | Discard a client's cached machine token on every replica, so its next call mints a new one. |
+| `restclient.breaker.set` | `PRIVILEGED` | control `restclientbreaker` with `{"client": "<name>", "state": "CLOSED" \| "FORCED_OPEN" \| "DISABLED"}` | Set a client's circuit breaker on every replica - forcing it open stops all calls to that partner. |
+| `restclient.client.read` | `READ` | `GET /admin/v1/restclient/clients` | See the named outbound clients; never a credential. |
+
+Each operation is held through the service's own `ludwig.security.roles`; a `PRIVILEGED` one needs an `Operation-Reason` header and refuses a personal access token.
+
+**A forced breaker resets on restart.** Resilience4j state is in memory: a restarted or new replica starts `CLOSED`.
+Read the breakers after a rollout, and set the state again if it must hold; the audit trail names who forced it and
+why.
+
+Role block (the role names are the service's own; `ALL` is the scope):
+
+```yaml
+ludwig:
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          restclient.breaker.read: ALL
+          restclient.client.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          restclient.token.reset: ALL
+          restclient.breaker.set: ALL
+```
+
 ## Configuration
 
 Durations accept `200ms`, `2s`, `5m`. Keys marked **refresh** are re-read once per second per client (with hot-reload,

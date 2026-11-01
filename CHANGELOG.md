@@ -21,6 +21,46 @@ either.
 
 ### Added
 
+- **Identity sources: a provider-neutral projection and pluggable feeds** (`identity-sources`).
+  - `identity-projection-spring-boot-starter` takes every user change through one SPI, `IdentityProjection`
+    (`IdentityChange.Upsert` / `Disable` / `Remove`), from declared sources (`ludwig.identity.sources.<name>`, with a
+    per-source `role-mapping` and `unmapped-roles`). A subject belongs to the source that first projected it; a change
+    from another source is refused and counted. Full sweeps disable the users a source no longer lists, aborted with
+    no change past `ludwig.identity.sweep.max-disable-ratio` (`0.1`). Metrics `ludwig_identity_changes_total`,
+    `ludwig_identity_sweeps_total`, `ludwig_identity_sweep_disabled_total`; a `REMOVED` user status.
+  - New `identity-source-kafka-spring-boot-starter`: one subscription per source, the `IdentityUserEvent` v1 contract;
+    a malformed event is now dead-lettered on its first delivery instead of being dropped.
+  - New `identity-source-directory-spring-boot-starter`: implement `IdentityDirectory` against a provider's user API;
+    incremental sync from a persisted watermark and scheduled sweeps run as job-core jobs
+    (`ludwig-identity-<source>-sync` / `-sweep`) under run locks, with `ludwig_identity_directory_run_seconds`.
+  - `GET /admin/v1/identity/sources` (`identity.source.read`) lists every source, its feeds and their state.
+  - `architecture-rules` group `identity`: `identity.writes-go-through-the-projection`.
+- **One operation catalog and one role table** (`operations-catalog`). Code authorizes by operation only; a role is
+  only a configuration item:
+  - every module declares its operations as `<area>.<object>.<verb>` with a sensitivity (`READ`, `CHANGE`,
+    `PRIVILEGED`), a surface (`BUSINESS`, `ADMIN`) and, when it touches rows, a resource and data action
+    (`OperationContributor`); the 15 administrative areas are 62 precise operations (each module's README lists them);
+  - `ludwig.security.roles.<ROLE>.operations.<operation>: <scope>` (`ALL`, or dimensions joined by `+`), with
+    `includes` for composition, is the only place roles are named; startup fails on an uncatalogued operation, an
+    unbound dimension, a row dimension on an operation that touches no rows, a wildcard, `NONE` or an `includes`
+    cycle, and logs the operations no role holds;
+  - `@RequiresOperation` and `@RequiresAuthentication` on MVC handlers, application-service methods (method
+    security) and gRPC methods; `DataAccessGuard` and export's `ReportDefinition.scopedBy(...)` take an operation id;
+  - `GET /me/operations` lists the caller's operations with scope and localized description, and
+    `GET /admin/v1/security/operations/{id}/holders` (`security.operation.read`) lists the roles holding one;
+  - notification-service and crud-service-example declare their business operations and move to the role table.
+
+  It supersedes the tier ids, `ludwig.admin.grants`, `@AdminAccess`, `Admin-Reason` / `admin-reason` and
+  `/admin/v1/me/operations` named by the unreleased entries below.
+- **Replica controls for configuration, machine tokens and circuit breakers** (`replica-controls`). Where job-core's
+  replica-control channel and the administrative surface run (both optional dependencies):
+  - hot-reload adds the `hotreload` area: `GET /admin/v1/hotreload/sources` (id, kind, `lastReloadedHere`, never a
+    value) and the control `hotreloadreload`, which reloads a source on every replica through the watcher's own path
+    and reports `reloaded`, `unchanged` or `rejected` per replica (a Vault lease source is rotated);
+  - rest-client adds the `restclient` area: `GET /admin/v1/restclient/clients` (host, auth kind, resilience; no
+    credentials) and the controls `restclienttokenreset` (operate), `restclientbreakers` (read, per replica) and
+    `restclientbreaker` (privileged, reason required: `CLOSED`, `FORCED_OPEN`, `DISABLED`; resets on restart).
+  notification-service grants `hotreload.*`, crud-service-example grants `restclient.*`.
 - **Administrative operations over gRPC** (`grpc-admin-operations`). `@AdminAccess` on a method of a
   `@LudwigGrpcService` is enforced with the same grants, caller admission and audit as `/admin/**`: an operation the
   caller does not hold is `PERMISSION_DENIED` (audited), a privileged one needs `admin-reason` metadata (else
@@ -197,6 +237,22 @@ either.
 
 ### Changed
 
+- **BREAKING: the identity projection no longer consumes Kafka** (`identity-sources`). Add
+  `identity-source-kafka-spring-boot-starter`, declare `ludwig.identity.sources.oidc: {}`, and move
+  `ludwig.identity.kafka.topic` to `ludwig.identity.kafka.subscriptions.oidc.topic`; `ludwig.identity.kafka.group-id` is
+  now required. The projection drops its `messaging-spring-boot-starter` dependency.
+- **BREAKING: operations replace tiers and policies** (`operations-catalog`). `PRIVILEGED` requires the
+  `Operation-Reason` header (gRPC metadata `operation-reason`, `GrpcMetadataKeys.OPERATION_REASON`) and refuses
+  personal access tokens unless `ludwig.security.operations.allow-personal-access-tokens=true`, on every surface.
+  `ludwig.admin.approval.required` accepts only administrative `PRIVILEGED` operation ids. `DataAccessGuard`'s methods
+  take an operation id instead of a resource and action; `DataScopePermissionEvaluator`'s permission is an operation
+  id. The gRPC interceptor is `OperationInterceptor`. The `DataScopeProvider` SPI is unchanged: it is asked with the
+  operation's resource and action, or for an operation that touches no rows its id and `invoke`.
+- **hot-reload and rest-client: bean methods take the registries the admin areas read** (`replica-controls`). The
+  source-creating `@Bean` methods of `HotReloadAutoConfiguration`, `HotReloadVaultAutoConfiguration` and
+  `HotReloadFreemarkerAutoConfiguration` take `ReloadableSourceRegistry`;
+  `RestClientAuthAutoConfiguration.ludwigClientCredentialsAuthenticationProvider` takes `ClientTokenSources`.
+  `SourceReloadCoordinator` gains `reloadOutcome(source)`; `reload(source)` is unchanged.
 - **security-spring-boot-starter: one administrative evaluation for every transport** (`grpc-admin-operations`).
   `AdminAccessEvaluator.authorize(Authentication, LudwigPrincipal, AdminOperation, String reason, Object target)`
   returns an `AdminInvocation.Scope`, for HTTP and gRPC alike. Partner, personal-access-token and
@@ -303,6 +359,15 @@ either.
 
 ### Removed
 
+- **`OidcUserEvent`, `OidcUserEventListener` and `IdentityProjectionService.apply(OidcUserEvent)`**
+  (`identity-sources`): replaced by `IdentityUserEvent` in the Kafka source and `IdentityProjection`.
+  `ludwig.identity.kafka.topic` fails startup, naming its replacement.
+- **Tiers, grants and data policies** (`operations-catalog`). `AdminOperation`, `AdminTier`,
+  `AdminOperationContributor`, `AdminOperationCatalog`, `AdminGrants`, `AdminAccess`, `AdminAuthenticated`,
+  `AdminAccessEvaluator`, `AdminObjectScope`, `ScopePolicies`, `PolicyDataScopeProvider`, `DataScopePolicyValidator`
+  and `ReportDefinition.scopeResourceType`. The keys `ludwig.admin.grants`, `ludwig.admin.allow-personal-access-tokens`,
+  `ludwig.security.data.policies`, `ludwig.security.data.default-access` and `ludwig.security.data.strict-policy-tokens`
+  fail startup, naming their replacement. `/admin/v1/me/operations` is gone.
 - **Actuator administration** (`starter-admin-endpoints`). The `reconciliation` and `fileingest` actuator
   endpoints are removed, along with their auto-configurations and `ludwig.reconciliation.endpoint.*` /
   `ludwig.ingest.endpoint.*`; use their `/admin/v1/` areas instead. Also removed:
@@ -339,6 +404,12 @@ either.
 
 ### Fixed
 
+- **AsyncAPI: listeners whose topics come from an expression yielding several topics** (`identity-sources`).
+  Springwolf documented such a listener once, under the array's `toString()`; the platform customizer now evaluates
+  the expression as Spring Kafka does and documents one channel, receive operation and dead-letter channel per topic.
+- **hot-reload: a typed configuration could rebind from the stale Environment** (`replica-controls`). A
+  `RefreshableConfig` created before the environment bridge registered its listener first, so after a reload it kept
+  the old values. The typed-configuration factory now depends on the bridge, which fixes the order.
 - **A cancelled file-action submission is no longer recorded as applied** (`file-action-cancelled-state`). A pass that
   stopped on a cancel was recorded `APPLIED` (envelope `SUCCEEDED`) with a successful `file-action.applied` event. It
   is now `CANCELLED`, audited as `file-action.cancelled`. A cancel that arrived while the submission was queued or

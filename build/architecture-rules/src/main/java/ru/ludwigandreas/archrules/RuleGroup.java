@@ -206,12 +206,21 @@ public enum RuleGroup {
 
     /**
      * The administrative surface: every handler under {@code /admin/} declares its operation with
-     * {@code @AdminAccess} (or {@code @AdminAuthenticated}), carries no second authorization annotation, is mapped
-     * under {@code /admin/v1/}, and delegates to a service rather than a repository. See
+     * {@code @RequiresOperation} (or {@code @RequiresAuthentication}), is mapped under {@code /admin/v1/}, and
+     * delegates to a service rather than a repository; and no handler declaring an operation carries a second
+     * authorization annotation. See
      * {@link ru.ludwigandreas.archrules.rules.AdminRules} for the rules and for the three things in this area no
      * bytecode rule can see. Vacuous for a module with no handler under {@code /admin/}.
      */
     ADMIN("admin", true),
+
+    /**
+     * The identity projection has one write path: users and their roles change only through its
+     * {@code IdentityProjection}, which owns ordering, staleness, source ownership, role mapping and cache eviction. A
+     * class that saves or deletes through the projection's repositories skips all five. See
+     * {@link ru.ludwigandreas.archrules.rules.IdentityRules}. Vacuous for a module that does not use the projection.
+     */
+    IDENTITY("identity", true),
 
     /** Rules contributed by the consuming service itself. */
     CUSTOM("custom", true);

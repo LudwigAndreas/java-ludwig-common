@@ -10,7 +10,7 @@
 |---|---|---|
 | PostgreSQL | каждому сервису | отдельная база данных для каждого сервиса; Liquibase выполняет миграции при запуске |
 | Kafka | сервисам с включённым обменом сообщениями | один или несколько именованных кластеров (`ludwig.kafka.clusters.<name>`); [messaging-db](../sources/messaging-db-spring-boot-starter/README.md) используется вместо кластера, которого пока нет |
-| Провайдер OIDC | каждому сервису с `security-spring-boot-starter` | `OIDC_ISSUER_URI`; поток пользователей (`corp.identity.users`) передаёт данные в проекцию идентификации |
+| Провайдер OIDC | каждому сервису с `security-spring-boot-starter` | `OIDC_ISSUER_URI`; поток пользователей (`corp.identity.users`) передаёт данные в проекцию идентификации через `identity-source-kafka`, а провайдер с API пользователей - через `identity-source-directory` |
 | Пограничный прокси (nginx/Envoy) | сервисам, работающим за ним | обменивает cookie сессии на JWT; передаёт клиентские сертификаты mTLS |
 | SMTP-сервер | notification-service | |
 | S3-совместимое хранилище | object-storage, file-ingest, export (если настроено) | учётные данные — только через цепочку провайдеров AWS SDK |
@@ -49,7 +49,8 @@
 | job-core | `job_run_lock` | ограничено именами блокировок |
 | idempotency | `idempotency_claim` | `ludwig.idempotency.ttl`, пакетная очистка |
 | audit starter | `audit_event` | `ludwig.audit.retention.*`, по умолчанию `P7Y`, отдельно для каждой категории |
-| identity-projection | `security_user`, `security_user_role`, `security_partner`, `security_partner_role`, `security_grant` | зеркально отражает данные провайдера |
+| identity-projection | `security_user`, `security_user_role`, `security_partner`, `security_partner_role`, `security_grant`, `identity_sweep_listed` | зеркально отражает данные провайдеров |
+| identity-source-directory | `identity_directory_state` | водяная отметка и последние синхронизация и обход каждого каталога |
 | messaging-db | `message_log`, `partition_head`, `consumer_offset` (схема `ludwig_messaging`) | `ludwig.messaging.db.retention`, по умолчанию 7 дней, независимо от того, обработано сообщение или нет |
 | export | `export_report_run`, `export_report_output`, `export_saved_report`, `export_report_subscription` | срок хранения выходных данных зависит от приёмника |
 | file-ingest | `file_ingest_run`, `file_ingest_quarantine` | **не ограничено** (§9) |
@@ -69,7 +70,7 @@ UPDATE job_run_lock SET owner = NULL, run_id = NULL, expires_at = now() WHERE lo
 
 | Топик | Производитель | Потребитель | Очередь недоставленных сообщений |
 |---|---|---|---|
-| `corp.identity.users` | провайдер OIDC | identity-projection (в каждом сервисе, где он включён) | `corp.identity.users.dlt` |
+| `corp.identity.users` | провайдер OIDC | identity-source-kafka (в каждом сервисе, который подписан на него в `ludwig.identity.kafka.subscriptions.<source>`) | `corp.identity.users.dlt` |
 | `catalog.product-events` | crud-service-example (outbox) | — | — |
 | `platform.notifications.requests` | любой сервис | notification-service (по умолчанию выключен) | `platform.notifications.requests.dlt` |
 | `platform.notifications.events` | notification-service (outbox) | — | — |
@@ -120,46 +121,88 @@ UPDATE job_run_lock SET owner = NULL, run_id = NULL, expires_at = now() WHERE lo
 | `/actuator/health/liveness`, `/actuator/health/readiness` | observability starter + Boot | публичный (пробы) |
 | `/actuator/info`, `/server/info` | observability starter | публичный |
 | `/actuator/prometheus`, `/actuator/metrics` | Micrometer | только внутренняя сеть |
-| `/admin/v1/**` | стартер безопасности + каждый модуль | аутентифицированные пользователи и сервисы с выданной операцией; см. ниже |
+| `/admin/v1/**` | стартер безопасности + каждый модуль | аутентифицированные пользователи и сервисы, владеющие операцией; см. ниже |
+| `/me/operations` | стартер безопасности | любой аутентифицированный вызывающий: операции, которыми он владеет |
 
-**Административная поверхность.** Все административные эндпоинты находятся под `/admin/v1/`. Модули объявляют
-операции `<area>.<tier>`; каждый сервис выдаёт их своим ролям в `ludwig.admin.grants` - выдачи по умолчанию нет,
-поэтому обновлённый сервис отклоняет все административные вызовы, пока блока нет, а журнал старта перечисляет
-невыданные операции. Административные микросервисы получают роли из `ludwig.identity.service-roles`. Партнёры и
-персональные токены доступа отклоняются; вызову `privileged` нужен заголовок `Admin-Reason`; каждое изменение
-аудируется в категории `admin`. `GET /admin/v1/me/operations` сообщает UI, что есть у вызывающего. Подробности:
-[security](../sources/security-spring-boot-starter/README.ru.md#административная-поверхность). Операторских эндпоинтов actuator у
-модулей больше нет: то, что делали `/actuator/fileingest` и `/actuator/reconciliation`, - в областях `fileingest` и
-`reconciliation` ниже.
+**Административная поверхность.** Все административные эндпоинты находятся под `/admin/v1/`, и каждый защищён
+одной операцией с чувствительностью `READ`, `CHANGE` или `PRIVILEGED`. Какие роли сервиса ею владеют, решает
+собственный `ludwig.security.roles` сервиса (ниже) - значения по умолчанию нет, поэтому операция, которую не
+перечисляет ни одна роль, запрещена всем, а строка журнала старта "Operations no role of this service holds"
+перечисляет такие операции. Административные микросервисы получают роли из `ludwig.identity.service-roles`. Партнёры
+отклоняются; вызову `PRIVILEGED` нужен заголовок `Operation-Reason` (метаданные gRPC `operation-reason`), и он не
+принимает персональные токены доступа, если не задан
+`ludwig.security.operations.allow-personal-access-tokens=true`; каждое изменение аудируется в категории `admin` с
+идентификатором операции в качестве действия. `GET /me/operations` сообщает UI, какими операциями владеет
+вызывающий и с какой областью; `GET /admin/v1/security/operations/{id}/holders` (`security.operation.read`)
+перечисляет роли, владеющие операцией. Подробности:
+[security](../sources/security-spring-boot-starter/README.ru.md#административная-поверхность). Операторских
+эндпоинтов actuator у модулей больше нет: то, что делали `/actuator/fileingest` и `/actuator/reconciliation`, - в
+областях `fileingest` и `reconciliation` ниже.
 
-| Область | Модуль | Чтение | Управление | Привилегированное |
+| Путь | Модуль | `READ` | `CHANGE` | `PRIVILEGED` |
 |---|---|---|---|---|
-| `jobs` | job-core | задачи, аренды запусков | запустить задачу сейчас | принудительно освободить аренду |
-| `replicas` | job-core | живые реплики, подтверждения команды по репликам | - (команды используют операции своих модулей) | - |
-| `caches` | job-core + cache | кэши с назначением и TTL | очистить кэш производительности на всех репликах | очистить кэш безопасности на всех репликах |
-| `outbox` | outbox | сообщения (без содержимого), сводка | повторить одно или многие | отбросить |
-| `messaging` | messaging-db | отставание потребителей | - | - |
-| `reconciliation` | reconciliation | задачи, области, карантин | запуски, backfill, возвраты в очередь, обходы | отмена задания у партнёра, освобождение аренды, подтверждение очистки |
-| `fileingest` | file-ingest | задачи, запуски, контрольные точки | запустить прогон | - |
-| `audit` | хранилище аудита | поиск по журналу (окно 30 дней) | - | - |
-| `identity` | проекция идентичности | партнёры, выдачи, полномочия субъекта | - | изменения партнёров и выдач |
-| `exports` | export | запуски, подписки (без результата) | отменить запуск | - |
-| `fileactions` | file-action | отправки (без файла и строк) | отменить отправку | - |
-| `settings` | user-settings | настройки и согласия субъекта | запись на уровне области, повторная публикация | - |
-| `pat` | pat | метаданные токенов | - | выпуск для другого владельца, отзыв любого |
+| `/admin/v1/jobs` | job-core | `job.definition.read`, `job.lease.read` | `job.definition.run` | `job.lease.release` |
+| `/admin/v1/replicas` | job-core | `replica.instance.read`, `replica.command.read` | - | - |
+| `/admin/v1/caches` | job-core + cache | `cache.definition.read` | `cache.performance.evict` | `cache.security.evict` |
+| `/admin/v1/hotreload` | hot-reload + job-core | `hotreload.source.read` | `hotreload.source.reload` | - |
+| `/admin/v1/restclient` | rest-client + job-core | `restclient.breaker.read`, `restclient.client.read` | `restclient.token.reset` | `restclient.breaker.set` |
+| `/admin/v1/outbox` | outbox | `outbox.message.read` | `outbox.message.retry` | `outbox.message.discard` |
+| `/admin/v1/messaging` | messaging-db | `messaging.consumer.read` | `messaging.consumer.pause`, `messaging.consumer.resume` | `messaging.offset.move` |
+| `/admin/v1/reconciliation` | reconciliation | `reconciliation.task.read` | `reconciliation.run.start`, `reconciliation.backfill.start`, `reconciliation.cursor.reset`, `reconciliation.scope.reset`, `reconciliation.quarantine.requeue`, `reconciliation.member.requeue`, `reconciliation.remotejob.requeue`, `reconciliation.discovery.start`, `reconciliation.walk.start`, `reconciliation.walk.preview`, `reconciliation.sweep.discard` | `reconciliation.remotejob.cancel`, `reconciliation.lease.release`, `reconciliation.sweep.confirm` |
+| `/admin/v1/fileingest` | file-ingest | `fileingest.task.read` | `fileingest.run.start` | - |
+| `/admin/v1/audit` | хранилище аудита | `audit.event.read` | - | - |
+| `/admin/v1/identity` | проекция идентичности | `identity.partner.read`, `identity.grant.read`, `identity.authority.read`, `identity.source.read` | - | `identity.partner.onboard`, `identity.partner.replace`, `identity.partner.suspend`, `identity.partner.activate`, `identity.grant.create`, `identity.grant.revoke` |
+| `/admin/v1/exports` | export | `export.run.read`, `export.subscription.read` | `export.run.cancel` | - |
+| `/admin/v1/fileactions` | file-action | `fileaction.submission.read` | `fileaction.submission.cancel` | - |
+| `/admin/v1/settings` | user-settings | `settings.subject.read`, `settings.consent.read` | `settings.scope.set`, `settings.backfill.start` | - |
+| `/admin/v1/pat` | pat | `pat.token.read` | - | `pat.token.issue`, `pat.token.revoke` |
+| `/admin/v1/security` | security | `security.operation.read` | - | - |
 
-Полная таблица операций и эндпоинтов - в разделе «Администрирование» README каждого модуля. Сервис выдаёт только те
-области, что у него есть: ключ с отсутствующей областью не даёт сервису стартовать:
+Полная таблица операций, эндпоинтов и описаний - в разделе «Администрирование» README каждого модуля.
+
+### Роли и операции
+
+Код называет операции, никогда не роли: роль - только элемент конфигурации. Каждой операцией сервиса - его
+собственными бизнес-операциями и всеми административными операциями используемых модулей - владеют через одну
+таблицу, `ludwig.security.roles.<ROLE>`, с `operations` (идентификатор операции и область) и, при необходимости,
+`includes` (роли, операциями которых она тоже владеет). Область - `ALL` или измерения через `+`, каждое из которых
+должно допускать строку: `OWN`, `TENANT`, `PARTNER`, `OBJECT` или добавленное модулем. Области ролей объединяются,
+поэтому роль может только расширить выданное другой.
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[jobs.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      "[jobs.operate]": [NOTIFICATION_ADMIN]
-      "[jobs.privileged]": [NOTIFICATION_ADMIN]
-      # ... по строке на каждую операцию каждой имеющейся области
+  security:
+    roles:
+      NOTIFICATION_SUPPORT:
+        operations:
+          notification.delivery.read: TENANT     # a business operation: only the caller's tenant's rows
+          notification.delivery.cancel: TENANT
+          outbox.message.read: ALL               # an administrative one: an operation that touches no rows is ALL
+          job.definition.read: ALL
+          audit.event.read: ALL
+      NOTIFICATION_ADMIN:
+        includes: [NOTIFICATION_SUPPORT]         # every operation of the support role, then widened below
+        operations:
+          notification.delivery.read: ALL
+          notification.delivery.retry: ALL
+          outbox.message.retry: ALL
+          outbox.message.discard: ALL
+          job.definition.run: ALL
+          job.lease.release: ALL
+      SUPPLY_OPS:
+        operations:
+          reconciliation.task.read: OBJECT       # only the tasks granted to each person, see below
+          reconciliation.run.start: OBJECT
+      NOTIFICATION_SENDER:
+        operations:
+          notification.request.read: OWN         # a peer service reads back only what it submitted
 ```
+
+Старт падает на записи с операцией, которой нет в каталоге сервиса (опечатка или область, которой у сервиса нет), на
+измерении, которое ресурс операции не связывает, на измерении, отличном от `ALL` или `OBJECT`, у операции, не
+затрагивающей строк, на шаблоне, `NONE`, а также на цикле `includes` или неопределённой роли. Имя роли, которого нет
+в таблице, ошибкой не является: роли приходят от провайдера идентичности. Проверяются роли резолвера полномочий
+(проекция идентичности, `ludwig.identity.service-roles`), никогда не claim токена.
 
 **Администрирование через UI: claim `act`.** Когда люди администрируют сервисы через административный UI,
 настройте провайдер идентичности так, чтобы вызовы UI выпускались обменом токенов по RFC 8693 и токен содержал
@@ -183,7 +226,8 @@ file-action и PAT фильтруются только через OData `$filter
 передаче игнорируются.
 
 **Согласование «четырёх глаз».** Чтобы привилегированные действия требовали второго администратора, перечислите их
-операции, например `ludwig.admin.approval.required: ["outbox.privileged", "identity.privileged"]`; сервису нужен
+операции, например `ludwig.admin.approval.required: ["outbox.message.discard", "identity.grant.create"]` (допускаются только
+административные операции `PRIVILEGED`); сервису нужен
 job-core, в таблице которого хранятся согласования. Вызов из списка отвечает `202` и ждёт в
 `GET /admin/v1/approvals`, пока другой обладатель операции его одобрит (`POST /admin/v1/approvals/{id}/approve`),
 отклонит или оно истечёт через `ludwig.admin.approval.ttl` (24 часа). Одобрение выполняет сохранённый запрос от имени
@@ -191,19 +235,35 @@ job-core, в таблице которого хранятся согласова
 выполнить один человек; не включайте операцию, нужную во время инцидента (например, принудительное освобождение
 аренды), или держите второго администратора на связи - заголовка для обхода нет.
 
-**Ограничение по объектам.** Команду можно ограничить её объектами - пока это задачи сверки - политикой областей
-данных для `admin.<area>` (роли `ALL` или `NONE`) и выдачами субъектам по измерению `object` через
-`POST /admin/v1/identity/grants`. Чтение вне области отвечает `404`, как для отсутствующего объекта. Настройка и
-пример: [настройка областей данных](data-scope-configuration.ru.md#административные-объекты).
+**Ограничение по объектам.** Команду можно ограничить её объектами - пока это задачи сверки - ролью с областью
+`OBJECT` на операциях области (`SUPPLY_OPS` выше) и выдачами субъектам по измерению `object` через
+`POST /admin/v1/identity/grants`. Чтение вне области отвечает `404`, как для отсутствующего объекта; прочие вызовы -
+`403`. Роль с областью `ALL` распространяется на все объекты. Настройка и пример:
+[настройка областей данных](data-scope-configuration.ru.md#административные-объекты).
 
-**Переход на этот выпуск.** В каждом сервисе: добавить блок `ludwig.admin.grants` (строка журнала старта
-"Administrative operations no role of this service holds" перечисляет, что осталось); административным микросервисам
-добавить `ludwig.identity.service-roles`; убрать `reconciliation` и `fileingest` из
-`management.endpoints.web.exposure.include`; удалить `ludwig.reconciliation.endpoint.*`, `ludwig.ingest.endpoint.*`,
-`ludwig.user-settings.access.admin-authority` и `ludwig.user-settings.web.admin-base-path`; перенести обладателей
-`pat:manage:any` и `ROLE_EXPORT_ADMIN` на выдачи `pat.*` и `exports.*`; направить административные UI на `/admin/v1/`
-(`consents/as-of` настроек теперь `consents/asof`). Изменения схемы - два аддитивных changeset,
-`audit_event.actor_tenant` и `audit_event.actor_via`; откат выпуска - предыдущая мажорная версия.
+**Переход на этот выпуск.** В каждом сервисе: заменить `ludwig.security.data.policies` на
+`ludwig.security.roles`, объявив каждую бизнес-операцию, которую покрывали политики, и выдать там каждую нужную
+сервису административную операцию (строка журнала старта "Operations no role of this service holds" перечисляет, что
+осталось). Приложение не стартует, пока задан `ludwig.security.data.policies`, `ludwig.security.data.default-access`,
+`ludwig.security.data.strict-policy-tokens`, `ludwig.admin.grants` или `ludwig.admin.allow-personal-access-tokens`, и
+называет ключ. Административным микросервисам добавить `ludwig.identity.service-roles`; убрать `reconciliation` и
+`fileingest` из `management.endpoints.web.exposure.include`; удалить `ludwig.reconciliation.endpoint.*`,
+`ludwig.ingest.endpoint.*`, `ludwig.user-settings.access.admin-authority` и
+`ludwig.user-settings.web.admin-base-path`; перенести обладателей `pat:manage:any` и `ROLE_EXPORT_ADMIN` на роли с
+`pat.token.*` и `export.run.*`; направить административные UI на `/admin/v1/` (`consents/as-of` настроек теперь
+`consents/asof`), обнаружение операций - на `/me/operations`, а заголовок причины - на `Operation-Reason`. Изменения
+схемы - два аддитивных changeset, `audit_event.actor_tenant` и `audit_event.actor_via`; откат выпуска - предыдущая
+мажорная версия.
+
+**Источники идентичности.** Проекция идентичности больше не читает Kafka сама. В каждом сервисе: добавить
+`identity-source-kafka-spring-boot-starter`, объявить источник (`ludwig.identity.sources.oidc: {}` - `oidc` - это
+`source_system` существующих строк), перенести `ludwig.identity.kafka.topic` в
+`ludwig.identity.kafka.subscriptions.oidc.topic` (старый ключ роняет старт с указанием нового) и оставить
+`ludwig.identity.kafka.group-id`, теперь обязательный. Провайдер, который отдаёт пользователей через API, наполняет
+проекцию через `identity-source-directory-spring-boot-starter` и один бин `IdentityDirectory`;
+`GET /admin/v1/identity/sources` (`identity.source.read`) показывает все источники, их каналы и состояние. Полное
+перечисление отключает пользователей, которых источник больше не содержит, и прерывается без изменений при
+превышении `ludwig.identity.sweep.max-disable-ratio` (10%).
 
 `ludwig.security.public-paths` заменяет список путей по умолчанию, а не дополняет его. Добавляя путь, повторно укажите эндпоинты actuator, иначе для проб потребуется аутентификация.
 
@@ -217,7 +277,7 @@ job-core, в таблице которого хранятся согласова
 | outbox | нет метрики размера очереди и индикатора состояния; строки `PUBLISHED` никогда не удаляются | таблица растёт без ограничений; организуйте собственную очистку |
 | file-action | метрик нет; коды ошибок используют `file-action.` вместо `ludwig.file-action.error.` | импорт можно отследить только по логам |
 | object-storage | нет метрик и проверки состояния вызовов S3 | сбои хранилища проявляются только как ошибки вызывающих компонентов |
-| identity-projection | отброшенные события отражаются только в логах; нет метрик проекции; изменения грантов и партнёров не аудируются | расхождения в данных авторизации остаются незаметными |
+| identity-projection | изменения грантов и партнёров, сделанные в SQL, не аудируются | расхождения в данных авторизации остаются незаметными |
 | messaging-db | нет метрик скорости записи, размера таблиц и индикатора состояния | отслеживайте размер таблиц на уровне базы данных |
 | audit-core | нет метрики сбоев sink (только `WARN`) | настройте оповещение по записи в лог |
 | audit starter | нет метрики самой старой неотправленной записи | задержка отправки в SIEM остаётся незаметной |
@@ -242,7 +302,7 @@ job-core, в таблице которого хранятся согласова
 | Потребитель завис, растёт задержка или DLT | [messaging](../sources/messaging-spring-boot-starter/README.md#runbook) |
 | Плановое задание не запускалось, блокировка удерживается | [job-core](../sources/job-core/README.md#runbook) |
 | Массовые 401/403, токен отклоняется | [security](../sources/security-spring-boot-starter/README.md#runbook) |
-| Данные пользователей или ролей устарели | [identity-projection](../sources/identity-projection-spring-boot-starter/README.md#runbook) |
+| Данные пользователей или ролей устарели, обход прерван | [identity-projection](../sources/identity-projection-spring-boot-starter/README.ru.md#runbook), затем канал источника: [Kafka](../sources/identity-source-kafka-spring-boot-starter/README.ru.md#runbook) или [каталог](../sources/identity-source-directory-spring-boot-starter/README.ru.md#runbook) |
 | Очередь уведомлений растёт, сообщения отправляются повторно | [notification-service](../services/notification-service/README.md#operational-runbook) |
 | Файл не поступил или обработка файлов остановилась | [file-ingest](../sources/file-ingest-spring-boot-starter/README.md#runbook) |
 | Вызовы партнёров завершаются ошибками, circuit breaker разомкнут | [rest-client](../sources/rest-client/README.md#runbook) |

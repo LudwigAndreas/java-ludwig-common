@@ -86,6 +86,41 @@ components:
           type: string
       title: ApprovalView
       type: object
+    BreakerView:
+      properties:
+        enabled:
+          type: boolean
+        failureRateThreshold:
+          format: float
+          type: number
+        waitDurationInOpenState:
+          properties:
+            nano:
+              format: int32
+              type: integer
+            negative:
+              type: boolean
+            positive:
+              type: boolean
+            seconds:
+              format: int64
+              type: integer
+            units:
+              items:
+                properties:
+                  dateBased:
+                    type: boolean
+                  durationEstimated:
+                    type: boolean
+                  timeBased:
+                    type: boolean
+                type: object
+              type: array
+            zero:
+              type: boolean
+          type: object
+      title: BreakerView
+      type: object
     BulkRetryRequest:
       properties:
         createdBefore:
@@ -173,6 +208,22 @@ components:
         name:
           type: string
       title: CategoryResponse
+      type: object
+    ClientView:
+      properties:
+        authKind:
+          type: string
+        baseUrlHost:
+          type: string
+        circuitBreaker:
+          $ref: '#/components/schemas/BreakerView'
+        name:
+          type: string
+        resilience:
+          type: boolean
+        retry:
+          $ref: '#/components/schemas/RetryView'
+      title: ClientView
       type: object
     ColumnResponse:
       description: A column of a report
@@ -383,15 +434,64 @@ components:
       type: object
     HeldOperation:
       properties:
-        area:
-          type: string
         description:
           type: string
         id:
           type: string
-        tier:
+        scope:
+          items:
+            type: string
+          type: array
+        sensitivity:
+          enum:
+          - READ
+          - CHANGE
+          - PRIVILEGED
+          type: string
+        surface:
+          enum:
+          - BUSINESS
+          - ADMIN
           type: string
       title: HeldOperation
+      type: object
+    HolderView:
+      properties:
+        role:
+          type: string
+        scope:
+          type: string
+        via:
+          type: string
+      title: HolderView
+      type: object
+    IdentityFeedView:
+      properties:
+        kind:
+          type: string
+        status:
+          additionalProperties:
+            type: object
+          type: object
+      title: IdentityFeedView
+      type: object
+    IdentitySourceView:
+      properties:
+        feeds:
+          items:
+            $ref: '#/components/schemas/IdentityFeedView'
+          type: array
+        lastChangeAt:
+          format: date-time
+          type: string
+        name:
+          type: string
+        users:
+          additionalProperties:
+            format: int64
+            type: integer
+          type: object
+      title: IdentitySourceView
       type: object
     InstanceView:
       properties:
@@ -842,6 +942,15 @@ components:
           - EXPIRED
           type: string
       title: ReportRunResponse
+      type: object
+    RetryView:
+      properties:
+        enabled:
+          type: boolean
+        maxAttempts:
+          format: int32
+          type: integer
+      title: RetryView
       type: object
     RowRejectResponse:
       properties:
@@ -1759,6 +1868,26 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - identity-admin-controller
+  /admin/v1/identity/sources:
+    get:
+      operationId: identitySources
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/IdentitySourceView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
   /admin/v1/identity/subjects/{subject}/authorities:
     get:
       operationId: authorities
@@ -1871,26 +2000,6 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - job-admin-controller
-  /admin/v1/me/operations:
-    get:
-      operationId: operations
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/HeldOperation'
-                type: array
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
-      tags:
-      - admin-operations-controller
   /admin/v1/outbox/messages:
     get:
       operationId: messages
@@ -2100,7 +2209,7 @@ paths:
         schema:
           type: string
       - in: header
-        name: Admin-Reason
+        name: Operation-Reason
         required: false
         schema:
           type: string
@@ -2124,6 +2233,52 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - replica-admin-controller
+  /admin/v1/restclient/clients:
+    get:
+      operationId: clients
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/ClientView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - rest-client-admin-controller
+  /admin/v1/security/operations/{id}/holders:
+    get:
+      operationId: holders
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/HolderView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - operation-holders-controller
   /api/v1/file-actions/{action}:
     post:
       operationId: submit
@@ -2660,6 +2815,26 @@ paths:
       summary: Request a report
       tags:
       - Reports
+  /me/operations:
+    get:
+      operationId: operations
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/HeldOperation'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - operations-controller
   /server/info:
     get:
       operationId: serverInfo

@@ -318,27 +318,32 @@ categories shipped to a SIEM by the audit starter's outbox sink.
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `exports.read` | `GET /admin/v1/exports/runs`<br>`GET /admin/v1/exports/runs/{runId}`<br>`GET /admin/v1/exports/subscriptions` | See every requester's export runs and every report subscription, without any output. |
-| `exports.operate` | `POST /admin/v1/exports/runs/{runId}/cancel` | Cancel anybody's export run. |
-| `exports.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `export.run.read` | `READ` | `GET /admin/v1/exports/runs`<br>`GET /admin/v1/exports/runs/{runId}` | See every requester's export runs, without any output. |
+| `export.run.cancel` | `CHANGE` | `POST /admin/v1/exports/runs/{runId}/cancel` | Cancel anybody's export run. |
+| `export.subscription.read` | `READ` | `GET /admin/v1/exports/subscriptions` | See every report subscription. |
 
 **Removed:** `ROLE_EXPORT_ADMIN` (`ReportRunController.ADMIN_AUTHORITY`) no longer reaches other requesters' runs on the requester API, which answers `404` for them; administrators use this area. No administrative response carries an output link.
 
 **Filtering `GET /admin/v1/exports/runs`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `definitionKey`, `requester`, `status` (the envelope status the run stores), `attempts`, `failureCode`, `createdAt`, `startedAt`, `finishedAt`. Not filterable: the stored filter expression, the failure arguments, the idempotency key. The subscriptions listing is not paged and keeps `owner` and `report`. Example: `$filter=requester eq 'alice' and status eq 'FAILED'`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[exports.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[exports.operate]": [ORDERS_ADMIN]
-      "[exports.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          export.run.read: ALL
+          export.subscription.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          export.run.cancel: ALL
 ```
 
 ## Runbook

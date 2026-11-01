@@ -19,13 +19,13 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import ru.ludwigandreas.outbox.entity.OutboxMessage;
 import ru.ludwigandreas.outbox.entity.OutboxStatus;
 import ru.ludwigandreas.outbox.repository.OutboxMessageRepository;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
 /**
- * Four-eyes approval end to end in this service: {@code outbox.privileged} requires approval, so one administrator's
- * discard is held, they cannot approve it themselves, and a second administrator's approval discards the message
- * through the outbox area's own handler - with the approval kept in job-core's table.
+ * Four-eyes approval end to end in this service: {@code outbox.message.discard} requires approval, so one
+ * administrator's discard is held, they cannot approve it themselves, and a second administrator's approval discards
+ * the message through the outbox area's own handler - with the approval kept in job-core's table.
  */
 @AutoConfigureMockMvc
 class FourEyesApprovalIT extends NotificationTestBase {
@@ -77,7 +77,7 @@ class FourEyesApprovalIT extends NotificationTestBase {
         UUID id = failedMessage();
 
         MvcResult held = mvc.perform(post("/admin/v1/outbox/messages/" + id + "/discard")
-                .header(AdminInvocation.REASON_HEADER, "INC-42 poison message").with(as("admin-anna"))).andReturn();
+                .header(OperationEvaluator.REASON_HEADER, "INC-42 poison message").with(as("admin-anna"))).andReturn();
 
         assertThat(held.getResponse().getStatus()).as(held.getResponse().getContentAsString()).isEqualTo(202);
         String approval = JSON.readTree(held.getResponse().getContentAsString()).path("id").asText();

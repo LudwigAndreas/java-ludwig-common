@@ -2,29 +2,23 @@ package ru.ludwigandreas.audit.store.admin;
 
 import java.util.Collection;
 import java.util.List;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.Sensitivity;
 
 /**
- * The {@code audit} area's administrative operations. Only {@code audit.read} guards an endpoint: the trail is
- * append-only, and nothing here changes it.
+ * The {@code audit} administrative area: searching the stored trail. The trail is append-only, so there is nothing to
+ * change.
  */
-public final class AuditAdminOperations implements AdminOperationContributor {
+public final class AuditAdminOperations implements OperationContributor {
 
-    /** Search the stored trail. */
-    public static final String READ = "audit.read";
-
-    /** Reserved; guards no endpoint. */
-    public static final String OPERATE = "audit.operate";
-
-    /** Reserved; guards no endpoint. */
-    public static final String PRIVILEGED = "audit.privileged";
+    /** Search the stored audit trail; every search is itself recorded. */
+    public static final String EVENT_READ = "audit.event.read";
 
     private static final String KEY = "ludwig.audit.admin.";
 
     @Override
-    public Collection<AdminOperation> adminOperations() {
-        return List.of(AdminOperation.of(READ, KEY + READ), AdminOperation.of(OPERATE, KEY + OPERATE),
-                AdminOperation.of(PRIVILEGED, KEY + PRIVILEGED));
+    public Collection<Operation> operations() {
+        return List.of(Operation.admin(EVENT_READ, Sensitivity.READ, KEY + EVENT_READ));
     }
 }

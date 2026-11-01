@@ -193,27 +193,25 @@ The event is emitted after the batch commits and carries the count actually remo
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `audit.read` | `GET /admin/v1/audit/events` | Search the stored audit trail; every search is itself recorded. |
-| `audit.operate` | none in this release | No operation; the trail is append-only. |
-| `audit.privileged` | none in this release | No operation; the trail is append-only. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `audit.event.read` | `READ` | `GET /admin/v1/audit/events` | Search the stored audit trail; every search is itself recorded. |
 
 A search spans at most 30 days, a `USER` caller sees only their own tenant's events, and every search is itself recorded. Every result carries `via`, the party the actor acted through; filter on it with `$filter=actorVia eq 'admin-console'`.
 
 **Filtering `GET /admin/v1/audit/events`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `occurredAt`, `category`, `action`, `outcome`, `actorSubject`, `actorType`, `actorVia`, `onBehalfOf`, `resourceType`, `resourceId`, `correlationId`. Indexed, so filter on these first: `occurredAt`, `actorSubject`, `category`, `actorVia`, `resourceType` with `resourceId`, `correlationId`. Not filterable: `reason`, the display and resource names, the actor's tenant, `attributes`. Without a filter on `occurredAt` a search covers the last 30 days. Example: `$filter=outcome eq 'DENIED' and startswith(action, 'pat.')`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[audit.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[audit.operate]": [ORDERS_ADMIN]
-      "[audit.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          audit.event.read: ALL
 ```
 
 ## Runbook

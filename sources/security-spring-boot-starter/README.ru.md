@@ -105,15 +105,64 @@ JWT несёт `sub`, имя и, возможно, тенант. Роли даё
 </dependency>
 ```
 
-### Уровень ресурса
+### Операции и роли
+
+Код авторизует по **операции**, никогда по роли. Модуль объявляет, что он делает; какие роли могут это делать и над
+какими строками, говорит только конфигурация сервиса.
 
 ```java
+@Bean
+OperationContributor orderOperations() {
+    return () -> List.of(
+            Operation.business("sales.order.read", Sensitivity.READ, "sales.op.order.read").on("order", DataAction.READ),
+            Operation.business("sales.order.update", Sensitivity.CHANGE, "sales.op.order.update").on("order", DataAction.WRITE),
+            Operation.business("sales.order.purge", Sensitivity.PRIVILEGED, "sales.op.order.purge"));
+}
+
 @GetMapping("/{id}")
-@PreAuthorize("hasAnyRole('ORDER_AGENT', 'ORDER_ADMIN')")
+@RequiresOperation("sales.order.read")
 public OrderResponse get(@PathVariable UUID id) { ... }
 ```
 
-Method security включается модулем.
+```yaml
+ludwig:
+  security:
+    roles:
+      ORDER_AGENT:
+        operations:
+          sales.order.read: OWN          # только созданные им строки
+          sales.order.update: OWN
+      ORDER_ADMIN:
+        includes: [ORDER_AGENT]
+        operations:
+          sales.order.read: ALL
+          sales.order.update: ALL
+          sales.order.purge: ALL
+```
+
+| Элемент | Что это |
+|---|---|
+| Идентификатор операции | `<area>.<object>.<verb>`, три сегмента в нижнем регистре. Чтение покрывает список и получение одного вида объектов; каждое отдельное изменение - своя операция |
+| Чувствительность | `READ` (ничего не меняет), `CHANGE` (меняет состояние), `PRIVILEGED` (может потерять данные, меняет, кто что может, или решает, вызывается ли зависимость). Для `PRIVILEGED` нужен заголовок `Operation-Reason` (1-500 символов, иначе `400 ludwig.security.reason-required`), а персональные токены отклоняются, если не задано `ludwig.security.operations.allow-personal-access-tokens=true` |
+| Поверхность | `BUSINESS` (собственный API сервиса) или `ADMIN` (только под `/admin/v1/`; см. ниже). Расхождение с путём обработчика роняет старт |
+| `@RequiresOperation("<id>")` | Единственная авторизация, которую объявляет код. На методе контроллера, сервиса или gRPC; проверяется через method security, административного стража или gRPC-перехватчик - одной оценкой |
+| `@RequiresAuthentication` | Метод, доступный любому аутентифицированному вызывающему |
+| `ludwig.security.roles.<ROLE>` | `operations` (операция → область) и `includes` (роли, чьи операции она тоже имеет, транзитивно). Роль сопоставляется с префиксом `ROLE_` и без |
+| Область | `ALL` или измерения через `+` (`OWN+TENANT`) - AND внутри выдачи, OR между ролями. `OBJECT` выдаётся субъектам (см. административную поверхность) |
+
+Везде закрыто по умолчанию: операция, которой нет ни у одной роли, отклоняется для всех и один раз попадает в журнал;
+роль с неизвестной операцией, маска, `NONE`, цикл или неопределённая роль в `includes`, измерение, которое ресурс
+операции не связывает, аннотация с незаявленной операцией и ключ описания, которого нет ни в одном бандле, - каждое из
+этого роняет старт. Заменённые ключи (`ludwig.admin.grants`, `ludwig.security.data.policies`,
+`ludwig.security.data.default-access`, `ludwig.admin.allow-personal-access-tokens`) роняют старт, если ещё заданы. Роли -
+это разрешённые роли этого сервиса (проекция идентичности для людей, `ludwig.identity.service-roles` для сервисов), а не
+claim токена; пересечение с PAT по-прежнему применяется.
+
+`GET /me/operations` перечисляет, что есть у вызывающего, - идентификатор, чувствительность, поверхность, область и
+описание на его языке, - чтобы UI знал, какие элементы управления показывать; того, чего у него нет, он не
+перечисляет. `GET /admin/v1/security/operations/{id}/holders` (`security.operation.read`) перечисляет роли, у которых
+есть операция, с их областью и, если она унаследована, ролью-источником. Method security включается модулем всегда, что
+бы ни говорил `ludwig.security.data.enabled`.
 
 ### Уровень данных
 
@@ -131,36 +180,18 @@ DataScopeMapping<OrderEntity> orderScopeMapping() {
 }
 ```
 
-Опишите политику в конфигурации:
-
-```yaml
-ludwig:
-  security:
-    data:
-      default-access: NONE            # всё, что не указано, запрещено
-      policies:
-        order:
-          read:
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN     # только созданные им строки
-            ROLE_TENANT_VIEWER: TENANT
-            ROLE_PARTNER: PARTNER
-          write:
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN
-```
-
-Используйте там, где достигаются строки:
+Операция, называющая ресурс (`.on("order", DataAction.READ)`), ограничивается им, а строки фильтруются областью каждой
+роли для этой операции в `ludwig.security.roles`. Используйте там, где достигаются строки:
 
 ```java
 // 1. Во время запроса - область входит в WHERE.
 queryFactory.selectFrom(order)
-        .where(guard.predicate("order", DataAction.READ).and(criteria))
+        .where(guard.predicate("sales.order.read").and(criteria))
         .fetch();
 
 // 2. Во время загрузки - страховка для путей, которых не видит предикат запроса.
 OrderEntity entity = repository.getByIdOrThrow(id);
-guard.check("order", DataAction.READ, entity, OrderEntity::getId);
+guard.check("sales.order.read", entity, OrderEntity::getId);
 ```
 
 или аннотацией на том же отображении: `@PostAuthorize("hasPermission(returnObject, 'read')")`.
@@ -193,19 +224,19 @@ DataScopeMapping.forResource("order", OrderEntity.class)
 
 ```java
 @Bean
-DataScopeProvider loaderMentionScopeProvider() {
-    return (principal, resourceType, action) ->
-            "order".equals(resourceType)
-                    && DataAction.READ.equals(action)
-                    && principal.hasRole("ROLE_LOADER")
-                    ? DataScope.restrictedTo(ScopeDimension.of("mentioned"), principal.subject())
-                    : DataScope.none();   // ничего не добавляет; другие провайдеры продолжают действовать
+DataScopeProvider coverageGrants(CoverageRepository coverage) {
+    return (principal, resourceType, action) -> "order".equals(resourceType) && DataAction.READ.equals(action)
+            ? coverage.ordersCoveredBy(principal.subject())    // например, временная замена
+            : DataScope.none();   // ничего не добавляет; области ролей продолжают действовать
 }
 ```
 
+Провайдер отвечает для субъекта, никогда не сравнивая роли; его спрашивают с ресурсом и действием операции (операцию,
+не касающуюся строк, - с её идентификатором и `invoke`).
+
 **Композиция**: значения внутри измерения объединяются по OR (`IN`); измерения внутри выдачи - по AND
-(`OWN+TENANT`); выдачи - по OR; `ALL` сильнее всего; `NONE` ничего не добавляет. Провайдеры объединяются
-(`CompositeDataScopeProvider`), поэтому провайдер может только **расширять**; запрет - это отсутствие выдачи.
+(`OWN+TENANT`); выдачи - по OR; `ALL` сильнее всего. Области ролей и все провайдеры объединяются, поэтому провайдер
+может только **расширять**; запрет - это отсутствие выдачи.
 Списочный эндпоинт для вызывающего без прав возвращает **пустую страницу**, а не 403. Полная модель и примеры -
 в [`docs/data-scope-configuration.md`](../../docs/data-scope-configuration.md).
 
@@ -265,31 +296,34 @@ bearer-токена resource server-а сообщает об отсутстви�
 
 ### Административная поверхность
 
-Все административные эндпоинты платформы обслуживаются под `/admin/v1/` и авторизуются одним способом. Модуль
-**объявляет операции**, но никогда не роли; сервис-потребитель **выдаёт их своим ролям**.
+Все административные эндпоинты платформы обслуживаются под `/admin/v1/` и авторизуются одним способом: операциями,
+описанными выше, объявленными на поверхности `ADMIN` (`Operation.admin(...)`) и выданными в `ludwig.security.roles`, как
+любые другие.
 
 | Элемент | Что это |
 |---|---|
-| Идентификатор операции | `<area>.<tier>`, например `outbox.operate`. Модуль, объявивший любой уровень области, объявляет все три |
-| Уровни | `read` (ничего не меняет), `operate` (безопасно повторять, не рассинхронизирует и не меняет доступ), `privileged` (меняет доступ, может рассинхронизировать с внешней системой или отбрасывает работу) |
-| `@AdminAccess(<Module>AdminOperations.OPERATE)` | На обработчике; единственный барьер. Никогда не сочетается с `@PreAuthorize` или проверкой роли |
-| `@AdminAuthenticated` | Обработчик, доступный любому допущенному вызывающему (эндпоинт обнаружения) |
-| `AdminAudit` | Записывает изменение через единственный `AuditSink`, категория `admin`, из сервиса модуля внутри его транзакции |
+| `@RequiresOperation(<Module>AdminOperations.<CONSTANT>)` | На обработчике; единственный барьер. Никогда не сочетается с `@PreAuthorize` или проверкой роли |
+| `@RequiresAuthentication` | Обработчик, доступный любому допущенному вызывающему (список согласований) |
+| `AdminAudit` | Записывает изменение через единственный `AuditSink`, категория `admin`, действие - идентификатор операции, из сервиса модуля внутри его транзакции |
 | `AdminInvocation.require()` | Текущая операция, вызывающий и причина; `tenantScope()` для таблиц с арендатором |
 | `AdminPage` / `AdminCursor` | Keyset-страницы; не более 200 строк; нераскодируемый курсор - `400` |
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      outbox.read:       [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      outbox.operate:    [NOTIFICATION_ADMIN]
-      outbox.privileged: [NOTIFICATION_ADMIN]
+  security:
+    roles:
+      NOTIFICATION_SUPPORT:
+        operations:
+          outbox.message.read: ALL
+      NOTIFICATION_ADMIN:
+        includes: [NOTIFICATION_SUPPORT]
+        operations:
+          outbox.message.retry: ALL
+          outbox.message.discard: ALL
 ```
 
-В файле `.properties` ключ с точкой записывается в скобках: `ludwig.admin.grants[outbox.read]=NOTIFICATION_ADMIN`.
-Роли - это разрешённые роли этого сервиса (проекция идентичности для людей, `ludwig.identity.service-roles` для
-административных сервисов), а не claim токена; пересечение с PAT по-прежнему применяется.
+В файле `.properties` ключ с точкой записывается в скобках:
+`ludwig.security.roles.NOTIFICATION_ADMIN.operations[outbox.message.discard]=ALL`.
 
 Что отклоняет страж на `/admin/**` (`HandlerInterceptor`, поэтому он работает при любой цепочке фильтров сервиса),
 по порядку:
@@ -298,18 +332,16 @@ ludwig:
 |---|---|
 | не аутентифицирован | `401` |
 | партнёр | `403` |
-| персональный токен доступа, если не задано `ludwig.admin.allow-personal-access-tokens=true` | `403`, `ludwig.pat.credential-not-permitted` - тот же тип, что у поверхности PAT |
+| персональный токен доступа, если не задано `ludwig.security.operations.allow-personal-access-tokens=true` | `403`, `ludwig.pat.credential-not-permitted` - тот же тип, что у поверхности PAT |
 | человек (`USER`), действующий не через одну из сторон `ludwig.admin.human-callers.required-via`, если список задан | `403`, публикуется как отказ авторизации и аудируется |
 | операция, которой у него нет | `403`, публикуется как отказ авторизации и аудируется |
-| `@AdminObject` вне его области данных, если для `admin.<area>` и уровня есть запись политики | `403`, а при чтении - собственный `404` области «не найдено»; аудируется |
-| операция `privileged` без `Admin-Reason` (1-500 символов) | `400`, `ludwig.admin.reason-required` - только после проверки выдачи |
-| обработчик под `/admin/` без обеих аннотаций | `403` |
+| операция `PRIVILEGED` без `Operation-Reason` (1-500 символов) | `400`, `ludwig.security.reason-required` - только после проверки выдачи |
+| `@AdminObject` вне его области, если область вызывающего ограничивает объекты | `403`, а для операции `READ` - собственный `404` области «не найдено»; аудируется |
+| обработчик под `/admin/` без обеих аннотаций или с операцией `BUSINESS` | `403`, а второе роняет старт |
 
-Везде закрыто по умолчанию: **выдачи по умолчанию нет**, нет масок и нет вложенности уровней; операция, которой ни у
-кого нет, отклоняется и один раз перечисляется при старте; опечатка в ключе выдачи, пустой список ролей, обработчик с
-незаявленным идентификатором, область без одного из уровней и запись `public-paths`, совпадающая с `/admin/v1/`, -
-каждое из этого роняет старт. Поверхность существует только при наличии конвейера ошибок web-core и не зависит от
-method security (`ludwig.security.data.enabled=false` её не выключает). `ludwig.admin.enabled=false` её убирает.
+Запись `public-paths`, совпадающая с `/admin/v1/`, роняет старт. Поверхность существует только при наличии конвейера
+ошибок web-core. `ludwig.admin.enabled=false` убирает стража, и оставшийся административный обработчик тогда отклоняется
+(`403`) через method security, а не обслуживается.
 
 Действующая сторона: claim делегирования в токене (`ludwig.security.jwt.actor-claim`, по умолчанию `act`, читается
 как `act.sub` по RFC 8693, вложенные `act` сохраняются цепочкой не длиннее 5) называет сторону, через которую пришёл
@@ -322,14 +354,15 @@ method security (`ludwig.security.data.enabled=false` её не выключае
 
 Ограничение по объектам: обработчик помечает переменную пути, называющую его объект, аннотацией `@AdminObject` (её
 `notFound` - собственный код «не найдено» области, поэтому чтение вне области отвечает так же, как для отсутствующего
-объекта), а список фильтруется через `AdminObjectScope.filter`. Включается для области и уровня записью
-`ludwig.security.data.policies."admin.<area>"`, роли в которой - `ALL` или `NONE`, а объекты выдаются субъектам по
-измерению `object`; см. [настройку областей данных](../../docs/data-scope-configuration.ru.md#административные-объекты).
+объекта), а список фильтруется через `OperationAuthority.admitted`. Роль ограничивает операцию объектами, выдавая ей
+`OBJECT`, а сами объекты выдаются субъектам по измерению `object` с ключом - идентификатором операции и действием
+`invoke` (через выдачи проекции идентичности); роль с `ALL` допускает любой объект. См.
+[настройку областей данных](../../docs/data-scope-configuration.ru.md#административные-объекты).
 
-Согласование «четырёх глаз»: `ludwig.admin.approval.required` перечисляет privileged-операции, вызовы которых должен
-одобрить второй обладатель (по умолчанию пусто; незаявленный или не privileged идентификатор, как и список без
+Согласование «четырёх глаз»: `ludwig.admin.approval.required` перечисляет операции `ADMIN` `PRIVILEGED`, вызовы которых
+должен одобрить второй обладатель (по умолчанию пусто; незаявленный идентификатор или любая другая операция, как и список без
 `AdminApprovalStore`, роняют старт - JDBC-хранилище даёт job-core). Такой вызов после проверки выдачи и причины не
-выполняется: запрос (метод, путь, query, тело до 64 КиБ - больше `413` - и `Admin-Reason`) записывается, а ответ -
+выполняется: запрос (метод, путь, query, тело до 64 КиБ - больше `413` - и `Operation-Reason`) записывается, а ответ -
 `202` с согласованием, чей конверт операции `PENDING`, и `Location: /admin/v1/approvals/{id}`. `/admin/v1/approvals`
 доступен любому вызывающему, которого пускает поверхность; что он видит и решает, ограничено его операциями:
 
@@ -350,10 +383,7 @@ method security (`ludwig.security.data.enabled=false` её не выключае
 Ограничение по арендатору: `USER` видит ресурсы только ровно своего арендатора (пользователь без арендатора - только
 ресурсы без арендатора); `SERVICE` не ограничен. Модули применяют `tenantScope()` к таблицам с арендатором.
 
-`GET /admin/v1/me/operations` перечисляет операции, которые есть у вызывающего, в формате `application/json`, с
-описаниями на его языке, чтобы административный UI знал, какие элементы управления показывать. Запуск завершается
-ошибкой, если ключ описания операции из каталога отсутствует во всех бандлах; в сообщении перечислены все такие
-операции и ключи. Модуль, добавляющий область, добавляет ключи в свой бандл.
+Какие элементы управления показывать, административный UI узнаёт из `GET /me/operations` с фильтром `surface=ADMIN`.
 
 ## Конфигурация
 
@@ -395,11 +425,11 @@ ludwig:
     authorities:
       require-resolver: false           # true в каждом развёрнутом окружении
     data:
-      enabled: true
-      default-access: NONE
-      strict-policy-tokens: true
+      enabled: true                     # ограничение строк; method security остаётся включённым в любом случае
       unscoped-resources: []            # справочные данные, намеренно без ограничений
-      policies: {}
+    roles: {}                           # <ROLE>: { includes: [...], operations: { <operation>: <scope> } }
+    operations:
+      allow-personal-access-tokens: false   # операции PRIVILEGED и /admin/** отклоняют PAT
     pat:
       assertion-lifetime: 5m            # как у выпускающего
       edge-cache-lifetime: 5m           # как у границы
@@ -455,10 +485,11 @@ set_current_client_cert_details:
 
 ### Порядок внедрения в существующий сервис
 
-1. Добавьте модуль с `data.default-access: ALL`. Следите за `ludwig.security.data.scope`: каждый ресурс с `ALL`
-   ещё без политики.
-2. Напишите бины `DataScopeMapping` и политики, начиная с самых чувствительных данных.
-3. Переключите `default-access` на `NONE`, когда необъяснённых `ALL` не останется (по сервису, не на весь парк).
+1. Объявите операции каждого модуля и переведите всю авторизацию на `@RequiresOperation`; режима «разрешить всё» на
+   время миграции нет - так задумано.
+2. Пишите `ludwig.security.roles` по одной роли, сначала выдавая `ALL`; журнал старта перечисляет операции, которых
+   нет ни у одной роли, а `/admin/v1/security/operations/{id}/holders` показывает, у кого что есть.
+3. Напишите бины `DataScopeMapping` и сужайте области (`OWN`, `TENANT`), начиная с самых чувствительных данных.
 4. Включите `authorities.require-resolver` и `jwt.require-audience` во всех развёрнутых окружениях.
 5. Включите mTLS на партнёрских маршрутах последним, когда `trusted-proxies` верен в каждом окружении.
 
@@ -471,7 +502,7 @@ set_current_client_cert_details:
 | `ludwig.security.authentication` | counter | `principal.type`, `outcome`, `reason` | Результаты аутентификации; `reason=untrusted-proxy` - кто-то обходит mesh |
 | `ludwig.security.access.denied` | counter | `resource`, `action` | Отказы (на уровне ролей и строк) |
 | `ludwig.security.authorities.cache` | counter | `principal.type`, `result` | Попадания/промахи кэша прав |
-| `ludwig.security.data.scope` | counter | `resource`, `access` | Фактическая ширина области; `access=ALL` на ограниченном ресурсе - политика не срабатывает |
+| `ludwig.security.data.scope` | counter | `resource`, `access` | Фактическая ширина области; `access=ALL` на ограниченном ресурсе - область роли шире задуманного |
 
 Теги - только из ограниченного словаря; ничего, чем управляет вызывающий.
 
@@ -479,7 +510,7 @@ set_current_client_cert_details:
 идентификатору, но отличается отпечаток, нет партнёра для сертификата, недоступна интроспекция PAT, непригодное
 значение области данных, `hasPermission` без отображения (отказ), запись `public-paths`, разрешающая широкий
 шаблон, `validate-revocation-window=false`, не удался аудит отказа. `INFO`: включена проверка audience, значения
-окна отзыва PAT, ресурс с отображением, но без политики.
+окна отзыва PAT. `WARN`: операции, которых нет ни у одной роли.
 
 **Рекомендуемые алерты:**
 
@@ -513,10 +544,10 @@ set_current_client_cert_details:
 | Симптом | Вероятная причина | Что делать |
 |---|---|---|
 | Сервис не стартует: OIDC discovery | Провайдер из `issuer-uri` недоступен | Восстановить связность или использовать `jwk-set-uri` |
-| Старт падает на политике | Ресурс без отображения, неизвестное измерение, опечатка в выдаче, ресурс и unscoped, и с политикой | Исправить, как указано в сообщении |
+| Старт падает на `ludwig.security.roles` | Неизвестная операция, ресурс без отображения, измерение, которое ресурс не связывает, `NONE`, маска, цикл в `includes`, ещё заданный заменённый ключ | Исправить, как указано в сообщении |
 | Старт падает: `trusted-proxies` / `forward-headers-strategy=native` | Небезопасные настройки mTLS | Сузить прокси; см. «Развёртывание» |
 | Старт падает: нет audience / нет резолвера | `require-audience` / `require-resolver` без настройки | Задать `jwt.audiences`; добавить identity-projection |
-| Все пользователи получают 403 | Нет данных `AuthorityResolver` (проекция пуста) или `default-access: NONE` без записей | Проверить потребление identity-projection; проверить политики |
+| Все пользователи получают 403 | Нет данных `AuthorityResolver` (проекция пуста) или операции нет ни у одной роли | Проверить потребление identity-projection; проверить обладателей операции |
 | У пользователя всё ещё работает отозванная роль | TTL кэша прав | Подождать ≤ TTL (`ludwig.cache.caches.authorities.ttl`) |
 | Партнёр получает 401 после перевыпуска сертификата | Сопоставление по нестабильному идентификатору или закреплённый отпечаток | Сопоставлять по SPIFFE URI/SAN; обновить `certificate-hash` |
 | `reason=untrusted-proxy` | Запрос дошёл до пода мимо прокси mesh | Найти путь (port-forward, лишний ingress); исправить сетевую политику |
@@ -536,7 +567,7 @@ set_current_client_cert_details:
 
 | Ситуация | Поведение | Почему не наоборот |
 |---|---|---|
-| У ресурса нет политики | Отказ (`default-access: NONE`) | Новый эндпоинт вышел бы незащищённым |
+| Операции нет ни у одной роли | Отказ и запись в журнале при старте | Новый эндпоинт вышел бы незащищённым |
 | Политика называет ресурс без отображения | Падение старта | Он считался бы неограниченным |
 | Политика называет непривязанное измерение | Падение старта | Неисполнимое условие нельзя тихо игнорировать |
 | Опечатка в выдаче (`OWNN`) | Падение старта | Иначе 500 на первом запросе с этой ролью |

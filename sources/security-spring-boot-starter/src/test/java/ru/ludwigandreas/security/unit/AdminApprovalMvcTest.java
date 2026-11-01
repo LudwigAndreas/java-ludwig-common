@@ -37,13 +37,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.AuditSink;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminApprovals;
 import ru.ludwigandreas.security.admin.AdminAudit;
 import ru.ludwigandreas.security.admin.AdminInvocation;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
 import ru.ludwigandreas.security.admin.AdminOutcome;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.RequiresOperation;
+import ru.ludwigandreas.security.operation.Sensitivity;
 import ru.ludwigandreas.security.authz.Authorities;
 import ru.ludwigandreas.security.authz.AuthorityLookup;
 import ru.ludwigandreas.security.principal.LudwigAuthentication;
@@ -58,11 +60,11 @@ import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 @SpringBootTest(classes = AdminApprovalMvcTest.Application.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
             "ludwig.security.jwt.enabled=false", "ludwig.web.i18n.configure-validator=false",
-            "ludwig.admin.grants.fixture.read[0]=SUPPORT",
-            "ludwig.admin.grants.fixture.read[1]=ADMIN",
-            "ludwig.admin.grants.fixture.operate[0]=ADMIN",
-            "ludwig.admin.grants.fixture.privileged[0]=ADMIN",
-            "ludwig.admin.approval.required[0]=fixture.privileged"})
+            "ludwig.security.roles.SUPPORT.operations[fixture.thing.read]=ALL",
+            "ludwig.security.roles.ADMIN.operations[fixture.thing.read]=ALL",
+            "ludwig.security.roles.ADMIN.operations[fixture.thing.poke]=ALL",
+            "ludwig.security.roles.ADMIN.operations[fixture.thing.discard]=ALL",
+            "ludwig.admin.approval.required[0]=fixture.thing.discard"})
 @AutoConfigureMockMvc
 class AdminApprovalMvcTest {
 
@@ -107,7 +109,7 @@ class AdminApprovalMvcTest {
         }
 
         @PostMapping("/admin/v1/fixture/messages/{id}/discard")
-        @AdminAccess("fixture.privileged")
+        @RequiresOperation("fixture.thing.discard")
         public Map<String, String> discard(@PathVariable String id, @RequestBody Map<String, String> body) {
             MESSAGES.put(id, "DISCARDED");
             audit.record("fixture-message", id, AdminOutcome.SUCCEEDED, Map.of("note", body.get("note")));
@@ -120,11 +122,11 @@ class AdminApprovalMvcTest {
     static class Application {
 
         @Bean
-        AdminOperationContributor fixtureOperations() {
+        OperationContributor fixtureOperations() {
             return () -> List.of(
-                    AdminOperation.of("fixture.read", "test.fixture.read"),
-                    AdminOperation.of("fixture.operate", "test.fixture.operate"),
-                    AdminOperation.of("fixture.privileged", "test.fixture.privileged"));
+                    Operation.admin("fixture.thing.read", Sensitivity.READ, "test.fixture.read"),
+                    Operation.admin("fixture.thing.poke", Sensitivity.CHANGE, "test.fixture.operate"),
+                    Operation.admin("fixture.thing.discard", Sensitivity.PRIVILEGED, "test.fixture.privileged"));
         }
 
         @Bean
@@ -193,7 +195,7 @@ class AdminApprovalMvcTest {
 
     private MvcResult requestDiscard(String subject) throws Exception {
         return perform(post("/admin/v1/fixture/messages/m-1/discard").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"note\":\"poison\"}").header(AdminInvocation.REASON_HEADER, "INC-7").with(as(subject)));
+                .content("{\"note\":\"poison\"}").header(OperationEvaluator.REASON_HEADER, "INC-7").with(as(subject)));
     }
 
     private String pendingApproval() throws Exception {
@@ -216,7 +218,7 @@ class AdminApprovalMvcTest {
         assertThat(held.getResponse().getHeader("Location"))
                 .isEqualTo("/admin/v1/approvals/" + approval.path("id").asText());
         assertThat(approval.path("operationEnvelope").path("status").asText()).isEqualTo("PENDING");
-        assertThat(approval.path("operation").asText()).isEqualTo("fixture.privileged");
+        assertThat(approval.path("operation").asText()).isEqualTo("fixture.thing.discard");
         assertThat(approval.path("requestedBy").asText()).isEqualTo("alice");
         assertThat(approval.path("body").isNull()).isTrue();
         assertThat(MESSAGES).containsEntry("m-1", "FAILED");
@@ -240,7 +242,7 @@ class AdminApprovalMvcTest {
     void largeBody() throws Exception {
         String big = "{\"note\":\"" + "x".repeat(65 * 1024) + "\"}";
         assertThat(perform(post("/admin/v1/fixture/messages/m-1/discard").contentType(MediaType.APPLICATION_JSON)
-                .content(big).header(AdminInvocation.REASON_HEADER, "INC-7").with(as("alice")))
+                .content(big).header(OperationEvaluator.REASON_HEADER, "INC-7").with(as("alice")))
                 .getResponse().getStatus()).isEqualTo(413);
         assertThat(withApproval("requested")).isEmpty();
     }

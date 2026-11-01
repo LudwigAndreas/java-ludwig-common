@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import ru.ludwigandreas.grpc.core.metadata.GrpcMetadataKeys;
 import ru.ludwigandreas.idempotency.api.IdempotencyHeaders;
 import ru.ludwigandreas.observability.config.ObservabilityProperties;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.webcore.config.WebCoreProperties;
 import ru.ludwigandreas.webcore.operation.OperationHeaders;
 
@@ -45,9 +45,9 @@ class GrpcMetadataKeysParityTest {
     }
 
     @Test
-    @DisplayName("the admin reason key matches AdminInvocation's header")
-    void adminReason() {
-        assertThat(GrpcMetadataKeys.ADMIN_REASON.name()).isEqualTo(lower(AdminInvocation.REASON_HEADER));
+    @DisplayName("the operation reason key matches OperationEvaluator's header")
+    void operationReason() {
+        assertThat(GrpcMetadataKeys.OPERATION_REASON.name()).isEqualTo(lower(OperationEvaluator.REASON_HEADER));
     }
 
     @Test

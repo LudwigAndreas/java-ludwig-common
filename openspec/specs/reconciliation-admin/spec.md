@@ -7,8 +7,9 @@ reachable, authorized per service role and audited.
 ## Requirements
 ### Requirement: Task state is readable
 
-`reconciliation-spring-boot-starter` SHALL declare `reconciliation.read`, `reconciliation.operate` and
-`reconciliation.privileged`, and serve under `reconciliation.read`:
+`reconciliation-spring-boot-starter` SHALL declare, on the `ADMIN` surface, `reconciliation.task.read` (`READ`),
+the `CHANGE` operations of "Safe actions are change operations" and the `PRIVILEGED` operations of "Actions that
+can desynchronize are privileged operations", and serve under `reconciliation.task.read`:
 
 - `GET /admin/v1/reconciliation/tasks` - every registered task with its tiers, cursor, freshness, last run outcome
   and quarantine count;
@@ -19,27 +20,27 @@ reachable, authorized per service role and audited.
 An unknown task or scope SHALL be `404`. A scope key containing `/` SHALL be percent-encoded by the caller.
 
 #### Scenario: An operator lists the tasks
-- **WHEN** a caller holding `reconciliation.read` lists the tasks
+- **WHEN** a caller holding `reconciliation.task.read` lists the tasks
 - **THEN** each registered task appears once with its state, and no quarantined payload is included
 
-### Requirement: Safe actions are the operate tier
+### Requirement: Safe actions are change operations
 
-Under `reconciliation.operate` the area SHALL serve:
+The area SHALL serve, each under its own `CHANGE` operation:
 
-| former actuator action | endpoint |
-|---|---|
-| `run` | `POST /admin/v1/reconciliation/tasks/{task}/runs` with `{tier}` |
-| `dry-run` | `POST /admin/v1/reconciliation/tasks/{task}/runs` with `{tier, dryRun: true}` |
-| `backfill` | `POST /admin/v1/reconciliation/tasks/{task}/backfills` with `{keys}` |
-| `reset-cursor` | `POST /admin/v1/reconciliation/tasks/{task}/cursor/reset` with `{tier}` |
-| `requeue-quarantined` | `POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue` |
-| `requeue-job` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue` |
-| enumeration `discover` | `POST /admin/v1/reconciliation/tasks/{task}/discover` |
-| enumeration `requeue-members` | `POST /admin/v1/reconciliation/tasks/{task}/members/requeue` |
-| scope `walk` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk` with `{kind}` |
-| scope `preview` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview` |
-| scope `reset-scope` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset` |
-| scope `discard-sweep` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` |
+| former actuator action | endpoint | operation |
+|---|---|---|
+| `run` | `POST /admin/v1/reconciliation/tasks/{task}/runs` with `{tier}` | `reconciliation.run.start` |
+| `dry-run` | `POST /admin/v1/reconciliation/tasks/{task}/runs` with `{tier, dryRun: true}` | `reconciliation.run.start` |
+| `backfill` | `POST /admin/v1/reconciliation/tasks/{task}/backfills` with `{keys}` | `reconciliation.backfill.start` |
+| `reset-cursor` | `POST /admin/v1/reconciliation/tasks/{task}/cursor/reset` with `{tier}` | `reconciliation.cursor.reset` |
+| `requeue-quarantined` | `POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue` | `reconciliation.quarantine.requeue` |
+| `requeue-job` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue` | `reconciliation.remotejob.requeue` |
+| enumeration `discover` | `POST /admin/v1/reconciliation/tasks/{task}/discover` | `reconciliation.discovery.start` |
+| enumeration `requeue-members` | `POST /admin/v1/reconciliation/tasks/{task}/members/requeue` | `reconciliation.member.requeue` |
+| scope `walk` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk` with `{kind}` | `reconciliation.walk.start` |
+| scope `preview` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview` | `reconciliation.walk.preview` |
+| scope `reset-scope` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset` | `reconciliation.scope.reset` |
+| scope `discard-sweep` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | `reconciliation.sweep.discard` |
 
 A dry run, a backfill, and a run of a task that is not an enumeration and does not use the asynchronous remote-job
 fetch shape SHALL take the task's run lease before answering, SHALL then answer `202` with the run's platform
@@ -71,25 +72,25 @@ a task that is not an enumeration, SHALL be `404`.
 - **THEN** its walk pass runs before the answer, the response is `200` with the pass and whether it ran, and no run
   is recorded
 
-### Requirement: Actions that can desynchronize are the privileged tier
+### Requirement: Actions that can desynchronize are privileged operations
 
-Under `reconciliation.privileged`, with a mandatory `Admin-Reason`, the area SHALL serve:
+The area SHALL serve, each under its own `PRIVILEGED` operation and with a mandatory `Operation-Reason`:
 
-| former actuator action | endpoint |
-|---|---|
-| `cancel-job` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel` |
-| `release-lease` | `POST /admin/v1/reconciliation/leases/{leaseId}/release` |
-| scope `confirm-sweep` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` |
+| former actuator action | endpoint | operation |
+|---|---|---|
+| `cancel-job` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel` | `reconciliation.remotejob.cancel` |
+| `release-lease` | `POST /admin/v1/reconciliation/leases/{leaseId}/release` | `reconciliation.lease.release` |
+| scope `confirm-sweep` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | `reconciliation.sweep.confirm` |
 
 `ludwig.reconciliation.endpoint.allow-destructive-operations` and the `confirm` parameter SHALL no longer exist:
-whether a deployment permits these is whether any of its roles is granted `reconciliation.privileged`.
+whether a deployment permits these is whether any of its roles is granted those operations.
 
 #### Scenario: A remote job is cancelled
 - **WHEN** an administrator cancels remote job `j-9` with reason `partner asked to abort`
 - **THEN** the job is cancelled and settled as before, and the audit event records the reason
 
 #### Scenario: A privileged action without a reason
-- **WHEN** the same request carries no `Admin-Reason`
+- **WHEN** the same request carries no `Operation-Reason`
 - **THEN** the response is `400` and the job is untouched
 
 ### Requirement: The actuator endpoint no longer exists
@@ -105,7 +106,7 @@ exposure list SHALL expose nothing.
 Every run that acquired its lease, whether scheduled, manual, dry or backfill, SHALL be recorded with its task,
 tier, kind, trigger, instance, correlation id, timestamps, outcome, counts (keys demanded, records fetched, rows
 produced) and failure code. A non-terminal run resource SHALL answer with `Retry-After`. Under
-`reconciliation.read` the area SHALL serve `GET /admin/v1/reconciliation/tasks/{task}/runs` (newest first,
+`reconciliation.task.read` the area SHALL serve `GET /admin/v1/reconciliation/tasks/{task}/runs` (newest first,
 keyset-paged, filtered with `$filter`) and `GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}`, each
 as the platform operation envelope with the run's counts beside it. An unknown task or run SHALL be `404`. A run
 that lost the lease race SHALL NOT be recorded.

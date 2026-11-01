@@ -25,6 +25,7 @@ import io.github.springwolf.asyncapi.v3.model.server.ServerReference;
 import io.github.springwolf.core.asyncapi.AsyncApiCustomizer;
 import io.github.springwolf.core.asyncapi.components.ComponentsService;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,7 +33,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.factory.config.BeanExpressionContext;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.config.EmbeddedValueResolver;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -159,21 +162,83 @@ public class PlatformAsyncApiCustomizer implements AsyncApiCustomizer {
         }
         ResolvedConsumerSettings resolved = settings.get();
         for (String topic : listener.topics()) {
-            String address = beans.resolveEmbeddedValue(topic);
-            ChannelObject channel = asyncApi.getChannels().get(address);
-            if (channel == null) {
-                continue;
+            List<String> addresses = topicsOf(topic);
+            renameScanned(asyncApi, new EmbeddedValueResolver(beans).resolveStringValue(topic), addresses);
+            addresses.forEach(address -> bindChannel(asyncApi, address, resolved));
+        }
+    }
+
+    /**
+     * The topics an entry of {@code topics} names. Resolved as Spring Kafka resolves it - a placeholder, then an
+     * expression that may yield one name, an array or a collection - not as Springwolf does, which renders an array
+     * with {@code toString()}.
+     */
+    private List<String> topicsOf(String topic) {
+        String embedded = beans.resolveEmbeddedValue(topic);
+        Object value = beans.getBeanExpressionResolver() == null ? embedded
+                : beans.getBeanExpressionResolver().evaluate(embedded, new BeanExpressionContext(beans, null));
+        List<String> topics = new ArrayList<>();
+        if (value instanceof String[] names) {
+            topics.addAll(List.of(names));
+        } else if (value instanceof Iterable<?> names) {
+            names.forEach(name -> topics.add(String.valueOf(name)));
+        } else if (value != null) {
+            topics.add(value.toString());
+        }
+        return topics;
+    }
+
+    /**
+     * Replaces the channel Springwolf scanned under a name that is not a topic - an expression yielding several
+     * topics, which it documents once, under the array's {@code toString()} - with one channel per topic, and points
+     * its receive operations at them.
+     */
+    private static void renameScanned(AsyncAPI asyncApi, String scanned, List<String> addresses) {
+        if (addresses.size() == 1 && addresses.get(0).equals(scanned)) {
+            return;
+        }
+        ChannelObject channel = asyncApi.getChannels().remove(scanned);
+        if (channel == null) {
+            return;
+        }
+        Map<String, Operation> operations = new LinkedHashMap<>();
+        asyncApi.getOperations().entrySet().removeIf(entry -> {
+            if (entry.getKey().startsWith(scanned + "_")) {
+                operations.put(entry.getKey().substring(scanned.length()), entry.getValue());
+                return true;
             }
-            channel.setServers(List.of(ServerReference.fromServer(resolved.cluster())));
-            if (resolved.deadLetterEnabled()) {
-                String deadLetters = DeadLetterTopics.forTopic(address, resolved.deadLetterSuffix());
-                asyncApi.getChannels().putIfAbsent(deadLetters, ChannelObject.builder()
-                        .channelId(deadLetters).address(deadLetters)
-                        .description("Dead letters of the consumer of " + address + ".")
-                        .messages(channel.getMessages() == null ? Map.of() : new LinkedHashMap<>(channel.getMessages()))
-                        .servers(List.of(ServerReference.fromServer(resolved.deadLetterCluster())))
-                        .build());
-            }
+            return false;
+        });
+        for (String address : addresses) {
+            asyncApi.getChannels().putIfAbsent(address, ChannelObject.builder().channelId(address).address(address)
+                    .messages(channel.getMessages()).bindings(channel.getBindings()).servers(channel.getServers())
+                    .description(channel.getDescription()).build());
+            operations.forEach((suffix, operation) -> asyncApi.getOperations().put(address + suffix,
+                    Operation.builder().action(operation.getAction()).title(operation.getTitle())
+                            .description(operation.getDescription()).bindings(operation.getBindings())
+                            .channel(ChannelReference.fromChannel(address))
+                            .messages(operation.getMessages() == null ? null : operation.getMessages().stream()
+                                    .map(message -> MessageReference.toChannelMessage(address,
+                                            message.getRef().substring(message.getRef().lastIndexOf('/') + 1)))
+                                    .toList())
+                            .build()));
+        }
+    }
+
+    private void bindChannel(AsyncAPI asyncApi, String address, ResolvedConsumerSettings resolved) {
+        ChannelObject channel = asyncApi.getChannels().get(address);
+        if (channel == null) {
+            return;
+        }
+        channel.setServers(List.of(ServerReference.fromServer(resolved.cluster())));
+        if (resolved.deadLetterEnabled()) {
+            String deadLetters = DeadLetterTopics.forTopic(address, resolved.deadLetterSuffix());
+            asyncApi.getChannels().putIfAbsent(deadLetters, ChannelObject.builder()
+                    .channelId(deadLetters).address(deadLetters)
+                    .description("Dead letters of the consumer of " + address + ".")
+                    .messages(channel.getMessages() == null ? Map.of() : new LinkedHashMap<>(channel.getMessages()))
+                    .servers(List.of(ServerReference.fromServer(resolved.deadLetterCluster())))
+                    .build());
         }
     }
 

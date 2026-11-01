@@ -72,8 +72,9 @@ service as that caller, and the address of the API documentation.
 The local application SHALL start with seed data that contains at least: a recipient reachable by
 email only; one with a chat handle; one deactivated; a notification that the service delivers
 shortly after start; a notification still queued; a published announcement; and one request on the
-Kafka ingress topic. Recipients SHALL be written through the identity projection's repository, and
-notifications and the announcement SHALL be submitted through the service's own REST API.
+Kafka ingress topic. Recipients SHALL be written through the identity projection's change feed, as
+changes of a declared local source, and notifications and the announcement SHALL be submitted
+through the service's own REST API.
 
 The seed SHALL NOT contain a recipient with a stored opt-out or quiet hours while the service has
 no preference store, and SHALL NOT contain a recipient with a webhook address, because a webhook

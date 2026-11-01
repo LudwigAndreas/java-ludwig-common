@@ -30,7 +30,8 @@ class AdminRulesTest {
                 // A placeholder with no default is unknowable from bytecode: skipped, never guessed at.
                 .noneMatch(description -> description.contains("unknowable"))
                 .noneMatch(description -> description.contains("GoodAdminController"))
-                .noneMatch(description -> description.contains("OrdinaryApiController"));
+                .noneMatch(description -> description.contains("OrdinaryApiController"))
+                .noneMatch(description -> description.contains("OperationApiController"));
     }
 
     @Test
@@ -47,15 +48,16 @@ class AdminRulesTest {
     }
 
     @Test
-    @DisplayName("an annotated handler mapped outside /admin/v1/ is reported")
+    @DisplayName("a handler under /admin/ but outside /admin/v1/ is reported; a business operation is not")
     void misplacedHandlerIsReported() {
         List<String> violations =
                 Fixtures.violationDescriptions(bad(), AdminRules.MAPPED_UNDER_THE_VERSIONED_PREFIX);
 
         assertThat(violations)
                 .anyMatch(description -> description.contains("MisplacedAdminController.list()")
-                        && description.contains("/api/v1/locks"))
-                .noneMatch(description -> description.contains("GoodAdminController"));
+                        && description.contains("/admin/locks"))
+                .noneMatch(description -> description.contains("GoodAdminController"))
+                .noneMatch(description -> description.contains("OperationApiController"));
     }
 
     @Test
@@ -101,8 +103,9 @@ class AdminRulesTest {
         assertThat(violations)
                 .noneMatch(description -> description.contains("GoodAdminController"))
                 .noneMatch(description -> description.contains("RepositoryBackedAdminController"))
-                // Not administrative - it declares no admin annotation - so it is still the REST path rule's.
-                .anyMatch(description -> description.contains("UnannotatedAdminController"));
+                // Administrative by its path, annotated or not: its missing annotation is reported by
+                // handler-declares-an-operation, not as a REST path violation.
+                .noneMatch(description -> description.contains("UnannotatedAdminController"));
     }
 
     @Test

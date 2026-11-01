@@ -6,8 +6,9 @@ must never be sent - without SQL and without ever seeing a message's payload.
 ## Requirements
 ### Requirement: Messages are browsable by state without their payload
 
-`outbox-spring-boot-starter` SHALL declare `outbox.read`, `outbox.operate` and `outbox.privileged`, and serve under
-`outbox.read`:
+`outbox-spring-boot-starter` SHALL declare, on the `ADMIN` surface, `outbox.message.read` (`READ`),
+`outbox.message.retry` (`CHANGE`) and `outbox.message.discard` (`PRIVILEGED`), and serve under
+`outbox.message.read`:
 
 - `GET /admin/v1/outbox/messages?$filter=&cursor=` - newest first, at most 200 per page, keyset-paginated;
 - `GET /admin/v1/outbox/messages/{id}` - one message with its status history and its last error as stored;
@@ -23,9 +24,9 @@ error, whose text may quote the payload.
 
 ### Requirement: Failed and dead-lettered messages can be retried
 
-`POST /admin/v1/outbox/messages/{id}/retry` (`outbox.operate`) SHALL move a `FAILED` or `DEAD_LETTER` message to
+`POST /admin/v1/outbox/messages/{id}/retry` (`outbox.message.retry`) SHALL move a `FAILED` or `DEAD_LETTER` message to
 `PENDING` with its attempt count reset, recording the transition in its status history. Any other status SHALL be
-`409`. `POST /admin/v1/outbox/messages/retry` (`outbox.operate`) with a filter of status (`FAILED` or
+`409`. `POST /admin/v1/outbox/messages/retry` (`outbox.message.retry`) with a filter of status (`FAILED` or
 `DEAD_LETTER`, required), and optionally event type, destination and created-before, SHALL retry at most 1000
 matching messages per call and report how many it moved and whether more match.
 
@@ -45,7 +46,7 @@ matching messages per call and report how many it moved and whether more match.
 
 ### Requirement: A message can be discarded, and stays on record
 
-`POST /admin/v1/outbox/messages/{id}/discard` (`outbox.privileged`, reason required) SHALL move a `PENDING`,
+`POST /admin/v1/outbox/messages/{id}/discard` (`outbox.message.discard`, reason required) SHALL move a `PENDING`,
 `FAILED` or `DEAD_LETTER` message to the new terminal status `DISCARDED`, which no poller claims. The row and its
 history SHALL be kept and purged by the same retention as `DEAD_LETTER`.
 

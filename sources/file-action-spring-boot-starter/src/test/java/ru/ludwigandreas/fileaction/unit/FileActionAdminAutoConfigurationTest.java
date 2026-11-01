@@ -9,7 +9,7 @@ import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import ru.ludwigandreas.fileaction.admin.web.FileActionAdminController;
 import ru.ludwigandreas.fileaction.config.FileActionAdminAutoConfiguration;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 
 /**
  * The {@code fileactions} area fails closed: without the security starter, or without its administrative surface,
@@ -29,7 +29,7 @@ class FileActionAdminAutoConfigurationTest {
     @Test
     @DisplayName("without the security starter on the classpath, the module starts with no administrative endpoint")
     void withoutTheSecurityStarter() {
-        runner.withClassLoader(new FilteredClassLoader(AdminOperationCatalog.class))
+        runner.withClassLoader(new FilteredClassLoader(AdminSurfaceGuard.class))
                 .run(context -> assertThat(context).hasNotFailed()
                         .doesNotHaveBean(FileActionAdminController.class));
     }

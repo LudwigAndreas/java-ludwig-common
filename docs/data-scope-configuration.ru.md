@@ -2,29 +2,37 @@
 
 **[English](data-scope-configuration.md)** · **Русский**
 
-Как определять области доступа на уровне данных в сервисе и сопоставлять их с ролями в конфигурации, чтобы доступ роли можно было изменить правкой конфигурации, а не кода.
+Как ограничивать строки, которые затрагивают операции сервиса, и выдавать эти операции ролям в конфигурации, чтобы
+доступ роли можно было изменить правкой конфигурации, а не кода.
 
-Всё описанное здесь — уже существующее поведение `security-spring-boot-starter` (пакет `ru.ludwigandreas.security.data`). README модуля является справочным источником; этот документ — практическое руководство с примерами. Сервис `order`, используемый в примерах, условный и не является модулем этого репозитория. Реальная эталонная реализация — `product` в `services/crud-service-example`.
+Всё описанное здесь — уже существующее поведение
+[`security-spring-boot-starter`](../sources/security-spring-boot-starter/README.ru.md) (пакеты
+`ru.ludwigandreas.security.operation` и `ru.ludwigandreas.security.data`). README модуля является справочным
+источником; этот документ — практическое руководство с примерами. Сервис `order`, используемый в примерах, условный
+и не является модулем этого репозитория. Реальная эталонная реализация — `product` в `services/crud-service-example`.
 
 ## Модель на одной странице
 
 | Понятие | Что это | Где определяется |
 |---|---|---|
-| Ресурс | Защищаемый объект (`order`) | В коде: имя, передаваемое в `DataScopeMapping.forResource(...)` |
-| Измерение | Ось, по которой можно ограничить строки (`owner`, `tenant`, `partner` или собственное измерение) | В коде: `ScopeDimension`, привязанное к столбцу в mapping |
-| Действие | Операция над ресурсом (`read`, `write`, `delete` или собственная) | В коде: обычная строка, передаваемая в guard |
-| Разрешение | Что получает роль для одного ресурса и действия: `ALL`, `NONE` или измерения, соединённые через `+` | Конфигурация |
-| Политика | Дерево `resource -> action -> role -> grant` | Конфигурация: `ludwig.security.data.policies` |
+| Операция | Что делает вызывающий: `<area>.<object>.<verb>` (`sales.order.update`), с чувствительностью и, если она затрагивает строки, ресурсом и действием над данными | В коде: бин `OperationContributor` |
+| Ресурс | Защищаемые строки (`order`) | В коде: имя, передаваемое в `DataScopeMapping.forResource(...)` |
+| Измерение | Ось, по которой можно ограничить строки (`owner`, `tenant`, `partner`, `object` или собственное измерение) | В коде: `ScopeDimension`, привязанное к столбцу в mapping |
+| Область | Что получает роль для одной операции: `ALL` или измерения, соединённые через `+` | В конфигурации |
+| Роль | Набор операций с их областями, при необходимости включающий другие роли | В конфигурации: `ludwig.security.roles` |
 
-Это разделение сделано намеренно. То, какой столбец соответствует какому измерению, задаётся в коде: здесь указываются реальные столбцы, и переименование столбца должно приводить к ошибке сборки. А то, какая роль получает какое разрешение, задаётся в конфигурации, поскольку именно это эксплуатационной команде нужно просматривать и менять без выпуска новой версии.
+Такое разделение сделано намеренно. Какие операции существуют и какой столбец несёт какое измерение — это код,
+потому что он называет реальные обработчики и столбцы и должен ломать сборку при их переименовании. Какая роль
+владеет какой операцией и с какой областью — это конфигурация, потому что именно её эксплуатации нужно читать и
+менять без выпуска. Код никогда не называет роль.
 
 Задействованные модули:
 
-| Модуль | Назначение |
+| Модуль | Роль |
 |---|---|
-| `security-spring-boot-starter` | Содержит модель: измерения, сопоставления, настроенную политику и `DataAccessGuard`. |
-| `identity-projection-spring-boot-starter` | Предоставляет роли и атрибуты вызывающего субъекта (`AuthorityResolver`), а также записи разрешений для отдельных пользователей (`DatabaseDataScopeProvider`). |
-| `test-support-security` | `TestPrincipalBuilder` для создания в тестах субъектов с ролями и атрибутами. |
+| `security-spring-boot-starter` | Владеет моделью: каталог операций, таблица ролей, измерения, mapping, `DataAccessGuard`. |
+| `identity-projection-spring-boot-starter` | Поставляет роли и атрибуты вызывающего (`AuthorityResolver`) и строки персональных разрешений (`DatabaseDataScopeProvider`). |
+| `test-support-security` | `TestPrincipalBuilder` для построения принципалов с ролями и атрибутами в тестах. |
 
 ## Шаг 1. Привяжите измерения к столбцам
 
@@ -40,63 +48,94 @@ DataScopeMapping<OrderEntity> orderScopeMapping() {
 }
 ```
 
-Каждая привязка одновременно задаёт часть для запроса (путь QueryDSL) и часть для загрузки (getter), поэтому они не могут разойтись.
+Каждая привязка объявляет одновременно часть для запроса (путь QueryDSL) и часть для загрузки (getter), поэтому
+они не могут разойтись.
 
 | Форма правила | Привязка |
 |---|---|
 | Один столбец содержит одно значение | `.owner(...)`, `.tenant(...)`, `.partner(...)`, `.bind(dimension, ...)` |
-| Строка связана с несколькими значениями, любое из которых может совпасть | `.bindCollection(dimension, path.any(), getter)` |
-| Любой другой случай | `.bindExpression(...)` — согласованность двух частей автоматически не проверяется, поэтому проверьте их друг относительно друга тестами. |
+| Строка связана со многими значениями, любое из которых может совпасть | `.bindCollection(dimension, path.any(), getter)` |
+| Всё остальное | `.bindExpression(...)` — ничто не проверяет согласованность двух частей, поэтому тестируйте их друг против друга |
 
-## Шаг 2. Сопоставьте роли с разрешениями
+## Шаг 2. Объявите операции
+
+```java
+public final class OrderOperations implements OperationContributor {
+
+    public static final String READ = "sales.order.read";
+    public static final String UPDATE = "sales.order.update";
+
+    @Override
+    public Collection<Operation> operations() {
+        return List.of(
+                Operation.business(READ, Sensitivity.READ, "sales.operation." + READ).on("order", DataAction.READ),
+                Operation.business(UPDATE, Sensitivity.CHANGE, "sales.operation." + UPDATE)
+                        .on("order", DataAction.WRITE));
+    }
+}
+```
+
+Зарегистрируйте его бином и задайте значение каждого ключа описания в бандле сообщений сервиса (EN и RU): его
+показывает человеку `GET /me/operations`, а старт падает на ключе, который нигде не разрешается. Одна операция
+чтения покрывает список и получение одного вида объектов; каждое отдельное изменение — своя операция. Операция
+`READ` не может объявить запись, а операция `CHANGE` или `PRIVILEGED` — действие чтения.
+
+## Шаг 3. Выдайте операции ролям
 
 ```yaml
 ludwig:
   security:
-    data:
-      default-access: NONE          # если для ресурса/действия нет политики, доступ запрещён
-      policies:
-        order:                      # ресурс
-          read:                     # действие
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN           # созданные ими строки
-            ROLE_TENANT_VIEWER: TENANT      # строки их арендатора
-            ROLE_PARTNER: PARTNER+TENANT    # их партнёр И их арендатор
-          write:
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN
+    roles:
+      ORDER_AGENT:
+        operations:
+          sales.order.read: OWN              # созданные ими строки
+          sales.order.update: OWN
+      TENANT_VIEWER:
+        operations:
+          sales.order.read: TENANT           # строки их арендатора
+      PARTNER:
+        operations:
+          sales.order.read: PARTNER+TENANT   # их партнёр И их арендатор
+      ORDER_ADMIN:
+        includes: [ORDER_AGENT]
+        operations:
+          sales.order.read: ALL
+          sales.order.update: ALL
 ```
 
-Чтобы изменить доступ роли, отредактируйте её строку. Установка значения `NONE` или удаление строки отзывает доступ.
+Изменение доступа роли — это правка её строки; удаление строки отзывает доступ.
 
-Как объединяются разрешения:
+Как сочетаются области:
 
-- Измерения внутри одного разрешения соединяются логическим И (`OWN+TENANT` = «мои строки в моём арендаторе»).
-- Если у вызывающего субъекта есть несколько подходящих ролей, их разрешения объединяются.
-- `ALL` имеет приоритет над всем; `NONE` ничего не добавляет.
-- Если у субъекта нет значения для обязательного измерения (например, tenant), доступ запрещается, а не расширяется.
-- Если субъекту ничего не разрешено, endpoint списка возвращает пустую страницу, а не `403`.
+- Измерения внутри одной области объединяются через И (`OWN+TENANT` = «мои строки в моём арендаторе»).
+- Вызывающий с несколькими ролями получает объединение их областей, а `includes` объединяет роль с включёнными в неё
+  ролями, транзитивно.
+- `ALL` перекрывает всё. Владеть операцией — значит владеть непустой областью; операция, которую не перечисляет ни
+  одна роль, запрещена всем.
+- Вызывающему без значения для требуемого измерения (например, без арендатора) доступ запрещается, а не расширяется.
+- Вызывающий, которому ничего не положено, получает пустую страницу от эндпоинта списка, а не 403.
 
-## Шаг 3. Примените ограничения в сервисе
+## Шаг 4. Примените ограничения в сервисе
 
 ```java
-// На этапе запроса: область становится частью WHERE, поэтому пагинация и подсчёт итогов остаются корректными.
+// Время запроса: область становится частью WHERE, поэтому постраничность и итоги остаются корректными.
 queryFactory.selectFrom(order)
-        .where(guard.predicate("order", DataAction.READ).and(criteria))
+        .where(guard.predicate(OrderOperations.READ).and(criteria))
         .fetch();
 
-// На этапе загрузки: дополнительная защита для загрузки по id и всех путей, которые не проходят через запрос с ограничением.
+// Время загрузки: страховка для загрузок по id и любого пути, который не проходит через ограниченный запрос.
 OrderEntity entity = repository.getByIdOrThrow(id);
-guard.check("order", DataAction.READ, entity, OrderEntity::getId);
+guard.check(OrderOperations.UPDATE, entity, OrderEntity::getId);
 ```
 
-Используйте оба механизма. Код приложения внедряет `DataAccessGuard`, а не отдельный provider.
+Используйте оба способа. Прикладной код внедряет `DataAccessGuard`, а не отдельный провайдер. Guard принимает
+операцию; операция задаёт ресурс, поэтому код и конфигурация называют одно и то же.
 
 ## Пользовательские измерения
 
-Сервис добавляет собственную ось с помощью `ScopeDimension.of(...)`. Для этого нужны три шага.
+Сервис добавляет собственную ось через `ScopeDimension.of(...)`. Нужны три вещи.
 
-1. Привяжите измерение:
+1. Привяжите её:
 
    ```java
    static final ScopeDimension REGION = ScopeDimension.of("region");
@@ -106,23 +145,26 @@ guard.check("order", DataAction.READ, entity, OrderEntity::getId);
            .build();
    ```
 
-2. Разрешите пользовательские токены и укажите измерение в политике:
+2. Назовите измерение в области роли:
 
    ```yaml
    ludwig:
      security:
-       data:
-         strict-policy-tokens: false     # иначе принимаются только OWN/TENANT/PARTNER/OBJECT
-         policies:
-           order:
-             read:
-               ROLE_REGIONAL_MANAGER: REGION
-               ROLE_REGIONAL_AGENT: OWN+REGION
+       roles:
+         REGIONAL_MANAGER:
+           operations:
+             sales.order.read: REGION
+         REGIONAL_AGENT:
+           operations:
+             sales.order.read: OWN+REGION
    ```
 
-   Токен — это имя измерения; регистр не учитывается. Если токен указывает на измерение, не привязанное в mapping, запуск всё равно завершится ошибкой, поэтому опечатка будет обнаружена даже при отключённой строгой проверке токенов.
+   Токен — это имя измерения без учёта регистра. Токен с измерением, которое ресурс операции не привязывает, роняет
+   старт, поэтому опечатка ловится.
 
-3. Передайте значение для вызывающего субъекта. Для пользовательского измерения настроенная политика сравнивает столбец с **атрибутом principal с тем же именем** (`region`). Стандартный `DatabaseAuthorityResolver` задаёт только `tenant` и `partner`, поэтому остальные атрибуты должен предоставить ваш `AuthorityResolver`:
+3. Дайте вызывающему значение. Для пользовательского измерения область роли сравнивает столбец с **атрибутом
+   принципала с тем же именем** (`region`). Штатный `DatabaseAuthorityResolver` устанавливает только `tenant` и
+   `partner`, поэтому остальное должен предоставить ваш `AuthorityResolver`:
 
    ```java
    return Authorities.builder()
@@ -131,69 +173,84 @@ guard.check("order", DataAction.READ, entity, OrderEntity::getId);
            .build();
    ```
 
-Атрибуты содержат одно значение. Если для одного измерения нужно несколько значений, см. раздел [Пользовательские провайдеры](#пользовательские-провайдеры).
+Атрибуты однозначны. Случай, когда вызывающему нужно несколько значений для одного измерения, описан в разделе
+[Пользовательские провайдеры](#пользовательские-провайдеры).
 
 ## Практический пример: заказы и переходы состояний
 
 Требования:
 
-- Пользователь создаёт и удаляет заказы и видит только собственные.
+- Пользователь создаёт и удаляет заказы и видит только свои.
 - Модератор видит все заказы.
-- Бизнес-заказчик видит заказы, для которых он указан бизнес-заказчиком.
+- Бизнес-клиент видит заказы, для которых он выбран бизнес-клиентом.
 - Участник команды внедрения видит заказы, назначенные его команде.
-- Переходы между статусами не хранятся отдельно. Пользователь может отменить заказ; модератор может его одобрить.
-- Позже команде внедрения может потребоваться полный доступ на чтение — желательно, чтобы для этого хватило одного изменения конфигурации.
+- Переходы между статусами не хранятся. Пользователь может отменить заказ; модератор может одобрить.
+- Позже команде внедрения может понадобиться полный доступ на чтение — в идеале одной правкой конфигурации.
 
 ### Модель
 
-Переходы — это **действия над `order`**, а не отдельный ресурс: политика отвечает на вопрос «какая роль может выполнить это действие над какими заказами». Каждая связь с заказом — это **измерение**.
+Каждый глагол — это **операция над `order`**: создание, чтение, удаление и каждый переход, — поэтому роли выдаются
+ровно те глаголы, которые она выполняет, ровно над теми строками, которые допускает её область. Каждая связь с
+заказом — это **измерение**.
 
 ### Терминология
 
-Храните каждое имя в одном месте для каждого ресурса. Для ресурса и измерений используйте строковые константы, а не enum: guard принимает `String`, `ScopeDimension` намеренно является типом-значением, а `@PreAuthorize("hasPermission(..., 'read')")` требует строковых литералов на этапе компиляции.
+Держите все имена ресурса в одном месте: идентификаторы операций и измерения, которые привязывает mapping.
 
 ```java
-public final class OrderAccess {
+public final class OrderOperations implements OperationContributor {
 
     public static final String RESOURCE = "order";
 
-    public static final String CREATE = "create";
-    public static final String READ = DataAction.READ;
-    public static final String DELETE = DataAction.DELETE;
+    public static final String CREATE = "sales.order.create";
+    public static final String READ = "sales.order.read";
+    public static final String DELETE = "sales.order.delete";
+    public static final String CANCEL = "sales.order.cancel";
+    public static final String APPROVE = "sales.order.approve";
 
     public static final ScopeDimension CUSTOMER = ScopeDimension.of("customer");
     public static final ScopeDimension TEAM = ScopeDimension.of("team");
 
-    private OrderAccess() {
+    private static final String KEY = "sales.operation.";
+
+    @Override
+    public Collection<Operation> operations() {
+        return List.of(
+                Operation.business(CREATE, Sensitivity.CHANGE, KEY + CREATE).on(RESOURCE, DataAction.WRITE),
+                Operation.business(READ, Sensitivity.READ, KEY + READ).on(RESOURCE, DataAction.READ),
+                Operation.business(DELETE, Sensitivity.CHANGE, KEY + DELETE).on(RESOURCE, DataAction.DELETE),
+                Operation.business(CANCEL, Sensitivity.CHANGE, KEY + CANCEL).on(RESOURCE, "cancel"),
+                Operation.business(APPROVE, Sensitivity.CHANGE, KEY + APPROVE).on(RESOURCE, "approve"));
     }
 }
 ```
 
-Переходы — исключение: список всё равно нужен конечному автомату, поэтому имя действия хранится в enum доменной модели.
+Машина состояний сопоставляет каждому переходу его операцию:
 
 ```java
 public enum OrderTransition {
-    CANCEL("cancel"),
-    APPROVE("approve");
+    CANCEL(OrderOperations.CANCEL),
+    APPROVE(OrderOperations.APPROVE);
 
-    private final String action;
+    private final String operation;
 
-    OrderTransition(String action) {
-        this.action = action;
+    OrderTransition(String operation) {
+        this.operation = operation;
     }
 
-    public String action() {
-        return action;
+    public String operation() {
+        return operation;
     }
 }
 ```
 
 Правила именования:
 
-- **Действия:** нижний регистр, одно слово или kebab-case (`approve`, `send-back`). Сопоставление выполняется по точной строке, поэтому `Approve` в конфигурации не совпадает с `approve` в коде.
-- **Измерения:** существительные в нижнем регистре, обозначающие связь (`customer`, `team`), а не столбец.
-- **Роли:** везде используйте полную форму `ROLE_...`. Префикс нормализуется, но единое написание упрощает поиск.
-- **Ресурс:** единственное число, то же слово, которое использует bean mapping.
+- Операции: `<area>.<object>.<verb>`, три сегмента из строчных латинских букв и цифр. Старт отклоняет всё прочее, а
+  также запись роли с операцией, которой нет в каталоге.
+- Измерения: существительные в нижнем регистре, называющие связь (`customer`, `team`), а не столбец.
+- Роли: в `ludwig.security.roles` пишутся без префикса `ROLE_`; префикс принимается и нормализуется.
+- Ресурс: в единственном числе, то же слово, что использует бин mapping.
 
 ### Сопоставление
 
@@ -201,179 +258,175 @@ public enum OrderTransition {
 @Bean
 DataScopeMapping<OrderEntity> orderScopeMapping() {
     QOrderEntity order = QOrderEntity.orderEntity;
-    return DataScopeMapping.forResource(OrderAccess.RESOURCE, OrderEntity.class)
+    return DataScopeMapping.forResource(OrderOperations.RESOURCE, OrderEntity.class)
             .owner(order.createdBy, OrderEntity::getCreatedBy)
-            .bind(OrderAccess.CUSTOMER, order.businessCustomerId, OrderEntity::getBusinessCustomerId)
-            .bind(OrderAccess.TEAM, order.implementationTeamId, OrderEntity::getImplementationTeamId)
+            .bind(OrderOperations.CUSTOMER, order.businessCustomerId, OrderEntity::getBusinessCustomerId)
+            .bind(OrderOperations.TEAM, order.implementationTeamId, OrderEntity::getImplementationTeamId)
             .build();
 }
 ```
 
-### Политика
+### Роли
 
 ```yaml
 ludwig:
   security:
-    data:
-      default-access: NONE
-      strict-policy-tokens: false
-      policies:
-        order:
-          create:
-            ROLE_USER: ALL
-          read:
-            ROLE_MODERATOR: ALL
-            ROLE_USER: OWN
-            ROLE_BUSINESS_CUSTOMER: CUSTOMER
-            ROLE_IMPLEMENTATION_TEAM: TEAM
-          delete:
-            ROLE_USER: OWN
-          cancel:
-            ROLE_USER: OWN
-          approve:
-            ROLE_MODERATOR: ALL
+    roles:
+      USER:
+        operations:
+          sales.order.create: ALL
+          sales.order.read: OWN
+          sales.order.delete: OWN
+          sales.order.cancel: OWN
+      MODERATOR:
+        operations:
+          sales.order.read: ALL
+          sales.order.approve: ALL
+      BUSINESS_CUSTOMER:
+        operations:
+          sales.order.read: CUSTOMER
+      IMPLEMENTATION_TEAM:
+        operations:
+          sales.order.read: TEAM
 ```
 
 Будущее изменение — одна строка:
 
 ```yaml
-            ROLE_IMPLEMENTATION_TEAM: ALL   # было TEAM
+          sales.order.read: ALL   # было TEAM
 ```
 
 ### Применение ограничений
 
 ```java
-// Переход: загрузить объект, проверить действие относительно этой строки, затем проверить допустимость перехода в доменной модели.
+// Переход: загрузить, проверить операцию для этой строки, затем дать домену решить, допустим ли переход.
 OrderEntity entity = repository.getByIdOrThrow(id);
-guard.check(OrderAccess.RESOURCE, transition.action(), entity, OrderEntity::getId);
+guard.check(transition.operation(), entity, OrderEntity::getId);
 entity.apply(transition);
 
-// Создание: строки ещё нет, поэтому проверяем только наличие у вызывающего субъекта какого-либо разрешения.
-if (guard.scope(OrderAccess.RESOURCE, OrderAccess.CREATE).denies()) {
-    throw new AccessDeniedException("order.create");
+// Создание: строки ещё нет, поэтому спрашиваем только, владеет ли вызывающий операцией.
+if (guard.scope(OrderOperations.CREATE).denies()) {
+    throw new AccessDeniedException(OrderOperations.CREATE);
 }
 ```
 
-Правило «одобрение допустимо только из состояния X» остаётся в доменной модели. Политика определяет, кто может выполнять действия над какими строками, и ничего не знает о статусах. Если когда-либо понадобится правило для каждой пары статусов, задайте отдельное имя действия для каждого перехода (например, `approve-from-review`).
+«Одобрение допустимо только из статуса X» остаётся в домене. Область роли решает, кто над какими строками может
+действовать, и ничего не знает о статусах. Если когда-нибудь понадобится правило для каждой пары статусов, объявите
+операцию на каждое ребро (`sales.order.approvefromreview`).
 
 ### Откуда берутся значения
 
-| Измерение | Атрибут principal | Значение |
+| Измерение | Атрибут принципала | Значение |
 |---|---|---|
-| `team` | `team` | идентификатор команды пользователя |
+| `team` | `team` | id команды пользователя |
 | `customer` | `customer` | собственный subject пользователя |
 
-Строка `customer` — обходное решение. Настроенная политика не умеет сравнивать этот пользовательский столбец с subject вызывающего субъекта, поэтому resolver копирует subject в атрибут. Альтернатива — bean `DataScopeProvider` (ниже), который переносит это единственное правило из конфигурации в код.
+Строка `customer` — обходной приём. Настроенная область не умеет сказать «сравни этот пользовательский столбец с
+subject вызывающего», поэтому резолвер копирует subject в атрибут. Альтернатива — бин `DataScopeProvider` (ниже),
+который выносит это одно правило из конфигурации.
 
 ### Количество команд
 
-| Ситуация | Что требуется |
+| Ситуация | Что нужно |
 |---|---|
-| У команды много заказов; у заказа одна команда; пользователь состоит в одной команде | Столбец с идентификатором команды в заказе и атрибут `team`. Дополнительная таблица не нужна. |
-| Заказ обслуживают несколько команд | Коллекция связей заказа с командами в сущности, привязанная через `.bindCollection(TEAM, ...)`. Это доменные данные, а не таблица безопасности. |
-| Пользователь состоит в нескольких командах | `DataScopeProvider`, возвращающий множество идентификаторов команд. |
+| У команды много заказов; у заказа одна команда; пользователь в одной команде | Столбец с id команды у заказа плюс атрибут `team`. Дополнительная таблица не нужна. |
+| Один заказ обрабатывают несколько команд | Коллекция «заказ — команда» в сущности, привязанная через `.bindCollection(TEAM, ...)`. Это данные домена, а не таблица безопасности. |
+| Один пользователь состоит в нескольких командах | `DataScopeProvider`, возвращающий множество id команд. |
 
 ## Административные объекты
 
-Административную операцию над именованным объектом - например, задачей сверки - можно сузить до объектов, выданных
-вызывающему. Ресурс - `admin.<area>` (например, `admin.reconciliation`), действие - уровень (`read`, `operate`,
-`privileged`), измерение - встроенное `object`, его значения - имена объектов. Включается отдельно для области и
-уровня: если для `admin.<area>` и уровня нет записи политики, владение операцией, как и прежде, допускает все
-объекты.
+Административную операцию над именованным объектом — например, задачей сверки — можно сузить до объектов, выданных
+вызывающему. Измерение — встроенное `object`, значения которого — имена объектов; обработчик объявляет, какой
+параметр называет объект. Роль выдаёт `OBJECT` (тогда объекты выдаются каждому субъекту отдельно) или `ALL` (все
+объекты); любое другое измерение у операции, не затрагивающей строк, роняет старт.
 
-Запись роли для административного ресурса - `ALL` (все объекты) или `NONE` (только объекты, выданные субъекту);
-что-либо другое роняет старт, потому что объекты выдаются субъектам, а не перечисляются для ролей. Роль без записи не
-получает ничего. Старт также падает для области, которую не объявляет ни один модуль, и для действия, не являющегося
-уровнем: иначе опечатка не ограничила бы ничего.
-
-Практический пример - команда поставок управляет `supplier-sync` и ничем больше, платформенная команда - всем:
+Пример: команда снабжения управляет только `supplier-sync`, а платформенная команда — всем:
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[reconciliation.read]": [SUPPLY_OPS, PLATFORM_ADMIN]
-      "[reconciliation.operate]": [SUPPLY_OPS, PLATFORM_ADMIN]
   security:
-    data:
-      policies:
-        "[admin.reconciliation]":
-          read:    { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
-          operate: { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
+    roles:
+      SUPPLY_OPS:
+        operations:
+          reconciliation.task.read: OBJECT
+          reconciliation.run.start: OBJECT
+      PLATFORM_ADMIN:
+        operations:
+          reconciliation.task.read: ALL
+          reconciliation.run.start: ALL
 ```
 
-Затем каждому участнику команды выдаётся задача - запросом `POST /admin/v1/identity/grants` с телом
-`{"subject": "bob", "principalType": "USER", "resourceType": "admin.reconciliation", "action": "operate",
-"dimension": "object", "dimensionValue": "supplier-sync"}` (и ещё раз с `"action": "read"`; для дежурного доступа
-подходит `expiresAt`). Запуск `supplier-sync` от Боба принимается, запуск `customer-sync` - `403`, а чтение
-`customer-sync` - `404`, тот же ответ, что и для несуществующей задачи. Список задач показывает ему только
-`supplier-sync`. Выдача доходит до других реплик в пределах TTL кэша областей данных, как любая выдача.
+Затем каждому участнику команды выдаётся задача для каждой операции через `POST /admin/v1/identity/grants` с телом
+`{"subject": "bob", "principalType": "USER", "resourceType": "reconciliation.run.start", "action": "invoke",
+"dimension": "object", "dimensionValue": "supplier-sync"}` (и ещё раз с `"resourceType":
+"reconciliation.task.read"`; для дежурного доступа подходит `expiresAt`). Операция, не затрагивающая строк,
+запрашивается по собственному id и действию `invoke`. Запуск `supplier-sync` от Боба принимается, запуск
+`customer-sync` — `403`, а чтение `customer-sync` — `404`, тот же ответ, что и для несуществующей задачи. Список
+задач показывает ему только `supplier-sync`. Выдача доходит до других реплик в пределах TTL кэша областей данных,
+как и любая выдача.
 
-Пока свои объекты ограничивает только `reconciliation`. Кандидаты - `jobs` (имена заданий) и `fileingest`
-(источники).
+Пока свои объекты ограничивает только `reconciliation`. Кандидаты — `jobs` (имена задач) и `fileingest` (источники).
 
 ## Пользовательские провайдеры
 
-Можно объявить любое количество bean-компонентов `DataScopeProvider`. `CompositeDataScopeProvider` собирает результаты всех них вместе с настроенной политикой и таблицей разрешений identity-projection, а затем объединяет их.
+Можно объявить любое количество бинов `DataScopeProvider`. Они собираются вместе с таблицей персональных разрешений
+проекции идентичности, а их ответы объединяются с областями ролей. Провайдер получает ресурс операции и действие
+над данными (для операции, не затрагивающей строк, — её id и `invoke`).
 
 ```java
 @Bean
 DataScopeProvider teamScopeProvider(TeamMembershipRepository memberships) {
     return (principal, resourceType, action) -> {
-        boolean applies = OrderAccess.RESOURCE.equals(resourceType)
-                && DataAction.READ.equals(action)
-                && principal.hasRole("ROLE_IMPLEMENTATION_TEAM");
+        boolean applies = OrderOperations.RESOURCE.equals(resourceType) && DataAction.READ.equals(action);
         if (!applies) {
             return DataScope.none();
         }
         Set<String> teamIds = memberships.teamIdsOf(principal.subject());
         return teamIds.isEmpty()
                 ? DataScope.none()
-                : DataScope.restrictedTo(Map.of(OrderAccess.TEAM, teamIds));
+                : DataScope.restrictedTo(Map.of(OrderOperations.TEAM, teamIds));
     };
 }
 ```
 
-- Провайдер может только расширить доступ. `DataScope.none()` означает «я ничего не добавляю», а не «запретить доступ».
-- `ALL` от любого провайдера прерывает дальнейшую обработку.
-- Порядок не влияет на результат; `@Order` определяет только очерёдность выполнения.
-- Каждый провайдер запускается при каждой проверке области доступа, поэтому проверяйте ресурс, действие и роль до выполнения любых запросов.
-- Роль и действие внутри провайдера задаются в Java, поэтому это правило нельзя сузить или переназначить конфигурацией. Расширение всё равно работает: `ROLE_IMPLEMENTATION_TEAM: ALL` в политике объединяется с ответом провайдера и имеет приоритет.
+- Провайдер может только расширять доступ. `DataScope.none()` означает «я ничего не добавляю», а не «запретить».
+- `ALL` от любого провайдера прерывает проверку остальных.
+- Порядок не меняет результат; `@Order` решает только, какой провайдер выполняется первым.
+- Каждый провайдер выполняется при каждой проверке области, поэтому выходите по ресурсу и действию до любого поиска.
+- Провайдер отвечает за субъект по данным. Он не должен сравнивать роли: кто чем владеет, решает таблица ролей, а
+  роль, сравниваемую в коде, нельзя изменить из конфигурации. Расширение по-прежнему работает: `sales.order.read: ALL`
+  у роли объединяется с ответом провайдера и побеждает.
 
 ## Согласованность кода и конфигурации
 
-Проверка при запуске (`DataScopePolicyValidator`) прерывает развёртывание в следующих случаях:
+Старт срывает развёртывание при:
 
-- опечатка в разрешении (`OWNN`, `ALL+TENANT`);
-- политика для ресурса, у которого нет `DataScopeMapping`;
-- политика использует измерение, не привязанное в mapping;
-- ресурс одновременно указан как не требующий ограничений и как защищённый политикой.
+- идентификаторе операции вне грамматики, повторяющемся идентификаторе или ключе описания, который нигде не
+  разрешается;
+- записи роли с операцией, которой нет в каталоге сервиса, — с перечнем операций этой области из каталога;
+- некорректной области (`OWNN`, `ALL+TENANT`), `NONE` или шаблоне;
+- измерении, которое ресурс операции не привязывает, операции, у ресурса которой нет `DataScopeMapping`, или
+  измерении строк у операции, не затрагивающей строк;
+- цикле `includes` или включении неопределённой роли;
+- аннотации авторизации с операцией, которой нет в каталоге;
+- всё ещё заданных `ludwig.security.data.policies`, `default-access` или `strict-policy-tokens`.
 
-Названия действий **не** проверяются. `aprove:` в конфигурации будет принято, а настоящее `approve` перейдёт к `default-access: NONE` — доступ будет закрыт, но ошибка останется незаметной. В сервисе есть тест, проверяющий оба направления:
+Он один раз записывает в журнал каждую операцию каталога, которой не владеет ни одна роль. Неопределённое имя роли
+в полномочиях вызывающего ошибкой не является, потому что роли приходят от провайдера идентичности.
 
-```java
-@Test
-void everyActionHasAPolicyAndEveryPolicyIsAKnownAction() {
-    Set<String> known = new HashSet<>(Set.of(OrderAccess.CREATE, OrderAccess.READ, OrderAccess.DELETE));
-    Arrays.stream(OrderTransition.values()).map(OrderTransition::action).forEach(known::add);
-
-    Set<String> configured = properties.getData().getPolicies().get(OrderAccess.RESOURCE).keySet();
-
-    assertThat(configured).isEqualTo(known);
-}
-```
-
-Храните полное дерево политик в `application.yml` сервиса как проверенную базовую конфигурацию, а для каждого окружения переопределяйте отдельные строки — тогда изменение доступа будет выглядеть как однострочный diff.
+Держите полную таблицу ролей в `application.yml` сервиса как проверенный эталон и переопределяйте отдельные строки
+по окружениям, чтобы изменение доступа было диффом в одну строку. `GET /admin/v1/security/operations/{id}/holders`
+показывает, кто владеет операцией в работающем развёртывании.
 
 ## Известные ограничения
 
-| Ограничение | Последствие |
+| Ограничение | Следствие |
 |---|---|
-| Политики компилируются один раз при запуске (`ScopePolicies`) | Изменение конфигурации требует перезапуска; переключить доступ на лету нельзя. |
-| Разрешения задаются отдельно для каждой роли | Выражение разрешения нельзя объявить один раз и повторно использовать для нескольких ролей. |
-| Пользовательское измерение читает атрибут principal | Чтобы сравнить пользовательский столбец с subject вызывающего субъекта, нужен обходной вариант с атрибутом или bean-провайдер. |
-| Атрибуты principal содержат одно значение | Для нескольких значений одного измерения нужен bean-провайдер или строки в таблице разрешений. |
-| `guard.scope(...)` не выполняет аудит | Отказ в `create`, проверенный таким способом, не записывается как отказ так, как это делает `guard.check(...)`. |
-| Названия действий не проверяются при запуске | Это проверяется описанным выше тестом сервиса. |
+| Таблица ролей компилируется один раз при старте | Изменение конфигурации требует перезапуска; это не переключатель на лету. |
+| Области записываются прямо в каждой роли | Выражение области нельзя назвать один раз и переиспользовать; `includes` разделяет роли целиком. |
+| Пользовательское измерение читает атрибут принципала | Сравнение пользовательского столбца с subject вызывающего требует обходного приёма с атрибутом или бина-провайдера. |
+| Атрибуты принципала однозначны | Несколько значений для одного измерения требуют бина-провайдера или строк в таблице разрешений. |
+| `guard.scope(...)` не пишет аудит | Отказ в `create`, проверенный таким способом, не записывается как отказ, в отличие от `guard.check(...)`. |
 
-Изменение любого из этих ограничений является изменением платформы в `security-spring-boot-starter` и должно проходить через OpenSpec для capability `data-access`.
+Изменение любого из этих пунктов — это платформенное изменение `security-spring-boot-starter`, которое проходит через
+OpenSpec относительно capability `operation-authorization`.

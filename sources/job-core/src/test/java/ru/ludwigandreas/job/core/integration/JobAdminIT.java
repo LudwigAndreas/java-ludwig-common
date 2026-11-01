@@ -29,7 +29,7 @@ import ru.ludwigandreas.job.core.lock.JdbcRunLock;
 import ru.ludwigandreas.job.core.lock.RunLockHandle;
 import ru.ludwigandreas.job.core.schedule.ScheduleSpec;
 import ru.ludwigandreas.job.core.schedule.SelfSchedulingLifecycle;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.testsupport.container.Containers;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
@@ -42,10 +42,12 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "ludwig.web.i18n.configure-validator=false",
             // The fixture has no application changelog of its own; job-core's is the schema under test.
             "spring.liquibase.change-log=classpath:db/changelog/job-core/job-core-changelog.xml",
-            "ludwig.admin.grants.jobs.read[0]=PLATFORM_SUPPORT",
-            "ludwig.admin.grants.jobs.read[1]=PLATFORM_ADMIN",
-            "ludwig.admin.grants.jobs.operate[0]=PLATFORM_ADMIN",
-            "ludwig.admin.grants.jobs.privileged[0]=PLATFORM_ADMIN"})
+            "ludwig.security.roles.PLATFORM_SUPPORT.operations[job.definition.read]=ALL",
+            "ludwig.security.roles.PLATFORM_SUPPORT.operations[job.lease.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.definition.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.lease.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.definition.run]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.lease.release]=ALL"})
 @AutoConfigureMockMvc
 class JobAdminIT {
 
@@ -142,7 +144,7 @@ class JobAdminIT {
         assertThat(result.getResponse().getStatus()).isEqualTo(409);
         assertThat(result.getResponse().getContentAsString()).contains("pod-7");
         assertThat(AUDIT).singleElement().satisfies(event -> {
-            assertThat(event.action()).isEqualTo("jobs.operate");
+            assertThat(event.action()).isEqualTo("job.definition.run");
             assertThat(event.outcome().status().name()).isEqualTo("DENIED");
         });
     }
@@ -168,9 +170,9 @@ class JobAdminIT {
 
         MvcResult noReason = mvc.perform(post("/admin/v1/jobs/locks/sweep/release").with(admin())).andReturn();
         MvcResult released = mvc.perform(post("/admin/v1/jobs/locks/sweep/release")
-                .header(AdminInvocation.REASON_HEADER, "pod-7 was evicted").with(admin())).andReturn();
+                .header(OperationEvaluator.REASON_HEADER, "pod-7 was evicted").with(admin())).andReturn();
         MvcResult again = mvc.perform(post("/admin/v1/jobs/locks/sweep/release")
-                .header(AdminInvocation.REASON_HEADER, "again").with(admin())).andReturn();
+                .header(OperationEvaluator.REASON_HEADER, "again").with(admin())).andReturn();
 
         assertThat(noReason.getResponse().getStatus()).isEqualTo(400);
         assertThat(released.getResponse().getStatus()).isEqualTo(200);

@@ -1,0 +1,38 @@
+{
+  "change": "replica-controls",
+  "contract": {
+    "goal": "hot-reload and rest-client each contribute an administrative area over job-core's replica-control channel: list reloadable sources and reload one on every replica; list named clients, reset a client-credentials token, read and set circuit breakers per replica - as specified in specs/config-reload-admin and specs/outbound-client-admin",
+    "output": "optional job-core/security(/web-core) deps in both POMs; ReloadableSourceRegistry; ClientTokenSources; hotreload and restclient operations, bundles, GET listings, controls hotreloadreload/restclienttokenreset/restclientbreakers/restclientbreaker; fail-closed auto-configurations; HotReloadAdminIT, RestClientAdminIT; service grants; OpenAPI docs; READMEs EN+RU, admin guide, follow-ups; manifest rebuilt",
+    "constraints": [
+      "nothing changes in either module when the administrative surface or job-core is absent",
+      "no in-repo dependency cycle (checked: none of job-core, security, web-core reaches either module, test scope included)",
+      "values, secrets, tokens never appear in a response",
+      "only the two module POMs change",
+      "no weakened Checkstyle/ArchUnit rule"
+    ],
+    "done_when": [
+      "scripts/check_image_pins.sh",
+      "scripts/check_migrations.sh",
+      "scripts/api-docs.sh missing",
+      "mvn -q validate",
+      "scripts/manifest.sh stale",
+      "mvn -pl :hot-reload-spring-boot-starter,:rest-client-spring-boot-starter + all in-repo dependents -am -amd install (one reactor)",
+      "openspec validate replica-controls --strict"
+    ]
+  },
+  "rollback_point": "f637178 (working tree carries the uncommitted earlier admin changes)",
+  "current_task": null,
+  "decisions": [
+    "1.1: SourceReloadCoordinator.reload returned false for both unchanged and failed, so the design's reloaded/unchanged/rejected needed a new reloadOutcome(source) (reload() delegates, unchanged contract). A typed configuration refusing new content happens in a listener after the coordinator accepted it; HotReloadTypedConfigFactory now reports it through coordinator.rejected(sourceId), a side channel that notifies nobody, so watcher behaviour is unchanged and only the outcome sees it. Coordinator also records lastReloaded and lastOutcome per source. ReloadableSourceRegistry (core) is filled in the four bean methods that create sources (file, Vault KV, Vault lease, template dir) - each gains a registry parameter. A Vault lease's forced reload is SecretLeaseContainer.rotate (synchronous for a rotating secret in spring-vault 3.1.2; VaultLeaseSecretBridge.rotate reports the delivery's outcome; a renewable lease reports UNCHANGED, marked as a shortcut). hot-reload POM: optional job-core, security, web-core; test postgres, liquibase, test-support(-security); failsafe bound. Cycle check: none of job-core/security/web-core reaches hot-reload or rest-client (test scope included). mvn -pl :hot-reload-spring-boot-starter -am verify rc=0; SourceReloadCoordinatorTest 7/7 (+2); manifest build, stale rc=0.",
+    "1.2: hotreload area (HotReloadAdminOperations with a reserved privileged tier, listing GET /admin/v1/hotreload/sources with lastReloadedHere, control hotreloadreload returning {source, outcome}), bundle i18n/ludwig-hotreload-messages EN+RU registered by the area's auto-configuration, which is conditional on AdminOperationCatalog + ReplicaControl + ProblemMessageBundle classes and on the registry, catalog and ReplicaControls beans. Found and fixed a pre-existing defect: a RefreshableConfig created before the EnvironmentPropertySourceBridge bean registered its coordinator listener first, so on a reload it rebound from the stale Environment (user-settings is a production user). hotReloadTypedConfigFactory now takes the bridge as a parameter, which fixes the listener order. HotReloadAdminIT 4/4 (listing without values, reloaded x2 then unchanged x2 across two replicas, typed rejection keeps last-known-good, unknown source 400) uses a properties file: the spec's Vault KV scenario goes through the same registry entry type and coordinator, and a Vault container is not part of this module's tests. In the rejection test only replica A has the typed configuration, so only A reports rejected. HotReloadAdminAutoConfigurationTest 2/2. mvn -pl :hot-reload-spring-boot-starter verify -Dit.test=HotReloadAdminIT rc=0.",
+    "2.1: rest-client POM gains optional job-core and security (web-core was already optional), test postgres/liquibase/test-support(-security), and failsafe (none was bound). ClientTokenSources bean (always present, so a token reset can answer 'no machine token here' instead of failing startup) is filled by ClientCredentialsAuthenticationProvider through a new 5-argument constructor; the 4-argument one keeps a private instance. The provider bean method gains the parameter. mvn -pl :rest-client-spring-boot-starter -am verify rc=0 (rest-client 129 tests); manifest build, stale rc=0.",
+    "2.2: restclient area: listing GET /admin/v1/restclient/clients (name-sorted; host only of the base URL, auth kind, resilience/retry/breaker settings, read from ClientRuntimeBuilder.resolve so listing builds no client), controls restclienttokenreset (operate; 400 for an unknown client or one not on oauth2-client-credentials; per-replica reset=false when that replica never minted), restclientbreakers (read; every breaker's name/state/failureRate), restclientbreaker (privileged; 400 for a client without a breaker; builds the client first on a replica that has not called it, so its breaker exists). Bundle i18n/ludwig-restclient-messages EN+RU. RestClientAdminIT 4/4 lives in its own test package: under integration the app's auto-configuration package scanned the other tests' @LudwigRestClient interfaces. RestClientAdminAutoConfigurationTest 2/2. mvn -pl :rest-client-spring-boot-starter verify -Dit.test=RestClientAdminIT rc=0.",
+    "3.1/3.2: notification-service grants hotreload.read to NOTIFICATION_ADMIN and NOTIFICATION_SUPPORT, operate and privileged to NOTIFICATION_ADMIN. crud-service-example grants restclient.* to CATALOG_ADMIN and NOT hotreload.*: the manifest shows crud does not run hot-reload (reached only through optional edges), and the proposal's own rule is 'only areas a service actually runs are granted'; the rule wins over the proposal's line. Verified after installing both modules: notification-service 317+214, crud-service-example 102+54, rc=0 each (first run failed only ApiDocumentIT.committedDocumentIsCurrent in both, which 3.3 is for).",
+    "3.3: scripts/api-docs.sh refresh - crud +80 lines (GET /admin/v1/restclient/clients), notification +36 (GET /admin/v1/hotreload/sources); no secret/token/password in the added lines; api-docs missing rc=0, check rc=0.",
+    "4.1: Administration sections in both modules' READMEs EN+RU (heading parity 26/26, 19/19; rest-client states a forced breaker resets on restart), admin guide areas table EN+RU (+hotreload, +restclient), follow-ups per-replica item updated (still open: per-key eviction, subset targeting, gRPC client channels). openspec validate replica-controls --strict: valid.",
+    "5.1: gate.sh stopped at check_api_baseline (releases repository unreachable); every other check run by hand rc=0; reactor -am -amd install: 24 modules SUCCESS, 3371 tests, 0 failures, 0 errors."
+  ],
+  "failures": [],
+  "open_questions": [],
+  "pending_human": []
+}

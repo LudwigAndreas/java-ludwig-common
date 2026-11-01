@@ -12,7 +12,7 @@ import ru.ludwigandreas.messaging.db.admin.service.MessagingAdminService;
 import ru.ludwigandreas.messaging.db.admin.service.MessagingAdminService.ConsumerView;
 import ru.ludwigandreas.messaging.db.admin.service.MessagingAdminService.MoveResult;
 import ru.ludwigandreas.messaging.db.admin.service.MessagingAdminService.PauseState;
-import ru.ludwigandreas.security.admin.AdminAccess;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /**
  * The {@code messaging} area: database-log consumer positions, and pausing, resuming and moving a group on a topic.
@@ -38,7 +38,7 @@ public class MessagingAdminController {
      * @return the positions
      */
     @GetMapping("/consumers")
-    @AdminAccess(MessagingAdminOperations.READ)
+    @RequiresOperation(MessagingAdminOperations.CONSUMER_READ)
     public List<ConsumerView> consumers() {
         return service.consumers();
     }
@@ -51,7 +51,7 @@ public class MessagingAdminController {
      * @return the pair's state
      */
     @PostMapping("/consumers/{group}/topics/{topic}/pause")
-    @AdminAccess(MessagingAdminOperations.OPERATE)
+    @RequiresOperation(MessagingAdminOperations.CONSUMER_PAUSE)
     public PauseState pause(@PathVariable String group, @PathVariable String topic) {
         return service.pause(group, topic);
     }
@@ -64,7 +64,7 @@ public class MessagingAdminController {
      * @return the pair's state
      */
     @PostMapping("/consumers/{group}/topics/{topic}/resume")
-    @AdminAccess(MessagingAdminOperations.OPERATE)
+    @RequiresOperation(MessagingAdminOperations.CONSUMER_RESUME)
     public PauseState resume(@PathVariable String group, @PathVariable String topic) {
         return service.resume(group, topic);
     }
@@ -78,7 +78,7 @@ public class MessagingAdminController {
      * @return each partition's old and new position
      */
     @PostMapping("/consumers/{group}/topics/{topic}/offsets")
-    @AdminAccess(MessagingAdminOperations.PRIVILEGED)
+    @RequiresOperation(MessagingAdminOperations.OFFSET_MOVE)
     public MoveResult moveOffsets(@PathVariable String group, @PathVariable String topic,
                                   @RequestBody MoveRequest request) {
         return service.moveOffsets(group, topic, request.partition(), request.to(), request.value());

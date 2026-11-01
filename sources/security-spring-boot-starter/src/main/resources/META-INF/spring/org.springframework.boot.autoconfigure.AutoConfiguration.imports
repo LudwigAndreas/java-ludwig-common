@@ -1,6 +1,7 @@
 ru.ludwigandreas.security.config.SecurityAuditAutoConfiguration
 ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration
 ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration
+ru.ludwigandreas.security.config.OperationAutoConfiguration
 ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration
 ru.ludwigandreas.security.config.MutualTlsAutoConfiguration
 ru.ludwigandreas.security.config.ResourceServerAutoConfiguration

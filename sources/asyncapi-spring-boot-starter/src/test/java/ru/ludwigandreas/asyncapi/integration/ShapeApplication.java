@@ -45,6 +45,12 @@ public class ShapeApplication {
         return builder.forTextPayload("settings-sync", "user.settings");
     }
 
+    /** Topics a listener names through an expression yielding an array, as a per-source subscription does. */
+    @Bean
+    String[] partnerTopics() {
+        return new String[] {"partner.returns", "partner.refunds"};
+    }
+
     @Bean
     Listeners listeners() {
         return new Listeners();
@@ -60,6 +66,11 @@ public class ShapeApplication {
         @KafkaListener(topics = "${shape.settings-topic:user.settings}", groupId = "shape",
                 containerFactory = "settingsFactory")
         public void settings(String value) {
+            // documented only
+        }
+
+        @KafkaListener(topics = "#{@partnerTopics}", groupId = "shape", containerFactory = "settingsFactory")
+        public void partnerEvents(String value) {
             // documented only
         }
     }

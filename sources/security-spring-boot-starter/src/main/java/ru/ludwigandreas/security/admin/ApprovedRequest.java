@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 
 /**
  * A stored administrative request, replayed over the approver's request: the stored method, path, query, body and
@@ -43,7 +44,7 @@ final class ApprovedRequest extends HttpServletRequestWrapper {
         attributes.put(EXECUTING, approval.id());
         header(HttpHeaders.CONTENT_TYPE, stored.contentType());
         header(HttpHeaders.ACCEPT_LANGUAGE, stored.acceptLanguage());
-        header(AdminInvocation.REASON_HEADER, stored.reason());
+        header(OperationEvaluator.REASON_HEADER, stored.reason());
         header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
         this.parameters = parse(stored.query());
     }

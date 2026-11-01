@@ -5,6 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import ru.ludwigandreas.security.exception.SecurityConfigurationException;
+import ru.ludwigandreas.security.operation.OperationCatalog;
+import ru.ludwigandreas.security.operation.Sensitivity;
+import ru.ludwigandreas.security.operation.Surface;
 
 /**
  * Which administrative operations need a second person's approval, validated at startup.
@@ -21,16 +24,17 @@ public final class AdminApprovalPolicy {
      * @param ttl            how long an approval may stay undecided
      * @param catalog        the declared operations
      * @param storePresent   whether an approval store exists
-     * @throws SecurityConfigurationException when an id is uncatalogued or not privileged, or no store exists
+     * @throws SecurityConfigurationException when an id is uncatalogued or not an administrative PRIVILEGED operation,
+     *                                        or no store exists
      */
-    public AdminApprovalPolicy(List<String> required, Duration ttl, AdminOperationCatalog catalog,
+    public AdminApprovalPolicy(List<String> required, Duration ttl, OperationCatalog catalog,
                                boolean storePresent) {
         List<String> problems = new ArrayList<>();
         for (String id : required) {
             catalog.find(id).ifPresentOrElse(operation -> {
-                if (operation.tier() != AdminTier.PRIVILEGED) {
-                    problems.add("'" + id + "' is a " + operation.tier().token() + " operation; only privileged"
-                            + " operations can require approval");
+                if (operation.surface() != Surface.ADMIN || operation.sensitivity() != Sensitivity.PRIVILEGED) {
+                    problems.add("'" + id + "' is a " + operation.surface() + " " + operation.sensitivity()
+                            + " operation; only administrative PRIVILEGED operations can require approval");
                 }
             }, () -> problems.add("'" + id + "' is not an administrative operation of this service"));
         }

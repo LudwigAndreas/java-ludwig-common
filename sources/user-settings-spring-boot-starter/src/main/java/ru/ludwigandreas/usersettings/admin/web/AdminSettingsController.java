@@ -10,19 +10,19 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.authz.PrincipalRef;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
 import ru.ludwigandreas.usersettings.admin.SettingsAdminOperations;
 import ru.ludwigandreas.usersettings.api.SettingDefinition;
 import ru.ludwigandreas.usersettings.api.SettingLayer;
 import ru.ludwigandreas.usersettings.api.SettingScope;
+import ru.ludwigandreas.usersettings.api.SettingValueConverter;
 import ru.ludwigandreas.usersettings.api.SettingsLookup;
 import ru.ludwigandreas.usersettings.api.SettingsSubject;
 import ru.ludwigandreas.usersettings.api.SettingsWriter;
 import ru.ludwigandreas.usersettings.consent.ConsentService;
-import ru.ludwigandreas.usersettings.api.SettingValueConverter;
 import ru.ludwigandreas.usersettings.registry.SettingDefinitionRegistry;
 import ru.ludwigandreas.usersettings.resolve.SettingsSubjects;
 import ru.ludwigandreas.usersettings.resolve.SettingsTenantResolver;
@@ -37,7 +37,7 @@ import ru.ludwigandreas.usersettings.web.dto.UpdateSettingsRequest;
  * <p>Mounted only where the administrative surface exists, {@code ludwig.user-settings.web.enabled=true}
  * <em>and</em> the service runs in owner mode, because half of it writes. It is a separate controller
  * from the self-service one specifically so that a deployment can have the second without the first.
- * Which roles may call it is the service's {@code ludwig.admin.grants}.
+ * Which roles may call it is the service's {@code ludwig.security.roles}.
  *
  * <p><b>The tenant is never taken from the request.</b> Every subject here is resolved through the
  * same {@link SettingsTenantResolver} the rest of the module uses. The default one answers with the
@@ -62,7 +62,7 @@ public class AdminSettingsController {
     private final SettingsTenantResolver tenantResolver;
 
     @GetMapping("/subjects/{subject}")
-    @AdminAccess(SettingsAdminOperations.READ)
+    @RequiresOperation(SettingsAdminOperations.SUBJECT_READ)
     public SettingsResponse settingsOf(@PathVariable String subject) {
         return mapper.toResponse(lookup.getAll(PrincipalRef.user(subject)), true);
     }
@@ -76,7 +76,7 @@ public class AdminSettingsController {
      * rejected by the writer with a message saying where they actually live.
      */
     @PutMapping("/scopes/{scopeType}/{scopeId}")
-    @AdminAccess(SettingsAdminOperations.OPERATE)
+    @RequiresOperation(SettingsAdminOperations.SCOPE_SET)
     public void setForScope(@PathVariable SettingLayer scopeType,
                             @PathVariable String scopeId,
                             @RequestBody UpdateSettingsRequest request) {
@@ -86,7 +86,7 @@ public class AdminSettingsController {
     }
 
     @GetMapping("/subjects/{subject}/consents")
-    @AdminAccess(SettingsAdminOperations.READ)
+    @RequiresOperation(SettingsAdminOperations.CONSENT_READ)
     public ConsentStateResponse consentsOf(@PathVariable String subject) {
         return mapper.toResponse(consents.history(PrincipalRef.user(subject), null));
     }
@@ -96,7 +96,7 @@ public class AdminSettingsController {
      * X", which is the question a regulator asks and a current-state column cannot answer.
      */
     @GetMapping("/subjects/{subject}/consents/asof")
-    @AdminAccess(SettingsAdminOperations.READ)
+    @RequiresOperation(SettingsAdminOperations.CONSENT_READ)
     public ConsentStateResponse consentsAsOf(
             @PathVariable String subject,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant at) {

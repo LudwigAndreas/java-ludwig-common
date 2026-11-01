@@ -7,21 +7,21 @@ take effect, with the request, the decision and the execution all on record.
 ## Requirements
 ### Requirement: Approval is configured per privileged operation
 `ludwig.admin.approval.required` SHALL list operation ids that require approval. An id that is not in the catalog, or
-whose tier is not `privileged`, SHALL fail startup naming it. A non-empty list with no approval store SHALL fail
+that is not an `ADMIN` operation of sensitivity `PRIVILEGED`, SHALL fail startup naming it. A non-empty list with no approval store SHALL fail
 startup. An empty list SHALL change no behaviour.
 
 #### Scenario: A read operation is listed
-- **WHEN** `approval.required` contains `outbox.read`
-- **THEN** the application fails to start naming `outbox.read`
+- **WHEN** `approval.required` contains `outbox.message.read`
+- **THEN** the application fails to start naming `outbox.message.read`
 
 ### Requirement: A call needing approval is recorded, not executed
 A call authorized for an operation that requires approval SHALL NOT invoke the handler. It SHALL record the method,
-path, query, body (at most 64 KiB, else `413`), `Admin-Reason` and requester, and answer `202` with an approval
+path, query, body (at most 64 KiB, else `413`), `Operation-Reason` and requester, and answer `202` with an approval
 resource whose operation envelope is `PENDING` and a `Location` naming `/admin/v1/approvals/{id}`. A call that would
 fail authorization or lacks a required reason SHALL be refused as before, with no approval recorded.
 
 #### Scenario: Alice asks to discard a message
-- **WHEN** `outbox.privileged` requires approval and alice, holding it, discards message `m-1` with a reason
+- **WHEN** `outbox.message.discard` requires approval and alice, holding it, discards message `m-1` with a reason
 - **THEN** the response is `202` with a pending approval, `m-1` is unchanged, and an audit event records the request
 
 ### Requirement: Only a different holder of the operation can approve or reject
@@ -32,7 +32,7 @@ status code and body on the approval, whose envelope becomes `SUCCEEDED` for a 2
 withdrawn or expired approval SHALL answer `409`.
 
 #### Scenario: Bob approves
-- **WHEN** bob, holding `outbox.privileged`, approves alice's pending discard
+- **WHEN** bob, holding `outbox.message.discard`, approves alice's pending discard
 - **THEN** `m-1` becomes `DISCARDED`, the approval's envelope is `SUCCEEDED` with the recorded status `200`, and the
   discard's audit event carries `requestedBy=alice` and `approvedBy=bob`
 
@@ -53,8 +53,8 @@ requester SHALL be able to withdraw a pending approval. An approval undecided af
 SHALL be audited.
 
 #### Scenario: A support user sees no privileged approvals
-- **WHEN** a caller holding only `outbox.read` lists approvals
-- **THEN** alice's pending `outbox.privileged` approval is not in the list
+- **WHEN** a caller holding only `outbox.message.read` lists approvals
+- **THEN** alice's pending `outbox.message.discard` approval is not in the list
 
 #### Scenario: Nobody decides in time
 - **WHEN** 24 hours pass without a decision

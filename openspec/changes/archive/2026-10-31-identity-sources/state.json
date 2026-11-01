@@ -1,0 +1,54 @@
+{
+  "change": "identity-sources",
+  "contract": {
+    "goal": "the identity projection is provider-neutral: one IdentityProjection write path with declared sources, role mapping, ownership and threshold-guarded sweeps; Kafka and pull-directory feeds are separate starters, as specified in specs/identity-projection, identity-source-kafka, identity-source-directory, identity-admin, starter-conditional-wiring, notification-local-run",
+    "output": "identity-projection-spring-boot-starter (core, no Kafka), new identity-source-kafka-spring-boot-starter, new identity-source-directory-spring-boot-starter, architecture-rules rule, both services migrated, READMEs EN+RU, admin guide, CHANGELOG",
+    "constraints": [
+      "no backward compatibility (user decision)",
+      "projection never depends on a feed module",
+      "no second implementation of scheduling, locks, cache, audit or problem pipeline",
+      "do not weaken checkstyle/ArchUnit rules or delete failing tests",
+      "do not commit or stage"
+    ],
+    "done_when": [
+      "mvn -q validate",
+      "mvn -pl :identity-projection-spring-boot-starter -am verify",
+      "mvn -pl :identity-source-kafka-spring-boot-starter -am verify",
+      "mvn -pl :identity-source-directory-spring-boot-starter -am verify",
+      "mvn -pl :architecture-rules -am verify",
+      "mvn -pl :crud-service-example -am verify",
+      "mvn -pl :notification-service -am verify",
+      "scripts/api-docs.sh check",
+      "scripts/manifest.sh stale",
+      "openspec validate identity-sources --strict"
+    ]
+  },
+  "rollback_point": "73f5ddcb88244104f91398cd27983fa98e7b9e6e (plus uncommitted operations-catalog work in the tree)",
+  "current_task": "done",
+  "decisions": [
+    "1.1 spec correction (code is the truth): an upsert's unset profile fields keep their stored values (current IGNORE-null merge, needed for partial provider payloads); only the role set is complete-state. Added a scenario. REMOVED becomes its own UserStatus (all readers test isActive / == ACTIVE).",
+    "1.3 design finding: a sweep-disabled user must be restorable by the next upsert whatever its occurredAt (a listing that omitted users by mistake, within the threshold, would otherwise lock them out for good). The sweep clears source_timestamp; spec scenario added.",
+    "1.1-1.4: integration tests in this module run under surefire (*IntegrationTest), so verification used `mvn -pl <module> test -Dtest=...` where tasks.md wrote `verify -Dit.test=...`; same tests, real Postgres.",
+    "IdentityChange requires source and occurredAt at construction (programming error otherwise); a blank subject is accepted and DISCARDED+counted so a feed of untrusted input need not decide.",
+    "Roles are stored without the ROLE_ prefix after mapping; the resolver prefixes on read, as before.",
+    "2.2 (code was the truth, now fixed to the spec): the old listener logged and DROPPED an unparseable payload; the new one throws MessageConversionException, which messaging classifies non-retryable, so it is dead-lettered on first delivery. Parsing lives in IdentityUserEventParser because architecture-rules forbids a @KafkaListener catching checked exceptions.",
+    "Per-source feed beans are registered by a BeanDefinitionRegistryPostProcessor from configuration (Kafka) - no SPI change was needed; IdentityKafkaProperties lives in .config and is @Validated per architecture-rules.",
+    "3.x: architecture-rules forced the directory module into layers: SPI (IdentityDirectory, DirectoryPage, DirectoryQuery) at the root, engine/job/feed/metrics in .service, JDBC state in .repository, wiring in .config. Per-directory sync, two jobs and a feed are registered by a BeanDefinitionRegistryPostProcessor keyed on the directory bean names.",
+    "3.4: added ludwig.identity.directory.sources.<s>.initial-delay (default PT15S) - the first sync's delay was hard-coded, which made the jobs untestable without stopping them (a stopped SelfSchedulingLifecycle refuses runNow).",
+    "3.4 verification of the jobs: the IT proves both jobs per source are SelfSchedulingLifecycle beans (what the jobs area lists) and that a held run lock of the job's name keeps the run out; the 409 of POST /admin/v1/jobs/{name}/run under lease is job-core's own behaviour for lock name == job name and was not re-tested here.",
+    "An aborted sweep does not advance the watermark: a truncated listing's highest watermark may lie past changes it never saw.",
+    "4.1: new RuleGroup IDENTITY with identity.writes-go-through-the-projection (no class outside ru.ludwigandreas.identity calls save*/delete* on ru.ludwigandreas.identity.repository); architecture-rules 103 tests green.",
+    "5.x finding: YAML `source: {}` reaches binding as an empty string or, from some property sources, an empty LinkedHashMap - neither converts to Source. Added two @ConfigurationPropertiesBinding converters (concrete classes, since a lambda erases the generic types binding matches on) accepting only empty values; IdentitySourceBindingTest covers both shapes.",
+    "5.1: notification's local seed now writes through IdentityProjection as source `local` (declared in application-localrun.yml) with a fixed occurredAt, so a second start applies nothing.",
+    "5.3 findings fixed rather than worked around: (a) Springwolf names a listener's channel after its topics expression's toString(), so an array-valued expression produced '[Ljava.lang.String;@...' channels; PlatformAsyncApiCustomizer (asyncapi-spring-boot-starter) now evaluates the expression as Spring Kafka does and splits the mis-named channel into one channel + receive operation + DLT per topic (new AsyncApiDocumentShapeIT case); IdentityKafkaSubscriptions returns one cached array so every evaluation names the same channel. (b) The identity SourceView/FeedView records collided with hot-reload's SourceView schema and the handler name 'sources' renamed hot-reload's operationId to sources_1: renamed to IdentitySourceView/IdentityFeedView and identitySources(); both OpenAPI documents now change additively only.",
+    "Scope addition recorded: asyncapi-spring-boot-starter changed (customizer + test + CHANGELOG Fixed), because the published AsyncAPI documents of both services would otherwise have lost the identity channel.",
+    "7.1 gate: script checks pass (migrations over tracked+untracked; api baseline offline); mvn -o install whole reactor: 45 modules, 5220 tests, 0 failures; receipt.json written."
+  ],
+  "failures": [
+    "scripts/check_migrations.sh reads `git ls-files` only, so a new untracked changeset reports E_INCLUDE_MISSING until staged; with staging forbidden, verified by piping tracked+untracked files to scripts/check_migrations.py (rc=0). The gate run must do the same.",
+    "identity-source-kafka spec scenario 'a concurrent first insert' is covered only by a unit test proving an apply failure is rethrown (so the consumer retries); no test runs two replicas against one database.",
+    "Pre-existing (HEAD): security-spring-boot-starter's LudwigSecurityAutoConfiguration cannot be introspected without web-core on the classpath (a @Bean method returning ProblemMessageBundle; method-level @ConditionalOnClass does not help). identity-source-directory adds web-core as a test dependency to work around it; a non-web service using the security starter would fail the same way. Not fixed here (out of scope) - recorded for the follow-ups."
+  ],
+  "open_questions": [],
+  "pending_human": []
+}

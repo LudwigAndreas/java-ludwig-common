@@ -71,7 +71,7 @@ existing signing key (preferred: one key to rotate, one JWKS).
 | `DELETE` | `/{id}` | Revoke |
 
 Authorities: `pat:manage` to manage one's own tokens - the self-service API acts on nobody else's. Issuing for or
-revoking another owner's token is the `pat.privileged` operation of the [administrative area](#administration)
+revoking another owner's token is the `pat.token.issue` / `pat.token.revoke` operation of the [administrative area](#administration)
 (grant sparingly: it lets a credential outlive the person who created it). A request authenticated **by a PAT** is
 refused on every management and administrative endpoint (`PatCredentialGuard`): a token cannot mint, rotate or
 revoke a token.
@@ -173,7 +173,8 @@ To shorten it, lower `ludwig.pat.exchange.assertion-lifetime` here **and** the e
    `PatLiquibaseAutoConfiguration`.
 3. A signing key (`RSAKey` bean) or a `PatAssertionMinter` delegating to the provider.
 4. `/oauth2/token` (and `/introspect` if used) in `ludwig.security.public-paths`; reachable only inside the mesh.
-5. Grant `pat:manage` to token holders, and `pat.read` / `pat.privileged` in `ludwig.admin.grants` only to administrators.
+5. Grant `pat:manage` to token holders, and `pat.token.read` / `pat.token.issue` / `pat.token.revoke` in `ludwig.security.roles` only to
+   administrators.
 6. **Schedule the maintenance operations** - see Known gaps below.
 7. Configure the edge as described above.
 
@@ -230,27 +231,32 @@ Secrets and digests never appear in events.
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `pat.read` | `GET /admin/v1/pat/tokens`<br>`GET /admin/v1/pat/tokens/{id}` | See any owner's personal access tokens, without a secret or its hash. |
-| `pat.operate` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
-| `pat.privileged` | `POST /admin/v1/pat/tokens`<br>`POST /admin/v1/pat/tokens/{id}/revoke` | Issue a personal access token for another owner, and revoke anybody's. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `pat.token.read` | `READ` | `GET /admin/v1/pat/tokens`<br>`GET /admin/v1/pat/tokens/{id}` | See any owner's personal access tokens, without a secret or its hash. |
+| `pat.token.issue` | `PRIVILEGED` | `POST /admin/v1/pat/tokens` | Issue a personal access token for another owner. |
+| `pat.token.revoke` | `PRIVILEGED` | `POST /admin/v1/pat/tokens/{id}/revoke` | Revoke any owner's personal access token. |
 
-**Removed:** `pat:manage:any` (`PatAuthorities.MANAGE_ANY`); the self-service API acts only on the caller's own tokens and refuses (and audits) a request naming another owner. A caller presenting a personal access token is refused here with the credential-not-permitted problem even when `ludwig.admin.allow-personal-access-tokens=true`: a token may not mint, rotate or revoke a token.
+**Removed:** `pat:manage:any` (`PatAuthorities.MANAGE_ANY`); the self-service API acts only on the caller's own tokens and refuses (and audits) a request naming another owner. A caller presenting a personal access token is refused here with the credential-not-permitted problem even when `ludwig.security.operations.allow-personal-access-tokens=true`: a token may not mint, rotate or revoke a token.
 
 **Filtering `GET /admin/v1/pat/tokens`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `ownerSubject`, `expiresAt`, `revokedAt`, `lastUsedAt`, `useCount`. A live token is `revokedAt eq null and (expiresAt eq null or expiresAt gt <now>)`. Not filterable: the secret digests, the key ids, the name, the scopes, the last-used address, the revocation reason. Example: `$filter=revokedAt eq null and lastUsedAt lt 2026-07-31T00:00:00Z`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[pat.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[pat.operate]": [ORDERS_ADMIN]
-      "[pat.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          pat.token.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          pat.token.issue: ALL
+          pat.token.revoke: ALL
 ```
 
 ## Runbook
@@ -259,7 +265,7 @@ ludwig:
 |---|---|---|
 | Every PAT fails at the edge with 401 | `/oauth2/token` not public, issuer/signing key misconfigured, or edge not exchanging | Check startup `WARN`s, `ludwig_pat_exchange_failure_total` reasons, the edge config |
 | `audience-not-permitted` / `audience-not-issuable` | Token not issued for that service, or service not in `exchange.audiences` | Re-issue with the audience, or add it to `audiences` |
-| A token must be killed now | Leak | `DELETE /api/v1/personal-access-tokens/{id}` (owner) or `POST /admin/v1/pat/tokens/{id}/revoke` (`pat.privileged`, with `Admin-Reason`); effective within the revocation window (≤ 11m by default) |
+| A token must be killed now | Leak | `DELETE /api/v1/personal-access-tokens/{id}` (owner) or `POST /admin/v1/pat/tokens/{id}/revoke` (`pat.token.revoke`, with `Operation-Reason`); effective within the revocation window (≤ 11m by default) |
 | Owner left the company | - | Disabling the principal (`PrincipalDisabledEvent`) revokes their tokens (`PatOwnerDisabledListener`); verify with `SELECT id, revoked_at, revocation_reason FROM ludwig_pat WHERE owner_subject = '<sub>';` |
 | Old tokens never get revoked for inactivity / table grows | Maintenance not scheduled | See Known gaps; run `revokeInactive()` and `purge()` on a schedule |
 | `last-used.write-failed` rising | Database contention on `ludwig_pat` | Raise `last-used-debounce`; check DB |

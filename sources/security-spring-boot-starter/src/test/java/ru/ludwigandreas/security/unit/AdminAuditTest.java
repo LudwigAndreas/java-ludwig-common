@@ -15,13 +15,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.AuditOutcome;
-import ru.ludwigandreas.security.admin.AdminAccessEvaluator;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminGrants;
-import ru.ludwigandreas.security.admin.AdminInvocation;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminCallerPolicy;
 import ru.ludwigandreas.security.admin.AdminOutcome;
 import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
+import ru.ludwigandreas.security.operation.OperationAuthority;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.security.principal.Credential;
 import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
@@ -31,17 +30,18 @@ class AdminAuditTest {
 
     private final List<AuditEvent> recorded = new ArrayList<>();
     private final AdminAudit audit = new AdminAudit(recorded::add);
-    private final AdminOperationCatalog catalog =
-            new AdminOperationCatalog(List.of(AdminOperationCatalogTest.area("outbox")));
-    private final AdminSurfaceGuard guard = new AdminSurfaceGuard(catalog, new AdminAccessEvaluator(
-            new AdminGrants(Map.of("outbox.operate", List.of("NOTIFICATION_ADMIN")), catalog),
+    private final OperationAuthority authority = TestOperations.authority(List.of(OperationCatalogTest.outbox()),
+            Map.of("NOTIFICATION_ADMIN", List.of("outbox.message.retry")));
+    private final OperationEvaluator evaluator = TestOperations.evaluator(authority,
             new org.springframework.security.authorization.AuthorizationEventPublisher() {
                 @Override
                 public <T> void publishAuthorizationEvent(
                         java.util.function.Supplier<org.springframework.security.core.Authentication> authentication,
                         T object, org.springframework.security.authorization.AuthorizationDecision decision) {
                 }
-            }), false);
+            }, false);
+    private final AdminSurfaceGuard guard = new AdminSurfaceGuard(authority.grants().catalog(), evaluator,
+            new AdminCallerPolicy(evaluator, false, java.util.Set.of()));
 
     private MockHttpServletRequest request;
 
@@ -59,7 +59,7 @@ class AdminAuditTest {
         SecurityContextHolder.getContext().setAuthentication(new LudwigAuthentication(principal, Credential.DIRECT));
         request = new MockHttpServletRequest("POST", "/admin/v1/outbox/messages/m1/retry");
         if (reason != null) {
-            request.addHeader(AdminInvocation.REASON_HEADER, reason);
+            request.addHeader(OperationEvaluator.REASON_HEADER, reason);
         }
         guard.preHandle(request, new MockHttpServletResponse(), new HandlerMethod(new AdminSurfaceGuardTest.Fixture(),
                 AdminSurfaceGuardTest.Fixture.class.getMethod("operate")));
@@ -74,7 +74,7 @@ class AdminAuditTest {
 
         AuditEvent event = recorded.get(0);
         assertThat(event.category()).isEqualTo(AdminAudit.CATEGORY);
-        assertThat(event.action()).isEqualTo("outbox.operate");
+        assertThat(event.action()).isEqualTo("outbox.message.retry");
         assertThat(event.actor().subject()).isEqualTo("alice");
         assertThat(event.actor().principalType()).isEqualTo("USER");
         assertThat(event.resource().type()).isEqualTo("outbox-message");

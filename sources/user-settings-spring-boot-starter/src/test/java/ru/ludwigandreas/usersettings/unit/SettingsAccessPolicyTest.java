@@ -12,8 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import ru.ludwigandreas.security.admin.AdminInvocation;
-import ru.ludwigandreas.security.admin.AdminOperation;
 import ru.ludwigandreas.security.authz.PrincipalRef;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.Sensitivity;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
 import ru.ludwigandreas.usersettings.api.SettingsSubject;
@@ -38,7 +39,8 @@ class SettingsAccessPolicyTest {
 
     private void inOperation(String operationId) {
         LudwigPrincipal principal = ru.ludwigandreas.security.principal.SecurityPrincipals.require();
-        invocation = Optional.of(new AdminInvocation(AdminOperation.of(operationId, "key"), principal, null));
+        invocation = Optional.of(
+                new AdminInvocation(Operation.admin(operationId, Sensitivity.READ, "key"), principal, null));
     }
 
     @AfterEach
@@ -73,7 +75,7 @@ class SettingsAccessPolicyTest {
     @DisplayName("an administrator in the same tenant, inside a settings operation, is ADMIN")
     void administrator_in_the_same_tenant_is_allowed() {
         authenticate("admin-1", "acme");
-        inOperation("settings.read");
+        inOperation("settings.subject.read");
 
         assertThat(policy.check(subject("user-1", "acme"))).isEqualTo(SettingsAccess.ADMIN);
     }
@@ -82,7 +84,7 @@ class SettingsAccessPolicyTest {
     @DisplayName("an administrator of another tenant is answered 404, not 403")
     void administrator_of_another_tenant_is_refused() {
         authenticate("admin-1", "globex");
-        inOperation("settings.read");
+        inOperation("settings.subject.read");
 
         assertThatThrownBy(() -> policy.check(subject("user-1", "acme")))
                 .isInstanceOf(SettingsSubjectNotFoundException.class);
@@ -102,7 +104,7 @@ class SettingsAccessPolicyTest {
     @DisplayName("another area's administrative operation does not reach settings")
     void another_areas_operation_is_refused() {
         authenticate("admin-1", "acme");
-        inOperation("jobs.read");
+        inOperation("job.definition.read");
 
         assertThatThrownBy(() -> policy.check(subject("user-1", "acme")))
                 .isInstanceOf(SettingsAccessDeniedException.class);
@@ -175,7 +177,7 @@ class SettingsAccessPolicyTest {
                 .isInstanceOf(SettingsAccessDeniedException.class);
 
         authenticate("admin-1", "acme");
-        inOperation("settings.operate");
+        inOperation("settings.scope.set");
         assertThatCode(() -> policy.requireAdmin(subject("admin-1", "acme"))).doesNotThrowAnyException();
     }
 }

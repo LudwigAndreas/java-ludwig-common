@@ -1,7 +1,6 @@
 package ru.ludwigandreas.reconciliation.admin.service;
 
 import com.querydsl.core.types.Predicate;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -14,6 +13,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.data.domain.PageRequest;
 import ru.ludwigandreas.db.core.query.AdminQueryFilter;
+import ru.ludwigandreas.reconciliation.admin.ReconciliationAdminOperations;
 import ru.ludwigandreas.reconciliation.api.DemandTier;
 import ru.ludwigandreas.reconciliation.config.FetchShape;
 import ru.ludwigandreas.reconciliation.config.ReconciliationProperties;
@@ -39,12 +39,11 @@ import ru.ludwigandreas.reconciliation.repository.SyncInboxRecordRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncRemoteJobRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncRunRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminObjectScope;
-import ru.ludwigandreas.security.admin.AdminTier;
 import ru.ludwigandreas.security.admin.AdminCursor;
 import ru.ludwigandreas.security.admin.AdminInvocation;
 import ru.ludwigandreas.security.admin.AdminOutcome;
 import ru.ludwigandreas.security.admin.AdminPage;
+import ru.ludwigandreas.security.operation.OperationAuthority;
 
 /**
  * The {@code reconciliation} area's operations - every action the reconciliation actuator endpoint offered, on the
@@ -64,7 +63,6 @@ public class ReconciliationAdminService {
     /** How many quarantined records a detail view lists before it is a report rather than a view. */
     private static final int QUARANTINE_SAMPLE = 20;
 
-    private static final String AREA = "reconciliation";
     private static final String TASK = "reconciliation-task";
     private static final String SCOPE = "reconciliation-scope";
     private static final String REMOTE_JOB = "reconciliation-remote-job";
@@ -84,7 +82,7 @@ public class ReconciliationAdminService {
     private final EnumerationOperations enumerations;
     private final AdminAudit audit;
     private final SyncRunRepository runs;
-    private final AdminObjectScope objects;
+    private final OperationAuthority authority;
     private final AdminQueryFilter filters;
 
     /**
@@ -93,12 +91,12 @@ public class ReconciliationAdminService {
      * @param engine       the task-kind collaborators
      * @param enumerations the enumeration operations, or null when no enumeration is configured
      * @param audit        the administrative audit
-     * @param objects      which tasks a caller's data scope admits, or null for no per-task scoping
+     * @param authority    which tasks a caller's scope admits, or null for no per-task scoping
      * @param filters      parses the run history's {@code $filter}
      */
     public ReconciliationAdminService(Engine engine, EnumerationOperations enumerations, AdminAudit audit,
-                                      AdminObjectScope objects, AdminQueryFilter filters) {
-        this.objects = objects;
+                                      OperationAuthority authority, AdminQueryFilter filters) {
+        this.authority = authority;
         this.filters = filters;
         this.registry = engine.registry();
         this.runtime = engine.runtime();
@@ -448,10 +446,11 @@ public class ReconciliationAdminService {
 
     /** The summaries whose task the caller's read scope admits; every one when tasks are not scoped. */
     private List<Map<String, Object>> readable(List<Map<String, Object>> summaries) {
-        if (objects == null) {
+        if (authority == null) {
             return summaries;
         }
-        List<String> admitted = objects.filter(AREA, AdminTier.READ,
+        List<String> admitted = authority.admitted(AdminInvocation.require().principal(),
+                ReconciliationAdminOperations.TASK_READ,
                 summaries.stream().map(summary -> String.valueOf(summary.get("name"))).toList());
         return summaries.stream().filter(summary -> admitted.contains(String.valueOf(summary.get("name")))).toList();
     }

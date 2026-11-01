@@ -35,7 +35,13 @@ public class IdentityProjectionProperties {
      */
     private boolean partnerRegistryEnabled = true;
 
-    private final Kafka kafka = new Kafka();
+    /**
+     * The identity sources this service accepts, by name. Every feed names one of them; a feed naming another fails
+     * startup. A name is lower-case letters, digits and hyphens, starting with a letter.
+     */
+    private Map<String, Source> sources = new LinkedHashMap<>();
+
+    private final Sweep sweep = new Sweep();
     private final Liquibase liquibase = new Liquibase();
     private final Contact contact = new Contact();
 
@@ -71,8 +77,16 @@ public class IdentityProjectionProperties {
         this.partnerRegistryEnabled = partnerRegistryEnabled;
     }
 
-    public Kafka getKafka() {
-        return kafka;
+    public Map<String, Source> getSources() {
+        return sources;
+    }
+
+    public void setSources(Map<String, Source> sources) {
+        this.sources = sources;
+    }
+
+    public Sweep getSweep() {
+        return sweep;
     }
 
     public Contact getContact() {
@@ -107,41 +121,58 @@ public class IdentityProjectionProperties {
         }
     }
 
-    public static class Kafka {
-
-        private boolean enabled = true;
-
-        /** The provider's user topic. Also referenced directly by the listener's annotation. */
-        private String topic = "oidc.users";
+    /** One identity source: a provider, and how its role vocabulary becomes the platform's. */
+    public static class Source {
 
         /**
-         * Consumer group. Every service keeps its own projection and therefore needs its own group -
-         * sharing one would mean each service sees only a share of the events.
+         * Provider role or group -> the platform roles it stands for. A mapped role is replaced by its targets. Role
+         * names are compared without the {@code ROLE_} prefix, and case-sensitively, as the provider spells them.
          */
-        private String groupId;
+        private Map<String, Set<String>> roleMapping = new LinkedHashMap<>();
 
-        public boolean isEnabled() {
-            return enabled;
+        /** What becomes of a provider role the mapping does not name. */
+        private UnmappedRoles unmappedRoles = UnmappedRoles.KEEP;
+
+        public Map<String, Set<String>> getRoleMapping() {
+            return roleMapping;
         }
 
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
+        public void setRoleMapping(Map<String, Set<String>> roleMapping) {
+            this.roleMapping = roleMapping;
         }
 
-        public String getTopic() {
-            return topic;
+        public UnmappedRoles getUnmappedRoles() {
+            return unmappedRoles;
         }
 
-        public void setTopic(String topic) {
-            this.topic = topic;
+        public void setUnmappedRoles(UnmappedRoles unmappedRoles) {
+            this.unmappedRoles = unmappedRoles;
+        }
+    }
+
+    /** What becomes of a provider role a source's mapping does not name. */
+    public enum UnmappedRoles {
+        /** Kept under the provider's name: right when the provider already speaks the platform's role names. */
+        KEEP,
+        /** Dropped: right when the provider's groups are broader than this service's roles. */
+        DROP
+    }
+
+    /** Complete listings of a source. */
+    public static class Sweep {
+
+        /**
+         * The largest share of a source's active users one sweep may disable. A sweep that would disable more is
+         * aborted with no change, because an empty or truncated listing must not lock out an organisation.
+         */
+        private double maxDisableRatio = 0.1;
+
+        public double getMaxDisableRatio() {
+            return maxDisableRatio;
         }
 
-        public String getGroupId() {
-            return groupId;
-        }
-
-        public void setGroupId(String groupId) {
-            this.groupId = groupId;
+        public void setMaxDisableRatio(double maxDisableRatio) {
+            this.maxDisableRatio = maxDisableRatio;
         }
     }
 

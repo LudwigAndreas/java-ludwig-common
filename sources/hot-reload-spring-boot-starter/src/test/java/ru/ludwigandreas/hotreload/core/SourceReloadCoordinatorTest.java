@@ -53,6 +53,39 @@ class SourceReloadCoordinatorTest {
     }
 
     @Test
+    void outcomeDistinguishesReloadedUnchangedAndRejected() {
+        SourceReloadCoordinator coordinator = new SourceReloadCoordinator();
+        ReloadableSource source = fixedSource("a", Map.of("x", "1"));
+
+        assertThat(coordinator.reloadOutcome(source)).isEqualTo(ReloadOutcome.RELOADED);
+        assertThat(coordinator.lastReloaded("a")).isPresent();
+        assertThat(coordinator.reloadOutcome(source)).isEqualTo(ReloadOutcome.UNCHANGED);
+        assertThat(coordinator.reloadOutcome(new ReloadableSource() {
+            @Override
+            public String id() {
+                return "a";
+            }
+
+            @Override
+            public Map<String, Object> load() {
+                throw new IllegalStateException("unreadable");
+            }
+        })).isEqualTo(ReloadOutcome.REJECTED);
+        assertThat(coordinator.lastKnownGood("a")).containsEntry("x", "1");
+        assertThat(coordinator.lastOutcome("a")).contains(ReloadOutcome.REJECTED);
+    }
+
+    @Test
+    void aListenerRefusingTheChangeMakesTheReloadRejected() {
+        SourceReloadCoordinator coordinator = new SourceReloadCoordinator();
+        coordinator.reloadOutcome(fixedSource("a", Map.of("x", "1")));
+        coordinator.addListener(event -> coordinator.rejected(event.sourceId()));
+
+        assertThat(coordinator.reloadOutcome(fixedSource("a", Map.of("x", "2")))).isEqualTo(ReloadOutcome.REJECTED);
+        assertThat(coordinator.reloadOutcome(fixedSource("b", Map.of("y", "1")))).isEqualTo(ReloadOutcome.REJECTED);
+    }
+
+    @Test
     void changeEventCarriesOldAndNewValuesForAudit() {
         SourceReloadCoordinator coordinator = new SourceReloadCoordinator();
         List<SourceChangeEvent> events = new ArrayList<>();

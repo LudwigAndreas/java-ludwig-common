@@ -169,6 +169,38 @@
 
     <build>
         <plugins>
+            <!--
+                Two test runs. The default one excludes *WithoutWebCoreTest; the without-web-core one runs only those,
+                with web-core removed from the test classpath - the only honest way to prove the starter starts and
+                refuses without its optional dependency, since hiding classes from conditions does not stop the
+                application classloader from linking against them.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*WithoutWebCoreTest.java</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>without-web-core</id>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <excludes combine.self="override"/>
+                            <includes>
+                                <include>**/*WithoutWebCoreTest.java</include>
+                            </includes>
+                            <classpathDependencyExcludes>
+                                <classpathDependencyExclude>ru.ludwigandreas:web-core-spring-boot-starter</classpathDependencyExclude>
+                            </classpathDependencyExcludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

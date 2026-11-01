@@ -18,6 +18,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import ru.ludwigandreas.security.authz.AuthorityLookup;
 import ru.ludwigandreas.security.authz.PrincipalRef;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationAuthority;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.webcore.operation.OperationFailure;
 import ru.ludwigandreas.webcore.operation.OperationResponse;
@@ -45,7 +47,7 @@ public class AdminApprovals {
 
     private final AdminApprovalPolicy policy;
     private final AdminApprovalStore store;
-    private final AdminGrants grants;
+    private final OperationAuthority grants;
     private final AuthorityLookup authorities;
     private final AdminAudit audit;
     private final AdminApprovalExecutor executor;
@@ -66,7 +68,7 @@ public class AdminApprovals {
      */
     // SUPPRESS CHECKSTYLE ParameterNumber - each collaborator is a distinct bean the auto-configuration supplies.
     @SuppressWarnings("checkstyle:ParameterNumber")
-    AdminApprovals(AdminApprovalPolicy policy, AdminApprovalStore store, AdminGrants grants,
+    AdminApprovals(AdminApprovalPolicy policy, AdminApprovalStore store, OperationAuthority grants,
                    AuthorityLookup authorities, AdminAudit audit, AdminApprovalExecutor executor, ObjectMapper json,
                    Clock clock) {
         this.policy = policy;
@@ -94,7 +96,7 @@ public class AdminApprovals {
      */
     // SUPPRESS CHECKSTYLE ParameterNumber - as above.
     @SuppressWarnings("checkstyle:ParameterNumber")
-    public static AdminApprovals create(AdminApprovalPolicy policy, AdminApprovalStore store, AdminGrants grants,
+    public static AdminApprovals create(AdminApprovalPolicy policy, AdminApprovalStore store, OperationAuthority grants,
                                         AuthorityLookup authorities, AdminAudit audit,
                                         org.springframework.web.context.WebApplicationContext context,
                                         ObjectMapper json, Clock clock) {
@@ -102,14 +104,14 @@ public class AdminApprovals {
                 clock);
     }
 
-    boolean requires(AdminOperation operation) {
+    boolean requires(Operation operation) {
         return store != null && policy.requires(operation.id());
     }
 
     /**
      * Records a call needing approval instead of executing it, and answers {@code 202} with the approval.
      */
-    void hold(HttpServletRequest request, HttpServletResponse response, AdminOperation operation,
+    void hold(HttpServletRequest request, HttpServletResponse response, Operation operation,
               LudwigPrincipal requester, String reason) {
         byte[] body;
         try {
@@ -143,7 +145,7 @@ public class AdminApprovals {
     /**
      * Lets the guard admit the dispatch of an approved request, and binds who requested and approved it.
      */
-    void admitExecution(UUID id, AdminOperation operation, LudwigPrincipal approver) {
+    void admitExecution(UUID id, Operation operation, LudwigPrincipal approver) {
         AdminApproval approval = store == null ? null : store.find(id).orElse(null);
         if (approval == null || approval.state() != AdminApprovalState.APPROVING
                 || !approval.operation().equals(operation.id()) || !approver.subject().equals(approval.decidedBy())) {
@@ -163,7 +165,7 @@ public class AdminApprovals {
      */
     public AdminPage<ApprovalView> list(LudwigPrincipal caller, AdminApprovalState state, String cursor,
                                         Integer size) {
-        List<String> held = grants.heldBy(caller).stream().map(AdminOperation::id).toList();
+        List<String> held = grants.heldBy(caller).keySet().stream().map(Operation::id).toList();
         if (store == null || held.isEmpty()) {
             return AdminPage.of(List.of(), AdminCursor.pageSize(size), view -> "");
         }
@@ -333,13 +335,13 @@ public class AdminApprovals {
         return store.find(id).orElseThrow(() -> AdminApprovalException.notFound(id));
     }
 
-    private AdminOperation operation(AdminApproval approval) {
-        return grants.catalog().find(approval.operation())
+    private Operation operation(AdminApproval approval) {
+        return grants.grants().catalog().find(approval.operation())
                 .orElseThrow(() -> new IllegalStateException("Uncatalogued approval operation "
                         + approval.operation()));
     }
 
-    private void recordAs(AdminOperation operation, LudwigPrincipal principal, String reason, AdminApproval approval,
+    private void recordAs(Operation operation, LudwigPrincipal principal, String reason, AdminApproval approval,
                           String action, AdminOutcome outcome, Map<String, Object> facts) {
         Map<String, Object> attributes = new LinkedHashMap<>(facts);
         attributes.put("approval", action);

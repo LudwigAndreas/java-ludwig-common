@@ -34,7 +34,7 @@ import ru.ludwigandreas.messaging.db.admin.service.MessagingAdminService;
 import ru.ludwigandreas.messaging.db.log.LogStore;
 import ru.ludwigandreas.messaging.db.log.Outcome;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.testsupport.container.Containers;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
@@ -55,11 +55,13 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
                     + "ru.ludwigandreas.messaging.db.config.MessagingDbLiquibaseAutoConfiguration,"
                     + "ru.ludwigandreas.messaging.db.config.MessagingDbMetricsAutoConfiguration",
             "spring.kafka.bootstrap-servers=localhost:9",
-            "ludwig.admin.grants.messaging.read[0]=OPS_SUPPORT",
-            "ludwig.admin.grants.messaging.read[1]=OPS_ADMIN",
-            "ludwig.admin.grants.messaging.operate[0]=OPS_SUPPORT",
-            "ludwig.admin.grants.messaging.operate[1]=OPS_ADMIN",
-            "ludwig.admin.grants.messaging.privileged[0]=OPS_ADMIN"})
+            "ludwig.security.roles.OPS_SUPPORT.operations[messaging.consumer.read]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[messaging.consumer.read]=ALL",
+            "ludwig.security.roles.OPS_SUPPORT.operations[messaging.consumer.pause]=ALL",
+            "ludwig.security.roles.OPS_SUPPORT.operations[messaging.consumer.resume]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[messaging.consumer.pause]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[messaging.consumer.resume]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[messaging.offset.move]=ALL"})
 @AutoConfigureMockMvc
 class ConsumerOffsetMoveIT {
 
@@ -130,13 +132,13 @@ class ConsumerOffsetMoveIT {
     }
 
     private MvcResult pause(RequestPostProcessor caller) throws Exception {
-        return mvc.perform(post(BASE + "/pause").header(AdminInvocation.REASON_HEADER, "poison record")
+        return mvc.perform(post(BASE + "/pause").header(OperationEvaluator.REASON_HEADER, "poison record")
                 .with(caller)).andReturn();
     }
 
     private MvcResult move(String body, RequestPostProcessor caller) throws Exception {
         return mvc.perform(post(BASE + "/offsets").contentType(MediaType.APPLICATION_JSON).content(body)
-                .header(AdminInvocation.REASON_HEADER, "INC-42").with(caller)).andReturn();
+                .header(OperationEvaluator.REASON_HEADER, "INC-42").with(caller)).andReturn();
     }
 
     private List<String> drain() {

@@ -32,22 +32,40 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
 /**
  * Reconciliation tasks as scoped administrative objects: the supply team's role is narrowed to the task it is granted
- * per subject, while the platform admin's role keeps every task. Without a policy entry nothing is scoped, which
- * {@code ReconciliationAdminIntegrationTest} shows by running unchanged.
+ * per subject ({@code OBJECT}), while the platform admin's role keeps every task ({@code ALL}). A role granting
+ * {@code ALL} scopes nothing, which {@code ReconciliationAdminIntegrationTest} shows by running unchanged.
  */
 @SpringBootTest(classes = ReconciliationTestApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
             "ludwig.security.enabled=true",
             "ludwig.security.jwt.enabled=false",
-            "ludwig.admin.grants.reconciliation.read[0]=SUPPLY_OPS",
-            "ludwig.admin.grants.reconciliation.read[1]=SYNC_ADMIN",
-            "ludwig.admin.grants.reconciliation.operate[0]=SUPPLY_OPS",
-            "ludwig.admin.grants.reconciliation.operate[1]=SYNC_ADMIN",
-            "ludwig.admin.grants.reconciliation.privileged[0]=SYNC_ADMIN",
-            "ludwig.security.data.policies[admin.reconciliation].read.ROLE_SUPPLY_OPS=NONE",
-            "ludwig.security.data.policies[admin.reconciliation].read.ROLE_SYNC_ADMIN=ALL",
-            "ludwig.security.data.policies[admin.reconciliation].operate.ROLE_SUPPLY_OPS=NONE",
-            "ludwig.security.data.policies[admin.reconciliation].operate.ROLE_SYNC_ADMIN=ALL"})
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.task.read]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.run.start]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.backfill.start]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.cursor.reset]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.scope.reset]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.quarantine.requeue]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.member.requeue]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.remotejob.requeue]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.discovery.start]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.walk.start]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.walk.preview]=OBJECT",
+            "ludwig.security.roles.SUPPLY_OPS.operations[reconciliation.sweep.discard]=OBJECT",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.task.read]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.run.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.backfill.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.cursor.reset]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.scope.reset]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.quarantine.requeue]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.member.requeue]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.remotejob.requeue]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.discovery.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.walk.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.walk.preview]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.sweep.discard]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.remotejob.cancel]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.lease.release]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.sweep.confirm]=ALL"})
 @Import({PostgresContainerConfiguration.class, ReconciliationObjectScopeIntegrationTest.BobsGrants.class})
 @AutoConfigureMockMvc
 class ReconciliationObjectScopeIntegrationTest {
@@ -64,7 +82,7 @@ class ReconciliationObjectScopeIntegrationTest {
         @Bean
         DataScopeProvider bobsTaskGrants() {
             return (principal, resource, action) ->
-                    "bob".equals(principal.subject()) && "admin.reconciliation".equals(resource)
+                    "bob".equals(principal.subject()) && resource.startsWith("reconciliation.")
                     ? DataScope.restrictedTo(ScopeDimension.OBJECT, OWN)
                     : DataScope.none();
         }

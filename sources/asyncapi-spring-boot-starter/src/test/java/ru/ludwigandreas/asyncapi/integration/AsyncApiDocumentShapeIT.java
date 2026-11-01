@@ -120,4 +120,15 @@ class AsyncApiDocumentShapeIT {
         });
         return names;
     }
+
+    /** A listener whose topics come from an array expression: a channel, operation and dead letters per topic. */
+    @Test
+    void arrayExpressionTopics() {
+        for (String topic : List.of("partner.returns", "partner.refunds")) {
+            assertThat(document.path("channels").has(topic)).as(topic).isTrue();
+            assertThat(document.path("channels").has(topic + ".dlt")).as(topic + ".dlt").isTrue();
+            assertThat(document.path("operations").toString()).contains("#/channels/" + topic);
+        }
+        assertThat(document.toString()).doesNotContain("[Ljava.lang.String;");
+    }
 }

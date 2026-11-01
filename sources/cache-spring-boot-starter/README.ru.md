@@ -286,8 +286,8 @@ Redis как `maximum-size` × размер записи × число общи�
 
 **Очистка кэша на всех репликах.** `LudwigCacheRegistry.evictAll(name)` очищает локальный уровень кэша и, если он
 есть, общий. Чтобы очистить кэш на всех репликах, оператор отправляет команду реплик `cacheevict` из job-core
-(`POST /admin/v1/replicas/controls/cacheevict`, `caches.operate`, либо `caches.privileged` с причиной для кэша
-`SECURITY`); `GET /admin/v1/caches` перечисляет кэши с назначением, уровнями и TTL. Модуль не получает для этого
+(`POST /admin/v1/replicas/controls/cacheevict`, `cache.performance.evict`, либо `cache.security.evict` с причиной
+для кэша `SECURITY`); `GET /admin/v1/caches` перечисляет кэши с назначением, уровнями и TTL. Модуль не получает для этого
 зависимостей: административная область находится в job-core.
 
 ## Runbook

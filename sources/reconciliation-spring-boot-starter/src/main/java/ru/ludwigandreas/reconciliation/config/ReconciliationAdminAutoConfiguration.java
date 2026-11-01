@@ -21,8 +21,8 @@ import ru.ludwigandreas.reconciliation.repository.SyncInboxRecordRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncRemoteJobRepository;
 import ru.ludwigandreas.reconciliation.repository.SyncRunRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminObjectScope;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
+import ru.ludwigandreas.security.operation.OperationAuthority;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
@@ -31,8 +31,8 @@ import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
  */
 @AutoConfiguration(after = {ReconciliationAutoConfiguration.class, ReconciliationEnumerationAutoConfiguration.class},
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, TaskRegistry.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, TaskRegistry.class})
 public class ReconciliationAdminAutoConfiguration {
 
     @Bean
@@ -60,11 +60,11 @@ public class ReconciliationAdminAutoConfiguration {
                                                                      ObjectProvider<EnumerationOperations> enumerations,
                                                                      AdminAudit audit,
                                                                      SyncRunRepository runs,
-                                                                     ObjectProvider<AdminObjectScope> objects,
+                                                                     ObjectProvider<OperationAuthority> authority,
                                                                      AdminQueryFilter filters) {
         return new ReconciliationAdminService(new ReconciliationAdminService.Engine(registry, runtime, runner,
                 taskState, records, jobs, leases, quota, properties, runs), enumerations.getIfAvailable(), audit,
-                objects.getIfAvailable(), filters);
+                authority.getIfAvailable(), filters);
     }
 
     @Bean

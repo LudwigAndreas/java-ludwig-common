@@ -278,8 +278,9 @@ public class FileActionService {
      * Requests cancellation of anybody's submission, for the administrative surface.
      *
      * <p>Exactly the submitter's cancel, minus the check that the caller holds the action's own authority: an
-     * administrator is authorized by the service's grant of {@code fileactions.operate}, which the surface has already
-     * checked. The submission's lifecycle record is written the same way, naming the administrator as the actor.
+     * administrator is authorized by the service's grant of {@code fileaction.submission.cancel}, which the surface
+     * has already checked. The submission's lifecycle record is written the same way, naming the administrator as
+     * the actor.
      *
      * @param id the submission
      * @return the submission as it now stands; unchanged when it was already terminal

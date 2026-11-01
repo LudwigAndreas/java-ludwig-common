@@ -22,6 +22,7 @@ import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.AuditOutcome;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration;
+import ru.ludwigandreas.security.config.OperationAutoConfiguration;
 import ru.ludwigandreas.cache.config.LudwigCacheAutoConfiguration;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration;
@@ -47,6 +48,7 @@ class MethodSecurityAuditTest {
                     LudwigCacheAutoConfiguration.class,
                     LudwigSecurityAutoConfiguration.class,
                     SecurityMetricsAutoConfiguration.class,
+                    OperationAutoConfiguration.class,
                     DataAuthorizationAutoConfiguration.class,
                     AuditCoreAutoConfiguration.class))
             .withUserConfiguration(GuardedServiceConfiguration.class);

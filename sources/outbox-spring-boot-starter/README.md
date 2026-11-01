@@ -222,7 +222,7 @@ deletes `PUBLISHED` messages 7 days after publication and `DEAD_LETTER` / `DISCA
 became terminal, with their `outbox_status_history` rows, in committed batches of 500. `PENDING`, `PROCESSING` and
 `FAILED` messages are never deleted, and an administrator's retry takes a message out of retention until it is
 terminal again. Every batch is audited as `outbox.purged` (`PARTIAL` while expired messages remain) and counted in
-`ludwig.outbox.purged{status}`. It is listed by `GET /admin/v1/jobs` and can be run with `jobs.operate`.
+`ludwig.outbox.purged{status}`. It is listed by `GET /admin/v1/jobs` and can be run with `job.definition.run`.
 
 **`retention.published` is the idempotency window.** An idempotency key is deduplicated against rows that still
 exist, so once a published row is purged a duplicate carrying its key is accepted and sent again. Set it longer
@@ -293,25 +293,30 @@ forwarding to the platform trail.
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `outbox.read` | `GET /admin/v1/outbox/messages`<br>`GET /admin/v1/outbox/messages/{id}`<br>`GET /admin/v1/outbox/summary` | See outbox messages by state, without their payloads. |
-| `outbox.operate` | `POST /admin/v1/outbox/messages/{id}/retry`<br>`POST /admin/v1/outbox/messages/retry` | Retry failed and dead-lettered outbox messages. |
-| `outbox.privileged` | `POST /admin/v1/outbox/messages/{id}/discard` | Discard an outbox message so that it is never sent. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `outbox.message.read` | `READ` | `GET /admin/v1/outbox/messages`<br>`GET /admin/v1/outbox/messages/{id}`<br>`GET /admin/v1/outbox/summary` | See outbox messages by state, without their payloads. |
+| `outbox.message.retry` | `CHANGE` | `POST /admin/v1/outbox/messages/{id}/retry`<br>`POST /admin/v1/outbox/messages/retry` | Retry failed and dead-lettered outbox messages. |
+| `outbox.message.discard` | `PRIVILEGED` | `POST /admin/v1/outbox/messages/{id}/discard` | Discard an outbox message so that it is never sent. |
 
 **Filtering `GET /admin/v1/outbox/messages`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `status`, `eventType`, `eventVersion`, `aggregateType`, `aggregateId`, `destination`, `transport`, `attempts`, `createdAt`, `nextAttemptAt`, `publishedAt`, `finishedAt`. Indexed with `status`: `nextAttemptAt` (for `PENDING` and `FAILED`) and `finishedAt`. Not filterable: the payload, `lastError`, the idempotency key, the lock owner. Example: `$filter=status eq 'DEAD_LETTER' and eventType eq 'OrderCreated'`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[outbox.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[outbox.operate]": [ORDERS_ADMIN]
-      "[outbox.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          outbox.message.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          outbox.message.retry: ALL
+          outbox.message.discard: ALL
 ```
 
 ## Runbook

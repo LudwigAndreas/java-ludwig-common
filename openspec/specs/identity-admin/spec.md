@@ -5,27 +5,34 @@ Gives administrators and administrative services a supported way to manage the i
 administrator-owned tables - the partner registry and data-scope grants - and to see what a subject is entitled to,
 with every change recorded in the audit trail rather than only stamped on the row.
 ## Requirements
-### Requirement: The identity area declares three operations
+### Requirement: The identity area declares one operation per action
 
-`identity-projection-spring-boot-starter` SHALL declare `identity.read`, `identity.operate` and
-`identity.privileged`. Partner and grant changes SHALL be `identity.privileged`, because each changes who may access
-what. `identity.operate` SHALL be declared and SHALL guard no endpoint in this release, so that a service's grant
-block can name it without failing startup when a later release adds one.
+`identity-projection-spring-boot-starter` SHALL declare, on the `ADMIN` surface, `identity.partner.read`,
+`identity.grant.read`, `identity.authority.read` and `identity.source.read` (`READ`), and `identity.partner.onboard`,
+`identity.partner.replace`, `identity.partner.suspend`, `identity.partner.activate`, `identity.grant.create` and
+`identity.grant.revoke` (`PRIVILEGED`). Every partner and grant change SHALL be `PRIVILEGED`, because each changes
+who may access what.
 
-#### Scenario: Granting a data scope requires the privileged tier
-- **WHEN** a caller holding `identity.read` and `identity.operate` but not `identity.privileged` posts a grant
+#### Scenario: Granting a data scope requires its own operation
+- **WHEN** a caller holding `identity.grant.read` and `identity.grant.revoke` but not `identity.grant.create` posts a grant
 - **THEN** the response is `403` and no grant row is written
+
+#### Scenario: Reading the sources needs its own operation
+- **WHEN** a caller holding `identity.authority.read` but not `identity.source.read` calls
+  `GET /admin/v1/identity/sources`
+- **THEN** the response is `403`
 
 ### Requirement: The partner registry is readable and changeable over the surface
 
 The area SHALL serve:
 
-- `GET /admin/v1/identity/partners` and `GET /admin/v1/identity/partners/{code}` (`identity.read`) - code, display
+- `GET /admin/v1/identity/partners` and `GET /admin/v1/identity/partners/{code}` (`identity.partner.read`) - code, display
   name, status, certificate identifiers, roles;
-- `POST /admin/v1/identity/partners` (`identity.privileged`) - onboard; `409` if the code exists;
-- `PUT /admin/v1/identity/partners/{code}` (`identity.privileged`) - replace display name, certificate identifiers
+- `POST /admin/v1/identity/partners` (`identity.partner.onboard`) - onboard; `409` if the code exists;
+- `PUT /admin/v1/identity/partners/{code}` (`identity.partner.replace`) - replace display name, certificate identifiers
   and roles, with optimistic concurrency through `If-Match`; `412` on a stale version;
-- `POST /admin/v1/identity/partners/{code}/suspend` and `.../activate` (`identity.privileged`).
+- `POST /admin/v1/identity/partners/{code}/suspend` (`identity.partner.suspend`) and `.../activate`
+  (`identity.partner.activate`).
 
 A suspended partner SHALL be refused authentication no later than the security authority cache TTL after the
 change commits.
@@ -33,7 +40,7 @@ change commits.
 #### Scenario: A partner is suspended
 - **WHEN** an administrator suspends partner `acme-logistics` with reason `contract ended`
 - **THEN** the response is `200` with status `SUSPENDED`, and one audit event of category `admin` records the
-  actor, operation `identity.privileged`, the partner code, the reason and outcome succeeded, in the same transaction
+  actor, operation `identity.partner.suspend`, the partner code, the reason and outcome succeeded, in the same transaction
   as the change
 
 #### Scenario: Two administrators edit the same partner
@@ -44,11 +51,11 @@ change commits.
 
 The area SHALL serve:
 
-- `GET /admin/v1/identity/grants?subject=&resource=&active=` (`identity.read`);
-- `POST /admin/v1/identity/grants` (`identity.privileged`) - subject, principal type, resource, action, dimension,
+- `GET /admin/v1/identity/grants?subject=&resource=&active=` (`identity.grant.read`);
+- `POST /admin/v1/identity/grants` (`identity.grant.create`) - subject, principal type, resource, action, dimension,
   dimension value, optional expiry; the dimension SHALL be one the deployment's data-scope configuration accepts,
   else `400`;
-- `POST /admin/v1/identity/grants/{id}/revoke` (`identity.privileged`) - sets the expiry to now and keeps the row.
+- `POST /admin/v1/identity/grants/{id}/revoke` (`identity.grant.revoke`) - sets the expiry to now and keeps the row.
 
 A grant change SHALL take effect on the replica that served it after commit, and on every replica no later than the
 data-scope cache TTL.
@@ -70,7 +77,7 @@ data-scope cache TTL.
 
 ### Requirement: A subject's effective authorities can be inspected
 
-`GET /admin/v1/identity/subjects/{subject}/authorities` (`identity.read`) SHALL return what the authority resolver
+`GET /admin/v1/identity/subjects/{subject}/authorities` (`identity.authority.read`) SHALL return what the authority resolver
 answers for the subject now - roles, attributes and active grants - resolved without the authority cache, and SHALL
 record an audit event, because it discloses one person's entitlements.
 
@@ -88,3 +95,18 @@ partner registry carries no tenant and SHALL NOT be confined.
 - **WHEN** a user of tenant `acme` inspects a subject of tenant `globex`
 - **THEN** the response is `404`
 
+### Requirement: The identity sources are listable
+`GET /admin/v1/identity/sources` (`identity.source.read`) SHALL list every declared source with: the feeds serving
+it (`kafka` with its topic, `directory`), its users counted by status, and when its newest applied change happened at the
+source. For a source served by a directory it SHALL also list the stored watermark and the last sync and last sweep, each
+with its time, outcome, error code when failed, pages read, and the changes a sync read or the users a sweep disabled. A declared source no feed
+serves SHALL be listed with no feeds. The listing SHALL carry no user's data.
+
+#### Scenario: A service with a Kafka source and a directory source
+- **WHEN** an administrator lists the sources of a service declaring `staff` (Kafka) and `customers` (directory)
+- **THEN** the response lists `staff` with its topic and user counts, and `customers` with its watermark, last sync
+  and last sweep
+
+#### Scenario: A failed sync is visible
+- **WHEN** `customers`' last sync failed with a timeout
+- **THEN** the listing shows that sync's outcome as failed with its error code

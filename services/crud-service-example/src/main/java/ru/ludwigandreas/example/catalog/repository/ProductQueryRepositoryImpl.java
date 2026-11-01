@@ -7,12 +7,12 @@ import lombok.RequiredArgsConstructor;
 import ru.ludwigandreas.db.core.util.Predicates;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductEntity;
 import ru.ludwigandreas.example.catalog.repository.entity.QProductEntity;
+import ru.ludwigandreas.example.catalog.security.CatalogOperations;
 import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
 import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.odatafilter.execution.ODataQueryExecutor;
 import ru.ludwigandreas.odatafilter.execution.ODataSearch;
 import ru.ludwigandreas.security.data.DataAccessGuard;
-import ru.ludwigandreas.security.data.DataAction;
 
 /**
  * QueryDSL-JPA implementation of {@link ProductQueryRepository}, picked up by Spring Data through
@@ -26,9 +26,6 @@ import ru.ludwigandreas.security.data.DataAction;
  */
 @RequiredArgsConstructor
 class ProductQueryRepositoryImpl implements ProductQueryRepository {
-
-    /** The name this resource's policies and scope mapping are registered under. */
-    private static final String RESOURCE_TYPE = "product";
 
     private static final QProductEntity PRODUCT = QProductEntity.productEntity;
 
@@ -77,7 +74,7 @@ class ProductQueryRepositoryImpl implements ProductQueryRepository {
     @Override
     public ODataPage<ProductEntity> search(ODataQueryOptions options) {
         return odataExecutor.search(ProductEntity.class, options, ODataSearch.of(PRODUCT)
-                .and(dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ))
+                .and(dataAccessGuard.predicate(CatalogOperations.PRODUCT_READ))
                 // The category is mapped into every response, so fetch it with the page instead of
                 // paying one extra SELECT per row. It is a fetch join and therefore belongs only on the
                 // content query - QueryDSL refuses one on a count, and a join that multiplied rows

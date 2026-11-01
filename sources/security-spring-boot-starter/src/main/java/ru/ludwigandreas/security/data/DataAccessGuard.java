@@ -18,11 +18,11 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
  * <pre>{@code
  * // Query time - the scope becomes part of the WHERE clause, so paging and counts stay correct.
  * queryFactory.selectFrom(order)
- *     .where(criteria.and(guard.predicate("order", DataAction.READ, ORDER_MAPPING)))
+ *     .where(criteria.and(guard.predicate("sales.order.read", ORDER_MAPPING)))
  *
  * // Load time - the safety net for every path that did not go through a scoped query.
  * OrderEntity entity = repository.getByIdOrThrow(id);
- * guard.check("order", DataAction.READ, entity);
+ * guard.check("sales.order.update", entity);
  * }</pre>
  *
  * <p>The pre-filter alone is not sufficient and the post-check alone is not efficient. Pre-filtering
@@ -30,13 +30,17 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
  * break paging and still read every row. Together they cover the surface, which is why the mapping
  * declares a column and an accessor for each dimension rather than one or the other.
  *
+ * <p>Every method takes the operation being performed, never a role or a resource: the operation names its resource
+ * and action, and the caller's scope is whatever {@code ludwig.security.roles} and the per-subject grants give it
+ * for that operation.
+ *
  * <p>Denials are audited and counted here rather than at the call sites, so a service cannot forget
  * to and so the signal is uniform across resources.
  */
 @RequiredArgsConstructor
 public class DataAccessGuard {
 
-    private final DataScopeProvider scopeProvider;
+    private final ScopeLookup scopes;
     private final DataScopeRegistry registry;
     private final DataScopePredicateFactory predicateFactory;
     private final AuditSink auditSink;
@@ -54,13 +58,17 @@ public class DataAccessGuard {
      */
     private final boolean recordGrants;
 
-    /** The caller's scope for this resource and action, before it is compiled into anything. */
-    public DataScope scope(String resourceType, String action) {
-        if (registry.isUnscoped(resourceType)) {
+    /**
+     * The caller's scope for an operation, before it is compiled into anything.
+     *
+     * @param operationId a catalogued operation that touches rows
+     * @return the scope
+     */
+    public DataScope scope(String operationId) {
+        if (registry.isUnscoped(scopes.resourceOf(operationId))) {
             return DataScope.all();
         }
-        LudwigPrincipal principal = SecurityPrincipals.require();
-        return scopeProvider.scopeFor(principal, resourceType, action);
+        return scopes.scopeFor(SecurityPrincipals.require(), operationId);
     }
 
     /**
@@ -70,9 +78,9 @@ public class DataAccessGuard {
      * grant at all gets an always-false one rather than an exception, so a list endpoint answers with
      * an empty page: a 403 on a search would tell an unauthorized caller that matching rows exist.
      */
-    public <T> BooleanExpression predicate(String resourceType, String action, DataScopeMapping<T> mapping) {
-        DataScope scope = scope(resourceType, action);
-        metrics.recordDataScopeApplied(resourceType, scope.access().name());
+    public <T> BooleanExpression predicate(String operationId, DataScopeMapping<T> mapping) {
+        DataScope scope = scope(operationId);
+        metrics.recordDataScopeApplied(scopes.resourceOf(operationId), scope.access().name());
         return predicateFactory.toPredicate(scope, mapping);
     }
 
@@ -84,12 +92,13 @@ public class DataAccessGuard {
      * {@link #check} and throw through this method - an escape hatch that fails on exactly the endpoints
      * that list rather than load.
      */
-    public BooleanExpression predicate(String resourceType, String action) {
+    public BooleanExpression predicate(String operationId) {
+        String resourceType = scopes.resourceOf(operationId);
         if (registry.isUnscoped(resourceType)) {
             metrics.recordDataScopeApplied(resourceType, DataScope.Access.ALL.name());
             return predicateFactory.unrestricted();
         }
-        return predicate(resourceType, action, registry.require(resourceType));
+        return predicate(operationId, registry.require(resourceType));
     }
 
     /**
@@ -98,12 +107,13 @@ public class DataAccessGuard {
      * <p>Silent - it records nothing. Use it where a denial is an expected branch (deciding whether to
      * show an action in a response), and {@link #check} where a denial is a rejected request.
      */
-    public <T> boolean permits(String resourceType, String action, T target) {
+    public <T> boolean permits(String operationId, T target) {
+        String resourceType = scopes.resourceOf(operationId);
         if (registry.isUnscoped(resourceType)) {
             return true;
         }
         DataScopeMapping<T> mapping = registry.require(resourceType);
-        return matches(scope(resourceType, action), mapping, target);
+        return matches(scope(operationId), mapping, target);
     }
 
     /**
@@ -111,21 +121,24 @@ public class DataAccessGuard {
      *
      * @throws AccessDeniedException when the caller's scope does not cover this object
      */
-    public <T> void check(String resourceType, String action, T target) {
-        check(resourceType, action, target, unused -> null);
+    public <T> void check(String operationId, T target) {
+        check(operationId, target, unused -> null);
     }
 
     /**
      * @param idExtractor reads the object's id purely for the audit record, so the trail says which
      *                    row was refused rather than only that something was
      */
-    public <T> void check(String resourceType, String action, T target, Function<T, Object> idExtractor) {
+    public <T> void check(String operationId, T target, Function<T, Object> idExtractor) {
+        String resourceType = scopes.resourceOf(operationId);
         if (registry.isUnscoped(resourceType)) {
             return;
         }
         LudwigPrincipal principal = SecurityPrincipals.require();
         DataScopeMapping<T> mapping = registry.require(resourceType);
-        DataScope scope = scopeProvider.scopeFor(principal, resourceType, action);
+        DataScope scope = scopes.scopeFor(principal, operationId);
+        // The audit and the metric name the operation performed: it says what was refused, the resource says where.
+        String action = operationId;
 
         if (matches(scope, mapping, target)) {
             if (recordGrants) {

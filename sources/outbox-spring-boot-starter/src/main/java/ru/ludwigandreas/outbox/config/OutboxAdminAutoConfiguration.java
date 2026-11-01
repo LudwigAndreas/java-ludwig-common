@@ -13,7 +13,7 @@ import ru.ludwigandreas.outbox.audit.OutboxAuditLogger;
 import ru.ludwigandreas.outbox.repository.OutboxAdminQueries;
 import ru.ludwigandreas.outbox.repository.OutboxStatusHistoryRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
@@ -22,8 +22,8 @@ import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
  */
 @AutoConfiguration(after = OutboxAutoConfiguration.class,
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, OutboxAuditLogger.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, OutboxAuditLogger.class})
 public class OutboxAdminAutoConfiguration {
 
     @Bean

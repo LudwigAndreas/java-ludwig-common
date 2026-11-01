@@ -102,15 +102,64 @@ The cost is a lookup per request; `AuthorityLookup` caches it in the platform ca
 </dependency>
 ```
 
-### Resource level
+### Operations and roles
+
+Code authorizes by **operation**, never by role. A module declares what it does; the service's configuration alone
+says which roles may do it, and on which rows.
 
 ```java
+@Bean
+OperationContributor orderOperations() {
+    return () -> List.of(
+            Operation.business("sales.order.read", Sensitivity.READ, "sales.op.order.read").on("order", DataAction.READ),
+            Operation.business("sales.order.update", Sensitivity.CHANGE, "sales.op.order.update").on("order", DataAction.WRITE),
+            Operation.business("sales.order.purge", Sensitivity.PRIVILEGED, "sales.op.order.purge"));
+}
+
 @GetMapping("/{id}")
-@PreAuthorize("hasAnyRole('ORDER_AGENT', 'ORDER_ADMIN')")
+@RequiresOperation("sales.order.read")
 public OrderResponse get(@PathVariable UUID id) { ... }
 ```
 
-Method security is enabled by the module.
+```yaml
+ludwig:
+  security:
+    roles:
+      ORDER_AGENT:
+        operations:
+          sales.order.read: OWN          # only rows they created
+          sales.order.update: OWN
+      ORDER_ADMIN:
+        includes: [ORDER_AGENT]
+        operations:
+          sales.order.read: ALL
+          sales.order.update: ALL
+          sales.order.purge: ALL
+```
+
+| Piece | What it is |
+|---|---|
+| Operation id | `<area>.<object>.<verb>`, three lower-case segments. A read covers listing and fetching one kind of object; each distinct change is its own operation |
+| Sensitivity | `READ` (changes nothing), `CHANGE` (changes state), `PRIVILEGED` (can lose data, changes who may do what, or decides whether a dependency is called). `PRIVILEGED` needs an `Operation-Reason` header (1-500 characters, `400 ludwig.security.reason-required` otherwise) and refuses personal access tokens unless `ludwig.security.operations.allow-personal-access-tokens=true` |
+| Surface | `BUSINESS` (the service's own API) or `ADMIN` (only under `/admin/v1/`; see below). A mismatch with the handler's path fails startup |
+| `@RequiresOperation("<id>")` | The only authorization code declares. On a controller, service or gRPC method; enforced through method security, the administrative guard, or the gRPC interceptor - one evaluation |
+| `@RequiresAuthentication` | A method any authenticated caller may use |
+| `ludwig.security.roles.<ROLE>` | `operations` (operation to scope) and `includes` (roles whose operations it also holds, transitively). A role is matched with or without `ROLE_` |
+| Scope | `ALL`, or dimensions joined by `+` (`OWN+TENANT`) - AND within a grant, OR across roles. `OBJECT` is granted per subject (see the administrative surface) |
+
+Fails closed: an operation no role lists is refused to everyone and logged once; a role naming an unknown operation, a
+wildcard, `NONE`, an `includes` cycle or undefined role, a dimension the operation's resource does not bind, an
+annotation naming an uncatalogued operation and a description key in no bundle each fail startup. The keys this
+replaced (`ludwig.admin.grants`, `ludwig.security.data.policies`, `ludwig.security.data.default-access`,
+`ludwig.admin.allow-personal-access-tokens`) fail startup when still set. Roles are this service's resolved roles -
+the identity projection for people, `ludwig.identity.service-roles` for services - never a token claim, and the PAT
+intersection still applies.
+
+`GET /me/operations` lists what the caller holds - id, sensitivity, surface, scope and a localized description - so a
+UI knows which controls to show; it never lists what the caller does not hold. `GET
+/admin/v1/security/operations/{id}/holders` (`security.operation.read`) lists the roles holding an operation, with
+their scope and, when inherited, the role it came from. Method security is enabled by the module whenever it is,
+whatever `ludwig.security.data.enabled` says.
 
 ### Data level
 
@@ -128,39 +177,22 @@ DataScopeMapping<OrderEntity> orderScopeMapping() {
 }
 ```
 
-Write the policy in configuration:
-
-```yaml
-ludwig:
-  security:
-    data:
-      default-access: NONE            # anything not listed is denied
-      policies:
-        order:
-          read:
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN     # only rows they created
-            ROLE_TENANT_VIEWER: TENANT
-            ROLE_PARTNER: PARTNER
-          write:
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN
-```
-
-Use it where rows are reached:
+An operation that names the resource (`.on("order", DataAction.READ)`) is scoped by it, and each role's scope for that
+operation in `ludwig.security.roles` is what its rows are filtered by. Use it where rows are reached:
 
 ```java
 // 1. Query time - the scope is part of the WHERE clause.
 queryFactory.selectFrom(order)
-        .where(guard.predicate("order", DataAction.READ).and(criteria))
+        .where(guard.predicate("sales.order.read").and(criteria))
         .fetch();
 
 // 2. Load time - the safety net for paths a query predicate never sees.
 OrderEntity entity = repository.getByIdOrThrow(id);
-guard.check("order", DataAction.READ, entity, OrderEntity::getId);
+guard.check("sales.order.read", entity, OrderEntity::getId);
 ```
 
-or as an annotation backed by the same mapping: `@PostAuthorize("hasPermission(returnObject, 'read')")`.
+or as an annotation backed by the same mapping: `@PostAuthorize("hasPermission(returnObject, 'sales.order.read')")`
+- the permission is an operation, and the object's class must belong to its resource.
 
 **Both halves are needed.** Pre-filtering alone misses loads by id, relations and objects rebuilt from events;
 post-checking alone breaks pagination and totals. The mapping declares a column (predicate) and an accessor (check)
@@ -186,23 +218,21 @@ DataScopeMapping.forResource("order", OrderEntity.class)
 `.bindExpression` is the escape hatch where nothing verifies that predicate and check agree; test them against each
 other (`ExpressionScopeBindingTest` shows how).
 
-**Custom values** come from a `DataScopeProvider`:
+**Per-subject grants** come from a `DataScopeProvider`, asked with the operation's resource and action (an operation
+that touches no rows is asked with its id and `invoke`). It answers for a subject, never by comparing roles:
 
 ```java
 @Bean
-DataScopeProvider loaderMentionScopeProvider() {
-    return (principal, resourceType, action) ->
-            "order".equals(resourceType)
-                    && DataAction.READ.equals(action)
-                    && principal.hasRole("ROLE_LOADER")
-                    ? DataScope.restrictedTo(ScopeDimension.of("mentioned"), principal.subject())
-                    : DataScope.none();   // contributes nothing; other providers still apply
+DataScopeProvider coverageGrants(CoverageRepository coverage) {
+    return (principal, resourceType, action) -> "order".equals(resourceType) && DataAction.READ.equals(action)
+            ? coverage.ordersCoveredBy(principal.subject())    // a time-boxed cover, say
+            : DataScope.none();   // contributes nothing; the roles' scopes still apply
 }
 ```
 
 **Composition**: values within a dimension are OR-ed (`IN`); dimensions within a grant are AND-ed (`OWN+TENANT`);
-grants are OR-ed; `ALL` beats everything; `NONE` contributes nothing. Providers are unioned
-(`CompositeDataScopeProvider`), so a provider can only **widen**; denial is no provider granting. A list endpoint
+grants are OR-ed; `ALL` beats everything. The roles' scopes and every provider are unioned, so a provider can only
+**widen**; denial is nothing granting. A list endpoint
 for a caller entitled to nothing returns an **empty page**, not 403. The full model and worked examples are in
 [`docs/data-scope-configuration.md`](../../docs/data-scope-configuration.md).
 
@@ -261,31 +291,33 @@ direct filter:      introspection cache TTL + authority cache TTL   (computed ev
 
 ### Administrative surface
 
-Every administrative endpoint on the platform is served under `/admin/v1/` and authorized one way. A module
-**declares operations**, never roles; the consuming service **grants them to its own roles**.
+Every administrative endpoint on the platform is served under `/admin/v1/` and authorized one way: by the operations
+above, declared on the `ADMIN` surface (`Operation.admin(...)`), granted in `ludwig.security.roles` like any other.
 
 | Piece | What it is |
 |---|---|
-| Operation id | `<area>.<tier>`, e.g. `outbox.operate`. A module declaring any tier of an area declares all three |
-| Tiers | `read` (changes nothing), `operate` (safe to repeat, cannot desynchronize or change access), `privileged` (changes access, can desynchronize from an external system, or discards work) |
-| `@AdminAccess(<Module>AdminOperations.OPERATE)` | On the handler; the only gate. Never combined with `@PreAuthorize` or a role check |
-| `@AdminAuthenticated` | A handler any admitted caller may use (the discovery endpoint) |
-| `AdminAudit` | Records the change through the one `AuditSink`, category `admin`, from the module service inside its transaction |
+| `@RequiresOperation(<Module>AdminOperations.<CONSTANT>)` | On the handler; the only gate. Never combined with `@PreAuthorize` or a role check |
+| `@RequiresAuthentication` | A handler any admitted caller may use (the approvals listing) |
+| `AdminAudit` | Records the change through the one `AuditSink`, category `admin`, action the operation id, from the module service inside its transaction |
 | `AdminInvocation.require()` | The current operation, caller and reason; `tenantScope()` for tenant-carrying tables |
 | `AdminPage` / `AdminCursor` | Keyset pages; at most 200 rows; an undecodable cursor is `400` |
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      outbox.read:       [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      outbox.operate:    [NOTIFICATION_ADMIN]
-      outbox.privileged: [NOTIFICATION_ADMIN]
+  security:
+    roles:
+      NOTIFICATION_SUPPORT:
+        operations:
+          outbox.message.read: ALL
+      NOTIFICATION_ADMIN:
+        includes: [NOTIFICATION_SUPPORT]
+        operations:
+          outbox.message.retry: ALL
+          outbox.message.discard: ALL
 ```
 
-In a `.properties` file a dotted key needs the bracket form: `ludwig.admin.grants[outbox.read]=NOTIFICATION_ADMIN`.
-Roles are this service's resolved roles - the identity projection for people, `ludwig.identity.service-roles`
-for administrative services - never a token claim, and the PAT intersection still applies.
+In a `.properties` file a dotted key needs the bracket form:
+`ludwig.security.roles.NOTIFICATION_ADMIN.operations[outbox.message.discard]=ALL`.
 
 What the guard on `/admin/**` (a `HandlerInterceptor`, so it holds whatever filter chain the service runs)
 refuses, in order:
@@ -294,18 +326,16 @@ refuses, in order:
 |---|---|
 | unauthenticated | `401` |
 | a partner | `403` |
-| a personal access token, unless `ludwig.admin.allow-personal-access-tokens=true` | `403`, `ludwig.pat.credential-not-permitted` - the PAT surface's own type |
+| a personal access token, unless `ludwig.security.operations.allow-personal-access-tokens=true` | `403`, `ludwig.pat.credential-not-permitted` - the PAT surface's own type |
 | a person (`USER`) not acting through one of `ludwig.admin.human-callers.required-via`, when that list is set | `403`, published as an authorization denial and audited |
 | an operation it does not hold | `403`, published as an authorization denial and audited |
-| an `@AdminObject` outside its data scope, where `admin.<area>` and the tier have a policy entry | `403`, or on a read the area's own not-found `404`; audited |
-| a `privileged` operation without `Admin-Reason` (1-500 characters) | `400`, `ludwig.admin.reason-required` - only after the grant check |
-| a handler under `/admin/` with neither annotation | `403` |
+| a `PRIVILEGED` operation without `Operation-Reason` (1-500 characters) | `400`, `ludwig.security.reason-required` - only after the grant check |
+| an `@AdminObject` outside its scope, where the caller's scope confines objects | `403`, or for a `READ` operation the area's own not-found `404`; audited |
+| a handler under `/admin/` with neither annotation, or with a `BUSINESS` operation | `403`, and the latter fails startup |
 
-Fails closed everywhere: there is **no default grant**, no wildcard and no tier implication; an operation
-nobody holds is refused and listed once at startup; a misspelled grant key, an empty role list, a handler naming an
-uncatalogued id, an area missing a tier and a `public-paths` entry matching `/admin/v1/` each fail startup. The
-surface exists only with web-core's problem pipeline present, and is independent of method security
-(`ludwig.security.data.enabled=false` does not turn it off). `ludwig.admin.enabled=false` removes it.
+A `public-paths` entry matching `/admin/v1/` fails startup. The surface exists only with web-core's problem pipeline
+present. `ludwig.admin.enabled=false` removes the guard, and an administrative handler still mapped is then refused
+(`403`) by method security rather than served.
 
 Acting party: a token's delegation claim (`ludwig.security.jwt.actor-claim`, default `act`, read as RFC 8693
 `act.sub`, nested `act` kept as a chain of at most 5) names the party the request came through, for example
@@ -317,14 +347,15 @@ outage. Only a validated token's claim counts, never a header.
 
 Per-object scope: a handler marks the path variable naming its object with `@AdminObject` (its `notFound` is the
 area's own not-found code, so an out-of-scope read answers exactly as a missing object), and a listing filters
-through `AdminObjectScope.filter`. Opt-in per area and tier through a `ludwig.security.data.policies."admin.<area>"`
-entry whose roles are `ALL` or `NONE`, with objects granted per subject on dimension `object`; see
+through `OperationAuthority.admitted`. A role confines an operation to objects by granting it `OBJECT`, and the
+objects themselves are granted per subject on dimension `object`, keyed by the operation's id and action `invoke`
+(through the identity projection's grants); a role granting `ALL` admits every object. See
 [data-scope configuration](../../docs/data-scope-configuration.md#administrative-objects).
 
-Four-eyes approval: `ludwig.admin.approval.required` lists privileged operations whose calls a second holder must
-approve (empty by default; an uncatalogued or non-privileged id, or a list with no `AdminApprovalStore`, fails
+Four-eyes approval: `ludwig.admin.approval.required` lists `ADMIN` `PRIVILEGED` operations whose calls a second holder
+must approve (empty by default; an uncatalogued id or any other operation, or a list with no `AdminApprovalStore`, fails
 startup - job-core provides the JDBC store). Such a call, once authorized and with its reason, is not executed: the
-request (method, path, query, body up to 64 KiB - `413` above - and `Admin-Reason`) is recorded and answered `202`
+request (method, path, query, body up to 64 KiB - `413` above - and `Operation-Reason`) is recorded and answered `202`
 with an approval whose operation envelope is `PENDING`, `Location: /admin/v1/approvals/{id}`. Any caller the surface
 admits may use `/admin/v1/approvals`; what they see and decide is limited to the operations they hold:
 
@@ -344,10 +375,7 @@ never re-run. Request, decision, withdrawal and expiry are audited, and the exec
 Tenant confinement: a `USER` reaches only resources of exactly their own tenant (a user without one, only untenanted
 resources); a `SERVICE` is not confined. Modules apply `tenantScope()` to tables that carry a tenant.
 
-`GET /admin/v1/me/operations` lists the operations the caller holds, as `application/json`, with descriptions in the
-caller's locale, so an administrative UI knows which controls to show. Startup fails when a catalogued operation's
-description key is in no bundle, naming every such operation and key: a module adding an area adds its keys to its own
-bundle.
+An administrative UI knows which controls to show from `GET /me/operations`, filtered on `surface=ADMIN`.
 
 ## Configuration
 
@@ -389,11 +417,11 @@ ludwig:
     authorities:
       require-resolver: false           # set true in every deployed environment
     data:
-      enabled: true
-      default-access: NONE
-      strict-policy-tokens: true
+      enabled: true                     # row scoping; method security stays on either way
       unscoped-resources: []            # reference data, deliberately exempt
-      policies: {}
+    roles: {}                           # <ROLE>: { includes: [...], operations: { <operation>: <scope> } }
+    operations:
+      allow-personal-access-tokens: false   # PRIVILEGED operations and /admin/** refuse PATs
     pat:
       assertion-lifetime: 5m            # match the issuer
       edge-cache-lifetime: 5m           # match the edge
@@ -449,10 +477,11 @@ accepts the session cookie directly, re-enable CSRF in the same change.**
 
 ### Adoption procedure for an existing service
 
-1. Add the module with `data.default-access: ALL`. Watch `ludwig.security.data.scope`: every resource reporting
-   `ALL` has no policy yet.
-2. Write `DataScopeMapping` beans and policies, starting with the most sensitive data.
-3. Switch `default-access` to `NONE` once no unexplained `ALL` remains (per service, not fleet-wide).
+1. Declare each module's operations and move every authorization to `@RequiresOperation`; there is no "allow
+   everything" mode to migrate under, by design.
+2. Write `ludwig.security.roles` one role at a time, granting `ALL` first; the startup log lists operations no role
+   holds, and `/admin/v1/security/operations/{id}/holders` shows who holds what.
+3. Write `DataScopeMapping` beans and narrow the scopes (`OWN`, `TENANT`), starting with the most sensitive data.
 4. Turn on `authorities.require-resolver` and `jwt.require-audience` in every deployed environment.
 5. Enable mTLS on partner routes last, after `trusted-proxies` is correct in each environment.
 
@@ -465,7 +494,7 @@ accepts the session cookie directly, re-enable CSRF in the same change.**
 | `ludwig.security.authentication` | counter | `principal.type`, `outcome`, `reason` | Authentication results; `reason=untrusted-proxy` = something bypasses the mesh |
 | `ludwig.security.access.denied` | counter | `resource`, `action` | Denials (role and row level) |
 | `ludwig.security.authorities.cache` | counter | `principal.type`, `result` | Authority cache hits/misses |
-| `ludwig.security.data.scope` | counter | `resource`, `access` | Effective scope width; `access=ALL` on a restricted resource = a policy is not matching |
+| `ludwig.security.data.scope` | counter | `resource`, `access` | Effective scope width; `access=ALL` on a restricted resource = a role's scope is wider than intended |
 
 Tags use a bounded vocabulary only; nothing caller-controlled.
 
@@ -473,7 +502,7 @@ Tags use a bounded vocabulary only; nothing caller-controlled.
 fingerprint differs, no partner registered for a certificate, PAT introspection unreachable, unusable data-scope
 value, `hasPermission` without a mapping (denied), `public-paths` entry that permits a broad pattern,
 `validate-revocation-window=false`, failed denial audit. `INFO`: audience validation enabled, PAT revocation window
-values, resource with a mapping but no policy.
+values. `WARN`: operations no role holds.
 
 **Recommended alerts:**
 
@@ -507,10 +536,10 @@ No payloads, no tokens. `PrincipalActorResolver` (registered regardless of `ludw
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | Service does not start: OIDC discovery | `issuer-uri` provider unreachable | Restore connectivity, or use `jwk-set-uri` |
-| Startup fails on a policy | Unmapped resource, unknown dimension, misspelled grant, resource both unscoped and policed | Fix as the message names |
+| Startup fails on `ludwig.security.roles` | Unknown operation, unmapped resource, a dimension the resource does not bind, `NONE`, a wildcard, an `includes` cycle, a removed key still set | Fix as the message names |
 | Startup fails: `trusted-proxies` / `forward-headers-strategy=native` | Unsafe mTLS settings | Narrow proxies; see Deployment |
 | Startup fails: no audience / no resolver | `require-audience` / `require-resolver` with nothing configured | Configure `jwt.audiences`; add identity-projection |
-| All users get 403 | No `AuthorityResolver` data (projection empty), or policy `default-access: NONE` without entries | Check identity-projection consumption; check policies |
+| All users get 403 | No `AuthorityResolver` data (projection empty), or no role holds the operation | Check identity-projection consumption; check the operation's holders |
 | A user still has a revoked role | Authority cache TTL | Wait ≤ TTL (`ludwig.cache.caches.authorities.ttl`) |
 | Partner gets 401 after certificate renewal | Partner mapped by a non-stable identifier or pinned fingerprint | Map by SPIFFE URI/SAN; update `certificate-hash` |
 | `reason=untrusted-proxy` | Request reached the pod without the mesh proxy | Find the path (port-forward, extra ingress); fix network policy |
@@ -530,7 +559,7 @@ client and cache, revocation window validation, auto-configuration. In a service
 
 | Situation | Behaviour | Why not the other way |
 |---|---|---|
-| Resource has no policy | Denied (`default-access: NONE`) | A new endpoint would ship unprotected |
+| Operation no role holds | Denied, and logged at startup | A new endpoint would ship unprotected |
 | Policy names a resource with no mapping | Startup failure | It would be treated as unrestricted |
 | Policy names an unbound dimension | Startup failure | An unenforceable clause must not be ignored |
 | Misspelled grant (`OWNN`) | Startup failure | Otherwise a 500 on the first request using that role |

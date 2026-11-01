@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import ru.ludwigandreas.hotreload.core.ReloadableSourceRegistry;
 import ru.ludwigandreas.hotreload.core.SourceReloadCoordinator;
 import ru.ludwigandreas.hotreload.core.watch.FileResourceWatcher;
 import ru.ludwigandreas.hotreload.template.FreemarkerTemplateDirectorySource;
@@ -53,7 +54,8 @@ public class HotReloadFreemarkerAutoConfiguration {
     @ConditionalOnBean(HotReloadableTemplateLoader.class)
     public ResourceWatcherLifecycle hotReloadFreemarkerWatcherLifecycle(HotReloadProperties properties,
                                                                           HotReloadableTemplateLoader templateLoader,
-                                                                          SourceReloadCoordinator coordinator) {
+                                                                          SourceReloadCoordinator coordinator,
+                                                                          ReloadableSourceRegistry registry) {
         Path directory = Path.of(properties.getFreemarker().getTemplateDirectory());
         FreemarkerTemplateDirectorySource source = new FreemarkerTemplateDirectorySource(directory);
 
@@ -63,6 +65,7 @@ public class HotReloadFreemarkerAutoConfiguration {
             }
         });
 
+        registry.register(ReloadableSourceRegistry.Kind.TEMPLATE_DIRECTORY, source, coordinator);
         FileResourceWatcher watcher = new FileResourceWatcher(List.of(source), coordinator,
                 properties.getFileWatch().getDebounce());
         return new ResourceWatcherLifecycle(watcher);

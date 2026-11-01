@@ -40,7 +40,7 @@ public record AdminApproval(UUID id, String operation, StoredRequest request, St
      * @param query          the raw query string, or null
      * @param contentType    the request's {@code Content-Type}, or null
      * @param acceptLanguage the request's {@code Accept-Language}, or null
-     * @param reason         the stated {@code Admin-Reason}
+     * @param reason         the stated {@code Operation-Reason}
      * @param body           the body, empty when there was none or once the approval is terminal
      */
     public record StoredRequest(String method, String path, String query, String contentType,

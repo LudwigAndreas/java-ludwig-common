@@ -4,8 +4,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminObject;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /** Violates admin-object-is-a-path-variable: the object is a request parameter, which the guard never reads. */
 @RestController
@@ -13,7 +13,7 @@ import ru.ludwigandreas.security.admin.AdminObject;
 public class ObjectAsQueryAdminController {
 
     @PostMapping("/poke")
-    @AdminAccess("things.operate")
+    @RequiresOperation("things.thing.poke")
     public String poke(@RequestParam @AdminObject String thing) {
         return thing;
     }

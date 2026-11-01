@@ -11,10 +11,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.ludwigandreas.notification.settings.NotificationProperties;
-import ru.ludwigandreas.security.data.DataAccessGuard;
-import ru.ludwigandreas.security.data.DataAction;
-import ru.ludwigandreas.notification.service.metrics.NotificationMetrics;
+import ru.ludwigandreas.idempotency.api.ClaimRequest;
+import ru.ludwigandreas.idempotency.api.ClaimResult;
+import ru.ludwigandreas.idempotency.api.IdempotencyStore;
+import ru.ludwigandreas.idempotency.config.IdempotencyProperties;
 import ru.ludwigandreas.notification.repository.NotificationDeliveryRepository;
 import ru.ludwigandreas.notification.repository.NotificationRequestRepository;
 import ru.ludwigandreas.notification.repository.entity.CategoryKind;
@@ -23,12 +23,10 @@ import ru.ludwigandreas.notification.repository.entity.NotificationDeliveryEntit
 import ru.ludwigandreas.notification.repository.entity.NotificationRequestEntity;
 import ru.ludwigandreas.notification.repository.entity.NotificationSource;
 import ru.ludwigandreas.notification.repository.entity.RequestStatus;
+import ru.ludwigandreas.notification.security.NotificationOperations;
 import ru.ludwigandreas.notification.service.exception.RequestNotFoundException;
-import ru.ludwigandreas.idempotency.api.ClaimRequest;
-import ru.ludwigandreas.idempotency.config.IdempotencyProperties;
-import ru.ludwigandreas.idempotency.api.ClaimResult;
-import ru.ludwigandreas.idempotency.api.IdempotencyStore;
 import ru.ludwigandreas.notification.service.mapper.NotificationEntityMapper;
+import ru.ludwigandreas.notification.service.metrics.NotificationMetrics;
 import ru.ludwigandreas.notification.service.model.NotificationCommand;
 import ru.ludwigandreas.notification.service.model.NotificationRequestView;
 import ru.ludwigandreas.notification.service.model.RenderRequest;
@@ -36,9 +34,11 @@ import ru.ludwigandreas.notification.service.model.RenderedPreview;
 import ru.ludwigandreas.notification.service.queue.DeliveryFanOutService;
 import ru.ludwigandreas.notification.service.template.RenderedTemplate;
 import ru.ludwigandreas.notification.service.template.TemplateCoordinates;
-import ru.ludwigandreas.notification.service.template.TemplateRenderer;
 import ru.ludwigandreas.notification.service.template.TemplateModel;
+import ru.ludwigandreas.notification.service.template.TemplateRenderer;
 import ru.ludwigandreas.notification.service.template.TemplateRevisionService;
+import ru.ludwigandreas.notification.settings.NotificationProperties;
+import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
 
@@ -65,16 +65,6 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
 @Transactional
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
-
-    /**
-     * The name this resource's scope mapping and policies are registered under.
-     *
-     * <p>Repeated here rather than imported from {@code config.SecurityConfig}, which is where the
-     * mapping is declared. The configuration package is the composition root and depends on this
-     * layer; importing back out of it would be the cycle the architecture rules reject.
-     * {@code DeliveryAdminService} carries its own copy of the delivery's name for the same reason.
-     */
-    private static final String REQUEST_RESOURCE = "notification-request";
 
     private final NotificationRequestRepository requestRepository;
     private final NotificationDeliveryRepository deliveryRepository;
@@ -129,8 +119,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public NotificationRequestView get(UUID id) {
         NotificationRequestEntity request = existing(id);
-        dataAccessGuard.check(REQUEST_RESOURCE, DataAction.READ, request,
-                NotificationRequestEntity::getId);
+        dataAccessGuard.check(NotificationOperations.REQUEST_READ, request, NotificationRequestEntity::getId);
         return view(request, false);
     }
 

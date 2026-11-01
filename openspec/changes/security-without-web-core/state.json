@@ -1,0 +1,29 @@
+{
+  "change": "security-without-web-core",
+  "contract": {
+    "goal": "security-spring-boot-starter starts, and refuses privileged calls with its own refusals, on a classpath without web-core; with web-core every refusal renders as before (specs/starter-conditional-wiring)",
+    "output": "nested web-core configuration in LudwigSecurityAutoConfiguration; SecurityRefusalException base; SecurityProblemMapper mapping the two refusals; a without-web-core Surefire execution and test; directory starter workaround removed; README, CHANGELOG",
+    "constraints": [
+      "no key, endpoint, problem type or wire change",
+      "web-core stays optional",
+      "do not weaken checks or skip checkstyle",
+      "do not commit or stage"
+    ],
+    "done_when": [
+      "mvn -q validate",
+      "mvn -pl :security-spring-boot-starter -am verify",
+      "mvn -pl :identity-source-directory-spring-boot-starter -am verify",
+      "mvn -pl :pat-spring-boot-starter -am verify",
+      "mvn -pl :grpc-server-spring-boot-starter -am verify",
+      "every in-repo dependent of security-spring-boot-starter verified (reactor install)",
+      "scripts/manifest.sh stale",
+      "openspec validate security-without-web-core --strict"
+    ]
+  },
+  "rollback_point": "73f5ddcb88244104f91398cd27983fa98e7b9e6e (plus uncommitted earlier changes in the tree)",
+  "current_task": "1.1",
+  "decisions": [],
+  "failures": [],
+  "open_questions": [],
+  "pending_human": []
+}

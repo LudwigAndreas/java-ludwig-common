@@ -80,7 +80,7 @@ import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
         "ludwig.notification.announcements.categories.platform-incident.channels=IN_APP,EMAIL",
         // Four-eyes approval of outbox discards (FourEyesApprovalIT). Here, not in a per-class source, for the
         // container reason above; no other test calls a privileged outbox endpoint, so nothing else is held.
-        "ludwig.admin.approval.required=outbox.privileged"
+        "ludwig.admin.approval.required=outbox.message.discard"
 })
 abstract class NotificationTestBase {
 

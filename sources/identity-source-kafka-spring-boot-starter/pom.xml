@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ru.ludwigandreas</groupId>
+        <artifactId>common</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>identity-source-kafka-spring-boot-starter</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Identity source: Kafka</name>
+    <description>
+        Feeds identity-projection-spring-boot-starter from providers that publish user changes to Kafka: one
+        subscription per declared source, the published IdentityUserEvent v1 contract, the platform's consumer
+        (retry with backoff, dead-letter topic), and a mandatory consumer group per service.
+    </description>
+
+    <!-- Third-party versions come from ludwig-bom, imported rather than inherited; see identity-projection's POM. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>ludwig-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- The projection this feeds, through its IdentityProjection SPI. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>identity-projection-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- The platform's consumer wiring: the container factory, its retry and dead-letter handling, metrics. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>messaging-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- The constraint annotations on IdentityKafkaProperties; the API only and optional, as messaging's. -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- A Bean Validation provider, so the @Validated properties in a full test context are checked. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>architecture-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

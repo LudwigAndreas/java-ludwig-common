@@ -151,19 +151,19 @@ public final class ReportDefinition<P extends ReportParameters, R> {
     private final Class<?> filterEntityType;
 
     /**
-     * The logical resource name this report's rows are scoped as, or null when they are not scoped.
+     * The read operation whose scope this report's rows are narrowed by, or null when they are not scoped.
      *
-     * <p>A name such as {@code "order"}, not a table or a class: it is what a {@code DataScopeMapping}
-     * is registered under in {@code security-spring-boot-starter}, so the policy survives a rename of
-     * either. Declaring it on the definition rather than deriving it from the row type is what lets
-     * two reports over the same rows carry different scopes - a customer-facing extract and an
-     * internal reconciliation are the same table and not the same entitlement.
+     * <p>An operation id such as {@code "catalog.product.read"}: the operation names the resource, and each
+     * requester's roles name the scope they hold on it, so a report is exactly as wide as the read it stands
+     * for. Declaring it on the definition rather than deriving it from the row type is what lets two reports
+     * over the same rows carry different scopes - a customer-facing extract and an internal reconciliation are
+     * the same table and not the same entitlement.
      *
      * <p>Null means the rows are not row-scoped, which is a claim about the data rather than a
      * default: the startup validator cannot tell an unscoped report from one whose author forgot, so
      * it is deliberately something somebody has to write.
      */
-    private final String scopeResourceType;
+    private final String scopedBy;
 
     /** Authorities that may run this report at all; empty means anyone the service lets in. */
     private final Set<String> requiredAuthorities;
@@ -199,7 +199,7 @@ public final class ReportDefinition<P extends ReportParameters, R> {
                              Long maxRows, MultiSheetStrategy multiSheetStrategy,
                              List<SortKey> defaultSort, Set<String> filterableColumns,
                              Set<String> requiredAuthorities, Boolean totalsRow, String template,
-                             Class<?> filterEntityType, String scopeResourceType) {
+                             Class<?> filterEntityType, String scopedBy) {
         this.key = requireKey(key);
         this.version = version == null ? 1 : version;
         this.titleKey = requireText(titleKey, this.key, "a title message key");
@@ -223,7 +223,7 @@ public final class ReportDefinition<P extends ReportParameters, R> {
         this.totalsRow = totalsRow == null || totalsRow;
         this.template = template;
         this.filterEntityType = filterEntityType;
-        this.scopeResourceType = scopeResourceType;
+        this.scopedBy = scopedBy;
         if (!this.filterableColumns.isEmpty() && filterEntityType == null) {
             throw new IllegalArgumentException("Report definition " + this.key + " declares filterable"
                     + " columns but no filterEntityType to resolve them against");

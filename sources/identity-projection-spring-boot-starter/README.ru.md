@@ -2,27 +2,30 @@
 
 *[English](README.md) · **Русский***
 
-Локальная запрашиваемая проекция Kafka-потока пользователей OIDC-провайдера плюс реализации трёх SPI
-[`security-spring-boot-starter`](../security-spring-boot-starter) на её основе: пользователи, роли, реестр
-партнёров и ограниченные по времени выдачи доступа к данным в PostgreSQL; идемпотентное и устойчивое к порядку
-потребление; вытеснение кэша прав после коммита; опциональная проекция подтверждённых контактов для того сервиса,
-который пишет людям.
+Локальная проекция пользователей и ролей, известных провайдерам идентичности сервиса, с возможностью запросов. Её
+наполняет **один нейтральный к провайдеру поток изменений** из любого числа объявленных **источников**; рядом -
+реализации трёх SPI [`security-spring-boot-starter`](../security-spring-boot-starter) поверх базы данных:
+пользователи, роли, реестр партнёров и ограниченные по времени выдачи областей данных в PostgreSQL; упорядоченное
+идемпотентное применение; владение источником и сопоставление ролей; полные обходы с защитным порогом; вытеснение
+кэша прав после коммита; и проекция подтверждённых контактов по выбору - для единственного сервиса, который пишет
+людям.
 
 | | |
 |---|---|
 | Роль | starter |
-| Зависит от (в репозитории) | [`db-core`](../db-core), [`messaging-spring-boot-starter`](../messaging-spring-boot-starter), [`security-spring-boot-starter`](../security-spring-boot-starter) |
+| Зависит от (в репозитории) | [`db-core`](../db-core), [`security-spring-boot-starter`](../security-spring-boot-starter) |
 | Используется | `crud-service-example`, `notification-service` |
-| Поверхности | Kafka (входящий поток пользователей) |
+| Каналы | [`identity-source-kafka`](../identity-source-kafka-spring-boot-starter) (push), [`identity-source-directory`](../identity-source-directory-spring-boot-starter) (pull) или собственный код сервиса |
 
 | SPI | Реализация | Источник |
 |---|---|---|
-| `AuthorityResolver` | `DatabaseAuthorityResolver` | `security_user` (Kafka), `security_partner` (таблица), `ludwig.identity.service-roles` (конфигурация) |
-| `DataScopeProvider` | `DatabaseDataScopeProvider` | `security_grant` - явные выдачи, опционально с ограничением по времени |
-| `PartnerIdentityResolver` | `DatabasePartnerIdentityResolver` | `security_partner` - подключение и приостановка партнёров без релиза |
+| `AuthorityResolver` | `DatabaseAuthorityResolver` | `security_user` (каналы), `security_partner` (таблица), `ludwig.identity.service-roles` (конфигурация) |
+| `DataScopeProvider` | `DatabaseDataScopeProvider` | `security_grant` - явные выдачи, при необходимости с истечением |
+| `PartnerIdentityResolver` | `DatabasePartnerIdentityResolver` | `security_partner` - подключение и приостановка партнёров без выпуска |
 
-Локальная проекция избавляет от сетевого обращения к провайдеру идентичности при каждом решении авторизации и
-делает «всех агентов тенанта» или «у кого ещё есть эта роль» запросом.
+Локальная проекция избавляет от сетевого вызова провайдера при каждом решении об авторизации и делает «всех агентов
+этого арендатора» или «кто ещё держит эту роль» запросом. Проекция ничего не знает о провайдерах: провайдеру нужен
+канал, а не форк этого модуля.
 
 ## Использование
 
@@ -31,57 +34,109 @@
     <groupId>ru.ludwigandreas</groupId>
     <artifactId>identity-projection-spring-boot-starter</artifactId>
 </dependency>
+<!-- и канал для вашего провайдера, например: -->
+<dependency>
+    <groupId>ru.ludwigandreas</groupId>
+    <artifactId>identity-source-kafka-spring-boot-starter</artifactId>
+</dependency>
 ```
 
-Запасные реализации security-стартера отступают (`@ConditionalOnMissingBean`); подключать ничего не нужно.
+```yaml
+ludwig:
+  identity:
+    sources:
+      oidc: {}          # каждый источник, который принимает сервис, объявляется; канал с другим роняет старт
+```
 
-### Контракт события
+Запасные реализации стартера безопасности уступают место (`@ConditionalOnMissingBean`); больше ничего связывать не
+нужно.
 
-```json
-{
-  "eventId":   "5f1c...",
-  "type":      "UPSERT",
-  "subject":   "0b7c1b5e-...",
-  "displayName": "Anna Schmidt",
-  "tenantId":  "tenant-a",
-  "roles":     ["CATALOG_ADMIN", "ORDER_AGENT"],
-  "email":     "anna.schmidt@example.com",
-  "emailVerified": true,
-  "alternateEmail": "anna@personal.example",
-  "phoneNumber": "+49301234567",
-  "phoneVerified": true,
-  "chatHandle": "@anna",
-  "sourceVersion": "7",
-  "occurredAt": "2026-03-01T10:00:00Z"
+### Источники и сопоставление ролей
+
+**Источник** - один провайдер идентичности. Каждое изменение называет свой источник, а пользователь принадлежит
+источнику, который первым его спроецировал (`security_user.source_system`): изменение для этого субъекта из другого
+источника отклоняется, учитывается (`outcome="foreign-source"`) и пишется в журнал с уровнем error, но никогда не
+применяется. Сервис с двумя провайдерами - сотрудники и клиенты, например - объявляет оба.
+
+```yaml
+ludwig:
+  identity:
+    sources:
+      staff:
+        role-mapping:                         # роль или группа провайдера -> роли платформы
+          okta-catalog-admins: [CATALOG_ADMIN, ORDER_AGENT]
+          okta-support: [ORDER_SUPPORT]
+        unmapped-roles: DROP                  # KEEP (по умолчанию) сохраняет роль, которой нет в сопоставлении
+      customers: {}
+```
+
+Имена ролей сравниваются без префикса `ROLE_`; хранится сопоставленный набор. Имя источника - строчные латинские
+буквы, цифры и дефисы. Объявленный источник без канала один раз записывается в журнал при старте и допустим
+(административный сервис, читающий таблицы; источник, который только засеивается локально).
+
+### Как написать канал
+
+Всё попадает в проекцию через `IdentityProjection`:
+
+```java
+@RestController
+class DirectoryWebhook {
+
+    private final IdentityProjection projection;
+
+    DirectoryWebhook(IdentityProjection projection) {
+        this.projection = projection;
+    }
+
+    @PostMapping("/hooks/directory")
+    void changed(@RequestBody ProviderUser user) {
+        projection.apply(new IdentityChange.Upsert("staff", user.id(), user.updatedAt(), user.etag(),
+                new UserProfile(user.name(), user.orgId(), user.groups(), null)));
+    }
 }
 ```
 
-- **`roles` - полный набор, а не изменение**: двойное применение события даёт ту же строку; повтор топика сходится.
-- **`occurredAt` - ключ упорядочивания**: событие старше сохранённого отбрасывается (нормально, не ошибка), поэтому
-  повтор никогда не возвращает отозванную роль.
-- **Неизвестные поля игнорируются**: схемой владеет провайдер.
-- `type` - `UPSERT`, `DISABLE` или `DELETE`. `DELETE` становится статусом, никогда не удалением строки: записи
-  аудита и ссылки `created_by` должны продолжать разрешаться, а пересозданная учётная запись не должна наследовать
-  историю старой.
+- **`Upsert`** несёт профиль. Набор ролей, если он есть, - **полный** набор, никогда не дельта (пустой отзывает все
+  роли); любое поле, оставленное null, включая набор ролей, сохраняет хранимое значение, потому что провайдеры
+  присылают неполные профили.
+- **`Disable`** и **`Remove`** ставят статус `DISABLED` / `REMOVED`; строка остаётся, поэтому записи аудита и ссылки
+  `created_by` продолжают разрешаться.
+- **`occurredAt` - ключ упорядочивания**: изменение не новее хранимого пропускается как `STALE` (нормально при
+  повторе и перестановке), поэтому повтор никогда не возвращает отозванную роль.
+- `applyAll(list)` применяет пакет в одной транзакции, присоединяясь к активной, - так pull-канал может
+  зафиксировать страницу вместе со своей водяной отметкой. Каждый вызов возвращает `ApplyOutcome` на каждое изменение.
+- Зарегистрируйте бин `IdentityFeed` (`source()`, `kind()`, `status()`), чтобы старт проверил источник, а список
+  источников показал канал.
+
+### Полные обходы
+
+Канал, который может перечислить источник полностью, выполняет обход: `beginSweep(source)`, `listed(subjects)` на
+каждую страницу, затем `complete()`. Каждый активный пользователь этого источника, которого обход не перечислил,
+отключается - так исправляется удаление, событие о котором потерялось. Обход, который отключил бы больше
+`ludwig.identity.sweep.max-disable-ratio` (`0.1`) активных пользователей источника, **прерывается без изменений**,
+пишется в журнал с уровнем error и учитывается, потому что пустой или усечённый список не должен заблокировать
+организацию. Пользователя, отключённого обходом, восстанавливает его следующий upsert, каким бы ни был его
+`occurredAt`: решение основывалось на отсутствии, а не на изменении в источнике. Перечисленные субъекты складываются в
+`identity_sweep_listed`, поэтому каталог в миллион пользователей не стоит памяти.
 
 ### Контактные данные (по выбору)
 
 Контактные поля сохраняются **только** при `ludwig.identity.contact.enabled=true` и очищаются в строке пользователя
-при следующем его событии, если флаг выключен. Включайте только в сервисе, который отправляет людям сообщения
+при следующем его изменении, если флаг выключен. Включайте только в сервисе, который отправляет людям сообщения
 (проекция реплицируется в каждый сервис с модулем, и каждая копия - ещё одно место, куда должен дойти запрос на
 удаление). Индексов по контактам нет (поиск идёт по subject). `emailVerified` / `phoneVerified` допускают null: null
 означает «провайдер не сообщил», что отличается от «не подтверждён».
 
-### Выдачи и политика
+### Выдачи и роли
 
-| | Политика ролей (`ludwig.security.data.policies`) | Строка выдачи (`security_grant`) |
+| | Область роли (`ludwig.security.roles`) | Строка выдачи (`security_grant`) |
 |---|---|---|
 | Говорит | «агенты видят свои дела» | «Анна замещает Берлин, пока Боб в отпуске» |
 | Это | правило системы | данные о человеке |
 | Меняется | pull request-ом и деплоем | действием администратора |
 | Истекает | никогда | `expires_at`, проверяется в запросе |
 
-Выдача может только **расширить** разрешённое политикой; сужение делается удалением ролей. Ограничение по времени
+Выдача может только **расширить** разрешённое ролями; сужение делается удалением ролей. Ограничение по времени
 проверяется в `WHERE`, поэтому ничего не нужно потом подчищать.
 
 ### Соседние сервисы
@@ -99,121 +154,164 @@ ludwig:
 ### Задержка отзыва
 
 ```
-изменение каталога -> Kafka -> коммит проекции -> вытеснение кэша прав (после коммита) -> следующий запрос видит
+изменение в источнике -> канал -> коммит проекции -> вытеснение кэша прав (после коммита) -> следующий запрос видит
 ```
 
 Вытеснение - `cache.evictAfterCommit(ref)` из [cache](../cache-spring-boot-starter). TTL кэша прав
-(`ludwig.cache.caches.authorities.ttl`, по умолчанию 30s) - страховка на случай *пропущенного* события.
+(`ludwig.cache.caches.authorities.ttl`, по умолчанию 30s) - страховка на случай *пропущенного* изменения.
 
 ## Конфигурация
 
-| Свойство | По умолчанию | Смысл |
+| Свойство | По умолчанию | Значение |
 |---|---|---|
 | `ludwig.identity.enabled` | `true` | Главный выключатель |
+| `ludwig.identity.sources.<name>.role-mapping` | `{}` | Роль или группа провайдера → роли платформы |
+| `ludwig.identity.sources.<name>.unmapped-roles` | `KEEP` | `KEEP` или `DROP` для роли, которой нет в сопоставлении |
+| `ludwig.identity.sweep.max-disable-ratio` | `0.1` | Наибольшая доля активных пользователей источника, которую может отключить один обход |
 | `ludwig.identity.grants-enabled` | `true` | Регистрировать `DataScopeProvider` на таблице выдач |
-| `ludwig.identity.partner-registry-enabled` | `true` | Регистрировать табличный `PartnerIdentityResolver` |
-| `ludwig.identity.kafka.enabled` | `true` | Потреблять поток пользователей (off: таблицы всё равно читаются - админ-сервис, тесты) |
-| `ludwig.identity.kafka.topic` | `oidc.users` | Топик потока пользователей |
-| `ludwig.identity.kafka.group-id` | - | **Своя группа потребителей в каждом сервисе** (общая группа видела бы только часть событий) |
-| `ludwig.identity.liquibase.enabled` | `true` | `false` при подключении changelog из своего master |
+| `ludwig.identity.partner-registry-enabled` | `true` | Регистрировать `PartnerIdentityResolver` на таблице |
+| `ludwig.identity.liquibase.enabled` | `true` | `false`, если changelog подключается из вашего собственного мастер-файла |
 | `ludwig.identity.contact.enabled` | `false` | Проецировать подтверждённые контакты |
-| `ludwig.identity.service-roles` | `{}` | Workload id → роли |
+| `ludwig.identity.service-roles` | `{}` | Идентификатор нагрузки → роли |
 
-Настройки потребителя listener-а (повторы, dead letter, кластер) - в
-`ludwig.messaging.consumers.<identity consumer>.*` (см. [messaging](../messaging-spring-boot-starter)).
+**Удалено:** `ludwig.identity.kafka.topic` роняет старт с указанием
+`ludwig.identity.kafka.subscriptions.<source>.topic` в [`identity-source-kafka`](../identity-source-kafka-spring-boot-starter);
+потребителя в проекции больше нет.
 
 ## Развёртывание
 
-- **Схема**: `db/changelog/identity/identity-changelog.xml` (id changeset-ов с namespace), отдельно или подключённым.
+- **Схема**: `db/changelog/identity/identity-changelog.xml` (идентификаторы changeset с пространством имён),
+  отдельно или через включение.
 
-  | Таблица | Хранит | Владелец |
+  | Таблица | Содержит | Владелец |
   |---|---|---|
-  | `security_user` (+ `security_user_role`) | проекция; PK = OIDC `sub` (`ExternalEntity`) | каталог, через Kafka |
-  | `security_partner` (+ `security_partner_role`) | реестр партнёров: код, идентификаторы сертификата, статус, роли | администраторы (`AuditedEntity`) |
-  | `security_grant` | явные выдачи областей данных, опционально истекающие | администраторы (`AuditedEntity`) |
+  | `security_user` (+ `security_user_role`) | проекция; PK = subject источника (`ExternalEntity`), `source_system` = его источник | источники, через каналы |
+  | `identity_sweep_listed` | субъекты, отложенные идущим обходом; пуста между обходами | проекция |
+  | `security_partner` (+ `security_partner_role`) | реестр партнёров: код, идентификаторы сертификатов, статус, роли | администраторы (`AuditedEntity`) |
+  | `security_grant` | явные выдачи областей данных, при необходимости с истечением | администраторы (`AuditedEntity`) |
 
-- **Топики**: топик пользователей и его dead-letter топик **`<topic>.dlt`** (по умолчанию `oidc.users.dlt`) должны
-  существовать.
-- **Группа потребителей**: отдельный `group-id` в каждом сервисе.
-- **Защита данных**: `security_user` содержит персональные данные; включайте её в процедуры удаления. С контактами
-  она хранит адреса.
+- **Защита данных**: `security_user` содержит персональные данные; включите её в процедуры удаления. С включёнными
+  контактами в ней хранятся адреса.
 
 ## Наблюдаемость
 
-Метрики потребления даёт [messaging](../messaging-spring-boot-starter/README.ru.md) (`ludwig.messaging.consumed`,
-`.retries`, `.dead.lettered`, `.dropped`, лаг потребителя, `silent`).
+| Метрика | Теги | Значение |
+|---|---|---|
+| `ludwig_identity_changes_total` | `source`, `type` (`upsert`, `disable`, `remove`), `outcome` (`applied`, `stale`, `foreign-source`, `discarded`) | Каждое изменение, доставленное каналом, по тому, что с ним сделано |
+| `ludwig_identity_sweeps_total` | `source`, `outcome` (`completed`, `aborted`) | Полные перечисления |
+| `ludwig_identity_sweep_disabled_total` | `source` | Пользователи, отключённые, потому что перечисление их больше не содержало |
 
-**Логи.** `ERROR Discarding unparseable user event` (коммитится, не повторяется); `WARN Discarding user event with
-no subject`. Payload никогда не логируется (это данные каталога о человеке).
+Метрики конкретного канала (отставание потребителя, запуски синхронизации) - в модулях каналов.
 
-**Рекомендуемые алерты:** алерты messaging на dead letter и потери по топику идентичности; `ludwig_messaging_silent`
-для потребителя идентичности (задайте `silence-threshold` по частоте изменений каталога).
+**Журнал.** `ERROR Refusing a ... change for subject ... from source ...: the subject belongs to source ...`;
+`ERROR Aborted the sweep of identity source ...`; `WARN Discarding a ... change ... with no subject`. Профили
+никогда не пишутся в журнал (данные каталога о человеке).
 
-**Известные пробелы:**
-
-- Отброшенные события (неразбираемые, без subject) только логируются, но не считаются: данные человека могут
-  пропасть без метрики.
-- Нет метрик применённых событий, событий, отброшенных проверкой порядка, и размера проекции.
+**Рекомендуемые оповещения:** любой `outcome="foreign-source"` (два провайдера выдают один субъект); любой
+прерванный обход; рост `outcome="discarded"`.
 
 ## Аудит
 
-Проекция не пишет событий аудита: она зеркалирует каталог провайдера, у которого свой аудит.
+Проекция не пишет событий аудита: она отражает каталоги провайдеров, у которых есть собственный журнал.
 
-Изменения `security_partner` и `security_grant`, сделанные через административные эндпоинты
-(`/admin/v1/identity/`), записываются в журнал аудита (категория `admin`) в той же транзакции, поэтому у вопроса
-«кто что выдал и когда» есть история, а не только последний `updated_by`. Изменение, сделанное вручную в SQL, по-прежнему
-имеет только отметки.
+Изменения `security_partner` и `security_grant` через административные эндпоинты (`/admin/v1/identity/`)
+записываются в журнал аудита (категория `admin`) в той же транзакции, поэтому у «кто, что и когда выдал» есть
+история, а не только последний `updated_by`. У изменения, сделанного вручную в SQL, остаются только отметки.
 
 ## Администрирование
 
-Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют и с какой областью, решает собственный `ludwig.security.roles` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, которой не владеет ни одна роль, запрещена всем. Операция `PRIVILEGED` требует заголовка `Operation-Reason` и не принимает персональный токен доступа, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /me/operations` показывает, какими операциями владеет вызывающий, а `GET /admin/v1/security/operations/{id}/holders` - какие роли владеют операцией.
 
-| Операция | Эндпоинты | Что разрешает |
-|---|---|---|
-| `identity.read` | `GET /admin/v1/identity/partners`<br>`GET /admin/v1/identity/partners/{code}`<br>`GET /admin/v1/identity/grants`<br>`GET /admin/v1/identity/subjects/{subject}/authorities` | Просмотр партнёров, выдач областей данных и того, что разрешено субъекту. |
-| `identity.operate` | в этом выпуске нет | Операций пока нет; уровень зарезервирован, чтобы выдачи для этой области не менялись между выпусками. |
-| `identity.privileged` | `POST /admin/v1/identity/partners`<br>`PUT /admin/v1/identity/partners/{code}`<br>`POST /admin/v1/identity/partners/{code}/suspend`<br>`POST /admin/v1/identity/partners/{code}/activate`<br>`POST /admin/v1/identity/grants`<br>`POST /admin/v1/identity/grants/{id}/revoke` | Подключение, изменение, приостановка и возобновление партнёров, выдача и отзыв областей данных. |
+| Операция | Чувствительность | Эндпоинты | Что разрешает |
+|---|---|---|---|
+| `identity.partner.read` | `READ` | `GET /admin/v1/identity/partners`<br>`GET /admin/v1/identity/partners/{code}` | Просмотр зарегистрированных партнёров: код, название, статус, идентификаторы сертификатов и роли. |
+| `identity.partner.onboard` | `PRIVILEGED` | `POST /admin/v1/identity/partners` | Подключить партнёра. |
+| `identity.partner.replace` | `PRIVILEGED` | `PUT /admin/v1/identity/partners/{code}` | Заменить название, идентификаторы сертификатов и роли партнёра. |
+| `identity.partner.suspend` | `PRIVILEGED` | `POST /admin/v1/identity/partners/{code}/suspend` | Приостановить партнёра, чтобы он больше не мог аутентифицироваться. |
+| `identity.partner.activate` | `PRIVILEGED` | `POST /admin/v1/identity/partners/{code}/activate` | Возобновить приостановленного партнёра. |
+| `identity.grant.read` | `READ` | `GET /admin/v1/identity/grants` | Просмотр выдач областей данных субъектам. |
+| `identity.grant.create` | `PRIVILEGED` | `POST /admin/v1/identity/grants` | Выдать субъекту область данных, при необходимости до срока. |
+| `identity.grant.revoke` | `PRIVILEGED` | `POST /admin/v1/identity/grants/{id}/revoke` | Отозвать выдачу области данных субъекту, сохранив её историю. |
+| `identity.authority.read` | `READ` | `GET /admin/v1/identity/subjects/{subject}/authorities` | Просмотр того, на что субъект имеет право сейчас: роли, атрибуты и действующие выдачи. |
+| `identity.source.read` | `READ` | `GET /admin/v1/identity/sources` | Просмотр источников идентичности: их каналов, количества пользователей по статусам и собственного состояния каждого канала, например водяной отметки или последней синхронизации. |
 
 `PUT .../partners/{code}` требует `If-Match` и отвечает `412` на устаревшую версию. Вызывающий типа `USER` ограничен субъектами своего арендатора (субъект другого арендатора - `404`); реестр партнёров арендатором не ограничен.
 
-Блок выдачи (имена ролей - собственные роли сервиса):
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[identity.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[identity.operate]": [ORDERS_ADMIN]
-      "[identity.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          identity.partner.read: ALL
+          identity.grant.read: ALL
+          identity.authority.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          identity.partner.onboard: ALL
+          identity.partner.replace: ALL
+          identity.partner.suspend: ALL
+          identity.partner.activate: ALL
+          identity.grant.create: ALL
+          identity.grant.revoke: ALL
+```
+
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
+
+```yaml
+ludwig:
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          identity.partner.read: ALL
+          identity.grant.read: ALL
+          identity.authority.read: ALL
+          identity.source.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          identity.partner.onboard: ALL
+          identity.partner.replace: ALL
+          identity.partner.suspend: ALL
+          identity.partner.activate: ALL
+          identity.grant.create: ALL
+          identity.grant.revoke: ALL
 ```
 
 ## Runbook
 
 | Симптом | Вероятная причина | Что делать |
 |---|---|---|
-| У нового пользователя нет ролей | Событие ещё не прочитано, потребитель застрял или неверный топик/группа | Проверить лаг и `silent` потребителя идентичности; `SELECT subject, status, source_timestamp FROM security_user WHERE subject = '<sub>';` |
-| Роль, отозванная в каталоге, ещё работает | Событие не прочитано или в пределах TTL кэша прав | Проверить лаг; подождать ≤ TTL |
-| Отозванная роль вернулась после повтора | Не должно происходить (проверка порядка) | Сравнить `source_timestamp` с `occurredAt` события; сообщить об ошибке |
-| `Discarding unparseable user event` | Изменение схемы провайдера сломало разбор | Исправить разбор; попросить провайдера переопубликовать затронутых пользователей |
-| Записи в `oidc.users.dlt` | Применение многократно падало (БД недоступна, ограничение) | Устранить причину; переиграть dead letter в топик (применение идемпотентно) |
+| У нового пользователя нет ролей | Изменение ещё не доставлено, или сопоставление ролей источника их отбрасывает | Проверьте канал (`GET /admin/v1/identity/sources`); `SELECT id, source_system, status, source_timestamp FROM security_user WHERE id = '<sub>';`; проверьте `role-mapping` и `unmapped-roles` |
+| Роль, отозванная у провайдера, ещё работает | Изменение не доставлено, или в пределах TTL кэша прав | Проверьте канал; подождите ≤ TTL |
+| Отозванная роль вернулась после повтора | Не должно происходить (защита порядка) | Сравните `source_timestamp` с `occurredAt` изменения; сообщите об ошибке |
+| Учтено `foreign-source` | Два источника выдают один и тот же субъект | Исправьте конфигурацию провайдера; проекция никогда не объединяет субъекты |
+| Обход прерван | Перечисление было пустым или усечённым, либо это реальное массовое увольнение | Проверьте провайдера; для реального увольнения поднимите `max-disable-ratio` на один запуск |
 | Выдача не действует | Истекла (`expires_at`), не тот ресурс/действие или `grants-enabled=false` | `SELECT * FROM security_grant WHERE subject = '<sub>';` |
-| Партнёр отклонён | Нет строки `security_partner`, приостановлен или изменился идентификатор сертификата | Обновить строку (статус, идентификаторы) |
+| Партнёр отклонён | Нет строки `security_partner`, приостановлен или сменился идентификатор сертификата | Обновите строку (статус, идентификаторы) |
 
 ## Тестирование
 
-`IdentityProjectionServiceTest` (применение, порядок, удаление как статус, очистка контактов) и
-`IdentityKafkaOrderingTest`.
-
-**Известный пробел:** нет интеграционного теста на реальных PostgreSQL и Kafka для проекции, SPI и changelog;
-сервисы-потребители покрывают это косвенно.
+`IdentityProjectionServiceTest` (применение, порядок, владение, удаление как статус, очистка контактов),
+`RoleMappingTest`, `IdentitySourceValidationTest`, `RemovedIdentityKeysTest`, `IdentityMetricsTest`, а против
+PostgreSQL - `IdentitySweepIntegrationTest` (отключение множеством, порог, изоляция источников, восстановление) и
+`IdentityAdminIntegrationTest` (область `identity`, список источников).
 
 ## Проектные решения
 
-- **Проекция, а не удалённый вызов или claim-ы токена**: локальные join-ы, нет чужой доступности на горячем пути,
-  отзыв за секунды.
-- **Полные наборы ролей и порядок по `occurredAt`**: повторы сходятся и никогда не выдают права повторно.
-- **По умолчанию хранится только нужное для авторизации**; контакты - по выбору.
-- **Роли сервисов - в конфигурации**, проверяются вместе с кодом.
-- **Listener читает `String` payload и разбирает сам**: неразбираемые payload логируются и коммитятся; ошибки
-  применения пробрасываются, повторяются с backoff и уходят в dead letter (применение идемпотентно). Фабрика
-  контейнеров - из билдера messaging; listener не объявляет `Acknowledgment`.
+- **Проекция, а не удалённый вызов или claims токена**: локальные соединения, никакой доступности третьей стороны на
+  горячем пути, отзыв за секунды.
+- **Один путь записи, много каналов**: порядок, устаревание, владение, сопоставление ролей, политика контактов и
+  вытеснение живут в `IdentityProjection`, поэтому каждый провайдер получает их одинаково, а новый провайдер - это
+  канал, а не форк.
+- **Полные наборы ролей и упорядочивание по `occurredAt`**: повторы сходятся и никогда не выдают права заново.
+- **Обходы исправляют, порог защищает**: у одного потока событий нет пути исправления; одно перечисление может
+  ошибаться.
+- **Субъект принадлежит одному источнику**: молчаливое объединение субъектов двух провайдеров позволило бы одному
+  человеку получить роли другого.
+- **По умолчанию хранится только то, что нужно авторизации**; контакты - по выбору.
+- **Роли сервисов в конфигурации**, проверяются вместе с кодом.

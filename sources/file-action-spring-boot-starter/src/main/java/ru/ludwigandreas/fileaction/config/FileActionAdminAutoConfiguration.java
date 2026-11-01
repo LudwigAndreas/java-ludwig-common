@@ -12,15 +12,15 @@ import ru.ludwigandreas.fileaction.admin.web.FileActionAdminController;
 import ru.ludwigandreas.fileaction.engine.FileActionService;
 import ru.ludwigandreas.fileaction.repository.FileActionSubmissionRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 
 /**
  * The {@code fileactions} administrative area, registered only where the administrative surface exists.
  */
 @AutoConfiguration(after = {FileActionAutoConfiguration.class, FileActionPersistenceAutoConfiguration.class},
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, FileActionService.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, FileActionService.class})
 public class FileActionAdminAutoConfiguration {
 
     @Bean

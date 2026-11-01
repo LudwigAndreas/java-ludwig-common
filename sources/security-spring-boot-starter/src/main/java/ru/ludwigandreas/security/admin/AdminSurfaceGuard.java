@@ -4,7 +4,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -13,6 +12,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationCatalog;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.RequiresAuthentication;
+import ru.ludwigandreas.security.operation.RequiresOperation;
+import ru.ludwigandreas.security.operation.Surface;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 
 /**
@@ -23,24 +28,23 @@ import ru.ludwigandreas.security.principal.LudwigPrincipal;
  * chain is in place - including one that permits {@code /admin/**} anonymously. Its refusals are thrown, so they are
  * rendered by web-core's one problem pipeline with the same types every other endpoint uses.
  *
- * <p>In order, it refuses (the first four by {@link AdminCallerPolicy}, the next two by
- * {@link AdminAccessEvaluator#authorize(Authentication, LudwigPrincipal, AdminOperation, String, Object)}, both shared
- * with gRPC):
+ * <p>In order, it refuses (the first four by {@link AdminCallerPolicy}, the next ones by
+ * {@link OperationEvaluator}, both shared with gRPC):
  *
  * <ol>
  *   <li>an unauthenticated caller, {@code 401};</li>
  *   <li>a partner, {@code 403} - an external organization is never an administrator of this service;</li>
- *   <li>a personal access token, {@code 403} with the credential-not-permitted type, unless the deployment opened
- *       the surface to them;</li>
+ *   <li>a personal access token, {@code 403} with the credential-not-permitted type, unless
+ *       {@code ludwig.security.operations.allow-personal-access-tokens} opened the surface to them;</li>
  *   <li>a person ({@code USER}) whose validated token names none of {@code ludwig.admin.human-callers.required-via}
  *       as its acting party, when that list is set, {@code 403} - audited as a denial;</li>
  *   <li>a handler declaring an operation the caller does not hold, {@code 403};</li>
- *   <li>a privileged operation without a stated reason, {@code 400} - after the grant check, so that the
- *       requirement reveals nothing to a caller who could not perform the operation anyway;</li>
- *   <li>an {@link AdminObject} outside the caller's data scope, where the area and tier are scoped: {@code 403}, or
- *       on a read the area's not-found {@code 404};</li>
- *   <li>a handler declaring neither an operation nor {@link AdminAuthenticated}, {@code 403} - a forgotten
- *       annotation fails closed.</li>
+ *   <li>a {@code PRIVILEGED} operation without a stated {@code Operation-Reason}, {@code 400} - after the grant
+ *       check, so that the requirement reveals nothing to a caller who could not perform the operation anyway;</li>
+ *   <li>an {@link AdminObject} outside the caller's scope, where that scope confines objects: {@code 403}, or for a
+ *       {@code READ} operation the area's not-found {@code 404};</li>
+ *   <li>a handler declaring neither an administrative operation nor {@link RequiresAuthentication}, {@code 403} - a
+ *       forgotten annotation fails closed.</li>
  * </ol>
  *
  * <p>A call whose operation requires four-eyes approval is then held rather than executed, answered {@code 202}
@@ -54,59 +58,31 @@ public class AdminSurfaceGuard implements HandlerInterceptor {
     /** The path pattern the guard is registered for. */
     public static final String PATH_PATTERN = "/admin/**";
 
-    private final AdminOperationCatalog catalog;
-    private final AdminAccessEvaluator evaluator;
+    private final OperationCatalog catalog;
+    private final OperationEvaluator evaluator;
     private final AdminCallerPolicy callers;
     private final AdminApprovals approvals;
 
     /**
-     * Creates the guard with no acting party required of people.
+     * Creates the guard with no four-eyes approval.
      *
-     * @param catalog                   the declared operations
-     * @param evaluator                 the grant check
-     * @param allowPersonalAccessTokens whether a PAT-credentialed caller may reach the surface
+     * @param catalog   the declared operations
+     * @param evaluator the operation evaluation every surface shares
+     * @param callers   who may use the surface at all
      */
-    public AdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator,
-                             boolean allowPersonalAccessTokens) {
-        this(catalog, evaluator, allowPersonalAccessTokens, Set.of());
+    public AdminSurfaceGuard(OperationCatalog catalog, OperationEvaluator evaluator, AdminCallerPolicy callers) {
+        this(catalog, evaluator, callers, null);
     }
 
     /**
      * Creates the guard.
      *
-     * @param catalog                   the declared operations
-     * @param evaluator                 the grant check
-     * @param allowPersonalAccessTokens whether a PAT-credentialed caller may reach the surface
-     * @param requiredVia               acting parties a person must come through; empty requires none
-     */
-    public AdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator,
-                             boolean allowPersonalAccessTokens, Set<String> requiredVia) {
-        this(catalog, evaluator, allowPersonalAccessTokens, requiredVia, null);
-    }
-
-    /**
-     * Creates the guard with four-eyes approval.
-     *
-     * @param catalog                   the declared operations
-     * @param evaluator                 the grant check
-     * @param allowPersonalAccessTokens whether a PAT-credentialed caller may reach the surface
-     * @param requiredVia               acting parties a person must come through; empty requires none
-     * @param approvals                 holds calls whose operation requires approval, or null for none
-     */
-    public AdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator,
-                             boolean allowPersonalAccessTokens, Set<String> requiredVia, AdminApprovals approvals) {
-        this(catalog, evaluator, new AdminCallerPolicy(evaluator, allowPersonalAccessTokens, requiredVia), approvals);
-    }
-
-    /**
-     * Creates the guard over a shared caller policy, the one gRPC administrative methods are admitted by too.
-     *
      * @param catalog   the declared operations
-     * @param evaluator the grant check
-     * @param callers   who may use the surface at all
+     * @param evaluator the operation evaluation every surface shares
+     * @param callers   who may use the surface at all, the one gRPC administrative methods are admitted by too
      * @param approvals holds calls whose operation requires approval, or null for none
      */
-    public AdminSurfaceGuard(AdminOperationCatalog catalog, AdminAccessEvaluator evaluator, AdminCallerPolicy callers,
+    public AdminSurfaceGuard(OperationCatalog catalog, OperationEvaluator evaluator, AdminCallerPolicy callers,
                              AdminApprovals approvals) {
         this.catalog = catalog;
         this.evaluator = evaluator;
@@ -134,26 +110,27 @@ public class AdminSurfaceGuard implements HandlerInterceptor {
             return true;
         }
         refuseUnsupportedQueryOptions(request);
-        AdminAccess access = method.getMethodAnnotation(AdminAccess.class);
+        RequiresOperation access = method.getMethodAnnotation(RequiresOperation.class);
         if (access == null) {
-            if (method.hasMethodAnnotation(AdminAuthenticated.class)) {
+            if (method.hasMethodAnnotation(RequiresAuthentication.class)) {
                 return true;
             }
-            log.error("Refused {} {}: handler {} is under /admin/ but declares neither @AdminAccess nor"
-                            + " @AdminAuthenticated",
+            log.error("Refused {} {}: handler {} is under /admin/ but declares neither @RequiresOperation nor"
+                            + " @RequiresAuthentication",
                     request.getMethod(), request.getRequestURI(), method.getShortLogMessage());
             throw new AccessDeniedException("Administrative handler declares no operation");
         }
-        AdminOperation operation = catalog.find(access.value())
+        Operation operation = catalog.find(access.value())
+                .filter(found -> found.surface() == Surface.ADMIN)
                 .orElseThrow(() -> new AccessDeniedException("Uncatalogued administrative operation"));
-        AdminInvocation.Scope scope = evaluator.authorize(authentication, principal, operation,
-                request.getHeader(AdminInvocation.REASON_HEADER), method);
+        AdminInvocation.Scope scope = AdminInvocation.open(evaluator.authorize(authentication, principal, operation,
+                request.getHeader(OperationEvaluator.REASON_HEADER), method));
         return admit(request, response, authentication, method, operation, scope);
     }
 
     /** Object scope and four-eyes approval, after the grant: the call proceeds with its invocation bound, or not. */
     private boolean admit(HttpServletRequest request, HttpServletResponse response, Authentication authentication,
-                          HandlerMethod method, AdminOperation operation, AdminInvocation.Scope scope) {
+                          HandlerMethod method, Operation operation, AdminInvocation.Scope scope) {
         LudwigPrincipal principal = scope.invocation().principal();
         try {
             evaluator.authorizeObject(authentication, principal, method, operation, pathVariables(request));

@@ -27,15 +27,17 @@ import ru.ludwigandreas.archrules.support.ConventionPredicates;
  * <h2>The four rules</h2>
  *
  * <ol>
- *   <li><b>A handler under {@code /admin/} declares an operation.</b> {@code @AdminAccess} names the operation;
- *       {@code @AdminAuthenticated} marks the rare handler that performs none. A handler with neither is also
- *       refused at runtime - this rule makes it a build failure rather than a {@code 403} somebody reports.</li>
- *   <li><b>No second gate.</b> An administrative handler that also carries {@code @PreAuthorize}, {@code @Secured}
- *       or {@code @RolesAllowed} - on the method or on its class - has two places its authorization is decided,
- *       and the second one names a role, which is exactly what a library must not do: roles belong to the
- *       consuming service and are granted in {@code ludwig.admin.grants}.</li>
- *   <li><b>Mapped under {@code /admin/v1/}.</b> The guard is registered for {@code /admin/**}; an annotated
- *       handler mapped elsewhere is never guarded, so its annotation would be decoration.</li>
+ *   <li><b>A handler under {@code /admin/} declares an operation.</b> {@code @RequiresOperation} names the
+ *       operation; {@code @RequiresAuthentication} marks the rare handler that performs none. A handler with neither
+ *       is also refused at runtime - this rule makes it a build failure rather than a {@code 403} somebody
+ *       reports.</li>
+ *   <li><b>No second gate.</b> A handler declaring an operation - on any surface - that also carries
+ *       {@code @PreAuthorize}, {@code @Secured} or {@code @RolesAllowed}, on the method or on its class, has two
+ *       places its authorization is decided, and the second one names a role, which code must never do: roles are
+ *       defined only in the service's {@code ludwig.security.roles}.</li>
+ *   <li><b>Mapped under {@code /admin/v1/}.</b> Everything under {@code /admin/} is versioned, as the guard and every
+ *       administrative client expect. Whether an operation's surface agrees with its handler's path is a fact of the
+ *       catalog, so the security starter checks it at startup.</li>
  *   <li><b>No repository behind an administrative controller.</b> The module service owns the transaction, the
  *       tenant predicate and the audit record, which is where the administrative change has to be recorded.</li>
  * </ol>
@@ -52,22 +54,22 @@ import ru.ludwigandreas.archrules.support.ConventionPredicates;
  * <ol>
  *   <li><b>That an operation id is catalogued.</b> The catalog is assembled from beans at runtime; the security
  *       starter fails startup on an uncatalogued id instead.</li>
- *   <li><b>That an operation's tier matches what it does.</b> A judgement, reviewed against each module's README
- *       table of operations.</li>
+ *   <li><b>That an operation's sensitivity matches what it does, and its surface its path.</b> The first is a
+ *       judgement, reviewed against each module's README table of operations; the second is checked at startup.</li>
  *   <li><b>That a module's endpoints are absent without the security starter.</b> A property of the assembled
  *       context, tested by each declaring module's auto-configuration test.</li>
  * </ol>
  */
 public final class AdminRules implements ArchitectureRuleSet {
 
-    /** A handler under {@code /admin/} carries {@code @AdminAccess} or {@code @AdminAuthenticated}. */
+    /** A handler under {@code /admin/} carries {@code @RequiresOperation} or {@code @RequiresAuthentication}. */
     public static final RuleId HANDLER_DECLARES_AN_OPERATION =
             RuleId.of(RuleGroup.ADMIN, "handler-declares-an-operation");
 
-    /** An administrative handler and its class carry no other authorization annotation. */
+    /** A handler declaring an operation, and its class, carry no other authorization annotation. */
     public static final RuleId NO_SECOND_GATE = RuleId.of(RuleGroup.ADMIN, "no-second-gate");
 
-    /** An administrative handler is mapped under {@code /admin/v1/}. */
+    /** A handler under {@code /admin/} is mapped under {@code /admin/v1/}. */
     public static final RuleId MAPPED_UNDER_THE_VERSIONED_PREFIX =
             RuleId.of(RuleGroup.ADMIN, "mapped-under-the-versioned-prefix");
 
@@ -85,9 +87,9 @@ public final class AdminRules implements ArchitectureRuleSet {
     private static final String ADMIN_OBJECT = "ru.ludwigandreas.security.admin.AdminObject";
     private static final String PATH_VARIABLE = "org.springframework.web.bind.annotation.PathVariable";
 
-    private static final String ADMIN_ACCESS = "ru.ludwigandreas.security.admin.AdminAccess";
-    private static final String ADMIN_AUTHENTICATED = "ru.ludwigandreas.security.admin.AdminAuthenticated";
-    private static final List<String> ADMIN_ANNOTATIONS = List.of(ADMIN_ACCESS, ADMIN_AUTHENTICATED);
+    private static final String REQUIRES_OPERATION = "ru.ludwigandreas.security.operation.RequiresOperation";
+    private static final String REQUIRES_AUTHENTICATION = "ru.ludwigandreas.security.operation.RequiresAuthentication";
+    private static final List<String> OPERATION_ANNOTATIONS = List.of(REQUIRES_OPERATION, REQUIRES_AUTHENTICATION);
 
     private static final String ADMIN_PREFIX = "/admin/";
     private static final String VERSIONED_PREFIX = "/admin/v1/";
@@ -112,17 +114,16 @@ public final class AdminRules implements ArchitectureRuleSet {
     public List<ArchitectureRule> rules(RuleContext context) {
         return List.of(
                 ArchitectureRule.of(HANDLER_DECLARES_AN_OPERATION, handlerDeclaresAnOperation(),
-                        "Annotate the handler with @AdminAccess(<Module>AdminOperations.<TIER>), naming the operation"
-                                + " it performs, or with @AdminAuthenticated if it performs none. A handler under"
-                                + " /admin/ with neither is refused by the surface guard at runtime."),
+                        "Annotate the handler with @RequiresOperation(<Module>AdminOperations.<OPERATION>), naming the"
+                                + " operation it performs, or with @RequiresAuthentication if it performs none. A"
+                                + " handler under /admin/ with neither is refused by the surface guard at runtime."),
                 ArchitectureRule.of(NO_SECOND_GATE, noSecondGate(),
-                        "Remove the role or authority check. Which of a service's roles may perform an"
-                                + " administrative operation is decided by that service in ludwig.admin.grants;"
-                                + " a library naming a role takes the decision away from it, and two gates on one"
-                                + " endpoint are two places to change it."),
+                        "Remove the role or authority check. Which of a service's roles may perform an operation is"
+                                + " decided by that service in ludwig.security.roles; code naming a role takes the"
+                                + " decision away from it, and two gates on one endpoint are two places to change it."),
                 ArchitectureRule.of(MAPPED_UNDER_THE_VERSIONED_PREFIX, mappedUnderTheVersionedPrefix(),
-                        "Map the handler under /admin/v1/. The administrative surface guard is registered for"
-                                + " /admin/**, so an annotated handler mapped elsewhere is never guarded."),
+                        "Map the handler under /admin/v1/. Everything under /admin/ is versioned, as the surface"
+                                + " guard and every administrative client expect."),
                 ArchitectureRule.of(CONTROLLER_IS_A_THIN_ADAPTER, controllerIsAThinAdapter(context),
                         "Delegate to the module's service instead of reading a repository from the controller."
                                 + " The service owns the transaction, the tenant predicate and the audit record of"
@@ -160,10 +161,10 @@ public final class AdminRules implements ArchitectureRuleSet {
                         for (JavaMethod method : item.getMethods()) {
                             Optional<String> path = handlerPath(item, method);
                             if (path.isPresent() && path.get().startsWith(ADMIN_PREFIX)
-                                    && !carriesAny(method, ADMIN_ANNOTATIONS)) {
+                                    && !carriesAny(method, OPERATION_ANNOTATIONS)) {
                                 events.add(SimpleConditionEvent.violated(item, String.format(
-                                        "%s is mapped to %s and carries neither @AdminAccess nor"
-                                                + " @AdminAuthenticated in %s",
+                                        "%s is mapped to %s and carries neither @RequiresOperation nor"
+                                                + " @RequiresAuthentication in %s",
                                         method.getFullName(), path.get(), item.getSourceCodeLocation())));
                             }
                         }
@@ -174,7 +175,7 @@ public final class AdminRules implements ArchitectureRuleSet {
 
     private static ArchRule noSecondGate() {
         return ArchRuleDefinition.classes()
-                .that(declaringAdministrativeHandlers())
+                .that(declaringOperations())
                 .should(new ArchCondition<JavaClass>("carry no second authorization annotation") {
                     @Override
                     public void check(JavaClass item, ConditionEvents events) {
@@ -183,7 +184,7 @@ public final class AdminRules implements ArchitectureRuleSet {
                                 events.add(violation(item, item.getName(), gate));
                             }
                             item.getMethods().stream()
-                                    .filter(method -> carriesAny(method, ADMIN_ANNOTATIONS))
+                                    .filter(method -> carriesAny(method, OPERATION_ANNOTATIONS))
                                     .filter(method -> method.isAnnotatedWith(gate) || method.isMetaAnnotatedWith(gate))
                                     .forEach(method -> events.add(violation(item, method.getFullName(), gate)));
                         }
@@ -191,25 +192,22 @@ public final class AdminRules implements ArchitectureRuleSet {
 
                     private ConditionEvent violation(JavaClass item, String where, String gate) {
                         return SimpleConditionEvent.violated(item, String.format(
-                                "%s is an administrative handler or its controller and is also annotated with @%s"
-                                        + " in %s", where, gate, item.getSourceCodeLocation()));
+                                "%s declares an operation, or is the controller of one that does, and is also"
+                                        + " annotated with @%s in %s", where, gate, item.getSourceCodeLocation()));
                     }
                 })
-                .as("An administrative handler has exactly one gate");
+                .as("A handler declaring an operation has exactly one gate");
     }
 
     private static ArchRule mappedUnderTheVersionedPrefix() {
         return ArchRuleDefinition.classes()
-                .that(declaringAdministrativeHandlers())
-                .should(new ArchCondition<JavaClass>("map every administrative handler under /admin/v1/") {
+                .should(new ArchCondition<JavaClass>("map every handler under /admin/ under /admin/v1/") {
                     @Override
                     public void check(JavaClass item, ConditionEvents events) {
                         for (JavaMethod method : item.getMethods()) {
-                            if (!carriesAny(method, ADMIN_ANNOTATIONS)) {
-                                continue;
-                            }
                             Optional<String> path = handlerPath(item, method);
-                            if (path.isPresent() && !path.get().startsWith(VERSIONED_PREFIX)) {
+                            if (path.isPresent() && path.get().startsWith(ADMIN_PREFIX)
+                                    && !path.get().startsWith(VERSIONED_PREFIX)) {
                                 events.add(SimpleConditionEvent.violated(item, String.format(
                                         "%s is an administrative handler mapped to %s, outside /admin/v1/, in %s",
                                         method.getFullName(), path.get(), item.getSourceCodeLocation())));
@@ -217,7 +215,7 @@ public final class AdminRules implements ArchitectureRuleSet {
                         }
                     }
                 })
-                .as("An administrative handler is mapped under /admin/v1/");
+                .as("A handler under /admin/ is mapped under /admin/v1/");
     }
 
     private static ArchRule controllerIsAThinAdapter(RuleContext context) {
@@ -238,9 +236,18 @@ public final class AdminRules implements ArchitectureRuleSet {
         return declaringAdministrativeHandlers();
     }
 
+    /** Classes with a handler under {@code /admin/} - administrative by where they answer, whatever they declare. */
     private static DescribedPredicate<JavaClass> declaringAdministrativeHandlers() {
         return DescribedPredicate.describe("classes declaring administrative handlers",
-                javaClass -> javaClass.getMethods().stream().anyMatch(method -> carriesAny(method, ADMIN_ANNOTATIONS)));
+                javaClass -> javaClass.getMethods().stream().anyMatch(method -> handlerPath(javaClass, method)
+                        .filter(path -> path.startsWith(ADMIN_PREFIX)).isPresent()));
+    }
+
+    /** Classes with a method declaring an operation, on any surface. */
+    private static DescribedPredicate<JavaClass> declaringOperations() {
+        return DescribedPredicate.describe("classes declaring operations",
+                javaClass -> javaClass.getMethods().stream()
+                        .anyMatch(method -> carriesAny(method, OPERATION_ANNOTATIONS)));
     }
 
     private static boolean carriesAny(JavaMethod method, List<String> annotations) {

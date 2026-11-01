@@ -15,7 +15,7 @@ import ru.ludwigandreas.export.api.ReportDefinition;
  *
  * <p>The default implementation returns no predicate, which is correct for a service whose reports
  * are not row-scoped and is <em>only</em> correct for such a service. A service with data scopes
- * contributes an implementation backed by {@code DataScopeProvider}; the startup validator has no way
+ * contributes an implementation backed by {@code OperationAuthority}; the startup validator has no way
  * to tell the two apart, so the decision is deliberately a bean somebody has to write rather than a
  * property somebody could leave at its default.
  */

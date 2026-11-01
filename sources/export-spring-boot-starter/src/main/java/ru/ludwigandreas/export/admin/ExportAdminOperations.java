@@ -2,28 +2,30 @@ package ru.ludwigandreas.export.admin;
 
 import java.util.Collection;
 import java.util.List;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.Sensitivity;
 
 /**
- * The {@code exports} area's administrative operations.
+ * The {@code export} administrative area: every requester's runs, cancelling one, and every report subscription.
  */
-public final class ExportAdminOperations implements AdminOperationContributor {
+public final class ExportAdminOperations implements OperationContributor {
 
-    /** See every requester's runs and every subscription, without any output. */
-    public static final String READ = "exports.read";
+    /** See every requester's runs, without any output. */
+    public static final String RUN_READ = "export.run.read";
 
     /** Cancel anybody's run. */
-    public static final String OPERATE = "exports.operate";
+    public static final String RUN_CANCEL = "export.run.cancel";
 
-    /** Reserved; guards no endpoint yet. */
-    public static final String PRIVILEGED = "exports.privileged";
+    /** See every report subscription. */
+    public static final String SUBSCRIPTION_READ = "export.subscription.read";
 
     private static final String KEY = "ludwig.export.admin.";
 
     @Override
-    public Collection<AdminOperation> adminOperations() {
-        return List.of(AdminOperation.of(READ, KEY + READ), AdminOperation.of(OPERATE, KEY + OPERATE),
-                AdminOperation.of(PRIVILEGED, KEY + PRIVILEGED));
+    public Collection<Operation> operations() {
+        return List.of(Operation.admin(RUN_READ, Sensitivity.READ, KEY + RUN_READ),
+                Operation.admin(RUN_CANCEL, Sensitivity.CHANGE, KEY + RUN_CANCEL),
+                Operation.admin(SUBSCRIPTION_READ, Sensitivity.READ, KEY + SUBSCRIPTION_READ));
     }
 }

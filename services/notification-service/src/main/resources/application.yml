@@ -450,33 +450,6 @@ ludwig:
         destination: platform.notifications.events
         event-types: NotificationDelivered,NotificationFailed,NotificationSuppressed
 
-  # --- administrative surface (/admin/v1/) ------------------------------------------------------
-  # Which of this service's roles may perform each administrative operation of the starters it uses.
-  # The roles come from the authority resolver (the identity projection), never from token claims.
-  # Every tier goes to NOTIFICATION_ADMIN and the read tiers also to NOTIFICATION_SUPPORT. A key naming
-  # an area this service does not have fails startup, so the list is exactly the areas present: jobs
-  # (job-core), outbox, identity and audit. Bracketed because the operation ids contain a dot.
-  admin:
-    grants:
-      "[jobs.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      "[jobs.operate]": [NOTIFICATION_ADMIN]
-      "[jobs.privileged]": [NOTIFICATION_ADMIN]
-      "[outbox.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      "[outbox.operate]": [NOTIFICATION_ADMIN]
-      "[outbox.privileged]": [NOTIFICATION_ADMIN]
-      "[identity.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      "[identity.operate]": [NOTIFICATION_ADMIN]
-      "[identity.privileged]": [NOTIFICATION_ADMIN]
-      "[audit.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      "[audit.operate]": [NOTIFICATION_ADMIN]
-      "[audit.privileged]": [NOTIFICATION_ADMIN]
-      "[replicas.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      "[replicas.operate]": [NOTIFICATION_ADMIN]
-      "[replicas.privileged]": [NOTIFICATION_ADMIN]
-      "[caches.read]": [NOTIFICATION_ADMIN, NOTIFICATION_SUPPORT]
-      "[caches.operate]": [NOTIFICATION_ADMIN]
-      "[caches.privileged]": [NOTIFICATION_ADMIN]
-
   # --- security ----------------------------------------------------------------------------------
   security:
     jwt:
@@ -499,29 +472,59 @@ ludwig:
       require-resolver: true
       cache:
         ttl: 60s
-    data:
-      # Anything without a policy below is denied. The only safe default.
-      default-access: NONE
-      policies:
-        notification-delivery:
-          read:
-            ROLE_NOTIFICATION_ADMIN: ALL
-            # Support sees its own tenant's delivery history and nothing else.
-            ROLE_NOTIFICATION_SUPPORT: TENANT
-          write:
-            ROLE_NOTIFICATION_ADMIN: ALL
-            ROLE_NOTIFICATION_SUPPORT: TENANT
-        # The request a caller submitted, readable through GET /api/v1/notifications/{id} - the
-        # resource the 202 points at. Without this policy the default above denies it, and the
-        # location header would be a promise nobody could follow.
-        notification-request:
-          read:
-            ROLE_NOTIFICATION_ADMIN: ALL
-            ROLE_NOTIFICATION_SUPPORT: TENANT
-            # A sending service reads back only what it submitted itself. Narrower than TENANT on
-            # purpose: a peer service polling its own request has no business seeing what other
-            # services in the same tenant are sending, and the request body names recipients.
-            ROLE_NOTIFICATION_SENDER: OWN
+    # Which of this service's roles hold which operation, and over which rows. The only place a role
+    # means anything: code names operations, never roles. The roles come from the authority resolver
+    # (the identity projection), never from token claims. An operation no role lists is refused to
+    # everyone, and an entry naming an operation this service does not catalogue fails startup, so the
+    # administrative entries are exactly the areas present: jobs, replicas and caches (job-core),
+    # outbox, identity, audit, hot reload and the security area itself.
+    roles:
+      NOTIFICATION_SUPPORT:
+        operations:
+          # Support sees its own tenant's delivery history and requests, and cancels within it.
+          notification.delivery.read: TENANT
+          notification.content.read: TENANT
+          notification.delivery.cancel: TENANT
+          notification.request.read: TENANT
+          job.definition.read: ALL
+          job.lease.read: ALL
+          replica.instance.read: ALL
+          replica.command.read: ALL
+          cache.definition.read: ALL
+          outbox.message.read: ALL
+          identity.partner.read: ALL
+          identity.grant.read: ALL
+          identity.authority.read: ALL
+          audit.event.read: ALL
+          hotreload.source.read: ALL
+          security.operation.read: ALL
+      NOTIFICATION_ADMIN:
+        includes: [NOTIFICATION_SUPPORT]
+        operations:
+          notification.delivery.read: ALL
+          notification.content.read: ALL
+          notification.delivery.retry: ALL
+          notification.delivery.cancel: ALL
+          notification.request.read: ALL
+          job.definition.run: ALL
+          job.lease.release: ALL
+          cache.performance.evict: ALL
+          cache.security.evict: ALL
+          outbox.message.retry: ALL
+          outbox.message.discard: ALL
+          identity.partner.onboard: ALL
+          identity.partner.replace: ALL
+          identity.partner.suspend: ALL
+          identity.partner.activate: ALL
+          identity.grant.create: ALL
+          identity.grant.revoke: ALL
+          hotreload.source.reload: ALL
+      NOTIFICATION_SENDER:
+        operations:
+          # A sending service reads back only what it submitted itself. Narrower than TENANT on
+          # purpose: a peer service polling its own request has no business seeing what other
+          # services in the same tenant are sending, and the request body names recipients.
+          notification.request.read: OWN
 
   # --- identity projection -----------------------------------------------------------------------
   identity:
@@ -533,6 +536,10 @@ ludwig:
       # writes to people, so it is the one that projects them. Every other service leaves the flag off
       # and its security_user rows stay contact-free.
       enabled: true
+    # The one identity provider this service projects: the OIDC provider, whose role names are already the
+    # platform's, so nothing is mapped. Every feed names a declared source.
+    sources:
+      oidc: {}
     kafka:
       # OFF, like every other consumer here, because there is no broker. The projection's TABLES are
       # still created and still read: recipient resolution looks a user up in security_user whatever
@@ -543,8 +550,10 @@ ludwig:
       # RecipientDto accepts either - and every delivery path, preference and suppression rule works
       # identically for both.
       enabled: ${IDENTITY_PROJECTION_ENABLED:false}
-      topic: ${OIDC_USER_TOPIC:corp.identity.users}
       group-id: notification-service-identity-projection
+      subscriptions:
+        oidc:
+          topic: ${OIDC_USER_TOPIC:corp.identity.users}
     # Peer services calling this one, keyed by workload identity. In configuration rather than in a
     # table because which service may ask for a notification is part of the deployment topology.
     service-roles:

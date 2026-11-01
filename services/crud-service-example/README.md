@@ -384,30 +384,37 @@ the ones they watch. A provider can only ever widen access — denial is express
 granting, which is what keeps the empty configuration safe.
 
 `createdBy` needs no column of its own: db-core's auditing already fills it from the authenticated
-principal's subject, which is exactly what an `OWN` policy compares against. The policy itself is
-configuration (`ludwig.security.data.policies` in `application.yml`), so operations can read and change
-it during an incident without a release:
+principal's subject, which is exactly what an `OWN` scope compares against. The code declares three
+operations on `product` (`CatalogOperations`: `catalog.product.read`, `catalog.product.update`,
+`catalog.product.delete`); which role holds each, with what scope, is configuration
+(`ludwig.security.roles` in `application.yml`), so operations can read and change it during an incident
+without a release:
 
 ```yaml
-product:
-  read:
-    ROLE_CATALOG_ADMIN: ALL
-    ROLE_CATALOG_EDITOR: ALL
-    ROLE_CATALOG_PARTNER: PARTNER   # only rows filed under its own partner code
-  write:
-    ROLE_CATALOG_ADMIN: ALL
-    ROLE_CATALOG_EDITOR: OWN        # editors read everything, write only what they created
-    ROLE_CATALOG_PARTNER: PARTNER
-  delete:
-    ROLE_CATALOG_ADMIN: ALL
+CATALOG_READER:
+  operations:
+    catalog.product.read: ALL
+CATALOG_EDITOR:
+  includes: [CATALOG_READER]
+  operations:
+    catalog.product.update: OWN     # editors read everything, change only what they created
+CATALOG_PARTNER:
+  operations:
+    catalog.product.read: PARTNER   # only rows filed under its own partner code
+    catalog.product.update: PARTNER
+CATALOG_ADMIN:
+  operations:
+    catalog.product.read: ALL
+    catalog.product.update: ALL
+    catalog.product.delete: ALL
 ```
 
-Read and write scopes differ for the same role on purpose. Collapsing them into one "access" concept is
+Read and change scopes differ for the same role on purpose. Collapsing them into one "access" concept is
 what makes people grant the wider of the two.
 
-Misconfiguration is caught at startup, not on the first request that exercises it: a policy naming a
-resource with no mapping, a dimension the mapping does not bind, a misspelled grant (`OWNN`), or a
-resource listed as both unscoped and policed all fail the context. Try it — change `OWN` to `OWNN` in
+Misconfiguration is caught at startup, not on the first request that exercises it: an entry naming an
+operation the service does not have, a dimension the product mapping does not bind, a misspelled scope
+(`OWNN`), or an operation whose resource is listed as unscoped all fail the context. Try it — change `OWN` to `OWNN` in
 `application.yml` and the service refuses to start, quoting the offending key.
 
 Three details worth copying:

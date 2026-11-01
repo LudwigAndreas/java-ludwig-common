@@ -61,6 +61,8 @@
     <module>sources/security-spring-boot-starter</module>
     <module>sources/pat-spring-boot-starter</module>
     <module>sources/identity-projection-spring-boot-starter</module>
+    <module>sources/identity-source-kafka-spring-boot-starter</module>
+    <module>sources/identity-source-directory-spring-boot-starter</module>
     <module>sources/hot-reload-spring-boot-starter</module>
     <module>sources/web-core-spring-boot-starter</module>
     <module>sources/observability-spring-boot-starter</module>
@@ -808,6 +810,18 @@
                                       "code": "java\\.method\\.(removed|numberOfParametersChanged|parameterTypeChanged|returnTypeChanged)",
                                       "old": "method .* ru\\.ludwigandreas\\.messaging\\.db\\.admin\\.(service\\.MessagingAdminService::(<init>|consumers)|web\\.MessagingAdminController::consumers)\\(.*\\)",
                                       "justification": "REMOVED OR CHANGED IN THE NEXT MAJOR RELEASE WITHOUT A PRIOR DEPRECATION, BY THE OWNER'S EXPLICIT DECISION - change messaging-db-consumer-controls. The messaging admin area can pause, resume and move a database-log consumer: the service takes the service's local consumer groups and AdminAudit besides the LogStore, and consumers() returns ConsumerView (the position fields plus paused, pausedBy, pausedAt) - the JSON listing only gains fields. Migration: let the auto-configuration build the service, or pass the group supplier and AdminAudit."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.numberOfParametersChanged",
+                                      "old": "method .* ru\\.ludwigandreas\\.hotreload\\.config\\.(HotReloadAutoConfiguration::(hotReloadFileWatcherLifecycle|hotReloadTypedConfigFactory)|HotReloadVaultAutoConfiguration::(hotReloadVaultKvWatcherLifecycle|hotReloadSecretLeaseContainer)|HotReloadFreemarkerAutoConfiguration::hotReloadFreemarkerWatcherLifecycle)\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE, change replica-controls. The four @Bean methods that create reloadable sources take the ReloadableSourceRegistry they register them in, so the hotreload administrative area can reload a source on demand; hotReloadTypedConfigFactory takes the EnvironmentPropertySourceBridge so the bridge's listener is registered before any typed configuration's (a typed configuration created first rebound from the stale Environment). @Bean methods are called by Spring, not by services. Migration: a service overriding one of these beans by name adds the parameter or keeps its own bean."
+                                    },
+                                    {
+                                      "regex": true,
+                                      "code": "java\\.method\\.numberOfParametersChanged",
+                                      "old": "method .* ru\\.ludwigandreas\\.restclient\\.config\\.RestClientAuthAutoConfiguration::ludwigClientCredentialsAuthenticationProvider\\(.*\\)",
+                                      "justification": "CHANGED IN THE NEXT MAJOR RELEASE, change replica-controls. The client-credentials provider records each client's token cache in the new ClientTokenSources bean, so the restclient administrative area can reset a client's machine token on every replica. ClientCredentialsAuthenticationProvider keeps its four-argument constructor. Migration: none for a service; Spring supplies the new parameter."
                                     },
                                     {
                                       "regex": true,

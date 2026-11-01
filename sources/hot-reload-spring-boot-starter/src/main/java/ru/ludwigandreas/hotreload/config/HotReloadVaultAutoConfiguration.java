@@ -12,12 +12,15 @@ import org.springframework.vault.core.VaultKeyValueOperationsSupport.KeyValueBac
 import org.springframework.vault.core.VaultOperations;
 import org.springframework.vault.core.VaultTemplate;
 import org.springframework.vault.core.lease.SecretLeaseContainer;
+import ru.ludwigandreas.hotreload.core.ReloadOutcome;
+import ru.ludwigandreas.hotreload.core.ReloadableSourceRegistry;
 import ru.ludwigandreas.hotreload.core.SourceReloadCoordinator;
 import ru.ludwigandreas.hotreload.core.watch.PollingResourceWatcher;
 import ru.ludwigandreas.hotreload.secrets.VaultClientFactory;
 import ru.ludwigandreas.hotreload.secrets.VaultConnectionOptions;
 import ru.ludwigandreas.hotreload.secrets.VaultKvSecretSource;
 import ru.ludwigandreas.hotreload.secrets.VaultLeaseSecretBridge;
+import ru.ludwigandreas.hotreload.secrets.VaultLeaseSecretSource;
 
 import java.net.URI;
 import java.time.Duration;
@@ -72,13 +75,15 @@ public class HotReloadVaultAutoConfiguration {
     @ConditionalOnMissingBean(name = "hotReloadVaultKvWatcherLifecycle")
     public ResourceWatcherLifecycle hotReloadVaultKvWatcherLifecycle(HotReloadProperties properties,
                                                                        VaultOperations vaultOperations,
-                                                                       SourceReloadCoordinator coordinator) {
+                                                                       SourceReloadCoordinator coordinator,
+                                                                       ReloadableSourceRegistry registry) {
         List<VaultKvSecretSource> sources = properties.getVault().getSecrets().stream()
                 .filter(secret -> secret.getPath() != null && !secret.getPath().isBlank())
                 .map(secret -> new VaultKvSecretSource(vaultOperations, secret.getMount(), secret.getPath(),
                         secret.getKvVersion() == 1 ? KeyValueBackend.KV_1 : KeyValueBackend.KV_2,
                         secret.getKeyPrefix()))
                 .toList();
+        sources.forEach(source -> registry.register(ReloadableSourceRegistry.Kind.VAULT_KV, source, coordinator));
         PollingResourceWatcher watcher = new PollingResourceWatcher(sources, coordinator,
                 properties.getVault().getPollInterval(), Duration.ZERO);
         return new ResourceWatcherLifecycle(watcher);
@@ -89,7 +94,8 @@ public class HotReloadVaultAutoConfiguration {
     public SecretLeaseContainer hotReloadSecretLeaseContainer(VaultOperations vaultOperations,
                                                                  TaskScheduler hotReloadVaultTaskScheduler,
                                                                  HotReloadProperties properties,
-                                                                 SourceReloadCoordinator coordinator) {
+                                                                 SourceReloadCoordinator coordinator,
+                                                                 ReloadableSourceRegistry registry) {
         SecretLeaseContainer container = new SecretLeaseContainer(vaultOperations, hotReloadVaultTaskScheduler);
         VaultLeaseSecretBridge bridge = new VaultLeaseSecretBridge(container);
         for (HotReloadProperties.Vault.DynamicSecret dynamic : properties.getVault().getDynamicSecrets()) {
@@ -97,6 +103,11 @@ public class HotReloadVaultAutoConfiguration {
                 continue;
             }
             bridge.register(dynamic.getPath(), dynamic.isRotating(), dynamic.getKeyPrefix(), coordinator);
+            String path = dynamic.getPath();
+            // shortcut: a renewable (non-rotating) lease delivers nothing on rotate and reports UNCHANGED.
+            registry.register(new ReloadableSourceRegistry.Entry(VaultLeaseSecretSource.idFor(path),
+                    ReloadableSourceRegistry.Kind.VAULT_LEASE,
+                    () -> bridge.rotate(path).orElse(ReloadOutcome.UNCHANGED)));
         }
         return container;
     }

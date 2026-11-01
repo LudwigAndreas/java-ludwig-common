@@ -19,14 +19,11 @@ import ru.ludwigandreas.job.core.admin.service.ReplicaCommandViews.InstanceView;
 import ru.ludwigandreas.job.core.admin.service.ReplicaCommandViews.TargetView;
 import ru.ludwigandreas.job.core.control.ControlStore;
 import ru.ludwigandreas.job.core.control.ReplicaControl;
-import ru.ludwigandreas.security.admin.AdminAccessEvaluator;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminGrants;
 import ru.ludwigandreas.security.admin.AdminInvocation;
-import ru.ludwigandreas.security.admin.AdminOperation;
 import ru.ludwigandreas.security.admin.AdminOutcome;
-import ru.ludwigandreas.security.admin.AdminReasonRequiredException;
-import ru.ludwigandreas.security.admin.AdminTier;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.webcore.operation.OperationFailure;
 import ru.ludwigandreas.webcore.operation.OperationResponse;
@@ -36,7 +33,7 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
 /**
  * The {@code replicas} area: which replicas are live, submitting a control to all of them, and reading what each
  * answered. A submission is authorized by the control's own operation - evaluated after its arguments are bound and
- * validated, because the tier may depend on them - through the same grants and denial path as {@code @AdminAccess}.
+ * validated, because the operation may depend on them - through the same evaluation as {@code @RequiresOperation}.
  */
 public class ReplicaAdminService {
 
@@ -53,8 +50,7 @@ public class ReplicaAdminService {
     private final String self;
     private final Duration pollInterval;
     private final Duration ackTimeout;
-    private final AdminGrants grants;
-    private final AdminAccessEvaluator evaluator;
+    private final OperationEvaluator evaluator;
     private final AdminAudit audit;
     private final ObjectMapper json;
     private final Validator validator;
@@ -67,8 +63,7 @@ public class ReplicaAdminService {
      * @param self         this replica's owner id, heartbeated before a submission so it is always a target
      * @param pollInterval the replicas' poll interval; live means seen within three
      * @param ackTimeout   how long targets have to acknowledge
-     * @param grants       who holds which operation
-     * @param evaluator    publishes a denial exactly as {@code @AdminAccess} does
+     * @param evaluator    the operation evaluation every surface shares
      * @param audit        the administrative audit
      * @param json         binds arguments
      * @param validator    validates arguments, or null when no Jakarta validator is present
@@ -76,15 +71,14 @@ public class ReplicaAdminService {
     // SUPPRESS CHECKSTYLE ParameterNumber - collaborators and settings the auto-configuration supplies.
     @SuppressWarnings("checkstyle:ParameterNumber")
     public ReplicaAdminService(ControlStore store, Map<String, ReplicaControl<?>> controls, String self,
-                               Duration pollInterval, Duration ackTimeout, AdminGrants grants,
-                               AdminAccessEvaluator evaluator, AdminAudit audit, ObjectMapper json,
+                               Duration pollInterval, Duration ackTimeout,
+                               OperationEvaluator evaluator, AdminAudit audit, ObjectMapper json,
                                Validator validator) {
         this.store = store;
         this.controls = Map.copyOf(controls);
         this.self = self;
         this.pollInterval = pollInterval;
         this.ackTimeout = ackTimeout;
-        this.grants = grants;
         this.evaluator = evaluator;
         this.audit = audit;
         this.json = json;
@@ -110,7 +104,7 @@ public class ReplicaAdminService {
      * @param principal      the caller
      * @param authentication the caller's authentication, for a published denial
      * @param handler        the handler a denial names
-     * @param reasonHeader   the {@code Admin-Reason} header, or null
+     * @param reasonHeader   the {@code Operation-Reason} header, or null
      * @return the command
      */
     @SuppressWarnings({"unchecked", "rawtypes"}) // the control and its argument type travel together by name
@@ -121,20 +115,15 @@ public class ReplicaAdminService {
             throw ReplicaAdminException.controlNotFound(name);
         }
         Object arguments = bind(control, body);
-        AdminOperation operation;
+        Operation operation;
         try {
             operation = control.operationFor(arguments);
         } catch (IllegalArgumentException e) {
             throw ReplicaAdminException.invalidArguments(name, e.getMessage());
         }
-        if (!grants.holds(principal, operation.id())) {
-            evaluator.refuse(authentication, handler, "Caller does not hold " + operation.id());
-        }
-        String reason = reasonHeader == null || reasonHeader.isBlank() ? null : reasonHeader.trim();
-        if (reason != null && reason.length() > AdminInvocation.MAX_REASON_LENGTH
-                || reason == null && operation.tier() == AdminTier.PRIVILEGED) {
-            throw new AdminReasonRequiredException();
-        }
+        // The same evaluation as a handler's @RequiresOperation: the grant, then the PAT rule and the reason.
+        String reason = evaluator.authorize(authentication, principal, operation, reasonHeader, handler).reason()
+                .orElse(null);
         store.heartbeat(self);
         List<String> targets = store.live(pollInterval.multipliedBy(LIVE_INTERVALS)).stream()
                 .map(ControlStore.Instance::owner).toList();

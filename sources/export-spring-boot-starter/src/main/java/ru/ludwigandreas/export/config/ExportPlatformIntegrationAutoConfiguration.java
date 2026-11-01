@@ -1,5 +1,6 @@
 package ru.ludwigandreas.export.config;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -10,14 +11,15 @@ import org.springframework.context.annotation.Configuration;
 import ru.ludwigandreas.export.engine.ReportFilterParser;
 import ru.ludwigandreas.export.engine.ReportScopeResolver;
 import ru.ludwigandreas.export.filter.ODataReportFilterParser;
+import ru.ludwigandreas.export.registry.ReportDefinitionRegistry;
 import ru.ludwigandreas.export.security.ReportAuthorities;
 import ru.ludwigandreas.export.security.SecurityReportAuthorities;
 import ru.ludwigandreas.export.security.SecurityReportScopeResolver;
 import ru.ludwigandreas.odatafilter.core.ODataFilterService;
 import ru.ludwigandreas.security.authz.AuthorityResolver;
 import ru.ludwigandreas.security.data.DataScopePredicateFactory;
-import ru.ludwigandreas.security.data.DataScopeProvider;
 import ru.ludwigandreas.security.data.DataScopeRegistry;
+import ru.ludwigandreas.security.operation.OperationAuthority;
 
 /**
  * Where this module joins the platform's security and filter dialect, when either is present.
@@ -54,6 +56,7 @@ import ru.ludwigandreas.security.data.DataScopeRegistry;
 @AutoConfiguration(before = ExportWebAutoConfiguration.class,
         afterName = {
                 "ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration",
+                "ru.ludwigandreas.security.config.OperationAutoConfiguration",
                 "ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration",
                 "ru.ludwigandreas.identity.config.IdentityProjectionAutoConfiguration",
                 "ru.ludwigandreas.odatafilter.config.ODataFilterAutoConfiguration"
@@ -90,18 +93,22 @@ public class ExportPlatformIntegrationAutoConfiguration {
         /**
          * The row-level scope predicate the base query always carries.
          *
-         * @param scopes     resolves a principal's scope for a resource
-         * @param mappings   the registered resource mappings
-         * @param predicates turns a scope into a QueryDSL predicate
+         * @param authority   resolves a principal's scope for an operation
+         * @param mappings    the registered resource mappings
+         * @param predicates  turns a scope into a QueryDSL predicate
+         * @param definitions the report definitions, whose scope operations are validated here
          * @return the scope resolver
          */
         @Bean
         @ConditionalOnMissingBean
-        @ConditionalOnBean({DataScopeProvider.class, DataScopeRegistry.class})
-        public ReportScopeResolver reportScopeResolver(DataScopeProvider scopes,
+        @ConditionalOnBean({OperationAuthority.class, DataScopeRegistry.class})
+        public ReportScopeResolver reportScopeResolver(OperationAuthority authority,
                                                       DataScopeRegistry mappings,
-                                                      DataScopePredicateFactory predicates) {
-            return new SecurityReportScopeResolver(scopes, mappings, predicates);
+                                                      DataScopePredicateFactory predicates,
+                                                      ObjectProvider<ReportDefinitionRegistry> definitions) {
+            SecurityReportScopeResolver resolver = new SecurityReportScopeResolver(authority, mappings, predicates);
+            definitions.ifAvailable(registry -> resolver.validate(registry.definitions()));
+            return resolver;
         }
     }
 

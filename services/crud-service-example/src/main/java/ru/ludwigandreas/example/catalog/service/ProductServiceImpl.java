@@ -10,8 +10,7 @@ import ru.ludwigandreas.example.catalog.repository.CategoryRepository;
 import ru.ludwigandreas.example.catalog.repository.ProductRepository;
 import ru.ludwigandreas.example.catalog.repository.entity.CategoryEntity;
 import ru.ludwigandreas.example.catalog.repository.entity.ProductEntity;
-import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
-import ru.ludwigandreas.odatafilter.execution.ODataPage;
+import ru.ludwigandreas.example.catalog.security.CatalogOperations;
 import ru.ludwigandreas.example.catalog.service.event.ProductEventType;
 import ru.ludwigandreas.example.catalog.service.exception.CategoryNotFoundException;
 import ru.ludwigandreas.example.catalog.service.exception.ProductNotFoundException;
@@ -22,10 +21,11 @@ import ru.ludwigandreas.example.catalog.service.model.NewProduct;
 import ru.ludwigandreas.example.catalog.service.model.Product;
 import ru.ludwigandreas.example.catalog.service.model.ProductUpdate;
 import ru.ludwigandreas.example.catalog.service.notification.StewardNotificationSettings;
+import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
+import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.outbox.api.OutboxEvent;
 import ru.ludwigandreas.outbox.api.OutboxEventPublisher;
 import ru.ludwigandreas.security.data.DataAccessGuard;
-import ru.ludwigandreas.security.data.DataAction;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.PrincipalType;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
@@ -42,9 +42,6 @@ import ru.ludwigandreas.security.principal.SecurityPrincipals;
 public class ProductServiceImpl implements ProductService {
 
     private static final String AGGREGATE_TYPE = "Product";
-
-    /** The name this resource's scope mapping and policies are registered under. */
-    private static final String RESOURCE_TYPE = "product";
 
     /** Entry under {@code ludwig.outbox.routes} that carries steward notifications. */
     private static final String NOTIFICATION_ROUTE = "product-notifications";
@@ -78,7 +75,7 @@ public class ProductServiceImpl implements ProductService {
     @PreAuthorize("hasAnyRole('CATALOG_READER', 'CATALOG_EDITOR', 'CATALOG_ADMIN', "
             + "'CATALOG_PARTNER', 'CATALOG_WATCHER')")
     public Product get(UUID id) {
-        return mapper.toDomain(require(id, DataAction.READ));
+        return mapper.toDomain(require(id, CatalogOperations.PRODUCT_READ));
     }
 
     @Override
@@ -94,7 +91,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @PreAuthorize("hasAnyRole('CATALOG_EDITOR', 'CATALOG_ADMIN', 'CATALOG_PARTNER')")
     public Product update(UUID id, ProductUpdate command) {
-        ProductEntity entity = require(id, DataAction.WRITE);
+        ProductEntity entity = require(id, CatalogOperations.PRODUCT_UPDATE);
         if (entity.getVersion() != command.expectedVersion()) {
             // Fail before touching the entity: a stale write is a client-visible conflict, not an
             // infrastructure error surfacing from the flush at commit time.
@@ -112,7 +109,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @PreAuthorize("hasRole('CATALOG_ADMIN')")
     public void delete(UUID id) {
-        ProductEntity entity = require(id, DataAction.DELETE);
+        ProductEntity entity = require(id, CatalogOperations.PRODUCT_DELETE);
         Product deleted = mapper.toDomain(entity);
 
         productRepository.delete(entity);
@@ -130,14 +127,14 @@ public class ProductServiceImpl implements ProductService {
      * any product to any caller who can guess an id. The guard is asked <em>after</em> the row is loaded
      * because a scope is a statement about a row's contents, and it audits the denial itself.
      *
-     * <p>The read/write/delete distinction is passed in rather than collapsed into one "access" check:
-     * a partner reads the whole catalog but may only change its own rows, and a single check could only
-     * ever enforce the wider of the two.
+     * <p>The operation is passed in rather than collapsed into one "access" check: an editor reads the whole
+     * catalog but may only change its own rows, and a single check could only ever enforce the wider of the
+     * two.
      */
-    private ProductEntity require(UUID id, String action) {
+    private ProductEntity require(UUID id, String operation) {
         ProductEntity entity = productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException(id));
-        dataAccessGuard.check(RESOURCE_TYPE, action, entity, ProductEntity::getId);
+        dataAccessGuard.check(operation, entity, ProductEntity::getId);
         return entity;
     }
 

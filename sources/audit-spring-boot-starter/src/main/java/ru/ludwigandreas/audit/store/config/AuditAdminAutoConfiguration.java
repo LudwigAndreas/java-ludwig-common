@@ -13,7 +13,7 @@ import ru.ludwigandreas.audit.store.admin.web.AuditTrailController;
 import ru.ludwigandreas.audit.store.repository.AuditEventRepository;
 import ru.ludwigandreas.db.core.query.AdminQueryFilter;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 
 /**
  * The {@code audit} administrative area, registered only where the administrative surface and the stored trail both
@@ -21,8 +21,8 @@ import ru.ludwigandreas.security.admin.AdminOperationCatalog;
  */
 @AutoConfiguration(after = AuditPersistenceAutoConfiguration.class,
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, AuditEventRepository.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, AuditEventRepository.class})
 public class AuditAdminAutoConfiguration {
 
     @Bean

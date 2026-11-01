@@ -6,20 +6,20 @@ exposing the uploaded file or its rejected rows.
 ## Requirements
 ### Requirement: Every submitter's submissions are readable
 
-`file-action-spring-boot-starter` SHALL declare `fileactions.read`, `fileactions.operate` and
-`fileactions.privileged`, and serve under `fileactions.read`:
+`file-action-spring-boot-starter` SHALL declare `fileaction.submission.read` (`READ`) and
+`fileaction.submission.cancel` (`CHANGE`) on the `ADMIN` surface, and serve under `fileaction.submission.read`:
 
 - `GET /admin/v1/fileactions/submissions?$filter=&cursor=`;
 - `GET /admin/v1/fileactions/submissions/{id}` - the submission in the platform operation envelope with its
   submitter, action and reject count, without the file or any rejected row's content.
 
 #### Scenario: Support looks at a user's failed import
-- **WHEN** a caller holding `fileactions.read` opens another user's submission
+- **WHEN** a caller holding `fileaction.submission.read` opens another user's submission
 - **THEN** its status, counts and failure are returned, and no row content is
 
 ### Requirement: Any submission can be cancelled
 
-`POST /admin/v1/fileactions/submissions/{id}/cancel` (`fileactions.operate`) SHALL cancel exactly as the
+`POST /admin/v1/fileactions/submissions/{id}/cancel` (`fileaction.submission.cancel`) SHALL cancel exactly as the
 submitter's own cancel does: `202` with the envelope while the stop is pending, `200` with the terminal envelope
 once the submission is terminal, including a submission it ended `CANCELLED` itself.
 

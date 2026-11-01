@@ -16,19 +16,21 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.audit.config.AuditCoreAutoConfiguration;
 import ru.ludwigandreas.cache.config.LudwigCacheAutoConfiguration;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminApprovalPolicy;
 import ru.ludwigandreas.security.admin.AdminApprovalStore;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
 import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.security.config.AdminAutoConfiguration;
 import ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
+import ru.ludwigandreas.security.config.OperationAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityAuditAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration;
 import ru.ludwigandreas.security.exception.SecurityConfigurationException;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationCatalog;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.RequiresOperation;
+import ru.ludwigandreas.security.operation.Sensitivity;
 import ru.ludwigandreas.webcore.config.WebCoreProblemAutoConfiguration;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
@@ -42,6 +44,7 @@ class AdminStartupChecksTest {
                     LudwigCacheAutoConfiguration.class,
                     LudwigSecurityAutoConfiguration.class,
                     SecurityMetricsAutoConfiguration.class,
+                    OperationAutoConfiguration.class,
                     DataAuthorizationAutoConfiguration.class,
                     AuditCoreAutoConfiguration.class,
                     SecurityAuditAutoConfiguration.class,
@@ -56,35 +59,27 @@ class AdminStartupChecksTest {
     @Configuration(proxyBeanMethods = false)
     static class Operations {
         @Bean
-        AdminOperationContributor fixtureOperations() {
-            return () -> List.of(AdminOperation.of("fixture.read", "k.r"), AdminOperation.of("fixture.operate", "k.o"),
-                    AdminOperation.of("fixture.privileged", "k.p"));
-        }
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class PartialArea {
-        @Bean
-        AdminOperationContributor partialOperations() {
-            return () -> List.of(AdminOperation.of("messaging.read", "k.r"),
-                    AdminOperation.of("messaging.operate", "k.o"));
+        OperationContributor fixtureOperations() {
+            return () -> List.of(Operation.admin("fixture.thing.read", Sensitivity.READ, "k.r"),
+                    Operation.admin("fixture.thing.poke", Sensitivity.CHANGE, "k.o"),
+                    Operation.admin("fixture.thing.discard", Sensitivity.PRIVILEGED, "k.p"));
         }
     }
 
     @Configuration(proxyBeanMethods = false)
     static class Undescribed {
         @Bean
-        AdminOperationContributor undescribedOperations() {
-            return () -> List.of(AdminOperation.of("widgets.read", "ludwig.widgets.admin.read"),
-                    AdminOperation.of("widgets.operate", "ludwig.widgets.admin.operate"),
-                    AdminOperation.of("widgets.privileged", "k.p"));
+        OperationContributor undescribedOperations() {
+            return () -> List.of(Operation.admin("widgets.thing.read", Sensitivity.READ, "ludwig.widgets.admin.read"),
+                    Operation.admin("widgets.thing.poke", Sensitivity.CHANGE, "ludwig.widgets.admin.operate"),
+                    Operation.admin("widgets.thing.discard", Sensitivity.PRIVILEGED, "k.p"));
         }
     }
 
     @RestController
     static class MistypedController {
         @GetMapping("/admin/v1/fixture/things")
-        @AdminAccess("fixture.raed")
+        @RequiresOperation("fixture.thing.raed")
         public String things() {
             return "things";
         }
@@ -102,28 +97,30 @@ class AdminStartupChecksTest {
     @DisplayName("a correctly configured service starts with the catalog, the grants and the guard")
     void starts() {
         runner.withUserConfiguration(Operations.class)
-                .withPropertyValues("ludwig.admin.grants.fixture.read[0]=NOTIFICATION_ADMIN")
+                .withPropertyValues("ludwig.security.roles.NOTIFICATION_ADMIN.operations[fixture.thing.read]=ALL")
                 .run(context -> assertThat(context).hasNotFailed()
-                        .hasSingleBean(AdminOperationCatalog.class)
+                        .hasSingleBean(OperationCatalog.class)
                         .hasSingleBean(AdminSurfaceGuard.class));
     }
 
     @Test
-    @DisplayName("an area declaring only some of its tiers fails startup")
-    void partialArea() {
-        runner.withUserConfiguration(PartialArea.class).run(context -> assertThat(context).getFailure()
-                .rootCause().isInstanceOf(SecurityConfigurationException.class)
-                .hasMessageContaining("messaging.privileged"));
+    @DisplayName("a role naming an operation no module declares fails startup")
+    void misspelledGrant() {
+        runner.withUserConfiguration(Operations.class)
+                .withPropertyValues("ludwig.security.roles.NOTIFICATION_ADMIN.operations[fixture.thing.pkoe]=ALL")
+                .run(context -> assertThat(context).getFailure()
+                        .rootCause().isInstanceOf(SecurityConfigurationException.class)
+                        .hasMessageContaining("fixture.thing.pkoe"));
     }
 
     @Test
-    @DisplayName("a misspelled grant key fails startup")
-    void misspelledGrant() {
+    @DisplayName("a key the operation model replaced fails startup, naming its replacement")
+    void removedKeys() {
         runner.withUserConfiguration(Operations.class)
-                .withPropertyValues("ludwig.admin.grants.fixture.opreate[0]=NOTIFICATION_ADMIN")
+                .withPropertyValues("ludwig.admin.grants.fixture.read[0]=NOTIFICATION_ADMIN")
                 .run(context -> assertThat(context).getFailure()
                         .rootCause().isInstanceOf(SecurityConfigurationException.class)
-                        .hasMessageContaining("'fixture.opreate'"));
+                        .hasMessageContaining("ludwig.admin.grants").hasMessageContaining("ludwig.security.roles"));
     }
 
     @Test
@@ -131,9 +128,9 @@ class AdminStartupChecksTest {
     void undescribedOperation() {
         runner.withUserConfiguration(Undescribed.class).run(context -> assertThat(context)
                 .getFailure().isInstanceOf(SecurityConfigurationException.class)
-                .hasMessageContaining("widgets.read (ludwig.widgets.admin.read)")
-                .hasMessageContaining("widgets.operate (ludwig.widgets.admin.operate)")
-                .message().doesNotContain("widgets.privileged"));
+                .hasMessageContaining("widgets.thing.read has no description: add ludwig.widgets.admin.read")
+                .hasMessageContaining("widgets.thing.poke has no description: add ludwig.widgets.admin.operate")
+                .message().doesNotContain("widgets.thing.discard"));
     }
 
     @Test
@@ -142,14 +139,14 @@ class AdminStartupChecksTest {
         // Thrown from afterSingletonsInstantiated, so it is the failure itself rather than a wrapped cause.
         runner.withUserConfiguration(Operations.class, Mistyped.class).run(context -> assertThat(context)
                 .getFailure().isInstanceOf(SecurityConfigurationException.class)
-                .hasMessageContaining("fixture.raed")
+                .hasMessageContaining("fixture.thing.raed")
                 .hasMessageContaining("MistypedController"));
     }
 
     @Test
     @DisplayName("a public path that matches the surface fails startup, whether written narrowly or as /**")
     void publicPaths() {
-        for (String path : List.of("/admin/**", "/admin/v1/me/operations", "/**")) {
+        for (String path : List.of("/admin/**", "/admin/v1/security/operations/x/holders", "/**")) {
             runner.withUserConfiguration(Operations.class)
                     .withPropertyValues("ludwig.security.public-paths[0]=" + path)
                     .run(context -> assertThat(context).getFailure()
@@ -169,7 +166,8 @@ class AdminStartupChecksTest {
         new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(LudwigCacheAutoConfiguration.class,
                         LudwigSecurityAutoConfiguration.class, SecurityMetricsAutoConfiguration.class,
-                        DataAuthorizationAutoConfiguration.class, AuditCoreAutoConfiguration.class,
+                        OperationAutoConfiguration.class, DataAuthorizationAutoConfiguration.class,
+                        AuditCoreAutoConfiguration.class,
                         SecurityAuditAutoConfiguration.class, WebMvcAutoConfiguration.class,
                         AdminAutoConfiguration.class))
                 .withPropertyValues("ludwig.security.jwt.enabled=false")
@@ -177,12 +175,12 @@ class AdminStartupChecksTest {
                         new FilteredClassLoader(FilteredClassLoader.PackageFilter.of("ru.ludwigandreas.webcore")))
                 .withUserConfiguration(Operations.class)
                 .run(context -> assertThat(context).hasNotFailed()
-                        .doesNotHaveBean(AdminOperationCatalog.class)
+                        .hasSingleBean(OperationCatalog.class)
                         .doesNotHaveBean(AdminSurfaceGuard.class));
     }
 
     @Test
-    @DisplayName("with data authorization (and so method security) off, the surface still evaluates its grants")
+    @DisplayName("with row scoping off, the surface still evaluates its operations")
     void independentOfMethodSecurity() {
         runner.withUserConfiguration(Operations.class)
                 .withPropertyValues("ludwig.security.data.enabled=false")
@@ -193,19 +191,19 @@ class AdminStartupChecksTest {
     @DisplayName("an approval requirement on a non-privileged or uncatalogued operation fails startup, naming it")
     void approvalOnlyForPrivilegedOperations() {
         runner.withUserConfiguration(Operations.class, Stores.class)
-                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.read",
-                        "ludwig.admin.approval.required[1]=fixture.dicsard")
+                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.thing.read",
+                        "ludwig.admin.approval.required[1]=fixture.thing.dicsard")
                 .run(context -> assertThat(context).getFailure().rootCause()
                         .isInstanceOf(SecurityConfigurationException.class)
-                        .hasMessageContaining("'fixture.read' is a read operation")
-                        .hasMessageContaining("'fixture.dicsard' is not an administrative operation"));
+                        .hasMessageContaining("'fixture.thing.read' is a ADMIN READ operation")
+                        .hasMessageContaining("'fixture.thing.dicsard' is not an administrative operation"));
     }
 
     @Test
     @DisplayName("an approval requirement with no approval store fails startup")
     void approvalNeedsAStore() {
         runner.withUserConfiguration(Operations.class)
-                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.privileged")
+                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.thing.discard")
                 .run(context -> assertThat(context).getFailure().rootCause()
                         .isInstanceOf(SecurityConfigurationException.class)
                         .hasMessageContaining("no AdminApprovalStore"));
@@ -215,11 +213,11 @@ class AdminStartupChecksTest {
     @DisplayName("a privileged operation with a store starts; an empty list needs no store")
     void approvalConfigured() {
         runner.withUserConfiguration(Operations.class, Stores.class)
-                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.privileged")
+                .withPropertyValues("ludwig.admin.approval.required[0]=fixture.thing.discard")
                 .run(context -> assertThat(context).hasNotFailed()
                         .getBean(AdminApprovalPolicy.class).satisfies(policy -> {
-                            assertThat(policy.requires("fixture.privileged")).isTrue();
-                            assertThat(policy.requires("fixture.read")).isFalse();
+                            assertThat(policy.requires("fixture.thing.discard")).isTrue();
+                            assertThat(policy.requires("fixture.thing.read")).isFalse();
                         }));
         runner.withUserConfiguration(Operations.class)
                 .run(context -> assertThat(context).hasNotFailed()

@@ -14,8 +14,8 @@ import ru.ludwigandreas.fileaction.admin.service.FileActionAdminService;
 import ru.ludwigandreas.fileaction.admin.service.FileActionAdminService.Submission;
 import ru.ludwigandreas.fileaction.engine.SubmissionSnapshot;
 import ru.ludwigandreas.fileaction.web.SubmissionMapper;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 import ru.ludwigandreas.webcore.operation.OperationResponse;
 import ru.ludwigandreas.webcore.operation.OperationResponses;
 
@@ -46,7 +46,7 @@ public class FileActionAdminController {
      * @return one page
      */
     @GetMapping
-    @AdminAccess(FileActionAdminOperations.READ)
+    @RequiresOperation(FileActionAdminOperations.SUBMISSION_READ)
     public AdminPage<SubmissionView> submissions(@RequestParam(name = "$filter", required = false) String filter,
                                                  @RequestParam(required = false) String cursor,
                                                  @RequestParam(required = false) Integer size) {
@@ -61,7 +61,7 @@ public class FileActionAdminController {
      * @return the submission
      */
     @GetMapping("/{id}")
-    @AdminAccess(FileActionAdminOperations.READ)
+    @RequiresOperation(FileActionAdminOperations.SUBMISSION_READ)
     public SubmissionView submission(@PathVariable UUID id) {
         return SubmissionView.of(service.submission(id));
     }
@@ -73,7 +73,7 @@ public class FileActionAdminController {
      * @return {@code 202} with the submission, or {@code 200} when it was already terminal
      */
     @PostMapping("/{id}/cancel")
-    @AdminAccess(FileActionAdminOperations.OPERATE)
+    @RequiresOperation(FileActionAdminOperations.SUBMISSION_CANCEL)
     public ResponseEntity<SubmissionView> cancel(@PathVariable UUID id) {
         SubmissionView view = SubmissionView.of(service.cancel(id));
         if (view.operation().isTerminal()) {

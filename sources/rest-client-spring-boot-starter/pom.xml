@@ -288,6 +288,46 @@
             <artifactId>archunit</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- The restclient administrative area, registered only where job-core's replica-control channel and the
+             security starter's administrative surface run. Optional: a service without them gets exactly the
+             starter it had. -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>job-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>security-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- RestClientAdminIT: the area over job-core's real channel, on PostgreSQL. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>test-support-security</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -311,6 +351,19 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

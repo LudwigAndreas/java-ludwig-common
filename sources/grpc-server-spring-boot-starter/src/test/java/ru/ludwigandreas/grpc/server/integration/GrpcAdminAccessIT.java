@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.aopalliance.intercept.MethodInvocation;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,19 +49,21 @@ import ru.ludwigandreas.grpc.server.LudwigGrpcService;
 import ru.ludwigandreas.grpc.server.config.GrpcServerAdminAutoConfiguration;
 import ru.ludwigandreas.grpc.server.integration.support.AdminEchoService;
 import ru.ludwigandreas.grpc.server.integration.support.Calls;
-import ru.ludwigandreas.security.admin.AdminAccess;
-import ru.ludwigandreas.security.admin.AdminAccessEvaluator;
 import ru.ludwigandreas.security.admin.AdminCallerPolicy;
-import ru.ludwigandreas.security.admin.AdminGrants;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationAuthority;
+import ru.ludwigandreas.security.operation.OperationCatalog;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.OperationGrants;
+import ru.ludwigandreas.security.operation.RequiresOperation;
+import ru.ludwigandreas.security.operation.Sensitivity;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
- * {@code @AdminAccess} on gRPC methods, against the real administrative surface: the same catalog, grants, caller
- * policy and evaluator the HTTP surface uses, in one application serving both.
+ * {@code @RequiresOperation} on gRPC methods, against the real security starter and administrative surface: the same
+ * catalog, roles, caller policy and evaluator HTTP uses, in one application serving both.
  */
 @SpringBootTest(classes = GrpcAdminAccessIT.AdminApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
@@ -68,10 +71,10 @@ import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
             "ludwig.grpc.server.in-process-name=" + GrpcAdminAccessIT.SERVER,
             "ludwig.security.jwt.enabled=false",
             "ludwig.web.i18n.configure-validator=false",
-            "ludwig.admin.grants.catalog.read[0]=CATALOG_READER",
-            "ludwig.admin.grants.catalog.read[1]=CATALOG_OPERATOR",
-            "ludwig.admin.grants.catalog.operate[0]=CATALOG_OPERATOR",
-            "ludwig.admin.grants.catalog.privileged[0]=CATALOG_ADMIN"})
+            "ludwig.security.roles.CATALOG_READER.operations[catalog.item.read]=ALL",
+            "ludwig.security.roles.CATALOG_OPERATOR.includes[0]=CATALOG_READER",
+            "ludwig.security.roles.CATALOG_OPERATOR.operations[catalog.item.store]=ALL",
+            "ludwig.security.roles.CATALOG_ADMIN.operations[catalog.item.append]=ALL"})
 @AutoConfigureMockMvc
 class GrpcAdminAccessIT {
 
@@ -120,13 +123,14 @@ class GrpcAdminAccessIT {
     /** What the audit listener records as the action: the refused method's name, whichever transport. */
     private List<String> deniedActions() {
         return denials.stream().map(AuthorizationDeniedEvent::getObject).map(object -> object instanceof Method method
-                ? method.getName() : ((HandlerMethod) object).getMethod().getName()).toList();
+                ? method.getName() : object instanceof MethodInvocation invocation ? invocation.getMethod().getName()
+                : ((HandlerMethod) object).getMethod().getName()).toList();
     }
 
     @Test
-    @DisplayName("automation granted the operation runs the handler, with the invocation bound for its audit")
+    @DisplayName("automation holding the operation runs the handler, with the invocation bound for its audit")
     void granted() {
-        assertThat(as("operator").store(Calls.text("x")).getText()).isEqualTo("catalog.operate|null");
+        assertThat(as("operator").store(Calls.text("x")).getText()).isEqualTo("catalog.item.store|null");
         assertThat(service.invoked("store")).isPositive();
     }
 
@@ -141,14 +145,14 @@ class GrpcAdminAccessIT {
     }
 
     @Test
-    @DisplayName("a privileged call needs admin-reason metadata: INVALID_ARGUMENT without it, the reason bound with it")
+    @DisplayName("a privileged call needs operation-reason metadata: INVALID_ARGUMENT without it, bound with it")
     void privilegedNeedsAReason() {
         int before = service.invoked("append");
 
         assertThat(refusal(() -> as("admin").append(Calls.text("x")))).isEqualTo(Status.Code.INVALID_ARGUMENT);
         assertThat(service.invoked("append")).isEqualTo(before);
-        assertThat(as("admin", "admin-reason", "INC-7").append(Calls.text("x")).getText())
-                .isEqualTo("catalog.privileged|INC-7");
+        assertThat(as("admin", "operation-reason", "INC-7").append(Calls.text("x")).getText())
+                .isEqualTo("catalog.item.append|INC-7");
     }
 
     @Test
@@ -166,14 +170,14 @@ class GrpcAdminAccessIT {
         private MockMvc mvc;
 
         @Test
-        @DisplayName("one grant serves HTTP and gRPC alike, and a refusal is the same audited action on both")
-        void sameGrantBothTransports() throws Exception {
-            assertThat(mvc.perform(get("/admin/v1/catalog/echo").with(principal("reader"))).andReturn()
+        @DisplayName("one business operation serves HTTP and gRPC alike, and a refusal is the same audited action")
+        void sameOperationBothTransports() throws Exception {
+            assertThat(mvc.perform(get("/catalog/echo").with(principal("reader"))).andReturn()
                     .getResponse().getStatus()).isEqualTo(200);
-            assertThat(as("reader").echo(Calls.text("x")).getText()).isEqualTo("catalog.read|null");
+            assertThat(as("reader").echo(Calls.text("x")).getText()).isEqualTo("business");
             assertThat(denials).isEmpty();
 
-            assertThat(mvc.perform(get("/admin/v1/catalog/echo").with(principal("nobody"))).andReturn()
+            assertThat(mvc.perform(get("/catalog/echo").with(principal("nobody"))).andReturn()
                     .getResponse().getStatus()).isEqualTo(403);
             assertThat(refusal(() -> as("nobody").echo(Calls.text("x")))).isEqualTo(Status.Code.PERMISSION_DENIED);
             assertThat(deniedActions()).containsExactly("echo", "echo");
@@ -196,14 +200,26 @@ class GrpcAdminAccessIT {
         void typo() {
             runner.withUserConfiguration(Surface.class).run(context -> assertThat(context).hasFailed()
                     .getFailure().hasStackTraceContaining("ludwig.echo.v1.EchoService/Echo")
-                    .hasStackTraceContaining("catalgo.read"));
+                    .hasStackTraceContaining("catalgo.item.read"));
         }
 
         @Test
-        @DisplayName("an annotated method with no administrative surface fails startup instead of serving anyone")
+        @DisplayName("an annotated method with no operation catalog fails startup instead of serving anyone")
         void noSurface() {
             runner.run(context -> assertThat(context).hasFailed()
                     .getFailure().hasStackTraceContaining("ludwig.echo.v1.EchoService/Echo"));
+        }
+    }
+
+    /** The operations of {@link AdminEchoService} and {@link CatalogController}. */
+    static final class TestOperations {
+
+        static final OperationContributor CATALOG = () -> List.of(
+                Operation.business("catalog.item.read", Sensitivity.READ, "test.catalog.item.read"),
+                Operation.admin("catalog.item.store", Sensitivity.CHANGE, "test.catalog.item.store"),
+                Operation.admin("catalog.item.append", Sensitivity.PRIVILEGED, "test.catalog.item.append"));
+
+        private TestOperations() {
         }
     }
 
@@ -212,7 +228,7 @@ class GrpcAdminAccessIT {
     static class TypoService extends EchoServiceGrpc.EchoServiceImplBase {
 
         @Override
-        @AdminAccess("catalgo.read")
+        @RequiresOperation("catalgo.item.read")
         public void echo(EchoRequest request, StreamObserver<EchoReply> observer) {
             observer.onCompleted();
         }
@@ -223,29 +239,29 @@ class GrpcAdminAccessIT {
     static class Surface {
 
         @Bean
-        AdminOperationCatalog catalog() {
-            return new AdminOperationCatalog(List.of(() -> List.of(AdminOperation.of("catalog.read", "k"),
-                    AdminOperation.of("catalog.operate", "k"), AdminOperation.of("catalog.privileged", "k"))));
+        OperationCatalog catalog() {
+            return new OperationCatalog(List.of(TestOperations.CATALOG));
         }
 
         @Bean
-        AdminAccessEvaluator evaluator(AdminOperationCatalog catalog, ApplicationEventPublisher events) {
-            return new AdminAccessEvaluator(new AdminGrants(Map.of(), catalog),
-                    new SpringAuthorizationEventPublisher(events));
+        OperationEvaluator evaluator(OperationCatalog catalog, ApplicationEventPublisher events) {
+            OperationAuthority authority =
+                    new OperationAuthority(OperationGrants.compile(Map.of(), catalog), () -> null);
+            return new OperationEvaluator(authority, new SpringAuthorizationEventPublisher(events), false);
         }
 
         @Bean
-        AdminCallerPolicy callers(AdminAccessEvaluator evaluator) {
+        AdminCallerPolicy callers(OperationEvaluator evaluator) {
             return new AdminCallerPolicy(evaluator, false, Set.of());
         }
     }
 
-    /** An HTTP administrative endpoint on the same operation as the gRPC {@code Echo}. */
+    /** An HTTP business endpoint on the same operation as the gRPC {@code Echo}. */
     @RestController
-    static class CatalogAdminController {
+    static class CatalogController {
 
-        @GetMapping("/admin/v1/catalog/echo")
-        @AdminAccess("catalog.read")
+        @GetMapping("/catalog/echo")
+        @RequiresOperation("catalog.item.read")
         public String echo() {
             return "echo";
         }
@@ -268,16 +284,13 @@ class GrpcAdminAccessIT {
         }
 
         @Bean
-        CatalogAdminController catalogAdminController() {
-            return new CatalogAdminController();
+        CatalogController catalogController() {
+            return new CatalogController();
         }
 
         @Bean
-        AdminOperationContributor catalogOperations() {
-            return () -> List.of(
-                    AdminOperation.of("catalog.read", "test.catalog.read"),
-                    AdminOperation.of("catalog.operate", "test.catalog.operate"),
-                    AdminOperation.of("catalog.privileged", "test.catalog.privileged"));
+        OperationContributor catalogOperations() {
+            return TestOperations.CATALOG;
         }
 
         @Bean

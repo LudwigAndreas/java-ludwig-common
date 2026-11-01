@@ -373,8 +373,8 @@ proportional to the backlog.
 | `sync_audit_record` | Created by the changelog; not written (the trail is `audit_event`) |
 | `job_run_lock` | From job-core: per-task run leases |
 
-**Administration**: grant `reconciliation.*` to the service's operator roles in `ludwig.admin.grants`; grant
-`reconciliation.privileged` only where the destructive actions are intended. **Partners**: a `@LudwigRestClient` per fetcher; rate limits ÷ replicas.
+**Administration**: grant the `reconciliation.*` operations to the service's operator roles in
+`ludwig.security.roles`; grant the `PRIVILEGED` ones only where the destructive actions are intended. **Partners**: a `@LudwigRestClient` per fetcher; rate limits ÷ replicas.
 
 ## Observability
 
@@ -420,13 +420,25 @@ with the calling principal**. Outcome is inferred from the event name (`.failed`
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}` | See reconciliation tasks, enumerations, scopes, quotas, what is stuck, and every run's outcome. |
-| `reconciliation.operate` | `POST /admin/v1/reconciliation/tasks/{task}/runs`<br>`POST /admin/v1/reconciliation/tasks/{task}/backfills`<br>`POST /admin/v1/reconciliation/tasks/{task}/cursor/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/discover`<br>`POST /admin/v1/reconciliation/tasks/{task}/members/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Run, backfill, requeue and reset reconciliation tasks and enumeration scopes. |
-| `reconciliation.privileged` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel`<br>`POST /admin/v1/reconciliation/leases/{leaseId}/release`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Cancel a remote job, release a quota lease or confirm a withheld sweep - actions that can make this system and the partner disagree. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `reconciliation.task.read` | `READ` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}` | See reconciliation tasks, enumerations, scopes, runs, quotas and what is stuck. |
+| `reconciliation.run.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/runs` | Run a reconciliation task now. |
+| `reconciliation.backfill.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/backfills` | Backfill a reconciliation task over named keys. |
+| `reconciliation.cursor.reset` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/cursor/reset` | Reset a task's cursor, so that its next run starts over. |
+| `reconciliation.scope.reset` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset` | Reset an enumeration scope. |
+| `reconciliation.quarantine.requeue` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue` | Requeue a task's quarantined records. |
+| `reconciliation.member.requeue` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/members/requeue` | Requeue an enumeration's failed members. |
+| `reconciliation.remotejob.requeue` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue` | Requeue a remote job. |
+| `reconciliation.remotejob.cancel` | `PRIVILEGED` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel` | Cancel a remote job - after which this system and the partner can disagree. |
+| `reconciliation.lease.release` | `PRIVILEGED` | `POST /admin/v1/reconciliation/leases/{leaseId}/release` | Release a quota lease - after which the partner's quota can be exceeded. |
+| `reconciliation.discovery.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/discover` | Discover an enumeration's members now. |
+| `reconciliation.walk.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk` | Walk an enumeration scope now. |
+| `reconciliation.walk.preview` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview` | Preview what a walk of an enumeration scope would do. |
+| `reconciliation.sweep.discard` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Discard a withheld sweep, keeping every row. |
+| `reconciliation.sweep.confirm` | `PRIVILEGED` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Confirm a withheld sweep - its rows are deleted. |
 
 **Runs are resources.** Every run that takes its lease - scheduled, manual, dry run or backfill - is recorded with
 its kind, who asked, the replica, its correlation id, timestamps, outcome and counts (keys demanded, records fetched,
@@ -440,24 +452,41 @@ kept for `runs.retention` and purged by `ludwig-reconciliation-run-purge` (liste
 also ends a run whose replica died as `FAILED` with `run-abandoned`.
 
 **Per-task scope.** Every endpoint naming `{task}` treats the task (or enumeration) name as its administrative object,
-and `GET /admin/v1/reconciliation/tasks` lists only the tasks and enumerations the caller's `read` scope admits. With
-a data-scope policy for `admin.reconciliation`, a team can be granted the one task it owns: another task is `403` to
-operate and `404` to read, the answer a task that does not exist gets. Without one, holding an operation covers every
-task. Setup: [data-scope configuration](../../docs/data-scope-configuration.md#administrative-objects).
+and `GET /admin/v1/reconciliation/tasks` lists only the tasks and enumerations the caller's `reconciliation.task.read` scope admits. With
+a role granting `OBJECT` on the operations and a per-subject grant of the task, a team holds the one task it owns:
+another task is `403` to operate and `404` to read, the answer a task that does not exist gets. A role granting `ALL`
+covers every task. Setup: [data-scope configuration](../../docs/data-scope-configuration.md#administrative-objects).
 
-**Removed:** the `reconciliation` actuator endpoint and `ludwig.reconciliation.endpoint.*`, including `allow-destructive-operations` and the `confirm` parameter. Whether a deployment permits the destructive actions is now whether any of its roles is granted `reconciliation.privileged`; adding `reconciliation` to the actuator exposure list exposes nothing.
+**Removed:** the `reconciliation` actuator endpoint and `ludwig.reconciliation.endpoint.*`, including `allow-destructive-operations` and the `confirm` parameter. Whether a deployment permits the destructive actions is now whether any of its roles holds `reconciliation.remotejob.cancel`, `reconciliation.lease.release` or `reconciliation.sweep.confirm`; adding `reconciliation` to the actuator exposure list exposes nothing.
 
 **Filtering `GET /admin/v1/reconciliation/tasks/{task}/runs`.** The listing takes an OData `$filter` and no other filter parameter; it pages with `cursor` and `size` in a fixed newest-first order, so `$orderby`, `$top`, `$skip` and `$count` are `400`, as is a field not listed here. The filter is applied under the area's own rules and can only narrow them. Filterable fields: `tier`, `kind` (`SCHEDULED`, `MANUAL`, `DRY_RUN`), `outcome` (`SUCCESS`, `FAILURE`, `TIMED_OUT`), `triggeredBy`, `instance`, `failureCode`, `correlationId`, `submittedAt`, `startedAt`, `finishedAt`, always within the path's task (indexed by task and `submittedAt`). A run in progress is `startedAt ne null and finishedAt eq null`. Not filterable: the result body. Example: `$filter=kind eq 'MANUAL' and outcome eq 'FAILURE'`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[reconciliation.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[reconciliation.operate]": [ORDERS_ADMIN]
-      "[reconciliation.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          reconciliation.task.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          reconciliation.run.start: ALL
+          reconciliation.backfill.start: ALL
+          reconciliation.cursor.reset: ALL
+          reconciliation.scope.reset: ALL
+          reconciliation.quarantine.requeue: ALL
+          reconciliation.member.requeue: ALL
+          reconciliation.remotejob.requeue: ALL
+          reconciliation.remotejob.cancel: ALL
+          reconciliation.lease.release: ALL
+          reconciliation.discovery.start: ALL
+          reconciliation.walk.start: ALL
+          reconciliation.walk.preview: ALL
+          reconciliation.sweep.discard: ALL
+          reconciliation.sweep.confirm: ALL
 ```
 
 ## Runbook
@@ -479,7 +508,7 @@ Operator actions, all under `/admin/v1/reconciliation` (see [Administration](#ad
 Enumerations: `POST /tasks/{enumeration}/discover`, `POST /tasks/{enumeration}/members/requeue`, and per scope
 `POST /tasks/{enumeration}/scopes/{scope}/walk` (`{kind}`), `.../preview` (writes nothing), `.../reset`,
 `.../sweep/discard`, `.../sweep/confirm` (**privileged**). Percent-encode scope keys containing `/`. A privileged
-action needs the `Admin-Reason` header.
+action needs the `Operation-Reason` header.
 
 | Situation | What to do |
 |---|---|

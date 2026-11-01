@@ -23,7 +23,7 @@ import ru.ludwigandreas.usersettings.exception.SettingsSubjectNotFoundException;
  * and passes it through without looking at it.
  *
  * <p>Which callers may administer settings is not decided here: the administrative surface guard has
- * already checked the service's {@code ludwig.admin.grants} before a {@code settings.*} handler runs,
+ * already checked the service's {@code ludwig.security.roles} before a {@code settings.*} handler runs,
  * and this policy only recognises that such a handler is running. What it still decides is the tenant:
  * the administrator's own tenant must match the tenant the lookup is confined to, or an administrator
  * of one organization could read another organization's users simply by knowing a subject id. That

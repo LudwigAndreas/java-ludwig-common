@@ -209,6 +209,11 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>identity-projection-spring-boot-starter</artifactId>
         </dependency>
+        <!-- Feeds that projection from the OIDC provider's user topic (ludwig.identity.kafka.subscriptions). -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>identity-source-kafka-spring-boot-starter</artifactId>
+        </dependency>
         <!-- Backs the security module's authority cache; without it every request re-resolves roles. -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>

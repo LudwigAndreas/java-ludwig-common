@@ -19,6 +19,51 @@
 
 ### Added
 
+- **Источники идентичности: нейтральная к провайдеру проекция и подключаемые каналы** (`identity-sources`).
+  - `identity-projection-spring-boot-starter` принимает каждое изменение пользователя через один SPI,
+    `IdentityProjection` (`IdentityChange.Upsert` / `Disable` / `Remove`), от объявленных источников
+    (`ludwig.identity.sources.<name>`, с `role-mapping` и `unmapped-roles` для каждого). Субъект принадлежит
+    источнику, который первым его спроецировал; изменение из другого источника отклоняется и учитывается. Полные
+    обходы отключают пользователей, которых источник больше не перечисляет, и прерываются без изменений при
+    превышении `ludwig.identity.sweep.max-disable-ratio` (`0.1`). Метрики `ludwig_identity_changes_total`,
+    `ludwig_identity_sweeps_total`, `ludwig_identity_sweep_disabled_total`; статус пользователя `REMOVED`.
+  - Новый `identity-source-kafka-spring-boot-starter`: подписка на источник, контракт `IdentityUserEvent` v1;
+    неправильное событие теперь уходит в недоставленные при первой доставке, а не отбрасывается.
+  - Новый `identity-source-directory-spring-boot-starter`: реализуйте `IdentityDirectory` против API пользователей
+    провайдера; инкрементальная синхронизация от сохранённой водяной отметки и обходы по расписанию выполняются как
+    задачи job-core (`ludwig-identity-<source>-sync` / `-sweep`) под блокировками запуска, с
+    `ludwig_identity_directory_run_seconds`.
+  - `GET /admin/v1/identity/sources` (`identity.source.read`) перечисляет источники, их каналы и состояние.
+  - Группа `architecture-rules` `identity`: `identity.writes-go-through-the-projection`.
+- **Один каталог операций и одна таблица ролей** (`operations-catalog`). Код авторизует только по операции; роль -
+  лишь элемент конфигурации:
+  - каждый модуль объявляет свои операции как `<area>.<object>.<verb>` с чувствительностью (`READ`, `CHANGE`,
+    `PRIVILEGED`), поверхностью (`BUSINESS`, `ADMIN`) и, если операция затрагивает строки, ресурсом и действием над
+    данными (`OperationContributor`); 15 административных областей - это 62 точные операции (их перечисляет README
+    каждого модуля);
+  - `ludwig.security.roles.<ROLE>.operations.<operation>: <scope>` (`ALL` или измерения через `+`) с `includes` для
+    композиции - единственное место, где называются роли; старт падает на операции вне каталога, непривязанном
+    измерении, измерении строк у операции, не затрагивающей строк, шаблоне, `NONE` или цикле `includes` и записывает
+    в журнал операции, которыми не владеет ни одна роль;
+  - `@RequiresOperation` и `@RequiresAuthentication` на MVC-обработчиках, методах сервисов приложения (method
+    security) и gRPC-методах; `DataAccessGuard` и `ReportDefinition.scopedBy(...)` экспорта принимают идентификатор
+    операции;
+  - `GET /me/operations` перечисляет операции вызывающего с областью и локализованным описанием, а
+    `GET /admin/v1/security/operations/{id}/holders` (`security.operation.read`) - роли, владеющие операцией;
+  - notification-service и crud-service-example объявляют свои бизнес-операции и переходят на таблицу ролей.
+
+  Это заменяет идентификаторы уровней, `ludwig.admin.grants`, `@AdminAccess`, `Admin-Reason` / `admin-reason` и
+  `/admin/v1/me/operations` из невыпущенных записей ниже.
+- **Контролы реплик для конфигурации, машинных токенов и автоматических выключателей** (`replica-controls`). Там, где
+  работают канал реплик job-core и административная поверхность (обе зависимости необязательные):
+  - hot-reload добавляет область `hotreload`: `GET /admin/v1/hotreload/sources` (id, вид, `lastReloadedHere`, без
+    значений) и контрол `hotreloadreload`, который перезагружает источник на каждой реплике тем же путём, что и
+    наблюдатель, и сообщает `reloaded`, `unchanged` или `rejected` по каждой реплике (для аренды Vault - ротация);
+  - rest-client добавляет область `restclient`: `GET /admin/v1/restclient/clients` (хост, вид аутентификации,
+    устойчивость; без учётных данных) и контролы `restclienttokenreset` (operate), `restclientbreakers` (read, по
+    репликам) и `restclientbreaker` (privileged, нужна причина: `CLOSED`, `FORCED_OPEN`, `DISABLED`; сбрасывается
+    при перезапуске).
+  notification-service выдаёт `hotreload.*`, crud-service-example - `restclient.*`.
 - **Административные операции по gRPC** (`grpc-admin-operations`). `@AdminAccess` на методе `@LudwigGrpcService`
   проверяется теми же grant-ами, допуском вызывающего и аудитом, что и `/admin/**`: операция, которой у вызывающего
   нет, - `PERMISSION_DENIED` (с аудитом), привилегированной нужны метаданные `admin-reason` (иначе
@@ -202,6 +247,23 @@
 
 ### Changed
 
+- **BREAKING: проекция идентичности больше не читает Kafka** (`identity-sources`). Добавьте
+  `identity-source-kafka-spring-boot-starter`, объявите `ludwig.identity.sources.oidc: {}` и перенесите
+  `ludwig.identity.kafka.topic` в `ludwig.identity.kafka.subscriptions.oidc.topic`; `ludwig.identity.kafka.group-id`
+  теперь обязателен. Проекция больше не зависит от `messaging-spring-boot-starter`.
+- **BREAKING: операции заменяют уровни и политики** (`operations-catalog`). `PRIVILEGED` требует заголовка
+  `Operation-Reason` (метаданные gRPC `operation-reason`, `GrpcMetadataKeys.OPERATION_REASON`) и не принимает
+  персональные токены доступа, если не задан `ludwig.security.operations.allow-personal-access-tokens=true`, на любой
+  поверхности. `ludwig.admin.approval.required` принимает только административные операции `PRIVILEGED`. Методы
+  `DataAccessGuard` принимают идентификатор операции вместо ресурса и действия; разрешение
+  `DataScopePermissionEvaluator` - идентификатор операции. gRPC-перехватчик - `OperationInterceptor`. SPI
+  `DataScopeProvider` не изменился: он получает ресурс и действие операции, а для операции, не затрагивающей строк, -
+  её id и `invoke`.
+- **hot-reload и rest-client: bean-методы принимают реестры, которые читают административные области**
+  (`replica-controls`). `@Bean`-методы `HotReloadAutoConfiguration`, `HotReloadVaultAutoConfiguration` и
+  `HotReloadFreemarkerAutoConfiguration`, создающие источники, принимают `ReloadableSourceRegistry`;
+  `RestClientAuthAutoConfiguration.ludwigClientCredentialsAuthenticationProvider` принимает `ClientTokenSources`.
+  `SourceReloadCoordinator` получает `reloadOutcome(source)`; `reload(source)` не изменился.
 - **security-spring-boot-starter: одна административная проверка для всех транспортов** (`grpc-admin-operations`).
   `AdminAccessEvaluator.authorize(Authentication, LudwigPrincipal, AdminOperation, String reason, Object target)`
   возвращает `AdminInvocation.Scope` - и для HTTP, и для gRPC. Допуск партнёров, персональных токенов и
@@ -312,6 +374,15 @@
 
 ### Removed
 
+- **`OidcUserEvent`, `OidcUserEventListener` и `IdentityProjectionService.apply(OidcUserEvent)`**
+  (`identity-sources`): заменены на `IdentityUserEvent` в Kafka-источнике и `IdentityProjection`.
+  `ludwig.identity.kafka.topic` роняет старт с указанием замены.
+- **Уровни, выдачи и политики данных** (`operations-catalog`). `AdminOperation`, `AdminTier`,
+  `AdminOperationContributor`, `AdminOperationCatalog`, `AdminGrants`, `AdminAccess`, `AdminAuthenticated`,
+  `AdminAccessEvaluator`, `AdminObjectScope`, `ScopePolicies`, `PolicyDataScopeProvider`, `DataScopePolicyValidator`
+  и `ReportDefinition.scopeResourceType`. Ключи `ludwig.admin.grants`, `ludwig.admin.allow-personal-access-tokens`,
+  `ludwig.security.data.policies`, `ludwig.security.data.default-access` и `ludwig.security.data.strict-policy-tokens`
+  роняют старт с указанием замены. `/admin/v1/me/operations` удалён.
 - **Администрирование через actuator** (`starter-admin-endpoints`). Удалены actuator-эндпоинты
   `reconciliation` и `fileingest` вместе с их автоконфигурациями и `ludwig.reconciliation.endpoint.*` /
   `ludwig.ingest.endpoint.*`; вместо них используйте их области в `/admin/v1/`. Также удалены
@@ -348,6 +419,12 @@
 
 ### Fixed
 
+- **AsyncAPI: слушатели, чьи топики задаёт выражение с несколькими значениями** (`identity-sources`). Springwolf
+  описывал такой слушатель один раз, под `toString()` массива; платформенный кастомайзер теперь вычисляет выражение
+  так же, как Spring Kafka, и описывает канал, операцию получения и канал недоставленных для каждого топика.
+- **hot-reload: типизированная конфигурация могла перепривязываться к устаревшему Environment** (`replica-controls`).
+  `RefreshableConfig`, созданный раньше моста окружения, регистрировал слушатель первым и после перезагрузки сохранял
+  старые значения. Фабрика типизированной конфигурации теперь зависит от моста, что исправляет порядок.
 - **Отменённая отправка файлового действия больше не записывается как применённая** (`file-action-cancelled-state`).
   Проход, остановленный отменой, записывался как `APPLIED` (конверт `SUCCEEDED`) с успешным событием
   `file-action.applied`. Теперь это `CANCELLED` с аудитом `file-action.cancelled`. Отмена, пришедшая, пока отправка

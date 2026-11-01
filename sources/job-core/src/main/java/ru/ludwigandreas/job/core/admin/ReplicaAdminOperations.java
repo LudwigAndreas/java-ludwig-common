@@ -2,30 +2,27 @@ package ru.ludwigandreas.job.core.admin;
 
 import java.util.Collection;
 import java.util.List;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.Sensitivity;
 
 /**
- * The {@code replicas} administrative area. Reading the live replicas and a command's acknowledgements is
- * {@code replicas.read}; submitting a control is authorized by the operation the control itself declares, so the
- * operate and privileged tiers are reserved.
+ * The {@code replica} administrative area: the live replicas and every command's acknowledgements. Submitting a
+ * control is authorized by the operation the control itself declares, in its own module.
  */
-public final class ReplicaAdminOperations implements AdminOperationContributor {
+public final class ReplicaAdminOperations implements OperationContributor {
 
-    /** See the live replicas and every command's acknowledgements. */
-    public static final String READ = "replicas.read";
+    /** See the live replicas. */
+    public static final String INSTANCE_READ = "replica.instance.read";
 
-    /** Reserved: controls declare their own module's operations. */
-    public static final String OPERATE = "replicas.operate";
-
-    /** Reserved: controls declare their own module's operations. */
-    public static final String PRIVILEGED = "replicas.privileged";
+    /** See a command and what each replica answered. */
+    public static final String COMMAND_READ = "replica.command.read";
 
     private static final String KEY = "ludwig.job-core.admin.";
 
     @Override
-    public Collection<AdminOperation> adminOperations() {
-        return List.of(AdminOperation.of(READ, KEY + READ), AdminOperation.of(OPERATE, KEY + OPERATE),
-                AdminOperation.of(PRIVILEGED, KEY + PRIVILEGED));
+    public Collection<Operation> operations() {
+        return List.of(Operation.admin(INSTANCE_READ, Sensitivity.READ, KEY + INSTANCE_READ),
+                Operation.admin(COMMAND_READ, Sensitivity.READ, KEY + COMMAND_READ));
     }
 }

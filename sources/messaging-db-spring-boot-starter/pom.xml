@@ -48,7 +48,7 @@
 
         <!--
             Optional: the administrative endpoints (ru.ludwigandreas.messaging.db.admin) exist only where the
-            security starter's administrative surface does, behind @ConditionalOnBean(AdminOperationCatalog). web-core
+            security starter's administrative surface does, behind @ConditionalOnBean(AdminSurfaceGuard). web-core
             is named because the security starter declares it optional, so it does not arrive transitively.
         -->
         <dependency>

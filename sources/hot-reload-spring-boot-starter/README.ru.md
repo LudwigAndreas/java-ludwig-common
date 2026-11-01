@@ -116,6 +116,39 @@ void onConfigChanged(ConfigurationRefreshedEvent event) {
 [observability](../observability-spring-boot-starter/README.ru.md) использует это, чтобы применять
 `logging.level.*` на лету.
 
+## Администрирование
+
+Там, где работают административная поверхность `security-spring-boot-starter` и канал реплик `job-core` (обе
+зависимости необязательные), стартер добавляет область `hotreload`; без любой из них не добавляет ничего.
+
+| Операция | Чувствительность | Эндпоинты | Что разрешает |
+|---|---|---|---|
+| `hotreload.source.reload` | `CHANGE` | контроль `hotreloadreload` с `{"source": "<id>"}` | Перезагрузка источника конфигурации или секретов на каждой реплике. |
+| `hotreload.source.read` | `READ` | `GET /admin/v1/hotreload/sources` | Просмотр перезагружаемых источников конфигурации и секретов с их видом и последней перезагрузкой; без значений. |
+
+Каждой операцией владеют через собственный `ludwig.security.roles` сервиса; операция `PRIVILEGED` требует заголовка `Operation-Reason` и не принимает персональный токен доступа.
+
+Принудительная перезагрузка идёт через тот же координатор, что и отслеживаемая: тот же diff, правило last-known-good,
+аудит и слушатели. Каждая реплика отвечает `reloaded`, `unchanged` или `rejected`; `rejected` (нечитаемое содержимое
+или типизированная конфигурация, отвергнутая валидацией) сохраняет last-known-good и всё равно подтверждает команду.
+Для источника аренды Vault принудительная перезагрузка запрашивает новый секрет (`SecretLeaseContainer.rotate`);
+продлеваемая аренда отвечает `unchanged`. Неизвестный источник - `400`.
+
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
+
+```yaml
+ludwig:
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          hotreload.source.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          hotreload.source.reload: ALL
+```
+
 ## Конфигурация
 
 ```properties

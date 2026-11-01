@@ -18,8 +18,8 @@ import ru.ludwigandreas.outbox.admin.service.OutboxAdminViews.MessageDetail;
 import ru.ludwigandreas.outbox.admin.service.OutboxAdminViews.MessageFilter;
 import ru.ludwigandreas.outbox.admin.service.OutboxAdminViews.MessageView;
 import ru.ludwigandreas.outbox.entity.OutboxStatus;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /**
  * The {@code outbox} administrative area: browse by state, retry, bulk retry, discard.
@@ -48,7 +48,7 @@ public class OutboxAdminController {
      * @return one page
      */
     @GetMapping("/messages")
-    @AdminAccess(OutboxAdminOperations.READ)
+    @RequiresOperation(OutboxAdminOperations.MESSAGE_READ)
     public AdminPage<MessageView> messages(@RequestParam(name = "$filter", required = false) String filter,
                                            @RequestParam(required = false) String cursor,
                                            @RequestParam(required = false) Integer size) {
@@ -62,7 +62,7 @@ public class OutboxAdminController {
      * @return the detail
      */
     @GetMapping("/messages/{id}")
-    @AdminAccess(OutboxAdminOperations.READ)
+    @RequiresOperation(OutboxAdminOperations.MESSAGE_READ)
     public MessageDetail message(@PathVariable UUID id) {
         return service.message(id);
     }
@@ -73,7 +73,7 @@ public class OutboxAdminController {
      * @return the counts
      */
     @GetMapping("/summary")
-    @AdminAccess(OutboxAdminOperations.READ)
+    @RequiresOperation(OutboxAdminOperations.MESSAGE_READ)
     public List<Count> summary() {
         return service.counts();
     }
@@ -85,7 +85,7 @@ public class OutboxAdminController {
      * @return the message, now {@code PENDING}
      */
     @PostMapping("/messages/{id}/retry")
-    @AdminAccess(OutboxAdminOperations.OPERATE)
+    @RequiresOperation(OutboxAdminOperations.MESSAGE_RETRY)
     public MessageView retry(@PathVariable UUID id) {
         return service.retry(id);
     }
@@ -97,7 +97,7 @@ public class OutboxAdminController {
      * @return how many moved, and whether more match
      */
     @PostMapping("/messages/retry")
-    @AdminAccess(OutboxAdminOperations.OPERATE)
+    @RequiresOperation(OutboxAdminOperations.MESSAGE_RETRY)
     public BulkRetryResult retryAll(@RequestBody BulkRetryRequest request) {
         return service.retryAll(new MessageFilter(request.status(), request.eventType(), request.destination(),
                 request.createdBefore()));
@@ -110,7 +110,7 @@ public class OutboxAdminController {
      * @return the message, now {@code DISCARDED}
      */
     @PostMapping("/messages/{id}/discard")
-    @AdminAccess(OutboxAdminOperations.PRIVILEGED)
+    @RequiresOperation(OutboxAdminOperations.MESSAGE_DISCARD)
     public MessageView discard(@PathVariable UUID id) {
         return service.discard(id);
     }

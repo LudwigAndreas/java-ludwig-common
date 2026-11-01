@@ -175,7 +175,7 @@ makes every object wait on one marker, an unknown zone, an unparseable source ur
 `SUCCEEDED` runs, and every instance runs the monitor without a lock (so it cannot stop with a lock holder).
 
 **Administrative area** `/admin/v1/fileingest`: recent runs with counts, `operation` envelope and **checkpoints** (a
-moving checkpoint = a large file; a static one = a problem); starting a task's run is `fileingest.operate`.
+moving checkpoint = a large file; a static one = a problem); starting a task's run is `fileingest.run.start`.
 
 **Logs.** `INFO`: configuration validated, schedules started, staging writer chosen, already-ingested skips, "not
 reading yet" (arrival), manual trigger, receipt written, archive done. `WARN`: no completed run by the deadline, no
@@ -206,25 +206,28 @@ Category `ingest`; resource `ingest-task` / task name (the task outlives runs; t
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `fileingest.read` | `GET /admin/v1/fileingest/tasks`<br>`GET /admin/v1/fileingest/tasks/{task}`<br>`GET /admin/v1/fileingest/tasks/{task}/runs/{runId}` | See ingest tasks and their runs, with each run's checkpoint and counts. |
-| `fileingest.operate` | `POST /admin/v1/fileingest/tasks/{task}/runs` | Trigger an ingest pass now. |
-| `fileingest.privileged` | none in this release | No operation yet; reserved so that grants for this area stay the same across releases. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `fileingest.task.read` | `READ` | `GET /admin/v1/fileingest/tasks`<br>`GET /admin/v1/fileingest/tasks/{task}`<br>`GET /admin/v1/fileingest/tasks/{task}/runs/{runId}` | See ingest tasks and their runs, with each run's checkpoint and counts. |
+| `fileingest.run.start` | `CHANGE` | `POST /admin/v1/fileingest/tasks/{task}/runs` | Trigger an ingest pass now. |
 
-**Removed:** the `fileingest` actuator endpoint and `ludwig.ingest.endpoint.*` (including `allow-manual-run`); starting a run is `fileingest.operate`. A run requested while one is in progress is `409`.
+**Removed:** the `fileingest` actuator endpoint and `ludwig.ingest.endpoint.*` (including `allow-manual-run`); starting a run is `fileingest.run.start`. A run requested while one is in progress is `409`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[fileingest.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[fileingest.operate]": [ORDERS_ADMIN]
-      "[fileingest.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          fileingest.task.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          fileingest.run.start: ALL
 ```
 
 ## Runbook

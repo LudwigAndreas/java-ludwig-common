@@ -17,12 +17,12 @@ import ru.ludwigandreas.notification.repository.entity.QDeliveryContentEntity;
 import ru.ludwigandreas.notification.repository.entity.QDeliveryStatusHistoryEntity;
 import ru.ludwigandreas.notification.repository.entity.QNotificationDeliveryEntity;
 import ru.ludwigandreas.notification.repository.query.QueueDepth;
+import ru.ludwigandreas.notification.security.NotificationOperations;
 import ru.ludwigandreas.odatafilter.core.ODataQueryOptions;
 import ru.ludwigandreas.odatafilter.execution.ODataPage;
 import ru.ludwigandreas.odatafilter.execution.ODataQueryExecutor;
 import ru.ludwigandreas.odatafilter.execution.ODataSearch;
 import ru.ludwigandreas.security.data.DataAccessGuard;
-import ru.ludwigandreas.security.data.DataAction;
 
 /**
  * QueryDSL-JPA implementation of {@link DeliveryQueryRepository}, picked up by Spring Data through
@@ -36,9 +36,6 @@ import ru.ludwigandreas.security.data.DataAction;
  */
 @RequiredArgsConstructor
 class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
-
-    /** The name this resource's data-scope mapping and policies are registered under. */
-    private static final String RESOURCE_TYPE = "notification-delivery";
 
     private static final QNotificationDeliveryEntity DELIVERY =
             QNotificationDeliveryEntity.notificationDeliveryEntity;
@@ -76,7 +73,7 @@ class DeliveryQueryRepositoryImpl implements DeliveryQueryRepository {
     @Override
     public ODataPage<NotificationDeliveryEntity> search(ODataQueryOptions options) {
         return odataExecutor.search(NotificationDeliveryEntity.class, options,
-                ODataSearch.of(DELIVERY).and(dataAccessGuard.predicate(RESOURCE_TYPE, DataAction.READ)));
+                ODataSearch.of(DELIVERY).and(dataAccessGuard.predicate(NotificationOperations.DELIVERY_READ)));
     }
 
     @Override

@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.job.core.admin.CacheAdminOperations;
 import ru.ludwigandreas.job.core.admin.service.CacheAdminService;
 import ru.ludwigandreas.job.core.admin.service.CacheAdminService.CacheView;
-import ru.ludwigandreas.security.admin.AdminAccess;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /**
  * The {@code caches} area's listing. Clearing a cache is the {@code cacheevict} replica control, submitted through
@@ -34,7 +34,7 @@ public class CacheAdminController {
      * @return them
      */
     @GetMapping
-    @AdminAccess(CacheAdminOperations.READ)
+    @RequiresOperation(CacheAdminOperations.DEFINITION_READ)
     public List<CacheView> caches() {
         return service.caches();
     }

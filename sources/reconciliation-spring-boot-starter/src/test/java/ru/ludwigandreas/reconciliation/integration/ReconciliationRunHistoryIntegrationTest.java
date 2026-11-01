@@ -53,9 +53,21 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
         properties = {
             "ludwig.security.enabled=true",
             "ludwig.security.jwt.enabled=false",
-            "ludwig.admin.grants.reconciliation.read[0]=SYNC_OPERATOR",
-            "ludwig.admin.grants.reconciliation.operate[0]=SYNC_OPERATOR",
-            "ludwig.admin.grants.reconciliation.privileged[0]=SYNC_ADMIN"})
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.task.read]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.run.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.backfill.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.cursor.reset]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.scope.reset]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.quarantine.requeue]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.member.requeue]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.remotejob.requeue]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.discovery.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.walk.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.walk.preview]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.sweep.discard]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.remotejob.cancel]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.lease.release]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.sweep.confirm]=ALL"})
 @Import(PostgresContainerConfiguration.class)
 @AutoConfigureMockMvc
 class ReconciliationRunHistoryIntegrationTest {

@@ -40,14 +40,25 @@ public class ClientCredentialsAuthenticationProvider implements ClientAuthentica
     private final Executor refreshExecutor;
     private final Clock clock;
     private final TokenRefreshCounter refreshCounter;
+    private final ClientTokenSources tokenSources;
+
     /** Creates the provider; the executor and clock are shared by every client it builds. */
     public ClientCredentialsAuthenticationProvider(ClientRegistrationRepository registrations,
                                                    Executor refreshExecutor, Clock clock,
                                                    TokenRefreshCounter refreshCounter) {
+        this(registrations, refreshExecutor, clock, refreshCounter, new ClientTokenSources());
+    }
+
+    /** Creates the provider, recording each client's token cache in {@code tokenSources}. */
+    public ClientCredentialsAuthenticationProvider(ClientRegistrationRepository registrations,
+                                                   Executor refreshExecutor, Clock clock,
+                                                   TokenRefreshCounter refreshCounter,
+                                                   ClientTokenSources tokenSources) {
         this.registrations = registrations;
         this.refreshExecutor = refreshExecutor;
         this.clock = clock;
         this.refreshCounter = refreshCounter;
+        this.tokenSources = tokenSources;
     }
 
     @Override
@@ -74,6 +85,7 @@ public class ClientCredentialsAuthenticationProvider implements ClientAuthentica
                 refreshExecutor,
                 clock,
                 () -> refreshCounter.tokenRefreshed(clientName, AuthTypes.OAUTH2_CLIENT_CREDENTIALS));
+        tokenSources.record(clientName, tokens);
         return new ClientCredentialsAuthenticator(clientName, registration.getRegistrationId(), tokens);
     }
 

@@ -647,15 +647,64 @@ components:
       type: object
     HeldOperation:
       properties:
-        area:
-          type: string
         description:
           type: string
         id:
           type: string
-        tier:
+        scope:
+          items:
+            type: string
+          type: array
+        sensitivity:
+          enum:
+          - READ
+          - CHANGE
+          - PRIVILEGED
+          type: string
+        surface:
+          enum:
+          - BUSINESS
+          - ADMIN
           type: string
       title: HeldOperation
+      type: object
+    HolderView:
+      properties:
+        role:
+          type: string
+        scope:
+          type: string
+        via:
+          type: string
+      title: HolderView
+      type: object
+    IdentityFeedView:
+      properties:
+        kind:
+          type: string
+        status:
+          additionalProperties:
+            type: object
+          type: object
+      title: IdentityFeedView
+      type: object
+    IdentitySourceView:
+      properties:
+        feeds:
+          items:
+            $ref: '#/components/schemas/IdentityFeedView'
+          type: array
+        lastChangeAt:
+          format: date-time
+          type: string
+        name:
+          type: string
+        users:
+          additionalProperties:
+            format: int64
+            type: integer
+          type: object
+      title: IdentitySourceView
       type: object
     InboxItem:
       description: One notification in the caller's own inbox
@@ -1293,6 +1342,22 @@ components:
           type: string
       title: ServerInfoResponse
       type: object
+    SourceView:
+      properties:
+        id:
+          type: string
+        kind:
+          enum:
+          - FILE
+          - VAULT_KV
+          - VAULT_LEASE
+          - TEMPLATE_DIRECTORY
+          type: string
+        lastReloadedHere:
+          format: date-time
+          type: string
+      title: SourceView
+      type: object
     SuppressionRequest:
       properties:
         address:
@@ -1604,6 +1669,26 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - cache-admin-controller
+  /admin/v1/hotreload/sources:
+    get:
+      operationId: sources
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/SourceView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - hot-reload-admin-controller
   /admin/v1/identity/grants:
     get:
       operationId: grants
@@ -1837,6 +1922,26 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - identity-admin-controller
+  /admin/v1/identity/sources:
+    get:
+      operationId: identitySources
+      responses:
+        '200':
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: '#/components/schemas/IdentitySourceView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - identity-admin-controller
   /admin/v1/identity/subjects/{subject}/authorities:
     get:
       operationId: authorities
@@ -1949,26 +2054,6 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - job-admin-controller
-  /admin/v1/me/operations:
-    get:
-      operationId: operations
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/HeldOperation'
-                type: array
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
-      tags:
-      - admin-operations-controller
   /admin/v1/outbox/messages:
     get:
       operationId: messages
@@ -2178,7 +2263,7 @@ paths:
         schema:
           type: string
       - in: header
-        name: Admin-Reason
+        name: Operation-Reason
         required: false
         schema:
           type: string
@@ -2202,6 +2287,32 @@ paths:
           description: RFC 9457 problem document. Branch on `code`, never on `detail`.
       tags:
       - replica-admin-controller
+  /admin/v1/security/operations/{id}/holders:
+    get:
+      operationId: holders
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/HolderView'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - operation-holders-controller
   /api/v1/announcements:
     get:
       description: Newest first, dismissed ones excluded, and only those inside their visibility window. Visibility is resolved from the caller's CURRENT roles on every request, so a revoked role stops granting it immediately. Supports $filter/$orderby/$top/$skip over the published surface - the audience is deliberately not filterable.
@@ -3172,6 +3283,26 @@ paths:
       summary: Read a submitted request
       tags:
       - Notifications
+  /me/operations:
+    get:
+      operationId: operations
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/HeldOperation'
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: RFC 9457 problem document. Branch on `code`, never on `detail`.
+      tags:
+      - operations-controller
   /server/info:
     get:
       operationId: serverInfo

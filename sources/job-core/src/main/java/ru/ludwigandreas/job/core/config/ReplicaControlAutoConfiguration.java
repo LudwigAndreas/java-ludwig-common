@@ -21,10 +21,10 @@ import ru.ludwigandreas.job.core.control.ReplicaControl;
 import ru.ludwigandreas.job.core.control.ReplicaControlPoller;
 import ru.ludwigandreas.job.core.control.ReplicaControlValidator;
 import ru.ludwigandreas.job.core.lock.RunLock;
-import ru.ludwigandreas.security.admin.AdminAccessEvaluator;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminGrants;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
+import ru.ludwigandreas.security.operation.OperationCatalog;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 
 /**
  * The replica-control channel and the {@code replicas} area, where job-core runs beside the administrative surface:
@@ -32,8 +32,8 @@ import ru.ludwigandreas.security.admin.AdminOperationCatalog;
  */
 @AutoConfiguration(after = JobCoreAutoConfiguration.class,
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, DataSource.class, RunLock.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, DataSource.class, RunLock.class})
 @ConditionalOnProperty(prefix = "ludwig.job-core.control", name = "enabled", matchIfMissing = true)
 public class ReplicaControlAutoConfiguration {
 
@@ -51,7 +51,7 @@ public class ReplicaControlAutoConfiguration {
     /** The controls by name, validated against the catalog at startup. */
     @Bean
     public ReplicaControls ludwigReplicaControls(ObjectProvider<ReplicaControl<?>> controls,
-                                                 AdminOperationCatalog catalog) {
+                                                 OperationCatalog catalog) {
         return new ReplicaControls(ReplicaControlValidator.index(controls.orderedStream().toList(), catalog));
     }
 
@@ -80,12 +80,12 @@ public class ReplicaControlAutoConfiguration {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public ReplicaAdminService ludwigReplicaAdminService(ControlStore store, ReplicaControls controls,
                                                          JobInstanceIdentity identity, JobCoreProperties properties,
-                                                         AdminGrants grants, AdminAccessEvaluator evaluator,
+                                                         OperationEvaluator evaluator,
                                                          AdminAudit audit, ObjectProvider<ObjectMapper> json,
                                                          ObjectProvider<Validator> validator) {
         JobCoreProperties.Control control = properties.getControl();
         return new ReplicaAdminService(store, controls.byName(), identity.owner(), control.getPollInterval(),
-                control.getAckTimeout(), grants, evaluator, audit, mapper(json), validator.getIfAvailable());
+                control.getAckTimeout(), evaluator, audit, mapper(json), validator.getIfAvailable());
     }
 
     @Bean

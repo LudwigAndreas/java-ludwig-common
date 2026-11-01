@@ -24,15 +24,15 @@ import ru.ludwigandreas.pat.service.PatService;
 import ru.ludwigandreas.pat.service.PatSnapshot;
 import ru.ludwigandreas.pat.web.dto.IssuedPatResponse;
 import ru.ludwigandreas.pat.web.dto.PatResponse;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /**
  * The {@code pat} administrative area: any owner's tokens.
  *
  * <p>A personal access token is refused here by {@code PatCredentialGuard}, which this module registers for these
- * paths too, whatever {@code ludwig.admin.allow-personal-access-tokens} says: a token may not mint, rotate or
- * revoke a token.
+ * paths too, whatever {@code ludwig.security.operations.allow-personal-access-tokens} says: a token may not mint,
+ * rotate or revoke a token.
  */
 @RestController
 @RequestMapping("/admin/v1/pat/tokens")
@@ -58,7 +58,7 @@ public class PatAdminController {
      * @return one page
      */
     @GetMapping
-    @AdminAccess(PatAdminOperations.READ)
+    @RequiresOperation(PatAdminOperations.TOKEN_READ)
     public AdminPage<PatResponse> tokens(@RequestParam(name = "$filter", required = false) String filter,
                                          @RequestParam(required = false) String cursor,
                                          @RequestParam(required = false) Integer size) {
@@ -73,7 +73,7 @@ public class PatAdminController {
      * @return the token
      */
     @GetMapping("/{id}")
-    @AdminAccess(PatAdminOperations.READ)
+    @RequiresOperation(PatAdminOperations.TOKEN_READ)
     public PatResponse token(@PathVariable UUID id) {
         return PatResponse.of(service.token(id));
     }
@@ -86,7 +86,7 @@ public class PatAdminController {
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @AdminAccess(PatAdminOperations.PRIVILEGED)
+    @RequiresOperation(PatAdminOperations.TOKEN_ISSUE)
     public IssuedPatResponse issue(@Valid @RequestBody IssueForOwnerRequest request) {
         PatService.IssuedToken issued = service.issue(new IssueTokenCommand(request.owner(), request.name(),
                 request.scopes(), request.audiences(), request.lifetime(), request.allowedCidrs()));
@@ -100,7 +100,7 @@ public class PatAdminController {
      * @return the token as it now stands
      */
     @PostMapping("/{id}/revoke")
-    @AdminAccess(PatAdminOperations.PRIVILEGED)
+    @RequiresOperation(PatAdminOperations.TOKEN_REVOKE)
     public PatResponse revoke(@PathVariable UUID id) {
         return PatResponse.of(service.revoke(id));
     }

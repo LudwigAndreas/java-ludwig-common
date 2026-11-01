@@ -2,28 +2,26 @@ package ru.ludwigandreas.fileaction.admin;
 
 import java.util.Collection;
 import java.util.List;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.Sensitivity;
 
 /**
- * The {@code fileactions} area's administrative operations.
+ * The {@code fileaction} administrative area: every submitter's file-action submissions, and cancelling one.
  */
-public final class FileActionAdminOperations implements AdminOperationContributor {
+public final class FileActionAdminOperations implements OperationContributor {
 
     /** See every submitter's submissions, without the file or any row. */
-    public static final String READ = "fileactions.read";
+    public static final String SUBMISSION_READ = "fileaction.submission.read";
 
     /** Cancel anybody's submission. */
-    public static final String OPERATE = "fileactions.operate";
-
-    /** Reserved; guards no endpoint yet. */
-    public static final String PRIVILEGED = "fileactions.privileged";
+    public static final String SUBMISSION_CANCEL = "fileaction.submission.cancel";
 
     private static final String KEY = "ludwig.file-action.admin.";
 
     @Override
-    public Collection<AdminOperation> adminOperations() {
-        return List.of(AdminOperation.of(READ, KEY + READ), AdminOperation.of(OPERATE, KEY + OPERATE),
-                AdminOperation.of(PRIVILEGED, KEY + PRIVILEGED));
+    public Collection<Operation> operations() {
+        return List.of(Operation.admin(SUBMISSION_READ, Sensitivity.READ, KEY + SUBMISSION_READ),
+                Operation.admin(SUBMISSION_CANCEL, Sensitivity.CHANGE, KEY + SUBMISSION_CANCEL));
     }
 }

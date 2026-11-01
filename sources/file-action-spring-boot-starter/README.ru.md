@@ -366,27 +366,30 @@ ludwig:
 
 ## Администрирование
 
-Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют и с какой областью, решает собственный `ludwig.security.roles` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, которой не владеет ни одна роль, запрещена всем. Операция `PRIVILEGED` требует заголовка `Operation-Reason` и не принимает персональный токен доступа, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /me/operations` показывает, какими операциями владеет вызывающий, а `GET /admin/v1/security/operations/{id}/holders` - какие роли владеют операцией.
 
-| Операция | Эндпоинты | Что разрешает |
-|---|---|---|
-| `fileactions.read` | `GET /admin/v1/fileactions/submissions`<br>`GET /admin/v1/fileactions/submissions/{id}` | Просмотр загрузок файловых действий всех пользователей, без самого файла и его строк. |
-| `fileactions.operate` | `POST /admin/v1/fileactions/submissions/{id}/cancel` | Отменить загрузку файлового действия любого пользователя. |
-| `fileactions.privileged` | в этом выпуске нет | Операций пока нет; уровень зарезервирован, чтобы выдачи для этой области не менялись между выпусками. |
+| Операция | Чувствительность | Эндпоинты | Что разрешает |
+|---|---|---|---|
+| `fileaction.submission.read` | `READ` | `GET /admin/v1/fileactions/submissions`<br>`GET /admin/v1/fileactions/submissions/{id}` | Просмотр загрузок файловых действий всех пользователей, без самого файла и его строк. |
+| `fileaction.submission.cancel` | `CHANGE` | `POST /admin/v1/fileactions/submissions/{id}/cancel` | Отменить загрузку файлового действия любого пользователя. |
 
 Ответы не содержат ни файла, ни содержимого строк, ни ссылки на отчёт об ошибках. Отмена - та же отмена, что у отправителя: `202`, пока остановка ожидается, либо `200` с конвертом, если отправка завершена, в том числе если отмена сама завершила её `CANCELLED`, как отправку в `VALIDATED`.
 
 **Фильтрация `GET /admin/v1/fileactions/submissions`.** Список принимает OData `$filter` и никаких других параметров фильтрации; он листается через `cursor` и `size` в фиксированном порядке от новых к старым, поэтому `$orderby`, `$top`, `$skip` и `$count` - `400`, как и поле, не перечисленное здесь. Фильтр применяется поверх собственных правил области и может их только сузить. Фильтруемые поля: `action`, `state` (`UPLOADED`, `VALIDATED`, `APPLYING`, `APPLIED`, `REJECTED`, `EXPIRED`, `CANCELLED`), `submittedBy`, `sourceFormat`, `failureCode`, `rowsRejected`, `submittedAt`, `startedAt`, `finishedAt`. Не фильтруются: расположение объекта, заявленное имя файла, аргументы ошибки. Пример: `$filter=action eq 'product-import' and rowsRejected gt 0`.
 
-Блок выдачи (имена ролей - собственные роли сервиса):
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[fileactions.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[fileactions.operate]": [ORDERS_ADMIN]
-      "[fileactions.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          fileaction.submission.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          fileaction.submission.cancel: ALL
 ```
 
 ## Runbook

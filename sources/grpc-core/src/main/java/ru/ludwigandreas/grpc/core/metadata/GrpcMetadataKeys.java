@@ -46,10 +46,10 @@ public final class GrpcMetadataKeys {
     public static final Metadata.Key<String> IDEMPOTENCY_REPLAYED = key("idempotency-replayed");
 
     /**
-     * The stated reason for an administrative call. Mirrors {@code AdminInvocation.REASON_HEADER} in
-     * {@code security-spring-boot-starter}.
+     * The stated reason for a call to an operation; required on a privileged one. Mirrors
+     * {@code OperationEvaluator.REASON_HEADER} in {@code security-spring-boot-starter}.
      */
-    public static final Metadata.Key<String> ADMIN_REASON = key("admin-reason");
+    public static final Metadata.Key<String> OPERATION_REASON = key("operation-reason");
 
     /**
      * The caller's locale, as a language range. Mirrors HTTP {@code Accept-Language}, which

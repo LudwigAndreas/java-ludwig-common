@@ -35,14 +35,16 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.AuditOutcome;
 import ru.ludwigandreas.audit.AuditSink;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminAudit;
 import ru.ludwigandreas.security.admin.AdminInvocation;
 import ru.ludwigandreas.security.admin.AdminObject;
 import ru.ludwigandreas.security.admin.AdminObjectNotFoundException;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
 import ru.ludwigandreas.security.admin.AdminOutcome;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.RequiresOperation;
+import ru.ludwigandreas.security.operation.Sensitivity;
 import ru.ludwigandreas.security.data.DataScope;
 import ru.ludwigandreas.security.data.DataScopeProvider;
 import ru.ludwigandreas.security.data.ScopeDimension;
@@ -76,13 +78,13 @@ class AdminSurfaceMvcTest {
         }
 
         @GetMapping("/admin/v1/fixture/things")
-        @AdminAccess("fixture.read")
+        @RequiresOperation("fixture.thing.read")
         public List<String> things() {
             return List.of("a", "b");
         }
 
         @GetMapping("/admin/v1/fixture/things/{name}")
-        @AdminAccess("fixture.read")
+        @RequiresOperation("fixture.thing.read")
         public String thing(@PathVariable @AdminObject(notFound = "test.fixture.thing-not-found") String name) {
             if (!List.of("a", "b").contains(name)) {
                 throw new AdminObjectNotFoundException("test.fixture.thing-not-found", name);
@@ -91,13 +93,13 @@ class AdminSurfaceMvcTest {
         }
 
         @PostMapping("/admin/v1/fixture/things/{thing}/poke")
-        @AdminAccess("fixture.operate")
+        @RequiresOperation("fixture.thing.poke")
         public String poke(@PathVariable("thing") @AdminObject String name) {
             return "poked " + name;
         }
 
         @PostMapping("/admin/v1/fixture/things/{id}/discard")
-        @AdminAccess("fixture.privileged")
+        @RequiresOperation("fixture.thing.discard")
         public String discard(@PathVariable String id) {
             audit.getObject().record("fixture-thing", id, AdminOutcome.SUCCEEDED);
             return AdminInvocation.require().reason();
@@ -109,11 +111,11 @@ class AdminSurfaceMvcTest {
     static class FixtureApplication {
 
         @Bean
-        AdminOperationContributor fixtureOperations() {
+        OperationContributor fixtureOperations() {
             return () -> List.of(
-                    AdminOperation.of("fixture.read", "test.fixture.read"),
-                    AdminOperation.of("fixture.operate", "test.fixture.operate"),
-                    AdminOperation.of("fixture.privileged", "test.fixture.privileged"));
+                    Operation.admin("fixture.thing.read", Sensitivity.READ, "test.fixture.read"),
+                    Operation.admin("fixture.thing.poke", Sensitivity.CHANGE, "test.fixture.operate"),
+                    Operation.admin("fixture.thing.discard", Sensitivity.PRIVILEGED, "test.fixture.privileged"));
         }
 
         @Bean
@@ -141,9 +143,9 @@ class AdminSurfaceMvcTest {
     @SpringBootTest(classes = FixtureApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK,
             properties = {
                 "ludwig.security.jwt.enabled=false", "ludwig.web.i18n.configure-validator=false",
-                "ludwig.admin.grants.fixture.read[0]=NOTIFICATION_ADMIN",
-                "ludwig.admin.grants.fixture.read[1]=NOTIFICATION_SUPPORT",
-                "ludwig.admin.grants.fixture.privileged[0]=NOTIFICATION_ADMIN"})
+                "ludwig.security.roles.NOTIFICATION_ADMIN.operations[fixture.thing.read]=ALL",
+                "ludwig.security.roles.NOTIFICATION_SUPPORT.operations[fixture.thing.read]=ALL",
+                "ludwig.security.roles.NOTIFICATION_ADMIN.operations[fixture.thing.discard]=ALL"})
     @AutoConfigureMockMvc
     class PlatformChain {
 
@@ -216,12 +218,12 @@ class AdminSurfaceMvcTest {
             MvcResult noReason = mvc.perform(post("/admin/v1/fixture/things/t1/discard")
                     .with(as(PrincipalType.USER, Credential.DIRECT, "NOTIFICATION_ADMIN"))).andReturn();
             MvcResult served = mvc.perform(post("/admin/v1/fixture/things/t1/discard")
-                    .header(AdminInvocation.REASON_HEADER, "INC-4411")
+                    .header(OperationEvaluator.REASON_HEADER, "INC-4411")
                     .with(as(PrincipalType.USER, Credential.DIRECT, "NOTIFICATION_ADMIN"))).andReturn();
 
             assertThat(ungranted.getResponse().getStatus()).isEqualTo(403);
             assertThat(noReason.getResponse().getStatus()).isEqualTo(400);
-            assertThat(problem(noReason).path("code").asText()).isEqualTo("ludwig.admin.reason-required");
+            assertThat(problem(noReason).path("code").asText()).isEqualTo("ludwig.security.reason-required");
             assertThat(served.getResponse().getStatus()).isEqualTo(200);
             assertThat(served.getResponse().getContentAsString()).isEqualTo("INC-4411");
         }
@@ -229,17 +231,19 @@ class AdminSurfaceMvcTest {
         @Test
         @DisplayName("discovery lists only what the caller holds, and an empty list for a caller holding nothing")
         void discovery() throws Exception {
-            MvcResult support = mvc.perform(get("/admin/v1/me/operations")
+            MvcResult support = mvc.perform(get("/me/operations")
                     .with(as(PrincipalType.USER, Credential.DIRECT, "NOTIFICATION_SUPPORT"))).andReturn();
-            MvcResult nobody = mvc.perform(get("/admin/v1/me/operations")
+            MvcResult nobody = mvc.perform(get("/me/operations")
                     .with(as(PrincipalType.USER, Credential.DIRECT))).andReturn();
 
             assertThat(support.getResponse().getStatus()).isEqualTo(200);
             assertThat(support.getResponse().getContentType()).startsWith("application/json");
             JsonNode held = JSON.readTree(support.getResponse().getContentAsString());
             assertThat(held).hasSize(1);
-            assertThat(held.get(0).path("id").asText()).isEqualTo("fixture.read");
-            assertThat(held.get(0).path("tier").asText()).isEqualTo("read");
+            assertThat(held.get(0).path("id").asText()).isEqualTo("fixture.thing.read");
+            assertThat(held.get(0).path("sensitivity").asText()).isEqualTo("READ");
+            assertThat(held.get(0).path("surface").asText()).isEqualTo("ADMIN");
+            assertThat(held.get(0).path("scope").get(0).asText()).isEqualTo("ALL");
             assertThat(nobody.getResponse().getContentAsString()).isEqualTo("[]");
         }
     }
@@ -253,7 +257,7 @@ class AdminSurfaceMvcTest {
     @SpringBootTest(classes = OpenChainApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK,
             properties = {
                 "ludwig.security.jwt.enabled=false", "ludwig.web.i18n.configure-validator=false",
-                "ludwig.admin.grants.fixture.read[0]=NOTIFICATION_ADMIN"})
+                "ludwig.security.roles.NOTIFICATION_ADMIN.operations[fixture.thing.read]=ALL"})
     @AutoConfigureMockMvc
     class OpenChain {
 
@@ -292,14 +296,12 @@ class AdminSurfaceMvcTest {
         private org.springframework.context.ApplicationContext context;
 
         @Test
-        @DisplayName("with the surface off there is no guard, no catalog and no discovery endpoint")
+        @DisplayName("with the surface off there is no guard, and an administrative handler still mapped is refused")
         void absent() throws Exception {
             assertThat(context.getBeanNamesForType(ru.ludwigandreas.security.admin.AdminSurfaceGuard.class)).isEmpty();
-            assertThat(context.getBeanNamesForType(ru.ludwigandreas.security.admin.AdminOperationCatalog.class))
-                    .isEmpty();
-            MvcResult result = mvc.perform(get("/admin/v1/me/operations")
+            MvcResult result = mvc.perform(get("/admin/v1/fixture/things")
                     .with(as(PrincipalType.USER, Credential.DIRECT, "NOTIFICATION_ADMIN"))).andReturn();
-            assertThat(result.getResponse().getStatus()).isEqualTo(404);
+            assertThat(result.getResponse().getStatus()).isEqualTo(403);
         }
     }
 
@@ -324,7 +326,7 @@ class AdminSurfaceMvcTest {
     @SpringBootTest(classes = RequiredViaApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK,
             properties = {
                 "ludwig.security.jwt.enabled=false", "ludwig.web.i18n.configure-validator=false",
-                "ludwig.admin.grants.fixture.read[0]=NOTIFICATION_SUPPORT",
+                "ludwig.security.roles.NOTIFICATION_SUPPORT.operations[fixture.thing.read]=ALL",
                 "ludwig.admin.human-callers.required-via[0]=admin-console"})
     @AutoConfigureMockMvc
     class RequiredVia {
@@ -368,13 +370,13 @@ class AdminSurfaceMvcTest {
         }
     }
 
-    /** What the identity projection's per-subject grants would give bob: one object, for both tiers. */
+    /** What the identity projection's per-subject grants would give bob: one object, for every fixture operation. */
     static class ObjectScopedApplication extends RequiredViaApplication {
 
         @Bean
         DataScopeProvider bobsGrants() {
             return (principal, resource, action) ->
-                    "bob".equals(principal.subject()) && "admin.fixture".equals(resource)
+                    "bob".equals(principal.subject()) && resource.startsWith("fixture.thing.")
                     ? DataScope.restrictedTo(ScopeDimension.OBJECT, "a")
                     : DataScope.none();
         }
@@ -389,12 +391,9 @@ class AdminSurfaceMvcTest {
     @SpringBootTest(classes = ObjectScopedApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK,
             properties = {
                 "ludwig.security.jwt.enabled=false", "ludwig.web.i18n.configure-validator=false",
-                "ludwig.admin.grants.fixture.read[0]=SUPPLY_OPS",
-                "ludwig.admin.grants.fixture.read[1]=PLATFORM_ADMIN",
-                "ludwig.admin.grants.fixture.operate[0]=SUPPLY_OPS",
-                "ludwig.security.data.policies[admin.fixture].read.ROLE_SUPPLY_OPS=NONE",
-                "ludwig.security.data.policies[admin.fixture].read.ROLE_PLATFORM_ADMIN=ALL",
-                "ludwig.security.data.policies[admin.fixture].operate.ROLE_SUPPLY_OPS=NONE"})
+                "ludwig.security.roles.SUPPLY_OPS.operations[fixture.thing.read]=OBJECT",
+                "ludwig.security.roles.PLATFORM_ADMIN.operations[fixture.thing.read]=ALL",
+                "ludwig.security.roles.SUPPLY_OPS.operations[fixture.thing.poke]=OBJECT"})
     @AutoConfigureMockMvc
     class ObjectScoped {
 
@@ -439,7 +438,7 @@ class AdminSurfaceMvcTest {
     @SpringBootTest(classes = ObjectScopedApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK,
             properties = {
                 "ludwig.security.jwt.enabled=false", "ludwig.web.i18n.configure-validator=false",
-                "ludwig.admin.grants.fixture.operate[0]=SUPPLY_OPS"})
+                "ludwig.security.roles.SUPPLY_OPS.operations[fixture.thing.poke]=ALL"})
     @AutoConfigureMockMvc
     class NoObjectPolicy {
 
@@ -447,7 +446,7 @@ class AdminSurfaceMvcTest {
         private MockMvc mvc;
 
         @Test
-        @DisplayName("with no policy entry for the area, holding the operation admits every object")
+        @DisplayName("a role holding the operation for ALL admits every object")
         void everyObject() throws Exception {
             assertThat(mvc.perform(post("/admin/v1/fixture/things/b/poke").with(bob())).andReturn().getResponse()
                     .getStatus()).isEqualTo(200);
@@ -455,15 +454,15 @@ class AdminSurfaceMvcTest {
     }
 
     @Test
-    @DisplayName("a role-level object list for an administrative resource fails startup, naming the entry")
-    void roleLevelObjectListRefused() {
+    @DisplayName("a row dimension on an administrative operation that touches no rows fails startup, naming it")
+    void rowDimensionWithoutRowsRefused() {
         assertThatThrownBy(() -> new SpringApplicationBuilder(ObjectScopedApplication.class)
                 .web(WebApplicationType.SERVLET)
                 .properties("ludwig.security.jwt.enabled=false", "ludwig.web.i18n.configure-validator=false",
                         "server.port=0",
-                        "ludwig.security.data.policies[admin.fixture].operate.ROLE_SUPPLY_OPS=OBJECT")
+                        "ludwig.security.roles.SUPPLY_OPS.operations[fixture.thing.poke]=OWN")
                 .run().close())
-                .hasStackTraceContaining("admin.fixture.operate.ROLE_SUPPLY_OPS")
-                .hasStackTraceContaining("granted per subject");
+                .hasStackTraceContaining("ROLE_SUPPLY_OPS -> fixture.thing.poke")
+                .hasStackTraceContaining("touches no rows");
     }
 }

@@ -27,9 +27,9 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "ludwig.security.enabled=true",
             "ludwig.security.jwt.enabled=false",
             "management.endpoints.web.exposure.include=fileingest",
-            "ludwig.admin.grants.fileingest.read[0]=INGEST_SUPPORT",
-            "ludwig.admin.grants.fileingest.read[1]=INGEST_ADMIN",
-            "ludwig.admin.grants.fileingest.operate[0]=INGEST_ADMIN"})
+            "ludwig.security.roles.INGEST_SUPPORT.operations[fileingest.task.read]=ALL",
+            "ludwig.security.roles.INGEST_ADMIN.operations[fileingest.task.read]=ALL",
+            "ludwig.security.roles.INGEST_ADMIN.operations[fileingest.run.start]=ALL"})
 @AutoConfigureMockMvc
 class FileIngestAdminIT extends FileIngestTestBase {
 

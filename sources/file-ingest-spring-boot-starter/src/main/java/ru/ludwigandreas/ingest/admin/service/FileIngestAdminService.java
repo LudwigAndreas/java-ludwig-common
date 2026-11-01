@@ -32,7 +32,7 @@ import ru.ludwigandreas.webcore.operation.OperationStatus;
  * ingest at nine in the morning is almost always one of three - did it run, did it finish, and if it is still going,
  * is it moving - and the third is answered only by the checkpoint, which is why every run view carries it beside the
  * envelope. The manual trigger no longer needs {@code ludwig.ingest.endpoint.allow-manual-run}: whether a deployment
- * permits it is whether any role is granted {@code fileingest.operate}.
+ * permits it is whether any role is granted {@code fileingest.run.start}.
  */
 public class FileIngestAdminService {
 

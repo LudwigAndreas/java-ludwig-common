@@ -3,8 +3,8 @@ package ru.ludwigandreas.archrules.fixture.bad.admin.web;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.archrules.fixture.bad.admin.repository.ThingRepository;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /** Violates controller-is-a-thin-adapter. */
 @RestController
@@ -18,7 +18,7 @@ public class RepositoryBackedAdminController {
     }
 
     @GetMapping
-    @AdminAccess("raw.read")
+    @RequiresOperation("raw.raw.read")
     public String read() {
         return repository.nameOf("x");
     }

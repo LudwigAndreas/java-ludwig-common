@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.ingest.admin.FileIngestAdminOperations;
 import ru.ludwigandreas.ingest.admin.service.FileIngestAdminService;
-import ru.ludwigandreas.security.admin.AdminAccess;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 import ru.ludwigandreas.webcore.operation.OperationLocationHeader;
 import ru.ludwigandreas.webcore.operation.OperationResponse;
 import ru.ludwigandreas.webcore.operation.OperationResponses;
@@ -42,7 +42,7 @@ public class FileIngestAdminController {
      * @return one entry per task
      */
     @GetMapping
-    @AdminAccess(FileIngestAdminOperations.READ)
+    @RequiresOperation(FileIngestAdminOperations.TASK_READ)
     public Map<String, Object> tasks() {
         return service.tasks();
     }
@@ -54,7 +54,7 @@ public class FileIngestAdminController {
      * @return the task
      */
     @GetMapping("/{task}")
-    @AdminAccess(FileIngestAdminOperations.READ)
+    @RequiresOperation(FileIngestAdminOperations.TASK_READ)
     public Map<String, Object> task(@PathVariable String task) {
         return service.task(task);
     }
@@ -67,7 +67,7 @@ public class FileIngestAdminController {
      * @return the run
      */
     @GetMapping("/{task}/runs/{runId}")
-    @AdminAccess(FileIngestAdminOperations.READ)
+    @RequiresOperation(FileIngestAdminOperations.TASK_READ)
     public Map<String, Object> run(@PathVariable String task, @PathVariable UUID runId) {
         return service.run(task, runId);
     }
@@ -79,7 +79,7 @@ public class FileIngestAdminController {
      * @return {@code 202} with the run's envelope and the run as its status resource; {@code 409} when it is running
      */
     @PostMapping("/{task}/runs")
-    @AdminAccess(FileIngestAdminOperations.OPERATE)
+    @RequiresOperation(FileIngestAdminOperations.RUN_START)
     public ResponseEntity<OperationResponse> trigger(@PathVariable String task) {
         OperationResponse operation = service.trigger(task);
         // A pass that found nothing new to ingest writes no run; the task is then the status resource.

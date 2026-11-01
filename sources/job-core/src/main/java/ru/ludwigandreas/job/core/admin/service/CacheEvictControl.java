@@ -9,7 +9,7 @@ import ru.ludwigandreas.cache.api.CacheSettings;
 import ru.ludwigandreas.cache.api.LudwigCacheRegistry;
 import ru.ludwigandreas.job.core.admin.CacheAdminOperations;
 import ru.ludwigandreas.job.core.control.ReplicaControl;
-import ru.ludwigandreas.security.admin.AdminOperation;
+import ru.ludwigandreas.security.operation.Operation;
 
 /**
  * The {@code cacheevict} control: clears every entry of one cache on every replica, and its shared tier where it has
@@ -51,17 +51,17 @@ public class CacheEvictControl implements ReplicaControl<CacheEvictControl.Argum
     }
 
     @Override
-    public AdminOperation operationFor(Arguments arguments) {
+    public Operation operationFor(Arguments arguments) {
         CacheSettings settings = registry.settings().stream()
                 .filter(each -> each.name().equals(arguments.cache())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("no cache named '" + arguments.cache() + "'"));
         return settings.purpose() == CachePurpose.SECURITY
-                ? CacheAdminOperations.PRIVILEGED_OPERATION : CacheAdminOperations.OPERATE_OPERATION;
+                ? CacheAdminOperations.SECURITY_EVICT_OPERATION : CacheAdminOperations.PERFORMANCE_EVICT_OPERATION;
     }
 
     @Override
-    public Set<AdminOperation> possibleOperations() {
-        return Set.of(CacheAdminOperations.OPERATE_OPERATION, CacheAdminOperations.PRIVILEGED_OPERATION);
+    public Set<Operation> possibleOperations() {
+        return Set.of(CacheAdminOperations.PERFORMANCE_EVICT_OPERATION, CacheAdminOperations.SECURITY_EVICT_OPERATION);
     }
 
     @Override

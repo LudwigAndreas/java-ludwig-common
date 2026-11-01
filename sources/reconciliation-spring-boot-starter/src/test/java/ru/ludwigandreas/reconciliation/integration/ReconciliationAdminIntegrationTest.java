@@ -26,7 +26,7 @@ import ru.ludwigandreas.reconciliation.integration.testmodel.ItemCatalogueEnumer
 import ru.ludwigandreas.reconciliation.integration.testmodel.ItemReconciler;
 import ru.ludwigandreas.reconciliation.integration.testmodel.RecordingAuditSink;
 import ru.ludwigandreas.reconciliation.integration.testmodel.StubCollectionPartner;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
@@ -42,11 +42,33 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "ludwig.security.enabled=true",
             "ludwig.security.jwt.enabled=false",
             "management.endpoints.web.exposure.include=reconciliation",
-            "ludwig.admin.grants.reconciliation.read[0]=SYNC_OPERATOR",
-            "ludwig.admin.grants.reconciliation.read[1]=SYNC_ADMIN",
-            "ludwig.admin.grants.reconciliation.operate[0]=SYNC_OPERATOR",
-            "ludwig.admin.grants.reconciliation.operate[1]=SYNC_ADMIN",
-            "ludwig.admin.grants.reconciliation.privileged[0]=SYNC_ADMIN"})
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.task.read]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.task.read]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.run.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.backfill.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.cursor.reset]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.scope.reset]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.quarantine.requeue]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.member.requeue]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.remotejob.requeue]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.discovery.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.walk.start]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.walk.preview]=ALL",
+            "ludwig.security.roles.SYNC_OPERATOR.operations[reconciliation.sweep.discard]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.run.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.backfill.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.cursor.reset]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.scope.reset]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.quarantine.requeue]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.member.requeue]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.remotejob.requeue]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.discovery.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.walk.start]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.walk.preview]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.sweep.discard]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.remotejob.cancel]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.lease.release]=ALL",
+            "ludwig.security.roles.SYNC_ADMIN.operations[reconciliation.sweep.confirm]=ALL"})
 @Import(PostgresContainerConfiguration.class)
 @AutoConfigureMockMvc
 class ReconciliationAdminIntegrationTest {
@@ -96,8 +118,7 @@ class ReconciliationAdminIntegrationTest {
     }
 
     private List<AuditEvent> adminEvents() {
-        return audit.withAction("reconciliation.operate").isEmpty()
-                ? audit.withAction("reconciliation.privileged") : audit.withAction("reconciliation.operate");
+        return audit.withAction("reconciliation.walk.preview");
     }
 
     @Test
@@ -165,7 +186,7 @@ class ReconciliationAdminIntegrationTest {
 
         assertThat(result.path("applied").asInt()).isEqualTo(1);
         assertThat(result.path("kind").asText()).isEqualTo("full");
-        assertThat(audit.withAction("reconciliation.operate")).singleElement().satisfies(event -> {
+        assertThat(audit.withAction("reconciliation.walk.start")).singleElement().satisfies(event -> {
             assertThat(event.category()).isEqualTo("admin");
             assertThat(event.actor().subject()).isEqualTo("olga");
             assertThat(event.attributes()).containsEntry("action", "walk");
@@ -177,7 +198,7 @@ class ReconciliationAdminIntegrationTest {
         givenAWithheldSweep();
 
         MvcResult result = perform(post(BASE + TASK + "/scopes/" + SCOPE + "/sweep/confirm")
-                .header(AdminInvocation.REASON_HEADER, "partner confirmed the removals").with(operator()));
+                .header(OperationEvaluator.REASON_HEADER, "partner confirmed the removals").with(operator()));
 
         assertThat(result.getResponse().getStatus()).isEqualTo(403);
         assertThat(catalogue.recorded().leftCalls()).isEmpty();
@@ -199,11 +220,11 @@ class ReconciliationAdminIntegrationTest {
         givenAWithheldSweep();
 
         JsonNode result = json(post(BASE + TASK + "/scopes/" + SCOPE + "/sweep/confirm")
-                .header(AdminInvocation.REASON_HEADER, "partner confirmed the removals").with(admin()));
+                .header(OperationEvaluator.REASON_HEADER, "partner confirmed the removals").with(admin()));
 
         assertThat(result.path("reported").asInt()).isEqualTo(4);
         assertThat(catalogue.recorded().leftCalls()).hasSize(4);
-        assertThat(audit.withAction("reconciliation.privileged")).singleElement().satisfies(event ->
+        assertThat(audit.withAction("reconciliation.sweep.confirm")).singleElement().satisfies(event ->
                 assertThat(event.attributes()).containsEntry("reason", "partner confirmed the removals"));
     }
 

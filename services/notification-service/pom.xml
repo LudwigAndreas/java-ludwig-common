@@ -133,6 +133,11 @@
             <groupId>ru.ludwigandreas</groupId>
             <artifactId>identity-projection-spring-boot-starter</artifactId>
         </dependency>
+        <!-- Feeds that projection from the OIDC provider's user topic (ludwig.identity.kafka.subscriptions). -->
+        <dependency>
+            <groupId>ru.ludwigandreas</groupId>
+            <artifactId>identity-source-kafka-spring-boot-starter</artifactId>
+        </dependency>
         <!--
             OPTIONAL, AND COMPILE-TIME ONLY. READ THIS BEFORE CHANGING THE SCOPE.
 

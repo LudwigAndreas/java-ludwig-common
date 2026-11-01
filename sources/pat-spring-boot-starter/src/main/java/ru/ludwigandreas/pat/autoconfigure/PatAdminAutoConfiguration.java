@@ -15,14 +15,14 @@ import ru.ludwigandreas.pat.repository.PatQueryRepository;
 import ru.ludwigandreas.pat.service.PatService;
 import ru.ludwigandreas.pat.web.PatCredentialGuard;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 
 /**
  * The {@code pat} administrative area, registered only where the administrative surface exists.
  */
 @AutoConfiguration(after = {PatAutoConfiguration.class, PatWebAutoConfiguration.class},
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnBean({AdminOperationCatalog.class, PatService.class, PatCredentialGuard.class})
+@ConditionalOnBean({AdminSurfaceGuard.class, PatService.class, PatCredentialGuard.class})
 public class PatAdminAutoConfiguration {
 
     @Bean

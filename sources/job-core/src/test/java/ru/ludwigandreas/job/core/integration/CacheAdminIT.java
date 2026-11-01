@@ -29,7 +29,7 @@ import ru.ludwigandreas.cache.api.CachePurpose;
 import ru.ludwigandreas.cache.api.LudwigCache;
 import ru.ludwigandreas.cache.api.LudwigCacheRegistry;
 import ru.ludwigandreas.job.core.control.ReplicaControlPoller;
-import ru.ludwigandreas.security.admin.AdminInvocation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.testsupport.container.Containers;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
@@ -44,10 +44,11 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "spring.liquibase.change-log=classpath:db/changelog/job-core/job-core-changelog.xml",
             "ludwig.job-core.owner=cache-replica",
             "ludwig.job-core.control.poll-interval=PT1H",
-            "ludwig.admin.grants.replicas.read[0]=OPS",
-            "ludwig.admin.grants.caches.read[0]=OPS",
-            "ludwig.admin.grants.caches.operate[0]=OPS",
-            "ludwig.admin.grants.caches.privileged[0]=SECURITY_ADMIN"})
+            "ludwig.security.roles.OPS.operations[replica.instance.read]=ALL",
+            "ludwig.security.roles.OPS.operations[replica.command.read]=ALL",
+            "ludwig.security.roles.OPS.operations[cache.definition.read]=ALL",
+            "ludwig.security.roles.OPS.operations[cache.performance.evict]=ALL",
+            "ludwig.security.roles.SECURITY_ADMIN.operations[cache.security.evict]=ALL"})
 @AutoConfigureMockMvc
 class CacheAdminIT {
 
@@ -114,7 +115,7 @@ class CacheAdminIT {
     private MvcResult evict(String cache, RequestPostProcessor caller, String reason) throws Exception {
         var request = post("/admin/v1/replicas/controls/cacheevict").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"cache\":\"" + cache + "\"}").with(caller);
-        return mvc.perform(reason == null ? request : request.header(AdminInvocation.REASON_HEADER, reason))
+        return mvc.perform(reason == null ? request : request.header(OperationEvaluator.REASON_HEADER, reason))
                 .andReturn();
     }
 

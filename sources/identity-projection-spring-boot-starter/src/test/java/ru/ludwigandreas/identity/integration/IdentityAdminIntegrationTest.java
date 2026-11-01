@@ -11,6 +11,7 @@ import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,11 +32,12 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import ru.ludwigandreas.audit.AuditEvent;
 import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.identity.entity.SecurityUserEntity;
+import ru.ludwigandreas.identity.feed.IdentityFeed;
 import ru.ludwigandreas.identity.repository.SecurityGrantRepository;
 import ru.ludwigandreas.identity.repository.SecurityPartnerRepository;
 import ru.ludwigandreas.identity.repository.SecurityUserRepository;
-import ru.ludwigandreas.security.admin.AdminInvocation;
 import ru.ludwigandreas.security.data.DataScopeMapping;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
@@ -45,13 +47,24 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 @SpringBootTest(classes = IdentityAdminIntegrationTest.Application.class,
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
-            "ludwig.identity.kafka.enabled=false",
             "ludwig.security.jwt.enabled=false",
             "spring.liquibase.enabled=false",
             "spring.jpa.hibernate.ddl-auto=validate",
-            "ludwig.admin.grants.identity.read[0]=ACCESS_SUPPORT",
-            "ludwig.admin.grants.identity.read[1]=ACCESS_ADMIN",
-            "ludwig.admin.grants.identity.privileged[0]=ACCESS_ADMIN"})
+            "ludwig.security.roles.ACCESS_SUPPORT.operations[identity.partner.read]=ALL",
+            "ludwig.security.roles.ACCESS_SUPPORT.operations[identity.grant.read]=ALL",
+            "ludwig.security.roles.ACCESS_SUPPORT.operations[identity.authority.read]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.partner.read]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.grant.read]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.authority.read]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.partner.onboard]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.partner.replace]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.partner.suspend]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.partner.activate]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.grant.create]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.grant.revoke]=ALL",
+            "ludwig.security.roles.ACCESS_ADMIN.operations[identity.source.read]=ALL",
+            "ludwig.identity.sources.oidc.unmapped-roles=KEEP",
+            "ludwig.identity.sources.customers.unmapped-roles=KEEP"})
 @Import(PostgresContainerConfiguration.class)
 @AutoConfigureMockMvc
 class IdentityAdminIntegrationTest {
@@ -73,6 +86,27 @@ class IdentityAdminIntegrationTest {
         @Bean
         JPAQueryFactory jpaQueryFactory(EntityManager entityManager) {
             return new JPAQueryFactory(entityManager);
+        }
+
+        /** A feed for {@code oidc}, standing in for the Kafka source; {@code customers} has none. */
+        @Bean
+        IdentityFeed oidcFeed() {
+            return new IdentityFeed() {
+                @Override
+                public String source() {
+                    return "oidc";
+                }
+
+                @Override
+                public String kind() {
+                    return "kafka";
+                }
+
+                @Override
+                public Map<String, Object> status() {
+                    return Map.of("topic", "oidc.users");
+                }
+            };
         }
 
         @Bean
@@ -141,13 +175,35 @@ class IdentityAdminIntegrationTest {
     }
 
     @Test
+    @DisplayName("the sources listing shows each declared source, its feeds and its users by status, and no user")
+    void listsTheSources() throws Exception {
+        MvcResult listed = perform(get(BASE + "/sources").with(admin()));
+
+        assertThat(listed.getResponse().getStatus()).isEqualTo(200);
+        JsonNode sources = JSON.readTree(listed.getResponse().getContentAsString());
+        assertThat(sources.findValuesAsText("name")).containsExactly("customers", "oidc");
+        JsonNode oidc = sources.get(1);
+        assertThat(oidc.path("feeds").get(0).path("kind").asText()).isEqualTo("kafka");
+        assertThat(oidc.path("feeds").get(0).path("status").path("topic").asText()).isEqualTo("oidc.users");
+        assertThat(oidc.path("users").path("ACTIVE").asLong()).isEqualTo(2);
+        assertThat(sources.get(0).path("feeds")).isEmpty();
+        assertThat(listed.getResponse().getContentAsString()).doesNotContain("bob");
+    }
+
+    @Test
+    @DisplayName("reading the sources needs identity.source.read")
+    void sourcesNeedTheirOperation() throws Exception {
+        assertThat(perform(get(BASE + "/sources").with(support())).getResponse().getStatus()).isEqualTo(403);
+    }
+
+    @Test
     @DisplayName("a partner is onboarded and suspended with a reason, each change audited")
     void partnerLifecycle() throws Exception {
         MvcResult onboarded = perform(json(post(BASE + "/partners"),
                 "{\"code\":\"acme-logistics\",\"displayName\":\"Acme Logistics\",\"roles\":[\"PARTNER_ORDERS\"]}")
-                .header(AdminInvocation.REASON_HEADER, "contract signed").with(admin()));
+                .header(OperationEvaluator.REASON_HEADER, "contract signed").with(admin()));
         MvcResult suspended = perform(post(BASE + "/partners/acme-logistics/suspend")
-                .header(AdminInvocation.REASON_HEADER, "contract ended").with(admin()));
+                .header(OperationEvaluator.REASON_HEADER, "contract ended").with(admin()));
 
         assertThat(onboarded.getResponse().getStatus()).isEqualTo(201);
         assertThat(suspended.getResponse().getStatus()).isEqualTo(200);
@@ -162,13 +218,13 @@ class IdentityAdminIntegrationTest {
     @DisplayName("a replace naming a stale version is a 412 and changes nothing")
     void stalePartnerReplace() throws Exception {
         perform(json(post(BASE + "/partners"), "{\"code\":\"p1\",\"displayName\":\"One\"}")
-                .header(AdminInvocation.REASON_HEADER, "onboard").with(admin()));
+                .header(OperationEvaluator.REASON_HEADER, "onboard").with(admin()));
         String etag = perform(get(BASE + "/partners/p1").with(support())).getResponse().getHeader("ETag");
 
         MvcResult first = perform(json(put(BASE + "/partners/p1"), "{\"displayName\":\"One, renamed\"}")
-                .header("If-Match", etag).header(AdminInvocation.REASON_HEADER, "rename").with(admin()));
+                .header("If-Match", etag).header(OperationEvaluator.REASON_HEADER, "rename").with(admin()));
         MvcResult second = perform(json(put(BASE + "/partners/p1"), "{\"displayName\":\"Lost update\"}")
-                .header("If-Match", etag).header(AdminInvocation.REASON_HEADER, "rename").with(admin()));
+                .header("If-Match", etag).header(OperationEvaluator.REASON_HEADER, "rename").with(admin()));
 
         assertThat(first.getResponse().getStatus()).isEqualTo(200);
         assertThat(second.getResponse().getStatus()).isEqualTo(412);
@@ -182,11 +238,11 @@ class IdentityAdminIntegrationTest {
                 + "\"dimension\":\"tenant\",\"dimensionValue\":\"acme\",\"expiresAt\":\"2099-01-01T00:00:00Z\"}";
 
         MvcResult created = perform(json(post(BASE + "/grants"), grant)
-                .header(AdminInvocation.REASON_HEADER, "INC-7").with(admin()));
+                .header(OperationEvaluator.REASON_HEADER, "INC-7").with(admin()));
         MvcResult badDimension = perform(json(post(BASE + "/grants"), grant.replace("\"tenant\"", "\"region\""))
-                .header(AdminInvocation.REASON_HEADER, "INC-7").with(admin()));
+                .header(OperationEvaluator.REASON_HEADER, "INC-7").with(admin()));
         MvcResult bySupport = perform(json(post(BASE + "/grants"), grant)
-                .header(AdminInvocation.REASON_HEADER, "INC-7").with(support()));
+                .header(OperationEvaluator.REASON_HEADER, "INC-7").with(support()));
 
         assertThat(created.getResponse().getStatus()).isEqualTo(201);
         assertThat(badDimension.getResponse().getStatus()).isEqualTo(400);
@@ -200,11 +256,11 @@ class IdentityAdminIntegrationTest {
         String id = JSON.readTree(perform(json(post(BASE + "/grants"),
                         "{\"subject\":\"bob\",\"principalType\":\"USER\","
                                 + "\"resourceType\":\"order\",\"action\":\"read\"}")
-                        .header(AdminInvocation.REASON_HEADER, "INC-7").with(admin())).getResponse()
+                        .header(OperationEvaluator.REASON_HEADER, "INC-7").with(admin())).getResponse()
                 .getContentAsString()).path("id").asText();
 
         MvcResult revoked = perform(post(BASE + "/grants/" + id + "/revoke")
-                .header(AdminInvocation.REASON_HEADER, "INC-7 closed").with(admin()));
+                .header(OperationEvaluator.REASON_HEADER, "INC-7 closed").with(admin()));
         JsonNode lapsed = JSON.readTree(perform(get(BASE + "/grants").param("active", "false").with(support()))
                 .getResponse().getContentAsString());
 
@@ -224,7 +280,7 @@ class IdentityAdminIntegrationTest {
                 .contains("ROLE_ORDER_CLERK");
         assertThat(other.getResponse().getStatus()).isEqualTo(404);
         assertThat(adminEvents()).singleElement().satisfies(event -> {
-            assertThat(event.action()).isEqualTo("identity.read");
+            assertThat(event.action()).isEqualTo("identity.authority.read");
             assertThat(event.resource().id()).isEqualTo("bob");
         });
     }

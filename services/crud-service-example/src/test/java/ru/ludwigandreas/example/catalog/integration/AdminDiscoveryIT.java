@@ -17,12 +17,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import ru.ludwigandreas.testsupport.container.PostgresContainerConfiguration;
 
 /**
- * What an administrative UI sees when it asks this service which operations its administrator holds.
+ * What a UI sees when it asks this service which operations its administrator holds.
  *
- * <p>The grants are this service's own ({@code ludwig.admin.grants} in {@code application.yml}); the descriptions
- * come from each starter's bundle. A description that equals its operation id means a bundle key is missing and the
- * UI would show {@code outbox.privileged} to a person - startup refuses that, and this asserts it end to end with
- * every starter this service actually runs.
+ * <p>The roles are this service's own ({@code ludwig.security.roles} in {@code application.yml}); the descriptions
+ * come from each starter's bundle and this service's own. A description that equals its operation id means a bundle
+ * key is missing and the UI would show {@code outbox.message.discard} to a person - startup refuses that, and this
+ * asserts it end to end with every starter this service actually runs.
  */
 @AutoConfigureMockMvc
 @SpringBootTest
@@ -44,7 +44,7 @@ class AdminDiscoveryIT {
     @Test
     @DisplayName("the catalog administrator holds operations, each with a description rather than its id")
     void everyHeldOperationIsDescribed() throws Exception {
-        String json = mockMvc.perform(get("/admin/v1/me/operations").with(TestPrincipals.admin()))
+        String json = mockMvc.perform(get("/me/operations").with(TestPrincipals.admin()))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 

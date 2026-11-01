@@ -3,11 +3,14 @@ package ru.ludwigandreas.hotreload.core;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -25,6 +28,9 @@ public class SourceReloadCoordinator {
 
     private final Map<String, Map<String, Object>> lastKnownGood = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<SourceChangeListener> listeners = new CopyOnWriteArrayList<>();
+    private final Map<String, Instant> lastReloaded = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> rejections = new ConcurrentHashMap<>();
+    private final Map<String, ReloadOutcome> lastOutcome = new ConcurrentHashMap<>();
 
     public void addListener(SourceChangeListener listener) {
         listeners.add(listener);
@@ -43,18 +49,70 @@ public class SourceReloadCoordinator {
      * @return {@code true} if listeners were notified of a change
      */
     public boolean reload(ReloadableSource source) {
+        return reloadOutcome(source) == ReloadOutcome.RELOADED;
+    }
+
+    /**
+     * {@link #reload(ReloadableSource)}, saying what happened: {@link ReloadOutcome#REJECTED} when the source could
+     * not be loaded, or when a typed configuration refused the new content during notification (see
+     * {@link #rejected(String)}).
+     *
+     * @param source the source
+     * @return the outcome on this replica
+     */
+    public ReloadOutcome reloadOutcome(ReloadableSource source) {
+        ReloadOutcome outcome = load(source);
+        lastOutcome.put(source.id(), outcome);
+        if (outcome == ReloadOutcome.RELOADED) {
+            lastReloaded.put(source.id(), Instant.now());
+        }
+        return outcome;
+    }
+
+    /**
+     * Records that a listener refused a change of {@code sourceId} and kept its previous value - a typed
+     * configuration whose new content failed validation. Notifies nobody; it only makes the reload in progress
+     * report {@link ReloadOutcome#REJECTED}.
+     *
+     * @param sourceId the source whose change was refused
+     */
+    public void rejected(String sourceId) {
+        rejections.computeIfAbsent(sourceId, id -> new AtomicLong()).incrementAndGet();
+    }
+
+    /**
+     * When {@code sourceId} last reloaded with changed content on this replica.
+     *
+     * @param sourceId the source
+     * @return the time, when it has
+     */
+    public Optional<Instant> lastReloaded(String sourceId) {
+        return Optional.ofNullable(lastReloaded.get(sourceId));
+    }
+
+    /**
+     * The outcome of the last reload of {@code sourceId} on this replica, by whichever path it ran.
+     *
+     * @param sourceId the source
+     * @return it, when the source has been reloaded
+     */
+    public Optional<ReloadOutcome> lastOutcome(String sourceId) {
+        return Optional.ofNullable(lastOutcome.get(sourceId));
+    }
+
+    private ReloadOutcome load(ReloadableSource source) {
         Map<String, Object> content;
         try {
             content = source.load();
         } catch (Exception e) {
             notifyError(source.id(), e);
-            return false;
+            return ReloadOutcome.REJECTED;
         }
 
         Map<String, Object> previous = lastKnownGood.get(source.id());
         Set<String> changedKeys = diff(previous, content);
         if (previous != null && changedKeys.isEmpty()) {
-            return false;
+            return ReloadOutcome.UNCHANGED;
         }
 
         lastKnownGood.put(source.id(), content);
@@ -62,8 +120,14 @@ public class SourceReloadCoordinator {
                 previous == null ? Map.of() : previous, changedKeys);
         log.info("Source '{}' {} ({} key(s) changed)", source.id(), previous == null ? "loaded" : "reloaded",
                 changedKeys.size());
+        long refusedBefore = rejectionCount(source.id());
         notifyChange(event);
-        return true;
+        return rejectionCount(source.id()) > refusedBefore ? ReloadOutcome.REJECTED : ReloadOutcome.RELOADED;
+    }
+
+    private long rejectionCount(String sourceId) {
+        AtomicLong count = rejections.get(sourceId);
+        return count == null ? 0 : count.get();
     }
 
     public Map<String, Object> lastKnownGood(String sourceId) {

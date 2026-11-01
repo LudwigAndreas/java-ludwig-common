@@ -4,7 +4,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ludwigandreas.security.admin.AdminAccess;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 
 /** Violates no-second-gate on the class. */
 @RestController
@@ -13,7 +13,7 @@ import ru.ludwigandreas.security.admin.AdminAccess;
 public class ClassGatedAdminController {
 
     @GetMapping
-    @AdminAccess("leases.read")
+    @RequiresOperation("leases.lease.read")
     public String list() {
         return "leases";
     }

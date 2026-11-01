@@ -115,6 +115,39 @@ void onConfigChanged(ConfigurationRefreshedEvent event) {
 [observability](../observability-spring-boot-starter#runtime-log-levels) uses this to apply `logging.level.*`
 at runtime.
 
+## Administration
+
+Where `security-spring-boot-starter`'s administrative surface and `job-core`'s replica-control channel both run (both
+optional dependencies), the starter contributes the `hotreload` area; without either it contributes nothing.
+
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `hotreload.source.reload` | `CHANGE` | control `hotreloadreload` with `{"source": "<id>"}` | Reload a configuration or secret source on every replica. |
+| `hotreload.source.read` | `READ` | `GET /admin/v1/hotreload/sources` | See the reloadable configuration and secret sources, with their kind and last reload; never a value. |
+
+Each operation is held through the service's own `ludwig.security.roles`; a `PRIVILEGED` one needs an `Operation-Reason` header and refuses a personal access token.
+
+A forced reload goes through the same coordinator as a watched one: the same diff, last-known-good rule, audit and
+listeners. Each replica answers `reloaded`, `unchanged` or `rejected`; `rejected` (unreadable content, or a typed
+configuration whose validation refused it) keeps the last-known-good value and still acknowledges the command. For a
+Vault lease source a forced reload requests a new secret (`SecretLeaseContainer.rotate`); a renewable lease answers
+`unchanged`. An unknown source is `400`.
+
+Role block (the role names are the service's own; `ALL` is the scope):
+
+```yaml
+ludwig:
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          hotreload.source.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          hotreload.source.reload: ALL
+```
+
 ## Configuration
 
 ```properties

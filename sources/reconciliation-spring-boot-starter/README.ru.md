@@ -378,8 +378,8 @@ ludwig:
 | `sync_audit_record` | Создаётся changelog-ом; не пишется (след - `audit_event`) |
 | `job_run_lock` | Из job-core: аренды запусков задач |
 
-**Администрирование**: выдайте `reconciliation.*` операторским ролям сервиса в `ludwig.admin.grants`;
-`reconciliation.privileged` - только там, где разрушительные действия действительно нужны. **Партнёры**: `@LudwigRestClient` на каждый fetcher; rate limit ÷ реплики.
+**Администрирование**: выдайте операции `reconciliation.*` операторским ролям сервиса в
+`ludwig.security.roles`; операции `PRIVILEGED` - только там, где разрушительные действия действительно нужны. **Партнёры**: `@LudwigRestClient` на каждый fetcher; rate limit ÷ реплики.
 
 ## Наблюдаемость
 
@@ -425,13 +425,25 @@ Gauge вычисляются из supplier-ов (остановившаяся з
 
 ## Администрирование
 
-Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют, решает собственный `ludwig.admin.grants` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, не выданная ни одной роли, запрещена всем. Вызов уровня `privileged` требует заголовка `Admin-Reason`, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /admin/v1/me/operations` показывает, какие операции есть у вызывающего.
+Эндпоинты оператора находятся на административной поверхности платформы, `/admin/v1/{area}`, и существуют только там, где есть поверхность `security-spring-boot-starter`. Каждый защищён одной операцией; какие роли сервиса ею владеют и с какой областью, решает собственный `ludwig.security.roles` сервиса (роли из резолвера полномочий, никогда не из claims токена), а операция, которой не владеет ни одна роль, запрещена всем. Операция `PRIVILEGED` требует заголовка `Operation-Reason` и не принимает персональный токен доступа, и каждый вызов записывается в аудит с категорией `admin` и идентификатором операции в качестве действия. `GET /me/operations` показывает, какими операциями владеет вызывающий, а `GET /admin/v1/security/operations/{id}/holders` - какие роли владеют операцией.
 
-| Операция | Эндпоинты | Что разрешает |
-|---|---|---|
-| `reconciliation.read` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}` | Просмотр задач сверки, перечислений, областей, квот, того, что застряло, и исхода каждого запуска. |
-| `reconciliation.operate` | `POST /admin/v1/reconciliation/tasks/{task}/runs`<br>`POST /admin/v1/reconciliation/tasks/{task}/backfills`<br>`POST /admin/v1/reconciliation/tasks/{task}/cursor/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/discover`<br>`POST /admin/v1/reconciliation/tasks/{task}/members/requeue`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Запуск, дозагрузка, повторная постановка и сброс задач сверки и областей перечислений. |
-| `reconciliation.privileged` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel`<br>`POST /admin/v1/reconciliation/leases/{leaseId}/release`<br>`POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Отмена удалённого задания, освобождение аренды квоты или подтверждение удержанной зачистки - действия, после которых эта система и партнёр могут разойтись. |
+| Операция | Чувствительность | Эндпоинты | Что разрешает |
+|---|---|---|---|
+| `reconciliation.task.read` | `READ` | `GET /admin/v1/reconciliation/tasks`<br>`GET /admin/v1/reconciliation/tasks/{task}`<br>`GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs`<br>`GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}` | Просмотр задач сверки, перечислений, областей, запусков, квот и того, что застряло. |
+| `reconciliation.run.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/runs` | Запустить задачу сверки сейчас. |
+| `reconciliation.backfill.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/backfills` | Дозагрузить задачу сверки по указанным ключам. |
+| `reconciliation.cursor.reset` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/cursor/reset` | Сбросить курсор задачи, чтобы следующий запуск начался заново. |
+| `reconciliation.scope.reset` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset` | Сбросить область перечисления. |
+| `reconciliation.quarantine.requeue` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue` | Повторно поставить в очередь записи задачи, отправленные в карантин. |
+| `reconciliation.member.requeue` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/members/requeue` | Повторно поставить в очередь неудавшиеся элементы перечисления. |
+| `reconciliation.remotejob.requeue` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue` | Повторно поставить в очередь удалённое задание. |
+| `reconciliation.remotejob.cancel` | `PRIVILEGED` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel` | Отменить удалённое задание - после этого эта система и партнёр могут разойтись. |
+| `reconciliation.lease.release` | `PRIVILEGED` | `POST /admin/v1/reconciliation/leases/{leaseId}/release` | Освободить аренду квоты - после этого квота партнёра может быть превышена. |
+| `reconciliation.discovery.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/discover` | Обнаружить элементы перечисления сейчас. |
+| `reconciliation.walk.start` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk` | Обойти область перечисления сейчас. |
+| `reconciliation.walk.preview` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview` | Предпросмотр того, что сделает обход области перечисления. |
+| `reconciliation.sweep.discard` | `CHANGE` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | Отбросить удержанную зачистку, сохранив все строки. |
+| `reconciliation.sweep.confirm` | `PRIVILEGED` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | Подтвердить удержанную зачистку - её строки удаляются. |
 
 **Запуски - это ресурсы.** Каждый запуск, взявший аренду, - по расписанию, ручной, пробный или backfill -
 записывается с видом, тем, кто его запросил, репликой, correlation id, отметками времени, исходом и счётчиками
@@ -447,24 +459,41 @@ Gauge вычисляются из supplier-ов (остановившаяся з
 
 **Ограничение по задачам.** Каждый эндпоинт с `{task}` считает имя задачи (или перечисления) своим
 административным объектом, а `GET /admin/v1/reconciliation/tasks` перечисляет только задачи и перечисления, которые
-допускает область `read` вызывающего. При политике областей данных для `admin.reconciliation` команде можно выдать
-одну её задачу: другая задача - `403` для управления и `404` для чтения, тот же ответ, что и для несуществующей
-задачи. Без политики владение операцией распространяется на все задачи. Настройка:
+допускает область `reconciliation.task.read` вызывающего. Если роль выдаёт операции с областью `OBJECT`, а
+субъекту выдана задача, команда владеет одной своей задачей: другая задача - `403` для управления и `404` для
+чтения, тот же ответ, что и для несуществующей задачи. Роль с областью `ALL` распространяется на все задачи. Настройка:
 [настройка областей данных](../../docs/data-scope-configuration.ru.md#административные-объекты).
 
-**Удалено:** actuator-эндпоинт `reconciliation` и `ludwig.reconciliation.endpoint.*`, включая `allow-destructive-operations` и параметр `confirm`. Разрешены ли разрушающие действия, теперь определяется тем, выдана ли какой-либо роли сервиса операция `reconciliation.privileged`; `reconciliation` в списке экспозиции actuator ничего не открывает.
+**Удалено:** actuator-эндпоинт `reconciliation` и `ludwig.reconciliation.endpoint.*`, включая `allow-destructive-operations` и параметр `confirm`. Разрешены ли разрушающие действия, теперь определяется тем, владеет ли какая-либо роль сервиса операцией `reconciliation.remotejob.cancel`, `reconciliation.lease.release` или `reconciliation.sweep.confirm`; `reconciliation` в списке экспозиции actuator ничего не открывает.
 
 **Фильтрация `GET /admin/v1/reconciliation/tasks/{task}/runs`.** Список принимает OData `$filter` и никаких других параметров фильтрации; он листается через `cursor` и `size` в фиксированном порядке от новых к старым, поэтому `$orderby`, `$top`, `$skip` и `$count` - `400`, как и поле, не перечисленное здесь. Фильтр применяется поверх собственных правил области и может их только сузить. Фильтруемые поля: `tier`, `kind` (`SCHEDULED`, `MANUAL`, `DRY_RUN`), `outcome` (`SUCCESS`, `FAILURE`, `TIMED_OUT`), `triggeredBy`, `instance`, `failureCode`, `correlationId`, `submittedAt`, `startedAt`, `finishedAt`, всегда внутри задачи из пути (индекс по задаче и `submittedAt`). Идущий запуск - `startedAt ne null and finishedAt eq null`. Не фильтруется: тело результата. Пример: `$filter=kind eq 'MANUAL' and outcome eq 'FAILURE'`.
 
-Блок выдачи (имена ролей - собственные роли сервиса):
+Блок ролей (имена ролей - собственные роли сервиса; `ALL` - область):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[reconciliation.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[reconciliation.operate]": [ORDERS_ADMIN]
-      "[reconciliation.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          reconciliation.task.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          reconciliation.run.start: ALL
+          reconciliation.backfill.start: ALL
+          reconciliation.cursor.reset: ALL
+          reconciliation.scope.reset: ALL
+          reconciliation.quarantine.requeue: ALL
+          reconciliation.member.requeue: ALL
+          reconciliation.remotejob.requeue: ALL
+          reconciliation.remotejob.cancel: ALL
+          reconciliation.lease.release: ALL
+          reconciliation.discovery.start: ALL
+          reconciliation.walk.start: ALL
+          reconciliation.walk.preview: ALL
+          reconciliation.sweep.discard: ALL
+          reconciliation.sweep.confirm: ALL
 ```
 
 ## Runbook
@@ -486,7 +515,7 @@ ludwig:
 Перечисления: `POST /tasks/{enumeration}/discover`, `POST /tasks/{enumeration}/members/requeue`, а по области
 `POST /tasks/{enumeration}/scopes/{scope}/walk` (`{kind}`), `.../preview` (ничего не пишет), `.../reset`,
 `.../sweep/discard`, `.../sweep/confirm` (**privileged**). Ключи областей со `/` кодируйте процентами. Действию уровня
-privileged нужен заголовок `Admin-Reason`.
+privileged нужен заголовок `Operation-Reason`.
 
 | Ситуация | Что делать |
 |---|---|

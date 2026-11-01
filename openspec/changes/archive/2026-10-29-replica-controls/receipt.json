@@ -1,0 +1,54 @@
+{
+  "change": "replica-controls",
+  "model": "claude-opus-5-5",
+  "modules_touched": [
+    "hot-reload-spring-boot-starter (POM, admin area, registry, outcome)",
+    "rest-client-spring-boot-starter (POM, admin area, ClientTokenSources)",
+    "notification-service (grants, OpenAPI)",
+    "crud-service-example (grants, OpenAPI)",
+    "project-index.json / PROJECT_INDEX.md (rebuilt)"
+  ],
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "not run to completion (releases repository unreachable; gate.sh stops there)",
+    "check_migrations": "pass",
+    "check_build_metadata": "pass",
+    "check_protos": "pass",
+    "api-docs missing": "pass",
+    "api-docs check": "pass (after refresh)",
+    "mvn -q validate": "pass",
+    "manifest stale": "pass (rebuilt for both POMs)",
+    "maven reactor (hot-reload, rest-client + all dependents, -am -amd install)": "pass: 24 modules SUCCESS, 3371 tests, 0 failures, 0 errors",
+    "openspec validate --strict": "pass"
+  },
+  "tests": [
+    "SourceReloadCoordinatorTest +2 (7/7)",
+    "HotReloadAdminAutoConfigurationTest 2/2 (new)",
+    "HotReloadAdminIT 4/4 (new)",
+    "RestClientAdminAutoConfigurationTest 2/2 (new)",
+    "RestClientAdminIT 4/4 (new)",
+    "notification-service 317+214, crud-service-example 102+54"
+  ],
+  "deviations_from_design": [
+    "SourceReloadCoordinator gains reloadOutcome/rejected/lastReloaded/lastOutcome: reload() could not tell unchanged from failed, and typed-configuration rejection happens in a listener",
+    "Pre-existing defect fixed: a typed configuration created before the environment bridge rebound from the stale Environment; the typed-config factory bean now depends on the bridge",
+    "Vault lease forced reload is SecretLeaseContainer.rotate; a renewable lease reports unchanged",
+    "Four hot-reload @Bean methods and the client-credentials provider bean gain a registry parameter",
+    "crud-service-example is not granted hotreload.* - it does not run hot-reload",
+    "The spec's Vault KV scenario is exercised with a properties file (same registry path); no Vault container in tests",
+    "RestClientAdminIT is in its own test package so its app does not scan other tests' client interfaces"
+  ],
+  "retries": [
+    "HotReloadAdminIT: @DynamicPropertySource came after the EnvironmentPostProcessor; then the stale-Environment defect above",
+    "RestClientAdminIT: audit imports; package scan; replica B lacking two controls; listing order",
+    "Service verifies failed ApiDocumentIT until 3.3 refreshed the documents"
+  ],
+  "rollback_commit": "f637178 (working tree also carries the uncommitted earlier admin changes)",
+  "unresolved": [
+    "check_api_baseline cannot run offline; revapi entries for the changed public @Bean signatures in hot-reload and rest-client (both in v2.0.0) are not added yet - due at archive",
+    "Vault KV and lease reloads not exercised against a real Vault",
+    "in the rejection IT only replica A has a typed configuration",
+    "replicas simulated by pollers sharing one database"
+  ]
+}

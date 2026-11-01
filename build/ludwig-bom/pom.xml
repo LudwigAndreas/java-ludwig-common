@@ -308,6 +308,16 @@
             </dependency>
             <dependency>
                 <groupId>ru.ludwigandreas</groupId>
+                <artifactId>identity-source-kafka-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
+                <artifactId>identity-source-directory-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.ludwigandreas</groupId>
                 <artifactId>hot-reload-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>

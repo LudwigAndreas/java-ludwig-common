@@ -7,8 +7,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.authz.PrincipalRef;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
 import ru.ludwigandreas.security.principal.SecurityPrincipals;
 import ru.ludwigandreas.usersettings.admin.SettingsAdminOperations;
@@ -31,7 +31,7 @@ import ru.ludwigandreas.usersettings.web.dto.BackfillResponse;
  *
  * <h2>The two things this controller adds over the service</h2>
  *
- * <p><b>The {@code settings.operate} operation is required outright.</b> Not the self-or-admin check
+ * <p><b>The {@code settings.backfill.start} operation is required outright.</b> Not the self-or-admin check
  * the subject-scoped endpoints use: a backfill is not about a subject, so there is no "self" case
  * that could apply.
  *
@@ -54,7 +54,7 @@ public class SettingsBackfillController {
     private final SettingsTenantResolver tenantResolver;
 
     @PostMapping("/backfill")
-    @AdminAccess(SettingsAdminOperations.OPERATE)
+    @RequiresOperation(SettingsAdminOperations.BACKFILL_START)
     public BackfillResponse backfill(@RequestBody(required = false) BackfillRequest request) {
         SettingsSubject caller = callerSubject();
 

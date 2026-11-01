@@ -13,15 +13,15 @@ import ru.ludwigandreas.export.lifecycle.ExportRunService;
 import ru.ludwigandreas.export.repository.ExportReportRunRepository;
 import ru.ludwigandreas.export.repository.ExportReportSubscriptionRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 
 /**
  * The {@code exports} administrative area, registered only where the administrative surface exists.
  */
 @AutoConfiguration(after = {ExportAutoConfiguration.class, ExportPersistenceAutoConfiguration.class},
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, ExportRunService.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, ExportRunService.class})
 public class ExportAdminAutoConfiguration {
 
     @Bean

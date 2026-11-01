@@ -47,9 +47,12 @@ import ru.ludwigandreas.usersettings.resolve.SettingsTenantResolver;
         "ludwig.outbox.default-route.destination=user.settings",
         "ludwig.identity.enabled=false",
         "ludwig.security.jwt.enabled=false",
-        "ludwig.admin.grants.settings.read[0]=SETTINGS_SUPPORT",
-        "ludwig.admin.grants.settings.read[1]=SETTINGS_ADMIN",
-        "ludwig.admin.grants.settings.operate[0]=SETTINGS_ADMIN",
+        "ludwig.security.roles.SETTINGS_SUPPORT.operations[settings.subject.read]=ALL",
+        "ludwig.security.roles.SETTINGS_SUPPORT.operations[settings.consent.read]=ALL",
+        "ludwig.security.roles.SETTINGS_ADMIN.operations[settings.subject.read]=ALL",
+        "ludwig.security.roles.SETTINGS_ADMIN.operations[settings.consent.read]=ALL",
+        "ludwig.security.roles.SETTINGS_ADMIN.operations[settings.scope.set]=ALL",
+        "ludwig.security.roles.SETTINGS_ADMIN.operations[settings.backfill.start]=ALL",
         "spring.liquibase.change-log=classpath:db/changelog/db.changelog-master.xml",
         "spring.jpa.hibernate.ddl-auto=validate"
 })
@@ -140,7 +143,7 @@ class SettingsAdminIntegrationTest {
     }
 
     @Test
-    @DisplayName("a tenant-scope write needs settings.operate")
+    @DisplayName("a tenant-scope write needs settings.scope.set")
     void scopeWriteNeedsOperate() throws Exception {
         String body = "{\"values\":{\"ui.page-size\":\"25\"}}";
 

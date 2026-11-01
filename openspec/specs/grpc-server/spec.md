@@ -176,36 +176,42 @@ The server SHALL count every call that arrives with no deadline, tagged by servi
 - **THEN** the call is served and the no-deadline counter for that method increases by one
 
 ### Requirement: Administrative operations are enforced on gRPC methods
-A method of a `@LudwigGrpcService` annotated `@AdminAccess(<operation>)` SHALL be invoked only when the authenticated
-caller is admitted to the administrative surface and holds that operation. Otherwise the call SHALL fail with
-`PERMISSION_DENIED` before the handler runs, and the denial SHALL be audited as an administrative denial. A
-privileged operation SHALL require non-blank `admin-reason` call metadata of at most 500 characters, else
-`INVALID_ARGUMENT`. The handler SHALL run with the administrative invocation bound, so its audit events record the
+A method of a `@LudwigGrpcService` annotated `@RequiresOperation(<operation>)` SHALL be invoked only when the
+authenticated caller holds that operation and, for an `ADMIN` operation, is admitted to the administrative surface. Otherwise the call SHALL fail with
+`PERMISSION_DENIED` before the handler runs, and the denial SHALL be audited as an authorization denial. An
+operation of sensitivity `PRIVILEGED` SHALL require non-blank `operation-reason` call metadata of at most 500 characters, else
+`INVALID_ARGUMENT`. The handler SHALL run with the invocation bound, so its audit events record the
 operation and reason. Startup SHALL fail, naming the method, when an annotated method names an operation absent
-from the catalog, names an operation that requires four-eyes approval, or exists while no administrative surface is
-configured. Methods without the annotation are unaffected.
+from the catalog, names an operation that requires four-eyes approval, names an `ADMIN` operation while no
+administrative surface is configured, or exists while no operation catalog is configured. Methods without the
+annotation are unaffected.
 
 #### Scenario: Automation calls an administrative method it is granted
-- **WHEN** a service principal holding `catalog.operate` calls a method annotated `@AdminAccess("catalog.operate")`
-- **THEN** the handler runs, with the invocation naming `catalog.operate` bound
+- **WHEN** a service principal holding `catalog.product.update` calls a method annotated
+  `@RequiresOperation("catalog.product.update")`
+- **THEN** the handler runs, with the invocation naming `catalog.product.update` bound
 
 #### Scenario: A caller without the operation
-- **WHEN** a caller holding only `catalog.read` calls the same method
+- **WHEN** a caller holding only `catalog.product.read` calls the same method
 - **THEN** the call fails with `PERMISSION_DENIED`, the handler is not invoked, and the denial is audited
 
 #### Scenario: A privileged call without a reason
-- **WHEN** a caller holding `catalog.privileged` calls a privileged method with no `admin-reason` metadata
-- **THEN** the call fails with `INVALID_ARGUMENT` and the handler is not invoked; with `admin-reason: INC-7` it runs
+- **WHEN** a caller holding `catalog.product.purge`, a `PRIVILEGED` operation, calls its method with no `operation-reason` metadata
+- **THEN** the call fails with `INVALID_ARGUMENT` and the handler is not invoked; with `operation-reason: INC-7` it runs
   with that reason bound
 
 #### Scenario: A typo in the operation
-- **WHEN** a gRPC method is annotated `@AdminAccess("catalgo.read")`
+- **WHEN** a gRPC method is annotated `@RequiresOperation("catalgo.product.read")`
 - **THEN** the application fails to start naming the method and the operation
 
-#### Scenario: No administrative surface
-- **WHEN** a gRPC method carries `@AdminAccess` and the service has no administrative surface configured
+#### Scenario: No operation catalog
+- **WHEN** a gRPC method carries `@RequiresOperation` and the service has no operation catalog configured
 - **THEN** the application fails to start naming the method, rather than serving it to any authenticated caller
 
 #### Scenario: An operation that requires approval
 - **WHEN** a gRPC method's operation is listed in `ludwig.admin.approval.required`
 - **THEN** the application fails to start naming the method, because four-eyes approval exists only over HTTP
+
+#### Scenario: An administrative operation without the administrative surface
+- **WHEN** a gRPC method's operation is an `ADMIN` operation and `ludwig.admin` is not configured
+- **THEN** the application fails to start naming the method and the operation

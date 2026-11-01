@@ -13,7 +13,7 @@ import ru.ludwigandreas.ingest.engine.IngestTaskRegistry;
 import ru.ludwigandreas.ingest.repository.FileIngestQuarantineRepository;
 import ru.ludwigandreas.ingest.repository.FileIngestRunRepository;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 
 /**
  * The {@code fileingest} administrative area, registered only where the administrative surface exists. It replaces
@@ -21,8 +21,8 @@ import ru.ludwigandreas.security.admin.AdminOperationCatalog;
  */
 @AutoConfiguration(after = FileIngestAutoConfiguration.class,
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, IngestTaskRegistry.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, IngestTaskRegistry.class})
 public class FileIngestAdminAutoConfiguration {
 
     @Bean

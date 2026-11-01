@@ -1,0 +1,60 @@
+{
+ "change": "identity-sources",
+ "model": "claude-opus-5-5",
+ "index": "code-index deep index, 3640 files at start",
+ "modules_touched": [
+  "identity-projection-spring-boot-starter (feed SPI, sources, role mapping, ownership, sweeps + changeset 0008, metrics, sources listing, removed-key check, empty-source binding; Kafka code and messaging dependency removed; README EN+RU)",
+  "identity-source-kafka-spring-boot-starter (NEW: IdentityUserEvent v1, listener, subscriptions, feeds; README EN+RU)",
+  "identity-source-directory-spring-boot-starter (NEW: IdentityDirectory SPI, sync/sweep engine, jobs, state table, feed, metrics; README EN+RU)",
+  "architecture-rules (group identity: identity.writes-go-through-the-projection; README EN+RU)",
+  "asyncapi-spring-boot-starter (customizer documents array-valued listener topics; shape IT)",
+  "notification-service, crud-service-example (Kafka source, declared oidc source, local seed via IdentityProjection; OpenAPI regenerated)",
+  "messaging README (EN+RU), admin guide (EN+RU), CHANGELOG (EN+RU), follow-ups intents",
+  "root pom, ludwig-bom, jacoco-aggregate; project-index.json / PROJECT_INDEX.md rebuilt"
+ ],
+ "gate": {
+  "mvn -q validate": "pass",
+  "check_image_pins": "pass",
+  "check_image_pins --self-test": "pass",
+  "check_build_metadata": "pass",
+  "check_protos": "pass",
+  "api-docs missing": "pass",
+  "api-docs check": "pass (after refresh; all four documents change additively only)",
+  "check_migrations": "pass over tracked+untracked files (19 root changelogs, 110 changesets); check_migrations.sh alone reports E_INCLUDE_MISSING because it reads git ls-files and the new changesets are unstaged by rule",
+  "check_api_baseline": "not run to completion (releases repository unreachable offline)",
+  "manifest stale": "pass (rebuilt)",
+  "maven reactor (mvn -o install, whole reactor)": "pass: 45 modules SUCCESS, 5220 tests, 0 failures, 0 errors",
+  "openspec validate --strict": "pass"
+ },
+ "tests": [
+  "identity-projection 113 (incl. IdentitySweepIntegrationTest 5, IdentityAdminIntegrationTest +2, IdentitySourceBindingTest 3)",
+  "identity-source-kafka 82 (incl. architecture 70)",
+  "identity-source-directory 81 (incl. DirectorySyncIntegrationTest 7, architecture 72)",
+  "architecture-rules 103",
+  "asyncapi 53 + 8 IT",
+  "notification-service 319 + 216",
+  "crud-service-example 104 + 54"
+ ],
+ "retries": [
+  "file/test fixes by checkstyle line length (several)",
+  "Kafka module: 3 architecture findings (properties package, @Validated, listener catching checked exception) fixed by design changes",
+  "directory module: persistence and layering findings -> repository/service packages",
+  "directory IT: jobs stopped by stop() never run -> configurable initial-delay",
+  "empty-source binding: string and empty-map shapes; lambda converter erased generics",
+  "AsyncAPI: array toString channels; schema/operationId collisions"
+ ],
+ "deviations_from_design": [
+  "Upsert profile fields left null keep their stored values (role set too); only a carried role set is complete-state (spec corrected).",
+  "UserStatus.REMOVED added; sweep-disabled users get source_timestamp cleared so the next upsert restores them (spec scenario added).",
+  "Directory module split into root SPI, .service, .repository, .config per architecture-rules; per-source beans registered by BeanDefinitionRegistryPostProcessor (also in the Kafka starter).",
+  "ludwig.identity.directory.sources.<s>.initial-delay added.",
+  "asyncapi-spring-boot-starter changed (scope addition) so the identity channel stays documented."
+ ],
+ "unresolved": [
+  "Concurrent first insert (two replicas, one new subject) is covered only by a unit test proving the apply failure is rethrown; no two-replica test.",
+  "The 409 of POST /admin/v1/jobs/{name}/run under lease is job-core's behaviour for lock name == job name; not re-tested here.",
+  "Pre-existing: security-spring-boot-starter cannot be introspected without web-core (recorded in follow-ups).",
+  "Springwolf 1.9 still documents only the first topic of a static multi-topic listener (unchanged)."
+ ],
+ "rollback": "73f5ddcb88244104f91398cd27983fa98e7b9e6e (uncommitted operations-catalog and identity-sources work in the tree)"
+}

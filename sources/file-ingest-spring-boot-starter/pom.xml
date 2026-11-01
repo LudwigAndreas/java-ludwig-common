@@ -163,7 +163,7 @@
         <!--
             Optional: the administrative endpoints (ru.ludwigandreas.ingest.admin), which replace the fileingest
             actuator endpoint, exist only where the security starter's administrative surface does, behind
-            @ConditionalOnBean(AdminOperationCatalog).
+            @ConditionalOnBean(AdminSurfaceGuard).
         -->
         <dependency>
             <groupId>ru.ludwigandreas</groupId>

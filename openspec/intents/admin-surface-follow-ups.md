@@ -25,6 +25,23 @@ releases repository rather than code. Each change removes its own items from thi
 | `replica-controls` | hot-reload, outbound tokens, circuit breakers | `replica-control-broadcast` |
 
 Still open after these:
+- The operation model's follow-ups, in this order (from `operations-catalog`, which made the operation the only thing
+  code authorizes by):
+  - `operations-starter-apis`: the starter APIs that still take roles - `@Filterable(roles = ...)` in odata-filter,
+    `visibleFor(roles)` in export, PAT's `MANAGE_OWN` authority - and code-defined `DataScopeProvider`s that compare
+    roles (crud-service-example's WATCHER provider) becoming contributed dimensions.
+  - `operations-services`: the 28 `@PreAuthorize` role checks in notification-service and crud-service-example
+    replaced by `@RequiresOperation` on their business operations.
+  - `no-roles-in-code`: an `architecture-rules` group failing the build on a role named in code. Last, because it fails
+    until the other two are done.
+- `identity-source-scim`: a ready-made `IdentityDirectory` for SCIM 2.0 providers (users and groups, `meta.lastModified`
+  as the change filter), so a standard provider needs configuration instead of a class.
+- `security-spring-boot-starter`'s `LudwigSecurityAutoConfiguration` cannot be introspected without web-core on the
+  classpath (a `@Bean` method returning `ProblemMessageBundle`; a method-level `@ConditionalOnClass` does not help):
+  move that bean into a nested `@ConditionalOnClass` configuration. Found by `identity-sources`, whose directory starter
+  works around it with a test-scoped web-core.
+- A service without web-core: the reason-required and credential-not-permitted refusals are rendered as a generic
+  `500` rather than their problem types, because the problem rendering is web-core's. Fail-closed, but unhelpful.
 - Run `check_api_baseline.sh` where the releases repository is reachable, before the major release is cut.
 - Adopt object scope in `jobs` and `fileingest`.
 - Enumeration run history.
@@ -55,9 +72,9 @@ The image-pin false positive, the PAT revoke race and `StubFaultIT.slow` were fi
   `ludwig.admin.human-callers.required-via`. Still open: recording the full delegation chain in the envelope (only
   the immediate acting party is stored), and reading delegation from mTLS or PAT callers.
 - **Per-replica controls.** The broadcast was added by `replica-control-broadcast` - job-core's database channel
-  with per-replica acknowledgements - and cache eviction is its first control (`cacheevict`). Still open:
-  hot-reload, outbound token invalidation and circuit-breaker state (`replica-controls`), per-key eviction, and
-  targeting a subset of replicas.
+  with per-replica acknowledgements - and cache eviction is its first control (`cacheevict`). Hot-reload, outbound
+  token reset and circuit-breaker state were added by `replica-controls` (`hotreload`, `restclient`). Still open:
+  per-key eviction, targeting a subset of replicas, and gRPC client channels.
 - **Moving a database-log consumer's offset** was added by `messaging-db-consumer-controls`: the pause is a row every
   replica's claim reads, so it needed no broadcast. Offsets of groups on a real Kafka cluster stay with Kafka's own
   tooling.

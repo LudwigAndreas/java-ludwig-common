@@ -14,8 +14,8 @@ import ru.ludwigandreas.export.admin.service.ExportAdminService;
 import ru.ludwigandreas.export.admin.service.ExportAdminService.Cancelled;
 import ru.ludwigandreas.export.admin.service.ExportAdminService.RunView;
 import ru.ludwigandreas.export.admin.service.ExportAdminService.SubscriptionView;
-import ru.ludwigandreas.security.admin.AdminAccess;
 import ru.ludwigandreas.security.admin.AdminPage;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 import ru.ludwigandreas.webcore.operation.OperationResponses;
 
 /**
@@ -45,7 +45,7 @@ public class ExportAdminController {
      * @return one page
      */
     @GetMapping("/runs")
-    @AdminAccess(ExportAdminOperations.READ)
+    @RequiresOperation(ExportAdminOperations.RUN_READ)
     public AdminPage<RunView> runs(@RequestParam(name = "$filter", required = false) String filter,
                                    @RequestParam(required = false) String cursor,
                                    @RequestParam(required = false) Integer size) {
@@ -59,7 +59,7 @@ public class ExportAdminController {
      * @return the run
      */
     @GetMapping("/runs/{runId}")
-    @AdminAccess(ExportAdminOperations.READ)
+    @RequiresOperation(ExportAdminOperations.RUN_READ)
     public RunView run(@PathVariable UUID runId) {
         return service.run(runId);
     }
@@ -71,7 +71,7 @@ public class ExportAdminController {
      * @return {@code 202} with the run
      */
     @PostMapping("/runs/{runId}/cancel")
-    @AdminAccess(ExportAdminOperations.OPERATE)
+    @RequiresOperation(ExportAdminOperations.RUN_CANCEL)
     public ResponseEntity<RunView> cancel(@PathVariable UUID runId) {
         Cancelled cancelled = service.cancel(runId);
         return OperationResponses.cancellationRequested(cancelled.envelope(), cancelled.view());
@@ -85,7 +85,7 @@ public class ExportAdminController {
      * @return the subscriptions
      */
     @GetMapping("/subscriptions")
-    @AdminAccess(ExportAdminOperations.READ)
+    @RequiresOperation(ExportAdminOperations.SUBSCRIPTION_READ)
     public List<SubscriptionView> subscriptions(@RequestParam(required = false) String owner,
                                                 @RequestParam(required = false) UUID report) {
         return service.subscriptions(owner, report);

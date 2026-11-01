@@ -19,11 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.ludwigandreas.reconciliation.admin.ReconciliationAdminOperations;
 import ru.ludwigandreas.reconciliation.admin.service.ReconciliationAdminService;
 import ru.ludwigandreas.reconciliation.admin.service.RunSnapshot;
-import ru.ludwigandreas.reconciliation.admin.service.RunViews.RunView;
 import ru.ludwigandreas.reconciliation.admin.service.RunViews;
-import ru.ludwigandreas.security.admin.AdminAccess;
+import ru.ludwigandreas.reconciliation.admin.service.RunViews.RunView;
 import ru.ludwigandreas.security.admin.AdminObject;
 import ru.ludwigandreas.security.admin.AdminPage;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 import ru.ludwigandreas.webcore.operation.OperationLocationHeader;
 import ru.ludwigandreas.webcore.operation.OperationResponses;
 
@@ -60,7 +60,7 @@ public class ReconciliationAdminController {
      * @return the overview
      */
     @GetMapping("/tasks")
-    @AdminAccess(ReconciliationAdminOperations.READ)
+    @RequiresOperation(ReconciliationAdminOperations.TASK_READ)
     public Map<String, Object> overview() {
         return service.overview();
     }
@@ -72,7 +72,7 @@ public class ReconciliationAdminController {
      * @return the detail
      */
     @GetMapping("/tasks/{task}")
-    @AdminAccess(ReconciliationAdminOperations.READ)
+    @RequiresOperation(ReconciliationAdminOperations.TASK_READ)
     public Map<String, Object> task(@PathVariable @AdminObject(notFound = TASK_NOT_FOUND) String task) {
         return service.task(task);
     }
@@ -85,7 +85,7 @@ public class ReconciliationAdminController {
      * @return the scope view
      */
     @GetMapping("/tasks/{task}/scopes/{scope}")
-    @AdminAccess(ReconciliationAdminOperations.READ)
+    @RequiresOperation(ReconciliationAdminOperations.TASK_READ)
     public Map<String, Object> scope(@PathVariable @AdminObject(notFound = ENUMERATION_NOT_FOUND) String task,
                                      @PathVariable String scope) {
         return service.scope(task, scope);
@@ -103,7 +103,7 @@ public class ReconciliationAdminController {
      * @return {@code 202} with the run, or {@code 200} with the pass's result
      */
     @PostMapping("/tasks/{task}/runs")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.RUN_START)
     public ResponseEntity<?> run(@PathVariable @AdminObject String task,
                                  @RequestBody(required = false) RunRequest request) {
         RunRequest run = request == null ? new RunRequest(null, false) : request;
@@ -121,7 +121,7 @@ public class ReconciliationAdminController {
      * @return {@code 202} with the run
      */
     @PostMapping("/tasks/{task}/backfills")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.BACKFILL_START)
     public ResponseEntity<RunView> backfill(@PathVariable @AdminObject String task,
                                                      @RequestBody BackfillRequest request) {
         return accepted(service.backfill(task, request.keys()));
@@ -137,7 +137,7 @@ public class ReconciliationAdminController {
      * @return the page
      */
     @GetMapping("/tasks/{task}/runs")
-    @AdminAccess(ReconciliationAdminOperations.READ)
+    @RequiresOperation(ReconciliationAdminOperations.TASK_READ)
     public AdminPage<RunView> runs(@PathVariable @AdminObject(notFound = TASK_NOT_FOUND) String task,
                                    @RequestParam(name = "$filter", required = false) String filter,
                                    @RequestParam(required = false) String cursor,
@@ -155,7 +155,7 @@ public class ReconciliationAdminController {
      * @return the run, with {@code Retry-After} while it is not finished
      */
     @GetMapping("/tasks/{task}/runs/{runId}")
-    @AdminAccess(ReconciliationAdminOperations.READ)
+    @RequiresOperation(ReconciliationAdminOperations.TASK_READ)
     public ResponseEntity<RunView> runResource(@PathVariable @AdminObject(notFound = TASK_NOT_FOUND) String task,
                                                @PathVariable UUID runId) {
         RunView view = RunViews.toView(service.run(task, runId), TASKS + task + "/runs/" + runId);
@@ -170,7 +170,7 @@ public class ReconciliationAdminController {
      * @return what was reset
      */
     @PostMapping("/tasks/{task}/cursor/reset")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.CURSOR_RESET)
     public Map<String, Object> resetCursor(@PathVariable @AdminObject String task,
                                            @RequestBody(required = false) TierRequest request) {
         return service.resetCursor(task, request == null ? null : request.tier());
@@ -183,7 +183,7 @@ public class ReconciliationAdminController {
      * @return how many were requeued
      */
     @PostMapping("/tasks/{task}/quarantine/requeue")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.QUARANTINE_REQUEUE)
     public Map<String, Object> requeueQuarantined(@PathVariable @AdminObject String task) {
         return service.requeueQuarantined(task);
     }
@@ -196,7 +196,7 @@ public class ReconciliationAdminController {
      * @return how many were requeued
      */
     @PostMapping("/tasks/{task}/remotejobs/{jobId}/requeue")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.REMOTEJOB_REQUEUE)
     public Map<String, Object> requeueJob(@PathVariable @AdminObject String task, @PathVariable UUID jobId) {
         return service.requeueJob(task, jobId);
     }
@@ -209,7 +209,7 @@ public class ReconciliationAdminController {
      * @return what was marked
      */
     @PostMapping("/tasks/{task}/remotejobs/{jobId}/cancel")
-    @AdminAccess(ReconciliationAdminOperations.PRIVILEGED)
+    @RequiresOperation(ReconciliationAdminOperations.REMOTEJOB_CANCEL)
     public Map<String, Object> cancelJob(@PathVariable @AdminObject String task, @PathVariable UUID jobId) {
         return service.cancelJob(task, jobId);
     }
@@ -221,7 +221,7 @@ public class ReconciliationAdminController {
      * @return what was released
      */
     @PostMapping("/leases/{leaseId}/release")
-    @AdminAccess(ReconciliationAdminOperations.PRIVILEGED)
+    @RequiresOperation(ReconciliationAdminOperations.LEASE_RELEASE)
     public Map<String, Object> releaseLease(@PathVariable UUID leaseId) {
         return service.releaseLease(leaseId);
     }
@@ -233,7 +233,7 @@ public class ReconciliationAdminController {
      * @return what happened
      */
     @PostMapping("/tasks/{task}/discover")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.DISCOVERY_START)
     public Map<String, Object> discover(@PathVariable @AdminObject String task) {
         return service.discover(task);
     }
@@ -245,7 +245,7 @@ public class ReconciliationAdminController {
      * @return how many were requeued
      */
     @PostMapping("/tasks/{task}/members/requeue")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.MEMBER_REQUEUE)
     public Map<String, Object> requeueMembers(@PathVariable @AdminObject String task) {
         return service.requeueMembers(task);
     }
@@ -259,7 +259,7 @@ public class ReconciliationAdminController {
      * @return what happened
      */
     @PostMapping("/tasks/{task}/scopes/{scope}/walk")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.WALK_START)
     public Map<String, Object> walk(@PathVariable @AdminObject String task, @PathVariable String scope,
                                     @RequestBody(required = false) WalkRequest request) {
         return service.scopeAction(task, scope, "walk", request == null ? null : request.kind());
@@ -273,7 +273,7 @@ public class ReconciliationAdminController {
      * @return the preview
      */
     @PostMapping("/tasks/{task}/scopes/{scope}/preview")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.WALK_PREVIEW)
     public Map<String, Object> preview(@PathVariable @AdminObject String task, @PathVariable String scope) {
         return service.scopeAction(task, scope, "preview", null);
     }
@@ -286,7 +286,7 @@ public class ReconciliationAdminController {
      * @return what was reset
      */
     @PostMapping("/tasks/{task}/scopes/{scope}/reset")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.SCOPE_RESET)
     public Map<String, Object> resetScope(@PathVariable @AdminObject String task, @PathVariable String scope) {
         return service.scopeAction(task, scope, "reset-scope", null);
     }
@@ -299,7 +299,7 @@ public class ReconciliationAdminController {
      * @return what was discarded
      */
     @PostMapping("/tasks/{task}/scopes/{scope}/sweep/discard")
-    @AdminAccess(ReconciliationAdminOperations.OPERATE)
+    @RequiresOperation(ReconciliationAdminOperations.SWEEP_DISCARD)
     public Map<String, Object> discardSweep(@PathVariable @AdminObject String task, @PathVariable String scope) {
         return service.scopeAction(task, scope, "discard-sweep", null);
     }
@@ -312,7 +312,7 @@ public class ReconciliationAdminController {
      * @return what was reported
      */
     @PostMapping("/tasks/{task}/scopes/{scope}/sweep/confirm")
-    @AdminAccess(ReconciliationAdminOperations.PRIVILEGED)
+    @RequiresOperation(ReconciliationAdminOperations.SWEEP_CONFIRM)
     public Map<String, Object> confirmSweep(@PathVariable @AdminObject String task, @PathVariable String scope) {
         return service.scopeAction(task, scope, "confirm-sweep", null);
     }

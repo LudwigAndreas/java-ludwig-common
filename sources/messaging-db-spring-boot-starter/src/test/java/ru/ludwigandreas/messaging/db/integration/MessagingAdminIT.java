@@ -45,7 +45,7 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
                     + "ru.ludwigandreas.messaging.db.config.MessagingDbLiquibaseAutoConfiguration,"
                     + "ru.ludwigandreas.messaging.db.config.MessagingDbMetricsAutoConfiguration",
             "spring.kafka.bootstrap-servers=localhost:9",
-            "ludwig.admin.grants.messaging.read[0]=OPS_SUPPORT"})
+            "ludwig.security.roles.OPS_SUPPORT.operations[messaging.consumer.read]=ALL"})
 @AutoConfigureMockMvc
 class MessagingAdminIT {
 

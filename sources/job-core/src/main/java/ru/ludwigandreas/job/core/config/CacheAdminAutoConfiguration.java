@@ -20,9 +20,9 @@ import ru.ludwigandreas.job.core.admin.web.CacheAdminController;
         afterName = {"ru.ludwigandreas.cache.config.LudwigCacheAutoConfiguration",
             "ru.ludwigandreas.security.config.AdminAutoConfiguration"})
 @ConditionalOnClass(name = {"ru.ludwigandreas.cache.api.LudwigCacheRegistry",
-    "ru.ludwigandreas.security.admin.AdminOperationCatalog"})
+    "ru.ludwigandreas.security.admin.AdminSurfaceGuard"})
 @ConditionalOnBean(type = {"ru.ludwigandreas.cache.api.LudwigCacheRegistry",
-    "ru.ludwigandreas.security.admin.AdminOperationCatalog",
+    "ru.ludwigandreas.security.admin.AdminSurfaceGuard",
     "ru.ludwigandreas.job.core.config.ReplicaControlAutoConfiguration$ReplicaControls"})
 public class CacheAdminAutoConfiguration {
 

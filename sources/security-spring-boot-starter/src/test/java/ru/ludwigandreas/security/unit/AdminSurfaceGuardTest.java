@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,15 +23,15 @@ import org.springframework.security.authorization.AuthorizationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
-import ru.ludwigandreas.security.admin.AdminAccess;
-import ru.ludwigandreas.security.admin.AdminAccessEvaluator;
-import ru.ludwigandreas.security.admin.AdminAuthenticated;
-import ru.ludwigandreas.security.admin.AdminGrants;
+import ru.ludwigandreas.security.admin.AdminCallerPolicy;
 import ru.ludwigandreas.security.admin.AdminInvocation;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
-import ru.ludwigandreas.security.admin.AdminReasonRequiredException;
 import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.security.admin.TenantScope;
+import ru.ludwigandreas.security.operation.OperationAuthority;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.ReasonRequiredException;
+import ru.ludwigandreas.security.operation.RequiresAuthentication;
+import ru.ludwigandreas.security.operation.RequiresOperation;
 import ru.ludwigandreas.security.principal.Credential;
 import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
@@ -40,12 +41,10 @@ import ru.ludwigandreas.security.web.PatCredentialNotPermittedException;
 class AdminSurfaceGuardTest {
 
     private final List<Object> deniedObjects = new ArrayList<>();
-    private final AdminOperationCatalog catalog =
-            new AdminOperationCatalog(List.of(AdminOperationCatalogTest.area("outbox")));
-    private final AdminGrants grants = new AdminGrants(Map.of(
-            "outbox.read", List.of("NOTIFICATION_ADMIN", "NOTIFICATION_SUPPORT"),
-            "outbox.operate", List.of("NOTIFICATION_ADMIN"),
-            "outbox.privileged", List.of("NOTIFICATION_ADMIN")), catalog);
+    private final OperationAuthority authority = TestOperations.authority(List.of(OperationCatalogTest.outbox()),
+            Map.of("NOTIFICATION_ADMIN",
+                    List.of("outbox.message.read", "outbox.message.retry", "outbox.message.discard"),
+                    "NOTIFICATION_SUPPORT", List.of("outbox.message.read")));
     private final AuthorizationEventPublisher publisher = new AuthorizationEventPublisher() {
         @Override
         public <T> void publishAuthorizationEvent(Supplier<Authentication> authentication, T object,
@@ -72,19 +71,19 @@ class AdminSurfaceGuardTest {
     /** Stands in for a module's administrative controller. */
     static class Fixture {
 
-        @AdminAccess("outbox.read")
+        @RequiresOperation("outbox.message.read")
         public void read() {
         }
 
-        @AdminAccess("outbox.operate")
+        @RequiresOperation("outbox.message.retry")
         public void operate() {
         }
 
-        @AdminAccess("outbox.privileged")
+        @RequiresOperation("outbox.message.discard")
         public void discard() {
         }
 
-        @AdminAuthenticated
+        @RequiresAuthentication
         public void discover() {
         }
 
@@ -106,7 +105,9 @@ class AdminSurfaceGuardTest {
     }
 
     private AdminSurfaceGuard guard(boolean allowPats) {
-        return new AdminSurfaceGuard(catalog, new AdminAccessEvaluator(grants, publisher), allowPats);
+        OperationEvaluator evaluator = TestOperations.evaluator(authority, publisher, allowPats);
+        return new AdminSurfaceGuard(authority.grants().catalog(), evaluator,
+                new AdminCallerPolicy(evaluator, allowPats, Set.of()));
     }
 
     private MockHttpServletRequest request() {
@@ -178,17 +179,17 @@ class AdminSurfaceGuardTest {
 
         authenticate(principal(PrincipalType.USER, null, "NOTIFICATION_ADMIN"), Credential.DIRECT);
         assertThatThrownBy(() -> guard(false).preHandle(request(), response, handler("discard")))
-                .isInstanceOf(AdminReasonRequiredException.class);
+                .isInstanceOf(ReasonRequiredException.class);
 
         MockHttpServletRequest blank = request();
-        blank.addHeader(AdminInvocation.REASON_HEADER, "   ");
+        blank.addHeader(OperationEvaluator.REASON_HEADER, "   ");
         assertThatThrownBy(() -> guard(false).preHandle(blank, response, handler("discard")))
-                .isInstanceOf(AdminReasonRequiredException.class);
+                .isInstanceOf(ReasonRequiredException.class);
 
         MockHttpServletRequest tooLong = request();
-        tooLong.addHeader(AdminInvocation.REASON_HEADER, "x".repeat(AdminInvocation.MAX_REASON_LENGTH + 1));
+        tooLong.addHeader(OperationEvaluator.REASON_HEADER, "x".repeat(OperationEvaluator.MAX_REASON_LENGTH + 1));
         assertThatThrownBy(() -> guard(false).preHandle(tooLong, response, handler("discard")))
-                .isInstanceOf(AdminReasonRequiredException.class);
+                .isInstanceOf(ReasonRequiredException.class);
     }
 
     @Test
@@ -196,12 +197,12 @@ class AdminSurfaceGuardTest {
     void bindsTheInvocation() throws Exception {
         authenticate(principal(PrincipalType.USER, "acme", "NOTIFICATION_ADMIN"), Credential.DIRECT);
         MockHttpServletRequest withReason = request();
-        withReason.addHeader(AdminInvocation.REASON_HEADER, "  INC-4411 ");
+        withReason.addHeader(OperationEvaluator.REASON_HEADER, "  INC-4411 ");
         AdminSurfaceGuard guard = guard(false);
 
         assertThat(guard.preHandle(withReason, response, handler("discard"))).isTrue();
         AdminInvocation invocation = AdminInvocation.require();
-        assertThat(invocation.operation().id()).isEqualTo("outbox.privileged");
+        assertThat(invocation.operation().id()).isEqualTo("outbox.message.discard");
         assertThat(invocation.reason()).isEqualTo("INC-4411");
         assertThat(invocation.tenantScope()).isEqualTo(TenantScope.confinedTo("acme"));
 

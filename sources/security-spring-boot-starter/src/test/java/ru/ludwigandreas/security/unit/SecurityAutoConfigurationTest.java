@@ -35,6 +35,7 @@ import ru.ludwigandreas.security.authz.PrincipalRef;
 import ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration;
 import ru.ludwigandreas.security.config.LudwigSecurityAutoConfiguration;
 import ru.ludwigandreas.security.config.MutualTlsAutoConfiguration;
+import ru.ludwigandreas.security.config.OperationAutoConfiguration;
 import ru.ludwigandreas.security.config.SecurityAuditAutoConfiguration;
 import ru.ludwigandreas.security.authn.pat.PatAuthenticationFilter;
 import ru.ludwigandreas.security.authn.pat.PatIntrospectionClient;
@@ -43,11 +44,15 @@ import ru.ludwigandreas.security.config.SecurityMetricsAutoConfiguration;
 import ru.ludwigandreas.security.web.IdentityHeaderStrippingFilter;
 import ru.ludwigandreas.security.data.DataAccessGuard;
 import ru.ludwigandreas.security.data.DataScopeMapping;
-import ru.ludwigandreas.security.data.DataScopePolicyValidator;
 import ru.ludwigandreas.security.data.DataScopeRegistry;
 import ru.ludwigandreas.security.metrics.SecurityMetrics;
 import ru.ludwigandreas.security.web.SecurityProblemMapper;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
+import ru.ludwigandreas.security.data.DataAction;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.OperationScopeValidator;
+import ru.ludwigandreas.security.operation.Sensitivity;
 
 /**
  * What the module wires up, and - more importantly - what it refuses to start with.
@@ -65,6 +70,7 @@ class SecurityAutoConfigurationTest {
                     LudwigCacheAutoConfiguration.class,
                     LudwigSecurityAutoConfiguration.class,
                     SecurityMetricsAutoConfiguration.class,
+                    OperationAutoConfiguration.class,
                     DataAuthorizationAutoConfiguration.class,
                     MutualTlsAutoConfiguration.class,
                     AuditCoreAutoConfiguration.class,
@@ -174,48 +180,53 @@ class SecurityAutoConfigurationTest {
     // --- startup validation of the policy tree --------------------------------------------------
 
     @Test
-    @DisplayName("a policy for a resource nothing maps cannot be enforced, so the context does not start")
+    @DisplayName("a scope on a resource nothing maps cannot be enforced, so the context does not start")
     void policyForAnUnmappedResourceFailsFast() {
-        runner.withPropertyValues("ludwig.security.data.policies.order.read.ROLE_AGENT=OWN")
+        runner.withUserConfiguration(ThingOperations.class)
+                .withPropertyValues("ludwig.security.roles.AGENT.operations[test.order.read]=OWN")
                 .run(context -> assertThat(context).hasFailed()
                         .getFailure().hasMessageContaining("no DataScopeMapping bean"));
     }
 
     @Test
-    @DisplayName("a policy using a dimension the mapping does not bind is refused at startup")
+    @DisplayName("a scope using a dimension the mapping does not bind is refused at startup")
     void policyWithAnUnboundDimensionFailsFast() {
         runner.withUserConfiguration(OwnerOnlyMappingConfiguration.class)
-                .withPropertyValues("ludwig.security.data.policies.thing.read.ROLE_AGENT=TENANT")
+                .withUserConfiguration(ThingOperations.class)
+                .withPropertyValues("ludwig.security.roles.AGENT.operations[test.thing.read]=TENANT")
                 .run(context -> assertThat(context).hasFailed()
                         .getFailure().hasMessageContaining("does not bind"));
     }
 
     @Test
-    @DisplayName("a resource that is both unscoped and policed is contradictory, and one side wins silently")
+    @DisplayName("a restricted scope on an unscoped resource is contradictory, and one side would win silently")
     void unscopedResourceWithPoliciesFailsFast() {
         runner.withUserConfiguration(OwnerOnlyMappingConfiguration.class)
                 .withPropertyValues(
                         "ludwig.security.data.unscoped-resources=thing",
-                        "ludwig.security.data.policies.thing.read.ROLE_AGENT=OWN")
+                        "ludwig.security.roles.AGENT.operations[test.thing.read]=OWN")
+                .withUserConfiguration(ThingOperations.class)
                 .run(context -> assertThat(context).hasFailed()
-                        .getFailure().hasMessageContaining("never consults a policy"));
+                        .getFailure().hasMessageContaining("admits only ALL"));
     }
 
     @Test
     @DisplayName("a misspelled grant token fails the deploy instead of the first request that hits it")
     void malformedGrantExpressionFailsFast() {
         runner.withUserConfiguration(OwnerOnlyMappingConfiguration.class)
-                .withPropertyValues("ludwig.security.data.policies.thing.read.ROLE_AGENT=OWNN")
+                .withUserConfiguration(ThingOperations.class)
+                .withPropertyValues("ludwig.security.roles.AGENT.operations[test.thing.read]=OWNN")
                 .run(context -> assertThat(context).hasFailed()
-                        .getFailure().hasMessageContaining("OWNN"));
+                        .getFailure().hasMessageContaining("ownn"));
     }
 
     @Test
     void aConsistentPolicyAndMappingStart() {
         runner.withUserConfiguration(OwnerOnlyMappingConfiguration.class)
-                .withPropertyValues("ludwig.security.data.policies.thing.read.ROLE_AGENT=OWN")
+                .withUserConfiguration(ThingOperations.class)
+                .withPropertyValues("ludwig.security.roles.AGENT.operations[test.thing.read]=OWN")
                 .run(context -> assertThat(context).hasNotFailed()
-                        .hasSingleBean(DataScopePolicyValidator.class));
+                        .hasSingleBean(OperationScopeValidator.class));
     }
 
     // --- the forward-headers trap ---------------------------------------------------------------
@@ -250,6 +261,17 @@ class SecurityAutoConfigurationTest {
                         "server.forward-headers-strategy=framework")
                 .run(context -> assertThat(context).hasNotFailed()
                         .hasSingleBean(MutualTlsAuthenticationFilter.class));
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ThingOperations {
+
+        @Bean
+        OperationContributor thingOperations() {
+            return () -> java.util.List.of(
+                    Operation.business("test.thing.read", Sensitivity.READ, "k").on("thing", DataAction.READ),
+                    Operation.business("test.order.read", Sensitivity.READ, "k").on("order", DataAction.READ));
+        }
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -316,6 +338,7 @@ class SecurityAutoConfigurationTest {
                     LudwigCacheAutoConfiguration.class,
                     LudwigSecurityAutoConfiguration.class,
                     SecurityMetricsAutoConfiguration.class,
+                    OperationAutoConfiguration.class,
                     DataAuthorizationAutoConfiguration.class,
                     MutualTlsAutoConfiguration.class,
                     AuditCoreAutoConfiguration.class,

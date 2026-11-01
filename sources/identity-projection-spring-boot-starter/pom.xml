@@ -15,12 +15,13 @@
 
     <name>Identity projection Spring Boot starter</name>
     <description>
-        Local projection of the OIDC provider's user/role stream, and the database-backed implementations
-        of security-spring-boot-starter's AuthorityResolver, DataScopeProvider and PartnerIdentityResolver
-        that read from it. Consumes user events from Kafka idempotently and in source order, keeps users,
-        roles, explicit data-scope grants and the partner registry in Postgres (Liquibase changelog
-        included), and evicts the authority cache the moment a grant changes so a revocation takes effect
-        in milliseconds rather than at token expiry.
+        Provider-neutral local projection of the users and roles a service's identity sources know, and the
+        database-backed implementations of security-spring-boot-starter's AuthorityResolver, DataScopeProvider and
+        PartnerIdentityResolver that read from it. Every feed writes through one IdentityProjection SPI - declared
+        sources, role mapping, ordering and staleness, ownership, threshold-guarded sweeps - so a provider needs a
+        feed (identity-source-kafka, identity-source-directory, or a service's own), never a fork. Keeps users,
+        roles, explicit data-scope grants and the partner registry in Postgres (Liquibase changelog included), and
+        evicts the authority cache after commit so a revocation takes effect on the next request.
     </description>
 
     <!--
@@ -94,29 +95,16 @@
             <classifier>jakarta</classifier>
         </dependency>
 
-        <!-- Compile-time generated mapping between the Kafka event and the projection entity. -->
+        <!-- Compile-time generated merge of a change's profile into the projection entity. -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
         </dependency>
 
-        <!-- Optional: the Kafka consumer is only wired when spring-kafka is on the consumer's classpath,
-             so a service can use the projection tables (and an admin UI over them) without a broker. -->
+        <!-- Optional: change and sweep counters (ludwig_identity_*), registered only where a MeterRegistry exists. -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <!--
-            Optional, alongside spring-kafka: the platform's shared consumer wiring. Before it, this module
-            declared no container factory at all and so inherited Boot's default error handler, which retries
-            ten times with no backoff and then drops the record - the silent data loss this dependency exists
-            to remove.
-        -->
-        <dependency>
-            <groupId>ru.ludwigandreas</groupId>
-            <artifactId>messaging-spring-boot-starter</artifactId>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
             <optional>true</optional>
         </dependency>
 

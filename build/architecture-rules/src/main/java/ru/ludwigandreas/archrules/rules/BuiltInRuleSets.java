@@ -41,7 +41,8 @@ public final class BuiltInRuleSets {
             new CredentialRules(),
             new LoggingRules(),
             new GrpcRules(),
-            new AdminRules());
+            new AdminRules(),
+            new IdentityRules());
 
     private BuiltInRuleSets() {
     }

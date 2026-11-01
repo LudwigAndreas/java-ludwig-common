@@ -7,22 +7,22 @@ than one configurable authority.
 ## Requirements
 ### Requirement: Administrative settings access is on the shared surface
 
-`user-settings-spring-boot-starter` SHALL declare `settings.read`, `settings.operate` and `settings.privileged`, and
-serve:
+`user-settings-spring-boot-starter` SHALL declare, on the `ADMIN` surface, `settings.subject.read` and `settings.consent.read`
+(`READ`), and `settings.scope.set` and `settings.backfill.start` (`CHANGE`), and serve:
 
 | endpoint | operation |
 |---|---|
-| `GET /admin/v1/settings/subjects/{subject}` | `settings.read` |
-| `GET /admin/v1/settings/subjects/{subject}/consents` | `settings.read` |
-| `GET /admin/v1/settings/subjects/{subject}/consents/asof?at=` (was `.../consents/as-of`) | `settings.read` |
-| `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}` | `settings.operate` |
-| `POST /admin/v1/settings/backfill` | `settings.operate` |
+| `GET /admin/v1/settings/subjects/{subject}` | `settings.subject.read` |
+| `GET /admin/v1/settings/subjects/{subject}/consents` | `settings.consent.read` |
+| `GET /admin/v1/settings/subjects/{subject}/consents/asof?at=` (was `.../consents/as-of`) | `settings.consent.read` |
+| `PUT /admin/v1/settings/scopes/{scopeType}/{scopeId}` | `settings.scope.set` |
+| `POST /admin/v1/settings/backfill` | `settings.backfill.start` |
 
 The paths under `/admin/settings/`, `ludwig.user-settings.access.admin-authority` and
 `ludwig.user-settings.web.admin-base-path` SHALL no longer exist.
 
 #### Scenario: Support reads a user's settings
-- **WHEN** a caller holding `settings.read` reads subject `alice`
+- **WHEN** a caller holding `settings.subject.read` reads subject `alice`
 - **THEN** the resolved settings are returned as the former administrative endpoint returned them
 
 #### Scenario: The former path
@@ -42,11 +42,10 @@ own tenant and no other tenant's row is read; a resolver that places subjects in
 reachable.
 
 #### Scenario: A tenant administrator reads another tenant's user
-- **WHEN** a user of tenant `acme` holding `settings.read` reads a subject the tenant resolver places in tenant
+- **WHEN** a user of tenant `acme` holding `settings.subject.read` reads a subject the tenant resolver places in tenant
   `globex`
 - **THEN** the response is `404`, where the former endpoint answered `403`
 
 #### Scenario: Another area's operation does not reach settings
 - **WHEN** a handler of another area's administrative operation reads another subject's settings in-process
 - **THEN** the settings access policy refuses it as it refuses any non-administrative caller
-

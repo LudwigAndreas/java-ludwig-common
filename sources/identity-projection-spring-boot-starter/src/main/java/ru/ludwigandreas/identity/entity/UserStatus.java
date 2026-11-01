@@ -11,6 +11,8 @@ public enum UserStatus {
 
     ACTIVE,
 
-    /** Deactivated upstream. Authenticates, resolves to no authorities at all. */
-    DISABLED
+    /** Deactivated at the source, or no longer listed by it. Authenticates, resolves to no authorities at all. */
+    DISABLED,
+    /** Deleted at the source. Resolves to no authorities, like {@link #DISABLED}; the row stays for references. */
+    REMOVED
 }

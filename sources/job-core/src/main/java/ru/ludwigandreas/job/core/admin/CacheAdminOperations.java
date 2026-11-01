@@ -2,33 +2,37 @@ package ru.ludwigandreas.job.core.admin;
 
 import java.util.Collection;
 import java.util.List;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationContributor;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationContributor;
+import ru.ludwigandreas.security.operation.Sensitivity;
 
 /**
- * The {@code caches} administrative area: the caches this service runs, and clearing one on every replica.
+ * The {@code cache} administrative area: the caches this service runs, and clearing one on every replica.
  */
-public final class CacheAdminOperations implements AdminOperationContributor {
+public final class CacheAdminOperations implements OperationContributor {
 
     /** See the registered caches. */
-    public static final String READ = "caches.read";
+    public static final String DEFINITION_READ = "cache.definition.read";
 
     /** Clear a performance cache on every replica. */
-    public static final String OPERATE = "caches.operate";
+    public static final String PERFORMANCE_EVICT = "cache.performance.evict";
 
-    /** Clear a security cache on every replica. */
-    public static final String PRIVILEGED = "caches.privileged";
+    /** Clear a security cache - authority, revocation - on every replica: it changes who may do what. */
+    public static final String SECURITY_EVICT = "cache.security.evict";
 
     private static final String KEY = "ludwig.job-core.admin.";
 
-    /** The operations as catalog entries, which the eviction control declares. */
-    public static final AdminOperation OPERATE_OPERATION = AdminOperation.of(OPERATE, KEY + OPERATE);
+    /** {@link #PERFORMANCE_EVICT}, which the eviction control declares. */
+    public static final Operation PERFORMANCE_EVICT_OPERATION =
+            Operation.admin(PERFORMANCE_EVICT, Sensitivity.CHANGE, KEY + PERFORMANCE_EVICT);
 
-    /** See {@link #OPERATE_OPERATION}. */
-    public static final AdminOperation PRIVILEGED_OPERATION = AdminOperation.of(PRIVILEGED, KEY + PRIVILEGED);
+    /** {@link #SECURITY_EVICT}, which the eviction control declares. */
+    public static final Operation SECURITY_EVICT_OPERATION =
+            Operation.admin(SECURITY_EVICT, Sensitivity.PRIVILEGED, KEY + SECURITY_EVICT);
 
     @Override
-    public Collection<AdminOperation> adminOperations() {
-        return List.of(AdminOperation.of(READ, KEY + READ), OPERATE_OPERATION, PRIVILEGED_OPERATION);
+    public Collection<Operation> operations() {
+        return List.of(Operation.admin(DEFINITION_READ, Sensitivity.READ, KEY + DEFINITION_READ),
+                PERFORMANCE_EVICT_OPERATION, SECURITY_EVICT_OPERATION);
     }
 }

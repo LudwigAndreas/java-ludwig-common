@@ -38,8 +38,9 @@ import ru.ludwigandreas.job.core.control.ControlStore;
 import ru.ludwigandreas.job.core.control.ReplicaControl;
 import ru.ludwigandreas.job.core.control.ReplicaControlPoller;
 import ru.ludwigandreas.job.core.lock.JdbcRunLock;
-import ru.ludwigandreas.security.admin.AdminInvocation;
-import ru.ludwigandreas.security.admin.AdminOperation;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.Sensitivity;
 import ru.ludwigandreas.testsupport.container.Containers;
 import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
 
@@ -55,21 +56,25 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "spring.liquibase.change-log=classpath:db/changelog/job-core/job-core-changelog.xml",
             "ludwig.job-core.owner=replica-a",
             "ludwig.job-core.control.poll-interval=PT1H",
-            "ludwig.admin.grants.jobs.read[0]=PLATFORM_SUPPORT",
-            "ludwig.admin.grants.jobs.read[1]=PLATFORM_ADMIN",
-            "ludwig.admin.grants.jobs.operate[0]=PLATFORM_ADMIN",
-            "ludwig.admin.grants.jobs.privileged[0]=PLATFORM_ADMIN",
-            "ludwig.admin.grants.replicas.read[0]=PLATFORM_SUPPORT",
-            "ludwig.admin.grants.replicas.read[1]=PLATFORM_ADMIN",
-            "ludwig.admin.grants.replicas.operate[0]=PLATFORM_ADMIN",
-            "ludwig.admin.grants.replicas.privileged[0]=PLATFORM_ADMIN"})
+            "ludwig.security.roles.PLATFORM_SUPPORT.operations[job.definition.read]=ALL",
+            "ludwig.security.roles.PLATFORM_SUPPORT.operations[job.lease.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.definition.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.lease.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.definition.run]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[job.lease.release]=ALL",
+            "ludwig.security.roles.PLATFORM_SUPPORT.operations[replica.instance.read]=ALL",
+            "ludwig.security.roles.PLATFORM_SUPPORT.operations[replica.command.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[replica.instance.read]=ALL",
+            "ludwig.security.roles.PLATFORM_ADMIN.operations[replica.command.read]=ALL"})
 @AutoConfigureMockMvc
 class ReplicaControlIT {
 
     static final List<AuditEvent> AUDIT = new CopyOnWriteArrayList<>();
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final AdminOperation OPERATE = AdminOperation.of(JobAdminOperations.OPERATE, "k");
-    private static final AdminOperation PRIVILEGED = AdminOperation.of(JobAdminOperations.PRIVILEGED, "k");
+    private static final Operation OPERATE =
+            Operation.admin(JobAdminOperations.DEFINITION_RUN, Sensitivity.CHANGE, "k");
+    private static final Operation PRIVILEGED =
+            Operation.admin(JobAdminOperations.LEASE_RELEASE, Sensitivity.PRIVILEGED, "k");
 
     /**
      * The probe control's arguments.
@@ -101,12 +106,12 @@ class ReplicaControlIT {
         }
 
         @Override
-        public AdminOperation operationFor(ProbeArgs arguments) {
+        public Operation operationFor(ProbeArgs arguments) {
             return arguments.privileged() ? PRIVILEGED : OPERATE;
         }
 
         @Override
-        public Set<AdminOperation> possibleOperations() {
+        public Set<Operation> possibleOperations() {
             return Set.of(OPERATE, PRIVILEGED);
         }
 
@@ -192,7 +197,7 @@ class ReplicaControlIT {
     private MvcResult submit(String body, RequestPostProcessor caller, String reason) throws Exception {
         var request = post("/admin/v1/replicas/controls/probe").contentType(MediaType.APPLICATION_JSON).content(body)
                 .with(caller);
-        return mvc.perform(reason == null ? request : request.header(AdminInvocation.REASON_HEADER, reason))
+        return mvc.perform(reason == null ? request : request.header(OperationEvaluator.REASON_HEADER, reason))
                 .andReturn();
     }
 

@@ -150,7 +150,7 @@
 
         <!--
             Optional: the administrative endpoints (ru.ludwigandreas.reconciliation.admin) exist only where the
-            security starter's administrative surface does, behind @ConditionalOnBean(AdminOperationCatalog). They
+            security starter's administrative surface does, behind @ConditionalOnBean(AdminSurfaceGuard). They
             replace the reconciliation actuator endpoint. web-core is named because the security starter declares it
             optional, so it does not arrive transitively.
         -->

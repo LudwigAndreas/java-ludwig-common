@@ -45,9 +45,9 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "ludwig.file-action.deferred.initial-delay=PT1H",
             "ludwig.file-action.storage.retention-interval=PT1H",
             "ludwig.security.jwt.enabled=false",
-            "ludwig.admin.grants.fileactions.read[0]=IMPORT_SUPPORT",
-            "ludwig.admin.grants.fileactions.read[1]=IMPORT_OPERATOR",
-            "ludwig.admin.grants.fileactions.operate[0]=IMPORT_OPERATOR"})
+            "ludwig.security.roles.IMPORT_SUPPORT.operations[fileaction.submission.read]=ALL",
+            "ludwig.security.roles.IMPORT_OPERATOR.operations[fileaction.submission.read]=ALL",
+            "ludwig.security.roles.IMPORT_OPERATOR.operations[fileaction.submission.cancel]=ALL"})
 @AutoConfigureMockMvc
 class FileActionAdminIT extends PostgresBackedTest {
 

@@ -1,12 +1,18 @@
 package ru.ludwigandreas.identity.unit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,20 +22,28 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import ru.ludwigandreas.cache.api.LudwigCache;
+import ru.ludwigandreas.identity.config.IdentityProjectionProperties;
 import ru.ludwigandreas.identity.entity.SecurityUserEntity;
 import ru.ludwigandreas.identity.entity.UserStatus;
-import ru.ludwigandreas.identity.kafka.OidcUserEvent;
-import ru.ludwigandreas.identity.kafka.OidcUserEventMapperImpl;
-import ru.ludwigandreas.identity.kafka.OidcUserEventType;
+import ru.ludwigandreas.identity.feed.ApplyOutcome;
+import ru.ludwigandreas.identity.feed.IdentityChange;
+import ru.ludwigandreas.identity.feed.UserProfile;
+import ru.ludwigandreas.identity.projection.IdentityChangeMapperImpl;
+import ru.ludwigandreas.identity.projection.IdentityMetrics;
 import ru.ludwigandreas.identity.projection.IdentityProjectionService;
+import ru.ludwigandreas.identity.projection.IdentitySources;
+import ru.ludwigandreas.identity.projection.SweepStore;
 import ru.ludwigandreas.identity.repository.SecurityUserRepository;
-import ru.ludwigandreas.cache.api.LudwigCache;
 import ru.ludwigandreas.security.authz.Authorities;
 import ru.ludwigandreas.security.authz.PrincipalRef;
+import ru.ludwigandreas.security.principal.PrincipalDisabledEvent;
 
 @ExtendWith(MockitoExtension.class)
 class IdentityProjectionServiceTest {
 
+    private static final String SOURCE = "oidc";
     private static final String SUBJECT = "0b7c1b5e-user";
     private static final Instant NOW = Instant.parse("2026-03-01T10:00:00Z");
 
@@ -39,88 +53,168 @@ class IdentityProjectionServiceTest {
     @Mock
     private LudwigCache<PrincipalRef, Authorities> authorityCache;
 
-    private IdentityProjectionService service;
-
     /** Collects published events, so the disabling signal can be asserted rather than assumed. */
-    private final java.util.List<Object> published = new java.util.ArrayList<>();
+    private final List<Object> published = new ArrayList<>();
 
-    private final org.springframework.context.ApplicationEventPublisher events = published::add;
+    private final ApplicationEventPublisher events = published::add;
+
+    private final List<String> counted = new ArrayList<>();
+
+    private final IdentityMetrics metrics = new IdentityMetrics() {
+        @Override
+        public void change(String source, String type, ApplyOutcome outcome) {
+            counted.add(source + "/" + type + "/" + outcome.tag());
+        }
+
+        @Override
+        public void sweep(String source, boolean aborted, long disabled) {
+        }
+    };
+
+    private IdentityProjectionService service;
 
     @BeforeEach
     void setUp() {
-        service = new IdentityProjectionService(
-                repository, new OidcUserEventMapperImpl(), authorityCache, events, true);
+        service = projection(true);
     }
 
-    private OidcUserEvent event(OidcUserEventType type, Instant occurredAt, Set<String> roles) {
-        return new OidcUserEvent("evt-1", type, SUBJECT, "Anna Schmidt", "tenant-a", roles,
-                "anna@example.com", null, null, "@anna", Boolean.TRUE, null, "7", occurredAt);
+    private IdentityProjectionService projection(boolean storeContact) {
+        Map<String, IdentityProjectionProperties.Source> declared = new LinkedHashMap<>();
+        declared.put(SOURCE, new IdentityProjectionProperties.Source());
+        declared.put("customers", new IdentityProjectionProperties.Source());
+        return new IdentityProjectionService(repository, new IdentityChangeMapperImpl(),
+                new IdentitySources(declared), authorityCache, events, metrics, mock(SweepStore.class),
+                storeContact);
+    }
+
+    private static IdentityChange.Upsert upsert(Instant occurredAt, Set<String> roles) {
+        return new IdentityChange.Upsert(SOURCE, SUBJECT, occurredAt, "7", new UserProfile("Anna Schmidt", "tenant-a",
+                roles, new UserProfile.Contact("anna@example.com", Boolean.TRUE, null, null, null, "@anna")));
+    }
+
+    private static SecurityUserEntity stored(Instant at, Set<String> roles) {
+        SecurityUserEntity stored = new SecurityUserEntity();
+        stored.setId(SUBJECT);
+        stored.setSourceSystem(SOURCE);
+        stored.setSourceTimestamp(at);
+        stored.setTenantId("tenant-a");
+        stored.getRoles().addAll(roles);
+        return stored;
+    }
+
+    private SecurityUserEntity saved() {
+        ArgumentCaptor<SecurityUserEntity> saved = ArgumentCaptor.forClass(SecurityUserEntity.class);
+        verify(repository).save(saved.capture());
+        return saved.getValue();
     }
 
     @Test
-    @DisplayName("a new user is inserted with the event's roles and provenance")
+    @DisplayName("a new user is inserted with the change's roles, source and provenance")
     void insertsUnknownUser() {
         when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
 
-        service.apply(event(OidcUserEventType.UPSERT, NOW, Set.of("CATALOG_ADMIN")));
+        assertThat(service.apply(upsert(NOW, Set.of("CATALOG_ADMIN")))).isEqualTo(ApplyOutcome.APPLIED);
 
-        ArgumentCaptor<SecurityUserEntity> saved = ArgumentCaptor.forClass(SecurityUserEntity.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getId()).isEqualTo(SUBJECT);
-        assertThat(saved.getValue().getRoles()).containsExactly("CATALOG_ADMIN");
-        assertThat(saved.getValue().getTenantId()).isEqualTo("tenant-a");
-        assertThat(saved.getValue().getSourceTimestamp()).isEqualTo(NOW);
-        assertThat(saved.getValue().getStatus()).isEqualTo(UserStatus.ACTIVE);
+        SecurityUserEntity user = saved();
+        assertThat(user.getId()).isEqualTo(SUBJECT);
+        assertThat(user.getRoles()).containsExactly("CATALOG_ADMIN");
+        assertThat(user.getTenantId()).isEqualTo("tenant-a");
+        assertThat(user.getSourceSystem()).isEqualTo(SOURCE);
+        assertThat(user.getSourceTimestamp()).isEqualTo(NOW);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        verify(authorityCache).evictAfterCommit(PrincipalRef.user(SUBJECT));
+        assertThat(counted).containsExactly("oidc/upsert/applied");
     }
 
     @Test
-    @DisplayName("an event older than the stored state is dropped, so a replay cannot restore a revoked role")
-    void ignoresOutOfOrderEvent() {
-        SecurityUserEntity stored = new SecurityUserEntity();
-        stored.setId(SUBJECT);
-        stored.setSourceTimestamp(NOW);
-        stored.setRoles(new java.util.LinkedHashSet<>(Set.of("CATALOG_VIEWER")));
-        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored));
+    @DisplayName("the role set replaces the stored one, so a withdrawn role is gone")
+    void replacesTheRoleSet() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(
+                stored(NOW.minusSeconds(60), Set.of("ORDER_AGENT", "CATALOG_ADMIN"))));
 
-        service.apply(event(OidcUserEventType.UPSERT, NOW.minusSeconds(60), Set.of("CATALOG_ADMIN")));
+        service.apply(upsert(NOW, Set.of("ORDER_AGENT")));
+
+        assertThat(saved().getRoles()).containsExactly("ORDER_AGENT");
+    }
+
+    @Test
+    @DisplayName("a profile field the change leaves unset keeps its stored value, roles included")
+    void keepsUnsetFields() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored(NOW.minusSeconds(60), Set.of("ORDER_AGENT"))));
+
+        service.apply(new IdentityChange.Upsert(SOURCE, SUBJECT, NOW, null,
+                new UserProfile("Anna", null, null, null)));
+
+        SecurityUserEntity user = saved();
+        assertThat(user.getTenantId()).isEqualTo("tenant-a");
+        assertThat(user.getRoles()).containsExactly("ORDER_AGENT");
+        assertThat(user.getDisplayName()).isEqualTo("Anna");
+    }
+
+    @Test
+    @DisplayName("a change older than the stored state is skipped as stale, so a replay cannot restore a revoked role")
+    void skipsAnOlderChange() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored(NOW, Set.of())));
+
+        assertThat(service.apply(upsert(NOW.minusSeconds(300), Set.of("CATALOG_ADMIN"))))
+                .isEqualTo(ApplyOutcome.STALE);
 
         verify(repository, never()).save(any());
-        assertThat(stored.getRoles()).containsExactly("CATALOG_VIEWER");
+        assertThat(counted).containsExactly("oidc/upsert/stale");
     }
 
     @Test
-    @DisplayName("re-applying the same event leaves the same state - the stream is at-least-once")
+    @DisplayName("re-applying the same change leaves the same state - feeds are at-least-once")
     void isIdempotentForTheSameTimestamp() {
-        SecurityUserEntity stored = new SecurityUserEntity();
-        stored.setId(SUBJECT);
-        stored.setSourceTimestamp(NOW);
-        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored));
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored(NOW, Set.of("CATALOG_ADMIN"))));
 
-        service.apply(event(OidcUserEventType.UPSERT, NOW, Set.of("CATALOG_ADMIN")));
+        assertThat(service.apply(upsert(NOW, Set.of("CATALOG_ADMIN")))).isEqualTo(ApplyOutcome.STALE);
 
         verify(repository, never()).save(any());
     }
 
     @Test
-    @DisplayName("a disable event keeps the row and evicts the cached authorities")
-    void disableKeepsRowAndEvictsCache() {
+    @DisplayName("a disable keeps the row, evicts the cached authorities and announces the principal")
+    void disableKeepsRowEvictsAndAnnounces() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored(NOW.minusSeconds(60), Set.of("X"))));
+
+        service.apply(new IdentityChange.Disable(SOURCE, SUBJECT, NOW, null));
+
+        assertThat(saved().getStatus()).isEqualTo(UserStatus.DISABLED);
+        verify(authorityCache).evictAfterCommit(PrincipalRef.user(SUBJECT));
+        assertThat(published).singleElement().isEqualTo(new PrincipalDisabledEvent(SUBJECT, "disable"));
+    }
+
+    @Test
+    @DisplayName("a remove is a status, never a deleted row, and is announced too")
+    void removeIsAStatus() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored(NOW.minusSeconds(60), Set.of("X"))));
+
+        service.apply(new IdentityChange.Remove(SOURCE, SUBJECT, NOW, null));
+
+        assertThat(saved().getStatus()).isEqualTo(UserStatus.REMOVED);
+        verify(repository, never()).delete(any());
+        assertThat(published).singleElement().isEqualTo(new PrincipalDisabledEvent(SUBJECT, "remove"));
+    }
+
+    @Test
+    @DisplayName("an upsert announces nothing")
+    void upsertPublishesNothing() {
         when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
 
-        service.apply(event(OidcUserEventType.DISABLE, NOW, Set.of("CATALOG_ADMIN")));
+        service.apply(upsert(NOW, Set.of("X")));
 
-        ArgumentCaptor<SecurityUserEntity> saved = ArgumentCaptor.forClass(SecurityUserEntity.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getStatus()).isEqualTo(UserStatus.DISABLED);
-        // No transaction is active in this unit test, so eviction happens inline rather than after commit.
-        verify(authorityCache).evictAfterCommit(PrincipalRef.user(SUBJECT));
+        assertThat(published).isEmpty();
     }
 
     @Test
-    void discardsAnEventWithNoSubject() {
-        service.apply(new OidcUserEvent("evt-2", OidcUserEventType.UPSERT, "  ", null, null, Set.of(),
-                null, null, null, null, null, null, null, NOW));
+    @DisplayName("a change with no subject is discarded and counted")
+    void discardsAChangeWithNoSubject() {
+        assertThat(service.apply(new IdentityChange.Disable(SOURCE, " ", NOW, null)))
+                .isEqualTo(ApplyOutcome.DISCARDED);
 
         verify(repository, never()).save(any());
+        assertThat(counted).containsExactly("oidc/disable/discarded");
     }
 
     @Test
@@ -128,60 +222,60 @@ class IdentityProjectionServiceTest {
     void projectsContactDataWhenEnabled() {
         when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
 
-        service.apply(event(OidcUserEventType.UPSERT, NOW, Set.of()));
+        service.apply(upsert(NOW, Set.of()));
 
-        ArgumentCaptor<SecurityUserEntity> saved = ArgumentCaptor.forClass(SecurityUserEntity.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getEmail()).isEqualTo("anna@example.com");
-        assertThat(saved.getValue().getEmailVerified()).isTrue();
-        assertThat(saved.getValue().getChatHandle()).isEqualTo("@anna");
+        SecurityUserEntity user = saved();
+        assertThat(user.getEmail()).isEqualTo("anna@example.com");
+        assertThat(user.getEmailVerified()).isTrue();
+        assertThat(user.getChatHandle()).isEqualTo("@anna");
     }
 
     @Test
     @DisplayName("contact data is scrubbed when the deployment did not opt in")
     void scrubsContactDataWhenDisabled() {
-        // Cleared on every apply, not only on insert: switching the flag off has to actually remove
-        // what an earlier configuration stored, rather than freezing it in place forever.
-        IdentityProjectionService withoutContact = new IdentityProjectionService(
-                repository, new OidcUserEventMapperImpl(), authorityCache, events, false);
-        when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
+        SecurityUserEntity stored = stored(NOW.minusSeconds(60), Set.of());
+        stored.setEmail("old@example.com");
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored));
 
-        withoutContact.apply(event(OidcUserEventType.UPSERT, NOW, Set.of()));
+        projection(false).apply(upsert(NOW, Set.of()));
 
-        ArgumentCaptor<SecurityUserEntity> saved = ArgumentCaptor.forClass(SecurityUserEntity.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getEmail()).isNull();
-        assertThat(saved.getValue().getEmailVerified()).isNull();
-        assertThat(saved.getValue().getChatHandle()).isNull();
+        SecurityUserEntity user = saved();
+        assertThat(user.getEmail()).isNull();
+        assertThat(user.getChatHandle()).isNull();
+        assertThat(user.getEmailVerified()).isNull();
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("a disabling event is published, so anything keyed on the subject can react")
-    void disablingPublishesAnEvent() {
-        when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
+    @DisplayName("a change for a subject another source owns is refused and counted, never applied")
+    void refusesAForeignSource() {
+        when(repository.findById(SUBJECT)).thenReturn(Optional.of(stored(NOW.minusSeconds(60), Set.of("X"))));
 
-        service.apply(event(OidcUserEventType.DISABLE, NOW, Set.of()));
+        assertThat(service.apply(new IdentityChange.Upsert("customers", SUBJECT, NOW, null,
+                new UserProfile(null, null, Set.of("ADMIN"), null)))).isEqualTo(ApplyOutcome.FOREIGN_SOURCE);
 
-        // The cross-module half of the owner-disabled path. The listener lives in
-        // pat-spring-boot-starter and is tested there; what has to be asserted HERE is that this module
-        // actually publishes, because a listener for an event nobody publishes passes its own tests
-        // perfectly and does nothing.
-        assertThat(published)
-                .singleElement()
-                .isInstanceOf(ru.ludwigandreas.security.principal.PrincipalDisabledEvent.class);
-        assertThat(((ru.ludwigandreas.security.principal.PrincipalDisabledEvent) published.get(0)).subject())
-                .isEqualTo(SUBJECT);
+        verify(repository, never()).save(any());
+        assertThat(counted).containsExactly("customers/upsert/foreign-source");
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("an ordinary upsert publishes nothing")
-    void upsertPublishesNothing() {
+    @DisplayName("a change from an undeclared source is a programming error, and a batch applies nothing")
+    void refusesAnUndeclaredSource() {
+        IdentityChange undeclared = new IdentityChange.Disable("staff", SUBJECT, NOW, null);
+
+        assertThatThrownBy(() -> service.apply(undeclared)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("staff");
+        assertThatThrownBy(() -> service.applyAll(List.of(upsert(NOW, Set.of()), undeclared)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a batch is applied in order, with one outcome per change")
+    void appliesABatchInOrder() {
         when(repository.findById(SUBJECT)).thenReturn(Optional.empty());
 
-        service.apply(event(OidcUserEventType.UPSERT, NOW, Set.of()));
-
-        // The vast majority of traffic. A listener firing on every ordinary user update is a listener
-        // somebody switches off, taking the disabling signal with it.
-        assertThat(published).isEmpty();
+        assertThat(service.applyAll(List.of(upsert(NOW, Set.of("X")),
+                new IdentityChange.Disable(SOURCE, "", NOW, null))))
+                .containsExactly(ApplyOutcome.APPLIED, ApplyOutcome.DISCARDED);
     }
 }

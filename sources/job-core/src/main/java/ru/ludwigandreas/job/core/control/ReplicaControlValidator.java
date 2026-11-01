@@ -5,8 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
-import ru.ludwigandreas.security.admin.AdminOperation;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.operation.Operation;
+import ru.ludwigandreas.security.operation.OperationCatalog;
 import ru.ludwigandreas.security.exception.SecurityConfigurationException;
 
 /**
@@ -29,7 +29,7 @@ public final class ReplicaControlValidator {
      * @throws SecurityConfigurationException naming every problem
      */
     public static Map<String, ReplicaControl<?>> index(List<ReplicaControl<?>> controls,
-                                                       AdminOperationCatalog catalog) {
+                                                       OperationCatalog catalog) {
         Map<String, ReplicaControl<?>> byName = new LinkedHashMap<>();
         List<String> problems = new ArrayList<>();
         for (ReplicaControl<?> control : controls) {
@@ -39,7 +39,7 @@ public final class ReplicaControlValidator {
             if (byName.put(control.name(), control) != null) {
                 problems.add("two controls are named '" + control.name() + "'");
             }
-            for (AdminOperation operation : control.possibleOperations()) {
+            for (Operation operation : control.possibleOperations()) {
                 if (!catalog.contains(operation.id())) {
                     problems.add("control '" + control.name() + "' may declare " + operation.id()
                             + ", which no module of this service catalogs");

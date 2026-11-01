@@ -48,9 +48,10 @@ import ru.ludwigandreas.testsupport.security.TestPrincipalBuilder;
             "ludwig.security.jwt.enabled=false",
             "ludwig.outbox.polling.enabled=false",
             "ludwig.outbox.retention.batch-size=3",
-            "ludwig.admin.grants.jobs.read[0]=OPS_SUPPORT",
-            "ludwig.admin.grants.outbox.read[0]=OPS_ADMIN",
-            "ludwig.admin.grants.outbox.operate[0]=OPS_ADMIN"})
+            "ludwig.security.roles.OPS_SUPPORT.operations[job.definition.read]=ALL",
+            "ludwig.security.roles.OPS_SUPPORT.operations[job.lease.read]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[outbox.message.read]=ALL",
+            "ludwig.security.roles.OPS_ADMIN.operations[outbox.message.retry]=ALL"})
 @Import({PostgresContainerConfiguration.class, OutboxRetentionPurgeIntegrationTest.CapturingAudit.class})
 @AutoConfigureMockMvc
 class OutboxRetentionPurgeIntegrationTest {

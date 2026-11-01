@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
 import ru.ludwigandreas.security.principal.Delegation;
 import ru.ludwigandreas.security.principal.LudwigAuthentication;
 import ru.ludwigandreas.security.principal.LudwigPrincipal;
@@ -19,7 +20,7 @@ import ru.ludwigandreas.security.web.PatCredentialNotPermittedException;
 @Slf4j
 public class AdminCallerPolicy {
 
-    private final AdminAccessEvaluator evaluator;
+    private final OperationEvaluator evaluator;
     private final boolean allowPersonalAccessTokens;
     private final Set<String> requiredVia;
 
@@ -30,7 +31,7 @@ public class AdminCallerPolicy {
      * @param allowPersonalAccessTokens whether a PAT-credentialed caller may reach the surface
      * @param requiredVia               acting parties a person must come through; empty requires none
      */
-    public AdminCallerPolicy(AdminAccessEvaluator evaluator, boolean allowPersonalAccessTokens,
+    public AdminCallerPolicy(OperationEvaluator evaluator, boolean allowPersonalAccessTokens,
                              Set<String> requiredVia) {
         this.evaluator = evaluator;
         this.allowPersonalAccessTokens = allowPersonalAccessTokens;

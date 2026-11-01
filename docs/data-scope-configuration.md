@@ -2,34 +2,35 @@
 
 **English** · **[Русский](data-scope-configuration.ru.md)**
 
-How to define data-level scopes in a service and map them onto roles in configuration, so that a
-role's access can be changed by editing configuration rather than code.
+How to scope the rows a service's operations touch, and grant those operations to roles in configuration, so that
+a role's access is changed by editing configuration rather than code.
 
 Everything here is existing behaviour of
-[`security-spring-boot-starter`](../sources/security-spring-boot-starter/README.md) (package
-`ru.ludwigandreas.security.data`). The module README is the reference; this document is the worked
-guide. The `order` service used in the examples is illustrative - it is not a module in this
-repository. The real reference implementation is `product` in `services/crud-service-example`.
+[`security-spring-boot-starter`](../sources/security-spring-boot-starter/README.md) (packages
+`ru.ludwigandreas.security.operation` and `ru.ludwigandreas.security.data`). The module README is the reference;
+this document is the worked guide. The `order` service used in the examples is illustrative - it is not a module in
+this repository. The real reference implementation is `product` in `services/crud-service-example`.
 
 ## The model in one page
 
 | Concept | What it is | Where it is defined |
 |---|---|---|
-| Resource | The thing being protected (`order`) | Code: the name given to `DataScopeMapping.forResource(...)` |
-| Dimension | An axis a row can be restricted along (`owner`, `tenant`, `partner`, or your own) | Code: `ScopeDimension`, bound to a column in the mapping |
-| Action | A verb on the resource (`read`, `write`, `delete`, or your own) | Code: a plain string passed to the guard |
-| Grant | What a role gets for one resource and action: `ALL`, `NONE`, or `+`-joined dimensions | Configuration |
-| Policy | The tree `resource -> action -> role -> grant` | Configuration: `ludwig.security.data.policies` |
+| Operation | What a caller does: `<area>.<object>.<verb>` (`sales.order.update`), with a sensitivity and, when it touches rows, a resource and data action | Code: an `OperationContributor` bean |
+| Resource | The rows being protected (`order`) | Code: the name given to `DataScopeMapping.forResource(...)` |
+| Dimension | An axis a row can be restricted along (`owner`, `tenant`, `partner`, `object`, or your own) | Code: `ScopeDimension`, bound to a column in the mapping |
+| Scope | What a role gets for one operation: `ALL`, or `+`-joined dimensions | Configuration |
+| Role | A set of operations with their scopes, optionally including other roles | Configuration: `ludwig.security.roles` |
 
-The split is deliberate. Which column carries which dimension is code, because it names real
-columns and must break the build when one is renamed. Which role gets which grant is configuration,
-because that is the part operations needs to read and change without a release.
+The split is deliberate. Which operations exist, and which column carries which dimension, is code, because it
+names real handlers and columns and must break the build when one is renamed. Which role holds which operation with
+which scope is configuration, because that is the part operations needs to read and change without a release. Code
+never names a role.
 
 Modules involved:
 
 | Module | Role |
 |---|---|
-| `security-spring-boot-starter` | Owns the model: dimensions, mappings, the configured policy, `DataAccessGuard`. |
+| `security-spring-boot-starter` | Owns the model: the operation catalog, the role table, dimensions, mappings, `DataAccessGuard`. |
 | `identity-projection-spring-boot-starter` | Supplies the caller's roles and attributes (`AuthorityResolver`) and per-user grant rows (`DatabaseDataScopeProvider`). |
 | `test-support-security` | `TestPrincipalBuilder`, for building principals with roles and attributes in tests. |
 
@@ -56,50 +57,79 @@ two cannot drift apart.
 | The row relates to many values, any of which may match | `.bindCollection(dimension, path.any(), getter)` |
 | Anything else | `.bindExpression(...)` - nothing verifies the two halves agree, so test them against each other |
 
-## Step 2: map roles to grants
+## Step 2: declare the operations
+
+```java
+public final class OrderOperations implements OperationContributor {
+
+    public static final String READ = "sales.order.read";
+    public static final String UPDATE = "sales.order.update";
+
+    @Override
+    public Collection<Operation> operations() {
+        return List.of(
+                Operation.business(READ, Sensitivity.READ, "sales.operation." + READ).on("order", DataAction.READ),
+                Operation.business(UPDATE, Sensitivity.CHANGE, "sales.operation." + UPDATE)
+                        .on("order", DataAction.WRITE));
+    }
+}
+```
+
+Register it as a bean, and give each description key a value in the service's message bundle (EN and RU): it is
+what `GET /me/operations` shows a person, and startup fails on a key that resolves nowhere. One read operation covers
+listing and fetching one kind of object; each distinct change is its own operation. A `READ` operation may not
+declare a write, and a `CHANGE` or `PRIVILEGED` one may not declare the read action.
+
+## Step 3: grant operations to roles
 
 ```yaml
 ludwig:
   security:
-    data:
-      default-access: NONE          # a resource/action with no policy is denied
-      policies:
-        order:                      # resource
-          read:                     # action
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN           # rows they created
-            ROLE_TENANT_VIEWER: TENANT      # rows of their tenant
-            ROLE_PARTNER: PARTNER+TENANT    # their partner AND their tenant
-          write:
-            ROLE_ORDER_ADMIN: ALL
-            ROLE_ORDER_AGENT: OWN
+    roles:
+      ORDER_AGENT:
+        operations:
+          sales.order.read: OWN              # rows they created
+          sales.order.update: OWN
+      TENANT_VIEWER:
+        operations:
+          sales.order.read: TENANT           # rows of their tenant
+      PARTNER:
+        operations:
+          sales.order.read: PARTNER+TENANT   # their partner AND their tenant
+      ORDER_ADMIN:
+        includes: [ORDER_AGENT]
+        operations:
+          sales.order.read: ALL
+          sales.order.update: ALL
 ```
 
-Changing a role's access is an edit to its line. Setting it to `NONE`, or deleting the line, revokes
-it.
+Changing a role's access is an edit to its line; deleting the line revokes it.
 
-How grants compose:
+How scopes compose:
 
-- Dimensions inside one grant are AND-ed (`OWN+TENANT` = "my rows, in my tenant").
-- A caller holding several matching roles gets the union of their grants.
-- `ALL` beats everything; `NONE` contributes nothing.
+- Dimensions inside one scope are AND-ed (`OWN+TENANT` = "my rows, in my tenant").
+- A caller holding several roles gets the union of their scopes, and `includes` unites a role with the roles it
+  includes, transitively.
+- `ALL` beats everything. Holding an operation means holding a scope that is not empty; an operation no role lists is
+  refused to everyone.
 - A caller with no value for a required dimension (for example no tenant) is denied, not widened.
 - A caller entitled to nothing gets an empty page from a list endpoint, not a 403.
 
-## Step 3: enforce in the service
+## Step 4: enforce in the service
 
 ```java
 // Query time: the scope becomes part of the WHERE clause, so paging and totals stay correct.
 queryFactory.selectFrom(order)
-        .where(guard.predicate("order", DataAction.READ).and(criteria))
+        .where(guard.predicate(OrderOperations.READ).and(criteria))
         .fetch();
 
 // Load time: the safety net for loads by id and every path a scoped query never sees.
 OrderEntity entity = repository.getByIdOrThrow(id);
-guard.check("order", DataAction.READ, entity, OrderEntity::getId);
+guard.check(OrderOperations.UPDATE, entity, OrderEntity::getId);
 ```
 
-Use both. Application code injects `DataAccessGuard`, never an individual provider.
+Use both. Application code injects `DataAccessGuard`, never an individual provider. The guard takes the operation;
+the operation supplies the resource, so code and configuration name the same thing.
 
 ## Custom dimensions
 
@@ -115,27 +145,26 @@ A service adds its own axis with `ScopeDimension.of(...)`. Three things are need
            .build();
    ```
 
-2. Allow custom tokens and name the dimension in the policy:
+2. Name the dimension in a role's scope:
 
    ```yaml
    ludwig:
      security:
-       data:
-         strict-policy-tokens: false     # otherwise only OWN/TENANT/PARTNER/OBJECT are accepted
-         policies:
-           order:
-             read:
-               ROLE_REGIONAL_MANAGER: REGION
-               ROLE_REGIONAL_AGENT: OWN+REGION
+       roles:
+         REGIONAL_MANAGER:
+           operations:
+             sales.order.read: REGION
+         REGIONAL_AGENT:
+           operations:
+             sales.order.read: OWN+REGION
    ```
 
-   The token is the dimension name, case-insensitive. A token naming a dimension the mapping does
-   not bind still fails startup, so a typo is caught with strict tokens off.
+   The token is the dimension name, case-insensitive. A token naming a dimension the operation's resource does not
+   bind fails startup, so a typo is caught.
 
-3. Give the caller a value. For a custom dimension the configured policy compares the column
-   against the **principal attribute of the same name** (`region`). The stock
-   `DatabaseAuthorityResolver` sets only `tenant` and `partner`, so your `AuthorityResolver` must
-   supply the rest:
+3. Give the caller a value. For a custom dimension a role's scope compares the column against the **principal
+   attribute of the same name** (`region`). The stock `DatabaseAuthorityResolver` sets only `tenant` and `partner`,
+   so your `AuthorityResolver` must supply the rest:
 
    ```java
    return Authorities.builder()
@@ -160,59 +189,67 @@ Requirements:
 
 ### Model
 
-Transitions are **actions on `order`**, not a resource of their own: the policy answers "which role
-may perform this verb on which orders". Each relationship to an order is a **dimension**.
+Each verb is an **operation on `order`** - creating, reading, deleting and each transition - so a role is granted
+exactly the verbs it performs, on exactly the rows its scope admits. Each relationship to an order is a
+**dimension**.
 
 ### Vocabulary
 
-Keep every name in one place per resource. String constants rather than an enum for the resource
-and dimensions: the guard takes `String`, `ScopeDimension` is a value type by design, and
-`@PreAuthorize("hasPermission(..., 'read')")` needs compile-time strings.
+Keep every name in one place per resource: the operation ids, and the dimensions the mapping binds.
 
 ```java
-public final class OrderAccess {
+public final class OrderOperations implements OperationContributor {
 
     public static final String RESOURCE = "order";
 
-    public static final String CREATE = "create";
-    public static final String READ = DataAction.READ;
-    public static final String DELETE = DataAction.DELETE;
+    public static final String CREATE = "sales.order.create";
+    public static final String READ = "sales.order.read";
+    public static final String DELETE = "sales.order.delete";
+    public static final String CANCEL = "sales.order.cancel";
+    public static final String APPROVE = "sales.order.approve";
 
     public static final ScopeDimension CUSTOMER = ScopeDimension.of("customer");
     public static final ScopeDimension TEAM = ScopeDimension.of("team");
 
-    private OrderAccess() {
+    private static final String KEY = "sales.operation.";
+
+    @Override
+    public Collection<Operation> operations() {
+        return List.of(
+                Operation.business(CREATE, Sensitivity.CHANGE, KEY + CREATE).on(RESOURCE, DataAction.WRITE),
+                Operation.business(READ, Sensitivity.READ, KEY + READ).on(RESOURCE, DataAction.READ),
+                Operation.business(DELETE, Sensitivity.CHANGE, KEY + DELETE).on(RESOURCE, DataAction.DELETE),
+                Operation.business(CANCEL, Sensitivity.CHANGE, KEY + CANCEL).on(RESOURCE, "cancel"),
+                Operation.business(APPROVE, Sensitivity.CHANGE, KEY + APPROVE).on(RESOURCE, "approve"));
     }
 }
 ```
 
-Transitions are the exception: the state machine needs the list anyway, so the domain enum carries
-the action name.
+The state machine maps each transition to its operation:
 
 ```java
 public enum OrderTransition {
-    CANCEL("cancel"),
-    APPROVE("approve");
+    CANCEL(OrderOperations.CANCEL),
+    APPROVE(OrderOperations.APPROVE);
 
-    private final String action;
+    private final String operation;
 
-    OrderTransition(String action) {
-        this.action = action;
+    OrderTransition(String operation) {
+        this.operation = operation;
     }
 
-    public String action() {
-        return action;
+    public String operation() {
+        return operation;
     }
 }
 ```
 
 Naming rules:
 
-- Actions: lower-case, one word or kebab-case (`approve`, `send-back`). The lookup is an exact
-  string match, so `Approve` in configuration does not match `approve` in code.
+- Operations: `<area>.<object>.<verb>`, three lower-case segments of letters and digits. Startup refuses anything
+  else, and a role entry naming an uncatalogued operation.
 - Dimensions: lower-case nouns naming the relationship (`customer`, `team`), not the column.
-- Roles: the full `ROLE_...` form everywhere. The prefix is normalised, but one spelling is easier
-  to search for.
+- Roles: written without the `ROLE_` prefix in `ludwig.security.roles`; the prefix is accepted and normalised.
 - Resource: singular, the same word the mapping bean uses.
 
 ### Mapping
@@ -221,62 +258,61 @@ Naming rules:
 @Bean
 DataScopeMapping<OrderEntity> orderScopeMapping() {
     QOrderEntity order = QOrderEntity.orderEntity;
-    return DataScopeMapping.forResource(OrderAccess.RESOURCE, OrderEntity.class)
+    return DataScopeMapping.forResource(OrderOperations.RESOURCE, OrderEntity.class)
             .owner(order.createdBy, OrderEntity::getCreatedBy)
-            .bind(OrderAccess.CUSTOMER, order.businessCustomerId, OrderEntity::getBusinessCustomerId)
-            .bind(OrderAccess.TEAM, order.implementationTeamId, OrderEntity::getImplementationTeamId)
+            .bind(OrderOperations.CUSTOMER, order.businessCustomerId, OrderEntity::getBusinessCustomerId)
+            .bind(OrderOperations.TEAM, order.implementationTeamId, OrderEntity::getImplementationTeamId)
             .build();
 }
 ```
 
-### Policy
+### Roles
 
 ```yaml
 ludwig:
   security:
-    data:
-      default-access: NONE
-      strict-policy-tokens: false
-      policies:
-        order:
-          create:
-            ROLE_USER: ALL
-          read:
-            ROLE_MODERATOR: ALL
-            ROLE_USER: OWN
-            ROLE_BUSINESS_CUSTOMER: CUSTOMER
-            ROLE_IMPLEMENTATION_TEAM: TEAM
-          delete:
-            ROLE_USER: OWN
-          cancel:
-            ROLE_USER: OWN
-          approve:
-            ROLE_MODERATOR: ALL
+    roles:
+      USER:
+        operations:
+          sales.order.create: ALL
+          sales.order.read: OWN
+          sales.order.delete: OWN
+          sales.order.cancel: OWN
+      MODERATOR:
+        operations:
+          sales.order.read: ALL
+          sales.order.approve: ALL
+      BUSINESS_CUSTOMER:
+        operations:
+          sales.order.read: CUSTOMER
+      IMPLEMENTATION_TEAM:
+        operations:
+          sales.order.read: TEAM
 ```
 
 The future change is one line:
 
 ```yaml
-            ROLE_IMPLEMENTATION_TEAM: ALL   # was TEAM
+          sales.order.read: ALL   # was TEAM
 ```
 
 ### Enforcement
 
 ```java
-// A transition: load, check the verb against this row, then let the domain decide validity.
+// A transition: load, check the operation against this row, then let the domain decide validity.
 OrderEntity entity = repository.getByIdOrThrow(id);
-guard.check(OrderAccess.RESOURCE, transition.action(), entity, OrderEntity::getId);
+guard.check(transition.operation(), entity, OrderEntity::getId);
 entity.apply(transition);
 
-// Create: no row exists yet, so ask only whether the caller holds any grant.
-if (guard.scope(OrderAccess.RESOURCE, OrderAccess.CREATE).denies()) {
-    throw new AccessDeniedException("order.create");
+// Create: no row exists yet, so ask only whether the caller holds the operation.
+if (guard.scope(OrderOperations.CREATE).denies()) {
+    throw new AccessDeniedException(OrderOperations.CREATE);
 }
 ```
 
-"Approve is only valid from status X" stays in the domain. The policy decides who may act on which
-rows and knows nothing about statuses. If a rule per status pair is ever required, name the action
-per edge (`approve-from-review`).
+"Approve is only valid from status X" stays in the domain. A role's scope decides who may act on which rows and
+knows nothing about statuses. If a rule per status pair is ever required, declare an operation per edge
+(`sales.order.approvefromreview`).
 
 ### Where the values come from
 
@@ -285,9 +321,9 @@ per edge (`approve-from-review`).
 | `team` | `team` | the user's team id |
 | `customer` | `customer` | the user's own subject |
 
-The `customer` row is a workaround. The configured policy cannot say "compare this custom column to
-the caller's subject", so the resolver copies the subject into an attribute. The alternative is a
-`DataScopeProvider` bean (below), which moves that one rule out of configuration.
+The `customer` row is a workaround. A configured scope cannot say "compare this custom column to the caller's
+subject", so the resolver copies the subject into an attribute. The alternative is a `DataScopeProvider` bean
+(below), which moves that one rule out of configuration.
 
 ### Team cardinality
 
@@ -300,61 +336,54 @@ the caller's subject", so the resolver copies the subject into an attribute. The
 ## Administrative objects
 
 An administrative operation on a named object - a reconciliation task, say - can be narrowed to the objects a caller
-is granted. The resource is `admin.<area>` (for example `admin.reconciliation`), the action is the tier (`read`,
-`operate`, `privileged`) and the dimension is the built-in `object`, whose values are object names. It is opt-in per
-area and tier: with no policy entry for `admin.<area>` and the tier, holding the operation admits every object, as
-before.
-
-A role entry for an administrative resource is `ALL` (every object) or `NONE` (only the objects granted per subject);
-anything else fails startup, because objects are granted per subject, never listed per role. A role with no entry
-gets nothing. Startup also fails for an area no module declares and for an action that is not a tier, since a typo
-would otherwise scope nothing.
+is granted. The dimension is the built-in `object`, whose values are object names; the handler declares which
+parameter names the object. A role grants `OBJECT` (the objects are then granted per subject) or `ALL` (every
+object); any other dimension on an operation that touches no rows fails startup.
 
 Worked example - the supply team operates `supplier-sync` and nothing else, the platform team everything:
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[reconciliation.read]": [SUPPLY_OPS, PLATFORM_ADMIN]
-      "[reconciliation.operate]": [SUPPLY_OPS, PLATFORM_ADMIN]
   security:
-    data:
-      policies:
-        "[admin.reconciliation]":
-          read:    { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
-          operate: { ROLE_SUPPLY_OPS: NONE, ROLE_PLATFORM_ADMIN: ALL }
+    roles:
+      SUPPLY_OPS:
+        operations:
+          reconciliation.task.read: OBJECT
+          reconciliation.run.start: OBJECT
+      PLATFORM_ADMIN:
+        operations:
+          reconciliation.task.read: ALL
+          reconciliation.run.start: ALL
 ```
 
-Then each member of the team is granted the task, with `POST /admin/v1/identity/grants` and the body
-`{"subject": "bob", "principalType": "USER", "resourceType": "admin.reconciliation", "action": "operate",
-"dimension": "object", "dimensionValue": "supplier-sync"}` (and again with `"action": "read"`; an `expiresAt` suits
-on-call access). Bob's run of `supplier-sync` is accepted, his run of `customer-sync` is `403`, and his read of
-`customer-sync` is `404` - the same answer as for a task that does not exist. The task listing shows him only
-`supplier-sync`. A grant reaches other replicas within the data-scope cache TTL, as every grant does.
+Then each member of the team is granted the task per operation, with `POST /admin/v1/identity/grants` and the body
+`{"subject": "bob", "principalType": "USER", "resourceType": "reconciliation.run.start", "action": "invoke",
+"dimension": "object", "dimensionValue": "supplier-sync"}` (and again with `"resourceType":
+"reconciliation.task.read"`; an `expiresAt` suits on-call access). An operation that touches no rows is asked for
+with its own id and the action `invoke`. Bob's run of `supplier-sync` is accepted, his run of `customer-sync` is
+`403`, and his read of `customer-sync` is `404` - the same answer as for a task that does not exist. The task listing
+shows him only `supplier-sync`. A grant reaches other replicas within the data-scope cache TTL, as every grant does.
 
 Only `reconciliation` scopes its objects so far. `jobs` (job names) and `fileingest` (sources) are the candidates.
 
 ## Custom providers
 
-Any number of `DataScopeProvider` beans may be declared. `CompositeDataScopeProvider` collects all of
-them, together with the configured policy and the identity-projection grant table, and unions the
-results.
+Any number of `DataScopeProvider` beans may be declared. They are collected, together with the identity-projection
+grant table, and their answers are united with the roles' scopes. A provider is asked with the operation's resource
+and data action (an operation that touches no rows: its id and `invoke`).
 
 ```java
 @Bean
 DataScopeProvider teamScopeProvider(TeamMembershipRepository memberships) {
     return (principal, resourceType, action) -> {
-        boolean applies = OrderAccess.RESOURCE.equals(resourceType)
-                && DataAction.READ.equals(action)
-                && principal.hasRole("ROLE_IMPLEMENTATION_TEAM");
+        boolean applies = OrderOperations.RESOURCE.equals(resourceType) && DataAction.READ.equals(action);
         if (!applies) {
             return DataScope.none();
         }
         Set<String> teamIds = memberships.teamIdsOf(principal.subject());
         return teamIds.isEmpty()
                 ? DataScope.none()
-                : DataScope.restrictedTo(Map.of(OrderAccess.TEAM, teamIds));
+                : DataScope.restrictedTo(Map.of(OrderOperations.TEAM, teamIds));
     };
 }
 ```
@@ -362,49 +391,40 @@ DataScopeProvider teamScopeProvider(TeamMembershipRepository memberships) {
 - A provider can only widen access. `DataScope.none()` means "I contribute nothing", not "deny".
 - `ALL` from any provider short-circuits the rest.
 - Order does not change the result; `@Order` only decides which runs first.
-- Every provider runs on every scope check, so exit on resource, action and role before any lookup.
-- The role and action in a provider are Java, so that rule cannot be narrowed or reassigned from
-  configuration. Widening still works: `ROLE_IMPLEMENTATION_TEAM: ALL` in the policy is unioned with
-  the provider's answer and wins.
+- Every provider runs on every scope check, so exit on resource and action before any lookup.
+- A provider answers for a subject from data. It must not compare roles: who holds what is the role table's job, and
+  a role compared in code cannot be changed from configuration. Widening still works: `sales.order.read: ALL` on a
+  role is united with the provider's answer and wins.
 
 ## Keeping code and configuration in step
 
-Startup validation (`DataScopePolicyValidator`) fails the deploy for:
+Startup fails the deploy for:
 
-- a misspelled grant (`OWNN`, `ALL+TENANT`),
-- a policy for a resource with no `DataScopeMapping`,
-- a policy using a dimension the mapping does not bind,
-- a resource listed as both unscoped and policed.
+- an operation id outside the grammar, a duplicate id, or a description key that resolves nowhere;
+- a role entry naming an operation the service does not catalogue, with the area's catalogued operations listed;
+- a malformed scope (`OWNN`, `ALL+TENANT`), `NONE`, or a wildcard;
+- a dimension the operation's resource does not bind, an operation whose resource has no `DataScopeMapping`, or a
+  row dimension on an operation that touches no rows;
+- an `includes` cycle, or an include of an undefined role;
+- an authorization annotation naming an uncatalogued operation;
+- `ludwig.security.data.policies`, `default-access` or `strict-policy-tokens` still being set.
 
-It does **not** validate action names. `aprove:` in configuration is accepted, and the real
-`approve` falls back to `default-access: NONE` - closed, but silent. A test in the service covers
-both directions:
+It logs, once, every catalogued operation no role holds. An undefined role name in a caller's authorities is not an
+error, because roles come from the identity provider.
 
-```java
-@Test
-void everyActionHasAPolicyAndEveryPolicyIsAKnownAction() {
-    Set<String> known = new HashSet<>(Set.of(OrderAccess.CREATE, OrderAccess.READ, OrderAccess.DELETE));
-    Arrays.stream(OrderTransition.values()).map(OrderTransition::action).forEach(known::add);
-
-    Set<String> configured = properties.getData().getPolicies().get(OrderAccess.RESOURCE).keySet();
-
-    assertThat(configured).isEqualTo(known);
-}
-```
-
-Keep the full policy tree in the service's `application.yml` as the reviewed baseline and override
-single lines per environment, so an access change is a one-line diff.
+Keep the full role table in the service's `application.yml` as the reviewed baseline and override single lines per
+environment, so an access change is a one-line diff. `GET /admin/v1/security/operations/{id}/holders` shows who
+holds an operation in the running deployment.
 
 ## Known limits
 
 | Limit | Consequence |
 |---|---|
-| Policies are compiled once at startup (`ScopePolicies`) | A configuration change needs a restart; it is not a live toggle. |
-| Grants are written inline per role | A grant expression cannot be named once and reused across roles. |
+| The role table is compiled once at startup | A configuration change needs a restart; it is not a live toggle. |
+| Scopes are written inline per role | A scope expression cannot be named once and reused; `includes` shares whole roles. |
 | A custom dimension reads a principal attribute | Comparing a custom column to the caller's subject needs the attribute workaround or a provider bean. |
 | Principal attributes are single-valued | Several values for one dimension need a provider bean or grant-table rows. |
 | `guard.scope(...)` does not audit | A refused `create` checked that way is not recorded as a denial the way `guard.check(...)` is. |
-| Action names are not validated at startup | Covered by the service test above. |
 
 Changing any of these is a platform change to `security-spring-boot-starter` and goes through
-OpenSpec against the `data-access` capability.
+OpenSpec against the `operation-authorization` capability.

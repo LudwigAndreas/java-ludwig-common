@@ -15,7 +15,7 @@ import ru.ludwigandreas.messaging.db.admin.service.MessagingAdminService;
 import ru.ludwigandreas.messaging.db.admin.web.MessagingAdminController;
 import ru.ludwigandreas.messaging.db.log.LogStore;
 import ru.ludwigandreas.security.admin.AdminAudit;
-import ru.ludwigandreas.security.admin.AdminOperationCatalog;
+import ru.ludwigandreas.security.admin.AdminSurfaceGuard;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
@@ -24,8 +24,8 @@ import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
  */
 @AutoConfiguration(after = MessagingDbAutoConfiguration.class,
         afterName = "ru.ludwigandreas.security.config.AdminAutoConfiguration")
-@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminOperationCatalog")
-@ConditionalOnBean({AdminOperationCatalog.class, LogStore.class})
+@ConditionalOnClass(name = "ru.ludwigandreas.security.admin.AdminSurfaceGuard")
+@ConditionalOnBean({AdminSurfaceGuard.class, LogStore.class})
 public class MessagingDbAdminAutoConfiguration {
 
     @Bean

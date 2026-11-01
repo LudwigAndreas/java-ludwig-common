@@ -1,0 +1,129 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Safe actions are the operate tier`
+- TO: `### Requirement: Safe actions are change operations`
+
+- FROM: `### Requirement: Actions that can desynchronize are the privileged tier`
+- TO: `### Requirement: Actions that can desynchronize are privileged operations`
+
+## MODIFIED Requirements
+
+### Requirement: Task state is readable
+
+`reconciliation-spring-boot-starter` SHALL declare, on the `ADMIN` surface, `reconciliation.task.read` (`READ`),
+the `CHANGE` operations of "Safe actions are change operations" and the `PRIVILEGED` operations of "Actions that
+can desynchronize are privileged operations", and serve under `reconciliation.task.read`:
+
+- `GET /admin/v1/reconciliation/tasks` - every registered task with its tiers, cursor, freshness, last run outcome
+  and quarantine count;
+- `GET /admin/v1/reconciliation/tasks/{task}` - one task, with up to 20 quarantined records' keys and reasons and
+  its open remote jobs and quota leases;
+- `GET /admin/v1/reconciliation/tasks/{task}/scopes/{scope}` - one enumeration scope's state.
+
+An unknown task or scope SHALL be `404`. A scope key containing `/` SHALL be percent-encoded by the caller.
+
+#### Scenario: An operator lists the tasks
+- **WHEN** a caller holding `reconciliation.task.read` lists the tasks
+- **THEN** each registered task appears once with its state, and no quarantined payload is included
+
+### Requirement: Safe actions are change operations
+
+The area SHALL serve, each under its own `CHANGE` operation:
+
+| former actuator action | endpoint | operation |
+|---|---|---|
+| `run` | `POST /admin/v1/reconciliation/tasks/{task}/runs` with `{tier}` | `reconciliation.run.start` |
+| `dry-run` | `POST /admin/v1/reconciliation/tasks/{task}/runs` with `{tier, dryRun: true}` | `reconciliation.run.start` |
+| `backfill` | `POST /admin/v1/reconciliation/tasks/{task}/backfills` with `{keys}` | `reconciliation.backfill.start` |
+| `reset-cursor` | `POST /admin/v1/reconciliation/tasks/{task}/cursor/reset` with `{tier}` | `reconciliation.cursor.reset` |
+| `requeue-quarantined` | `POST /admin/v1/reconciliation/tasks/{task}/quarantine/requeue` | `reconciliation.quarantine.requeue` |
+| `requeue-job` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/requeue` | `reconciliation.remotejob.requeue` |
+| enumeration `discover` | `POST /admin/v1/reconciliation/tasks/{task}/discover` | `reconciliation.discovery.start` |
+| enumeration `requeue-members` | `POST /admin/v1/reconciliation/tasks/{task}/members/requeue` | `reconciliation.member.requeue` |
+| scope `walk` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/walk` with `{kind}` | `reconciliation.walk.start` |
+| scope `preview` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/preview` | `reconciliation.walk.preview` |
+| scope `reset-scope` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/reset` | `reconciliation.scope.reset` |
+| scope `discard-sweep` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/discard` | `reconciliation.sweep.discard` |
+
+A dry run, a backfill, and a run of a task that is not an enumeration and does not use the asynchronous remote-job
+fetch shape SHALL take the task's run lease before answering, SHALL then answer `202` with the run's platform
+operation envelope (`id` equal to the run id) and a `Location` header naming
+`/admin/v1/reconciliation/tasks/{task}/runs/{runId}`, and SHALL execute the pass after answering. When the module's
+manual-run capacity is exhausted the request SHALL be refused with `429` and a `retryAfterSeconds` problem property,
+and no lease SHALL be held. A run of an enumeration, or of a task using the asynchronous remote-job fetch shape,
+SHALL trigger that task's walk or submit pass synchronously and answer `200` with what the pass did; such a pass is
+not a recorded run. A request the task's state does not permit SHALL be `409`. An unknown task, or a scope action on
+a task that is not an enumeration, SHALL be `404`.
+
+#### Scenario: A run is started
+- **WHEN** an operator starts a run of task `supplier-sync` on tier `hot`
+- **THEN** the response is `202` with that run's envelope, `Location` names
+  `/admin/v1/reconciliation/tasks/supplier-sync/runs/{runId}` for that envelope's id, and one audit event records
+  the request
+
+#### Scenario: A run is requested while one is in progress
+- **WHEN** the task is already running on any replica
+- **THEN** the response is `409` and no second run starts
+
+#### Scenario: Manual-run capacity is exhausted
+- **WHEN** two manual runs are executing and the capacity is two
+- **THEN** a third run request on a different task is `429` with a `retryAfterSeconds` property, and that task's
+  lease is not held
+
+#### Scenario: An enumeration is run on demand
+- **WHEN** an operator runs an enumeration
+- **THEN** its walk pass runs before the answer, the response is `200` with the pass and whether it ran, and no run
+  is recorded
+
+### Requirement: Actions that can desynchronize are privileged operations
+
+The area SHALL serve, each under its own `PRIVILEGED` operation and with a mandatory `Operation-Reason`:
+
+| former actuator action | endpoint | operation |
+|---|---|---|
+| `cancel-job` | `POST /admin/v1/reconciliation/tasks/{task}/remotejobs/{jobId}/cancel` | `reconciliation.remotejob.cancel` |
+| `release-lease` | `POST /admin/v1/reconciliation/leases/{leaseId}/release` | `reconciliation.lease.release` |
+| scope `confirm-sweep` | `POST /admin/v1/reconciliation/tasks/{task}/scopes/{scope}/sweep/confirm` | `reconciliation.sweep.confirm` |
+
+`ludwig.reconciliation.endpoint.allow-destructive-operations` and the `confirm` parameter SHALL no longer exist:
+whether a deployment permits these is whether any of its roles is granted those operations.
+
+#### Scenario: A remote job is cancelled
+- **WHEN** an administrator cancels remote job `j-9` with reason `partner asked to abort`
+- **THEN** the job is cancelled and settled as before, and the audit event records the reason
+
+#### Scenario: A privileged action without a reason
+- **WHEN** the same request carries no `Operation-Reason`
+- **THEN** the response is `400` and the job is untouched
+
+### Requirement: Every run is a readable resource
+Every run that acquired its lease, whether scheduled, manual, dry or backfill, SHALL be recorded with its task,
+tier, kind, trigger, instance, correlation id, timestamps, outcome, counts (keys demanded, records fetched, rows
+produced) and failure code. A non-terminal run resource SHALL answer with `Retry-After`. Under
+`reconciliation.task.read` the area SHALL serve `GET /admin/v1/reconciliation/tasks/{task}/runs` (newest first,
+keyset-paged, filtered with `$filter`) and `GET /admin/v1/reconciliation/tasks/{task}/runs/{runId}`, each
+as the platform operation envelope with the run's counts beside it. An unknown task or run SHALL be `404`. A run
+that lost the lease race SHALL NOT be recorded.
+
+#### Scenario: A scheduled run failed overnight
+- **WHEN** the 02:00 scheduled run of `supplier-sync` threw, and an operator lists that task's runs with
+  `$filter=outcome eq 'FAILURE'`
+- **THEN** the run is listed with kind `SCHEDULED`, its start and finish times, `status: FAILED` and a failure code
+
+#### Scenario: A manual run is polled to completion
+- **WHEN** an operator polls the status header of a run they started, until it is terminal
+- **THEN** the final envelope is `SUCCEEDED` with `result` naming the run resource, and the counts show how many
+  keys were demanded, records fetched and rows produced
+
+#### Scenario: A run that timed out
+- **WHEN** a run stops because it reached its `run-timeout`
+- **THEN** its envelope is `FAILED` with failure code `ludwig.reconciliation.error.run-timed-out`
+
+#### Scenario: A dry run's report
+- **WHEN** a dry run finishes
+- **THEN** its run resource's `result` carries the comparison report, and nothing was applied
+
+#### Scenario: The run joins the audit trail
+- **WHEN** an operator reads a run and then the task's audit events for the same period
+- **THEN** the run's `run.started` and `run.finished` events carry attribute `runId` equal to the run's id and the
+  run's correlation id

@@ -1,0 +1,39 @@
+{
+ "change": "operations-catalog",
+ "model": "claude-opus-5-5",
+ "modules_touched": [
+  "security-spring-boot-starter (operation model, role table, enforcement, discovery, holders; README EN+RU)",
+  "architecture-rules (RequiresOperation/RequiresAuthentication, admin = path under /admin/)",
+  "job-core, outbox, hot-reload, rest-client, audit, identity-projection, pat, messaging-db, file-ingest, file-action, export, reconciliation, user-settings (operations, handlers, bundles, tests, README EN+RU)",
+  "grpc-core (GrpcMetadataKeys.OPERATION_REASON), grpc-server (OperationInterceptor, IT, README)",
+  "cache-spring-boot-starter (README)",
+  "notification-service, crud-service-example (business operations, ludwig.security.roles, data-scope calls, OpenAPI)",
+  "docs/admin-guide, docs/data-scope-configuration (EN+RU), CHANGELOG (EN+RU), openspec/intents/admin-surface-follow-ups.md",
+  "POM comments (6) and project-index.json / PROJECT_INDEX.md (rebuilt)"
+ ],
+ "gate": {
+  "check_image_pins": "pass",
+  "check_image_pins --self-test": "pass",
+  "check_api_baseline": "not run to completion (releases repository unreachable offline; gate.sh stops there)",
+  "check_migrations": "pass",
+  "check_build_metadata": "pass",
+  "check_protos": "pass",
+  "api-docs missing": "pass",
+  "api-docs check": "pass (after refresh)",
+  "mvn -q validate": "pass",
+  "manifest stale": "pass (rebuilt)",
+  "maven reactor (mvn -o install, whole reactor)": "pass: 43 modules SUCCESS, 5009 tests, 0 failures, 0 errors",
+  "openspec validate --strict": "pass"
+ },
+ "deviations_from_design": [
+  "DataScopeProvider SPI unchanged: OperationAuthority asks providers with the operation's resource and action (id and invoke for an operation without rows)",
+  "OperationInterceptor enforces BUSINESS operations on gRPC too, because gRPC calls the target, never the method-security proxy",
+  "GrpcServerAdminAutoConfiguration keeps its class name",
+  "OperationAutoConfiguration enables SecurityProperties itself (found by export ITs excluding LudwigSecurityAutoConfiguration)",
+  "Report definitions validate scopedBy at startup (catalogued READ operation over a resource)",
+  "notification-service: NOTIFICATION_SUPPORT does not hold notification.delivery.retry (its @PreAuthorize already refused it), so discovery does not advertise it"
+ ],
+ "known_limits": [
+  "A service without web-core renders reason-required / credential-not-permitted as 500 (follow-up recorded)"
+ ]
+}

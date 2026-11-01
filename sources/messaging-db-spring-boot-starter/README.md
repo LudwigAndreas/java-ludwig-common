@@ -182,13 +182,14 @@ operations, not state changes of business data.
 
 ## Administration
 
-Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it is the service's own `ludwig.admin.grants` (roles from the authority resolver, never token claims), and an operation granted to no role is refused to everyone. A `privileged` call needs an `Admin-Reason` header, and every call is audited under category `admin` with the operation id as its action. `GET /admin/v1/me/operations` lists what the caller holds.
+Operator endpoints are on the platform's administrative surface, `/admin/v1/{area}`, and exist only where `security-spring-boot-starter`'s surface does. Each is guarded by one operation; which of the service's roles hold it, and with what scope, is the service's own `ludwig.security.roles` (roles from the authority resolver, never token claims), and an operation no role holds is refused to everyone. A `PRIVILEGED` operation needs an `Operation-Reason` header and refuses a personal access token, and every call is audited under category `admin` with the operation id as its action. `GET /me/operations` lists what the caller holds, and `GET /admin/v1/security/operations/{id}/holders` which roles hold an operation.
 
-| Operation | Endpoints | Allows |
-|---|---|---|
-| `messaging.read` | `GET /admin/v1/messaging/consumers` | See how far each consumer group is behind on each partition of the database log, and whether it is paused, by whom and since when. |
-| `messaging.operate` | `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/pause`, `.../resume` | Stop and restart delivery of one topic to one group, on every replica at once. |
-| `messaging.privileged` | `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/offsets` | Move a paused group's position on one partition or all of them, skipping or replaying records. |
+| Operation | Sensitivity | Endpoints | Allows |
+|---|---|---|---|
+| `messaging.consumer.read` | `READ` | `GET /admin/v1/messaging/consumers` | See how far each consumer group is behind on each partition of the database log. |
+| `messaging.consumer.pause` | `CHANGE` | `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/pause` | Pause a consumer group on a topic, on every replica. |
+| `messaging.consumer.resume` | `CHANGE` | `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/resume` | Resume a paused consumer group on a topic. |
+| `messaging.offset.move` | `PRIVILEGED` | `POST /admin/v1/messaging/consumers/{group}/topics/{topic}/offsets` | Move a paused consumer group's position on the database log, skipping or replaying records. |
 
 Only groups this service's own listeners consume as can be paused or moved; any other group, or a group with no
 position on the topic, is `404`. Pause and resume are idempotent and return the pair's state; the pause is a row
@@ -202,15 +203,21 @@ produced at or after it), and `partition` absent means every partition. The resu
 retained. The response and the audit event give each partition's old and new position and how many records are
 skipped or replayed; an unknown target or unparseable value is `400`.
 
-Grant block (the role names are the service's own):
+Role block (the role names are the service's own; `ALL` is the scope):
 
 ```yaml
 ludwig:
-  admin:
-    grants:
-      "[messaging.read]": [ORDERS_ADMIN, ORDERS_SUPPORT]
-      "[messaging.operate]": [ORDERS_ADMIN]
-      "[messaging.privileged]": [ORDERS_ADMIN]
+  security:
+    roles:
+      ORDERS_SUPPORT:
+        operations:
+          messaging.consumer.read: ALL
+      ORDERS_ADMIN:
+        includes: [ORDERS_SUPPORT]
+        operations:
+          messaging.consumer.pause: ALL
+          messaging.consumer.resume: ALL
+          messaging.offset.move: ALL
 ```
 
 ## Runbook

@@ -2,7 +2,7 @@ package ru.ludwigandreas.job.core.control;
 
 import java.util.Optional;
 import java.util.Set;
-import ru.ludwigandreas.security.admin.AdminOperation;
+import ru.ludwigandreas.security.operation.Operation;
 
 /**
  * An administrative control that acts on state each replica holds in its own memory - a local cache, say - and is
@@ -39,14 +39,14 @@ public interface ReplicaControl<A> {
      * @throws IllegalArgumentException when the arguments name something that does not exist; the submission is then
      *                                  refused with {@code 400}
      */
-    AdminOperation operationFor(A arguments);
+    Operation operationFor(A arguments);
 
     /**
      * Every operation {@link #operationFor} can return, checked against the catalog at startup.
      *
      * @return the operations
      */
-    Set<AdminOperation> possibleOperations();
+    Set<Operation> possibleOperations();
 
     /**
      * Applies the control on this replica.
