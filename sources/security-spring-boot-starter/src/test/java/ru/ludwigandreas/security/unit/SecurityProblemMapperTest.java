@@ -3,12 +3,19 @@ package ru.ludwigandreas.security.unit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Locale;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import ru.ludwigandreas.pat.problem.PatProblemTypes;
+import ru.ludwigandreas.security.admin.AdminObjectNotFoundException;
+import ru.ludwigandreas.security.operation.OperationEvaluator;
+import ru.ludwigandreas.security.operation.ReasonRequiredException;
+import ru.ludwigandreas.security.web.PatCredentialNotPermittedException;
 import ru.ludwigandreas.security.web.SecurityProblemMapper;
 import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
+import ru.ludwigandreas.webcore.problem.ProblemDefinition;
 import ru.ludwigandreas.webcore.problem.ProblemMessages;
 import ru.ludwigandreas.webcore.problem.ProblemStatus;
 
@@ -41,6 +48,26 @@ class SecurityProblemMapperTest {
                 .isEqualTo("ludwig.security.error.unauthorized");
         assertThat(mapper.map(new BadCredentialsException("expired")).status())
                 .isEqualTo(ProblemStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("the starter's own refusals render with the status, code, arguments and properties they had as"
+            + " LocalizedExceptions")
+    void rendersTheRefusals() {
+        ProblemDefinition reason = new ProblemDefinition(ProblemStatus.INVALID, ReasonRequiredException.CODE,
+                new Object[] {OperationEvaluator.REASON_HEADER, OperationEvaluator.MAX_REASON_LENGTH}, Map.of());
+        ProblemDefinition notFound = new ProblemDefinition(ProblemStatus.NOT_FOUND, "test.thing-not-found",
+                new Object[] {"t-1"}, Map.of());
+        ProblemDefinition credential = new ProblemDefinition(ProblemStatus.FORBIDDEN,
+                "ludwig.pat.credential-not-permitted", new Object[0], Map.of(
+                        "credentialKind", "PERSONAL_ACCESS_TOKEN",
+                        "manageCredentialsAt", PatProblemTypes.MANAGEMENT_PATH));
+
+        assertThat(mapper.map(new ReasonRequiredException())).usingRecursiveComparison().isEqualTo(reason);
+        assertThat(mapper.map(new AdminObjectNotFoundException("test.thing-not-found", "t-1")))
+                .usingRecursiveComparison().isEqualTo(notFound);
+        assertThat(mapper.map(new PatCredentialNotPermittedException("PERSONAL_ACCESS_TOKEN")))
+                .usingRecursiveComparison().isEqualTo(credential);
     }
 
     @Test

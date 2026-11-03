@@ -1,16 +1,16 @@
 {
   "index": {
     "generator": "scripts/project_index.py (via scripts/manifest.sh build)",
-    "generatedAt": "2026-10-30T22:23:49.552265Z",
+    "generatedAt": "2026-11-03T09:10:20.925750Z",
     "revision": "1.1.0-SNAPSHOT",
     "moduleCount": 44,
-    "commit": "73f5ddcb88244104f91398cd27983fa98e7b9e6e",
-    "commitShort": "73f5ddc",
+    "commit": "ab7d0c15182227350797d2dfc2bc4f0b155bab4a",
+    "commitShort": "ab7d0c1",
     "branch": "master",
     "freshness": {
-      "pomSetSha": "02e2b8116749b9c1a4e3765c7f99447b62f3f5822b29ee236c247aeb02360a82",
-      "newestPom": "services/crud-service-example/pom.xml",
-      "newestPomModified": "2026-10-30T21:58:22.675950Z"
+      "pomSetSha": "fcb0f0ed5d4151e5f3dfceb396853f26f2f2b857690349372128af27f8e3ff1e",
+      "newestPom": "sources/identity-source-directory-spring-boot-starter/pom.xml",
+      "newestPomModified": "2026-11-03T09:09:48.267901Z"
     }
   },
   "modules": [
@@ -1740,7 +1740,7 @@
         "unit": "sources/security-spring-boot-starter/src/test/java/ru/ludwigandreas/security/unit"
       },
       "testClasses": {
-        "surefire": 39,
+        "surefire": 40,
         "failsafe": 0
       },
       "pom": "sources/security-spring-boot-starter/pom.xml",
@@ -2014,11 +2014,6 @@
           "artifactId": "test-support",
           "scope": "test",
           "optional": false
-        },
-        {
-          "artifactId": "web-core-spring-boot-starter",
-          "scope": "test",
-          "optional": false
         }
       ],
       "inRepoDependents": [],
@@ -2183,10 +2178,6 @@
         {
           "artifactId": "identity-projection-spring-boot-starter",
           "scope": "compile"
-        },
-        {
-          "artifactId": "identity-source-directory-spring-boot-starter",
-          "scope": "test"
         },
         {
           "artifactId": "job-core",

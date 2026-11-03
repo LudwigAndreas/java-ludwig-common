@@ -245,6 +245,13 @@ DataScopeProvider coverageGrants(CoverageRepository coverage) {
 `SystemPrincipalTemplate` выполняет код планировщиков и listener-ов под явной системной идентичностью
 (`ludwig.security.system-principal.*`).
 
+web-core необязателен. Воркер без него - Kafka-слушатель на job-core, outbox или messaging, пакетная задача - получает
+весь стартер, кроме того, что рендерит problem-ответы: бандл сообщений и `SecurityProblemMapper` есть только с
+web-core. Операции проверяются и там, а их отказы - собственные `SecurityRefusalException` стартера
+(`ReasonRequiredException`, `PatCredentialNotPermittedException`), которые распространяются как исключения; с web-core
+они рендерятся как `400 ludwig.security.reason-required` и `403 ludwig.pat.credential-not-permitted` - и по HTTP, и
+по gRPC.
+
 ### Персональные токены доступа
 
 PAT - **ослабление** текущих прав владельца. Модуль читает claim `ludwig_pat` из assertion, полученного обменом на

@@ -2,6 +2,9 @@ package ru.ludwigandreas.security.web;
 
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import ru.ludwigandreas.security.admin.AdminObjectNotFoundException;
+import ru.ludwigandreas.security.exception.SecurityRefusalException;
+import ru.ludwigandreas.security.operation.ReasonRequiredException;
 import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
 import ru.ludwigandreas.webcore.problem.ProblemDefinition;
 import ru.ludwigandreas.webcore.problem.ProblemStatus;
@@ -18,6 +21,10 @@ import ru.ludwigandreas.webcore.problem.ProblemStatus;
  * come back under a different code. A client checking {@code code} would then have to know which
  * layer denied it, which is precisely the internal detail it should not have to know.
  *
+ * <p>It also renders the starter's own refusals, {@link SecurityRefusalException}s, which carry no web-core type so
+ * that they can be raised in a service without it: a missing reason is {@code INVALID}, an object outside the
+ * caller's scope {@code NOT_FOUND}, a refused credential {@code FORBIDDEN}.
+ *
  * <p>Registered at a lower order than web-core's own mapper so it wins, and only when that starter
  * is on the classpath.
  */
@@ -31,11 +38,21 @@ public class SecurityProblemMapper implements ExceptionProblemMapper {
 
     @Override
     public boolean supports(Throwable exception) {
-        return exception instanceof AccessDeniedException || exception instanceof AuthenticationException;
+        return exception instanceof AccessDeniedException || exception instanceof AuthenticationException
+                || exception instanceof SecurityRefusalException;
     }
 
     @Override
     public ProblemDefinition map(Throwable exception) {
+        if (exception instanceof SecurityRefusalException refusal) {
+            ProblemStatus status = ProblemStatus.FORBIDDEN;
+            if (refusal instanceof ReasonRequiredException) {
+                status = ProblemStatus.INVALID;
+            } else if (refusal instanceof AdminObjectNotFoundException) {
+                status = ProblemStatus.NOT_FOUND;
+            }
+            return new ProblemDefinition(status, refusal.code(), refusal.args(), refusal.properties());
+        }
         // Says only that access was denied. Which role was missing, which scope excluded the row,
         // which partner the certificate mapped to - all of that is in the audit log, keyed by
         // subject, where support can find it and a caller cannot use it to map the permission model.

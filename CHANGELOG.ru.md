@@ -419,6 +419,14 @@
 
 ### Fixed
 
+- **security: стартер работает без web-core** (`security-without-web-core`). web-core был объявлен необязательным,
+  но без него приложение не запускалось (`LudwigSecurityAutoConfiguration` не удавалось проинтроспектировать), а
+  привилегированный вызов падал с ошибкой линковки вместо своего отказа. Бины problem-конвейера перенесены во вложенную
+  конфигурацию, загружаемую только при наличии web-core, а `ReasonRequiredException`, `PatCredentialNotPermittedException`
+  и `AdminObjectNotFoundException` теперь наследуют собственный `SecurityRefusalException` стартера вместо
+  `LocalizedException` из web-core; их рендерит `SecurityProblemMapper`, так что problem-типы, статусы и тела по HTTP и
+  gRPC не изменились. Код, читавший `toDefinition()` у этих исключений, читает `code()`, `args()` и `properties()`.
+  `identity-source-directory-spring-boot-starter` больше не нужен web-core в тестах.
 - **AsyncAPI: слушатели, чьи топики задаёт выражение с несколькими значениями** (`identity-sources`). Springwolf
   описывал такой слушатель один раз, под `toString()` массива; платформенный кастомайзер теперь вычисляет выражение
   так же, как Spring Kafka, и описывает канал, операцию получения и канал недоставленных для каждого топика.

@@ -21,9 +21,45 @@
     ]
   },
   "rollback_point": "73f5ddcb88244104f91398cd27983fa98e7b9e6e (plus uncommitted earlier changes in the tree)",
-  "current_task": "1.1",
-  "decisions": [],
-  "failures": [],
+  "current_task": null,
+  "decisions": [
+    {
+      "task": "1.1",
+      "decision": "The test supplies an AuditSink bean (DataAuthorizationAutoConfiguration needs one, as in AdminSurfaceMvcTest); -Dtest must not be used to select it, since that also runs it in the default execution, which has web-core."
+    },
+    {
+      "task": "2.2",
+      "decision": "AdminObjectNotFoundException also extended LocalizedException and is thrown by OperationEvaluator (line 135) on every surface; the design missed it. Same treatment: extends SecurityRefusalException, SecurityProblemMapper renders it NOT_FOUND. Found by the without-web-core run (NoClassDefFoundError constructing OperationEvaluator). AdminApprovalException and InvalidAdminRequestException stay LocalizedException: admin surface only, which requires web-core, and OperationEvaluator does not link them."
+    },
+    {
+      "task": "2.2",
+      "decision": "AdminSurfaceGuardTest asserts e.code() instead of e.toDefinition().code(): toDefinition was LocalizedException's; the asserted code is unchanged."
+    },
+    {
+      "task": "2.2",
+      "decision": "SecurityRefusalException stores properties with Map.copyOf, as LocalizedException.getProperties did; ProblemDefinition copies them the same way, so the rendered body is unchanged."
+    },
+    {
+      "task": "2.2",
+      "decision": "SecurityProblemMapperTest.rendersTheRefusals pins status, code, args and properties of all three refusals (the new mapping branch)."
+    }
+  ],
+  "failures": [
+    {
+      "task": "1.1",
+      "when": "2026-11-03",
+      "command": "mvn -o -pl :security-spring-boot-starter test-compile surefire:test@without-web-core (code() assertions swapped for isInstanceOf for this run; they compile only after 2.2)",
+      "result": "Tests run: 3, Failures: 1, Errors: 1. webCoreIsAbsent passed. startsWithoutWebCore: Failed to introspect Class [LudwigSecurityAutoConfiguration] <- NoClassDefFoundError: ru/ludwigandreas/webcore/problem/ProblemMessageBundle. refusesWithoutWebCore: NoClassDefFoundError: ru/ludwigandreas/webcore/problem/LocalizedException",
+      "expected": true
+    },
+    {
+      "task": "5.1",
+      "when": "2026-11-03",
+      "command": "scripts/gate.sh --change security-without-web-core ...",
+      "result": "GATE FAILED at scripts/check_api_baseline.sh: published 2.0.0 baselines could not be fetched from nexus.example.internal (environment). Remaining 26 commands run individually, all pass.",
+      "expected": false
+    }
+  ],
   "open_questions": [],
   "pending_human": []
 }

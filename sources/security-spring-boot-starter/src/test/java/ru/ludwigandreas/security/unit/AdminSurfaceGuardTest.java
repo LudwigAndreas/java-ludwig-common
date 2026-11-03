@@ -143,7 +143,7 @@ class AdminSurfaceGuardTest {
 
         assertThatThrownBy(() -> guard(false).preHandle(request(), response, handler("read")))
                 .isInstanceOfSatisfying(PatCredentialNotPermittedException.class, e -> assertThat(
-                        e.toDefinition().code()).isEqualTo("ludwig.pat.credential-not-permitted"));
+                        e.code()).isEqualTo("ludwig.pat.credential-not-permitted"));
         assertThat(guard(true).preHandle(request(), response, handler("read"))).isTrue();
     }
 

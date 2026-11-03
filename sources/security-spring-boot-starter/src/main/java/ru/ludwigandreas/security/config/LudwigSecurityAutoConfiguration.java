@@ -10,6 +10,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import ru.ludwigandreas.cache.api.CacheDefinition;
@@ -29,7 +30,6 @@ import ru.ludwigandreas.security.web.ProblemDetailAccessDeniedHandler;
 import ru.ludwigandreas.security.web.ProblemDetailAuthenticationEntryPoint;
 import ru.ludwigandreas.security.web.SecurityMessages;
 import ru.ludwigandreas.security.web.SecurityProblemMapper;
-import ru.ludwigandreas.webcore.problem.ExceptionProblemMapper;
 import ru.ludwigandreas.webcore.problem.ProblemMessageBundle;
 
 /**
@@ -128,29 +128,6 @@ public class LudwigSecurityAutoConfiguration {
                 messages, properties.getProblemTypePrefix());
     }
 
-    /**
-     * This module's error text, contributed to the shared problem pipeline.
-     *
-     * <p>{@link SecurityMessages} keeps resolving the same bundle for the two filter-chain handlers,
-     * which have to write a response without an MVC dispatch and so cannot use that pipeline.
-     * Contributing the bundle as well is what makes both paths - a rejection in the filter chain and
-     * one from a {@code @PreAuthorize} - produce the same text for the same code.
-     */
-    @Bean
-    @ConditionalOnMissingBean(name = "ludwigSecurityProblemMessageBundle")
-    @ConditionalOnClass(ProblemMessageBundle.class)
-    public ProblemMessageBundle ludwigSecurityProblemMessageBundle() {
-        return ProblemMessageBundle.of("i18n/ludwig-security-messages");
-    }
-
-    /** Keeps an in-dispatch 401/403 under the same codes the filter-chain handlers use. */
-    @Bean
-    @ConditionalOnMissingBean(SecurityProblemMapper.class)
-    @ConditionalOnClass(ExceptionProblemMapper.class)
-    public SecurityProblemMapper ludwigSecurityProblemMapper() {
-        return new SecurityProblemMapper();
-    }
-
     @Bean
     @ConditionalOnMissingBean(SystemPrincipalTemplate.class)
     public SystemPrincipalTemplate ludwigSystemPrincipalTemplate(SecurityProperties properties) {
@@ -159,5 +136,36 @@ public class LudwigSecurityAutoConfiguration {
                 Set.copyOf(system.getRoles().stream()
                         .map(ru.ludwigandreas.security.authz.Authorities::normalizeRole)
                         .toList()));
+    }
+
+    /**
+     * The beans typed with web-core's problem pipeline, nested so that Spring introspects them only where web-core
+     * is present: a top-level method returning a web-core type fails the whole class without it, whatever its
+     * conditions say.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "ru.ludwigandreas.webcore.problem.ExceptionProblemMapper")
+    static class WebCoreProblems {
+
+        /**
+         * This module's error text, contributed to the shared problem pipeline.
+         *
+         * <p>{@link SecurityMessages} keeps resolving the same bundle for the two filter-chain handlers,
+         * which have to write a response without an MVC dispatch and so cannot use that pipeline.
+         * Contributing the bundle as well is what makes both paths - a rejection in the filter chain and
+         * one from a {@code @PreAuthorize} - produce the same text for the same code.
+         */
+        @Bean
+        @ConditionalOnMissingBean(name = "ludwigSecurityProblemMessageBundle")
+        ProblemMessageBundle ludwigSecurityProblemMessageBundle() {
+            return ProblemMessageBundle.of("i18n/ludwig-security-messages");
+        }
+
+        /** Keeps an in-dispatch 401/403 under the same codes the filter-chain handlers use. */
+        @Bean
+        @ConditionalOnMissingBean(SecurityProblemMapper.class)
+        SecurityProblemMapper ludwigSecurityProblemMapper() {
+            return new SecurityProblemMapper();
+        }
     }
 }

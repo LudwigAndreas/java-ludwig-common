@@ -1,7 +1,7 @@
 package ru.ludwigandreas.security.operation;
 
-import ru.ludwigandreas.webcore.problem.LocalizedException;
-import ru.ludwigandreas.webcore.problem.ProblemStatus;
+import java.util.Map;
+import ru.ludwigandreas.security.exception.SecurityRefusalException;
 
 /**
  * A call to a privileged operation that did not state why it was made, or stated it at unreasonable length.
@@ -10,7 +10,7 @@ import ru.ludwigandreas.webcore.problem.ProblemStatus;
  * caller who may not perform the operation anything about it. Its code differs from a body validation failure so a
  * client can prompt for the reason rather than for a corrected form.
  */
-public final class ReasonRequiredException extends LocalizedException {
+public final class ReasonRequiredException extends SecurityRefusalException {
 
     private static final long serialVersionUID = 1L;
 
@@ -21,6 +21,6 @@ public final class ReasonRequiredException extends LocalizedException {
      * Creates the exception.
      */
     public ReasonRequiredException() {
-        super(ProblemStatus.INVALID, CODE, OperationEvaluator.REASON_HEADER, OperationEvaluator.MAX_REASON_LENGTH);
+        super(CODE, Map.of(), OperationEvaluator.REASON_HEADER, OperationEvaluator.MAX_REASON_LENGTH);
     }
 }

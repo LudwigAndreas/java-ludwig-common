@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationEventPublisher;
 import org.springframework.security.core.Authentication;
+import ru.ludwigandreas.audit.AuditSink;
 import ru.ludwigandreas.cache.config.LudwigCacheAutoConfiguration;
 import ru.ludwigandreas.security.config.AdminAutoConfiguration;
 import ru.ludwigandreas.security.config.DataAuthorizationAutoConfiguration;
@@ -59,6 +60,7 @@ class SecurityWithoutWebCoreTest {
                         SecurityMetricsAutoConfiguration.class, OperationAutoConfiguration.class,
                         DataAuthorizationAutoConfiguration.class, MutualTlsAutoConfiguration.class,
                         ResourceServerAutoConfiguration.class, AdminAutoConfiguration.class))
+                .withBean(AuditSink.class, () -> event -> { })
                 .withPropertyValues("ludwig.security.jwt.enabled=false")
                 .run(context -> assertThat(context).hasNotFailed().hasSingleBean(OperationEvaluator.class));
     }
@@ -81,9 +83,11 @@ class SecurityWithoutWebCoreTest {
 
         assertThatThrownBy(() -> evaluator.authorize(new LudwigAuthentication(admin, Credential.DIRECT),
                 admin, PURGE, null, "target"))
-                .isInstanceOf(ReasonRequiredException.class);
+                .isInstanceOfSatisfying(ReasonRequiredException.class,
+                        refusal -> assertThat(refusal.code()).isEqualTo(ReasonRequiredException.CODE));
         assertThatThrownBy(() -> evaluator.authorize(new LudwigAuthentication(admin,
                 Credential.personalAccessToken("p1")), admin, PURGE, "INC-1", "target"))
-                .isInstanceOf(PatCredentialNotPermittedException.class);
+                .isInstanceOfSatisfying(PatCredentialNotPermittedException.class,
+                        refusal -> assertThat(refusal.code()).isEqualTo("ludwig.pat.credential-not-permitted"));
     }
 }

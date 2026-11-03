@@ -97,12 +97,6 @@
             <artifactId>spring-boot-starter-validation</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- The security starter's auto-configuration cannot be introspected without web-core on the classpath. -->
-        <dependency>
-            <groupId>ru.ludwigandreas</groupId>
-            <artifactId>web-core-spring-boot-starter</artifactId>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

@@ -241,6 +241,13 @@ for a caller entitled to nothing returns an **empty page**, not 403. The full mo
 `SystemPrincipalTemplate` runs scheduler and listener code under an explicit system identity
 (`ludwig.security.system-principal.*`).
 
+web-core is optional. A worker without it - a Kafka listener on job-core, outbox or messaging, a batch job - gets
+the whole starter except what renders problems: the problem bundle and `SecurityProblemMapper` exist only with
+web-core. Operations are still enforced there, and their refusals are the starter's own `SecurityRefusalException`s
+(`ReasonRequiredException`, `PatCredentialNotPermittedException`), which propagate as exceptions; with web-core they
+render as `400 ludwig.security.reason-required` and `403 ludwig.pat.credential-not-permitted`, over HTTP and gRPC
+alike.
+
 ### Personal access tokens
 
 A PAT is an **attenuation** of its owner's live authority. This module reads the `ludwig_pat` claim from the

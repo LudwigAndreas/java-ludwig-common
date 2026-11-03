@@ -1,0 +1,30 @@
+{
+  "change": "security-without-web-core",
+  "date": "2026-11-03",
+  "tasks": "8/8",
+  "changed": [
+    "security-spring-boot-starter: LudwigSecurityAutoConfiguration.WebCoreProblems (nested, @ConditionalOnClass by name); SecurityRefusalException; ReasonRequiredException, PatCredentialNotPermittedException, AdminObjectNotFoundException extend it; SecurityProblemMapper renders them (INVALID, FORBIDDEN, NOT_FOUND); without-web-core Surefire execution; SecurityWithoutWebCoreTest; SecurityProblemMapperTest.rendersTheRefusals; AdminSurfaceGuardTest reads e.code()",
+    "identity-source-directory-spring-boot-starter: test-scoped web-core removed",
+    "security README (EN+RU), CHANGELOG Fixed (EN+RU), follow-up removed from openspec/intents/admin-surface-follow-ups.md, design.md notes AdminObjectNotFoundException"
+  ],
+  "deviation": "AdminObjectNotFoundException was not in the design; OperationEvaluator throws it, so it was linked without web-core. Same treatment as the other two.",
+  "evidence_before": "surefire:test@without-web-core on the unfixed code: Tests run 3, Failures 1, Errors 1 (NoClassDefFoundError ProblemMessageBundle / LocalizedException); webCoreIsAbsent passed",
+  "gate": {
+    "check_image_pins": "pass",
+    "check_image_pins --self-test": "pass",
+    "check_api_baseline": "NOT RUN to completion: releases repository nexus.example.internal unreachable; the script fails rather than compare against an empty archive. Must be run where Nexus is reachable.",
+    "check_migrations": "pass (19 root changelogs, 110 changesets)",
+    "check_build_metadata": "pass",
+    "check_protos": "pass (4)",
+    "api-docs missing": "pass",
+    "mvn -q validate": "pass",
+    "module -am verify x20": "covered by the whole-reactor mvn -o install: 44 modules SUCCESS, 5224 tests, 0 failures, 0 errors",
+    "openspec validate --strict": "pass",
+    "manifest stale": "pass (rebuilt)"
+  },
+  "tests": [
+    "security-spring-boot-starter 242 default + 3 without-web-core",
+    "identity-source-directory 82 without web-core",
+    "pat 125+63, grpc-server 76+52 (GrpcAdminAccessIT 4)"
+  ]
+}

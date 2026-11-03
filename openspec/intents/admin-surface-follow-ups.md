@@ -36,10 +36,6 @@ Still open after these:
     until the other two are done.
 - `identity-source-scim`: a ready-made `IdentityDirectory` for SCIM 2.0 providers (users and groups, `meta.lastModified`
   as the change filter), so a standard provider needs configuration instead of a class.
-- `security-spring-boot-starter`'s `LudwigSecurityAutoConfiguration` cannot be introspected without web-core on the
-  classpath (a `@Bean` method returning `ProblemMessageBundle`; a method-level `@ConditionalOnClass` does not help):
-  move that bean into a nested `@ConditionalOnClass` configuration. Found by `identity-sources`, whose directory starter
-  works around it with a test-scoped web-core.
 - A service without web-core: the reason-required and credential-not-permitted refusals are rendered as a generic
   `500` rather than their problem types, because the problem rendering is web-core's. Fail-closed, but unhelpful.
 - Run `check_api_baseline.sh` where the releases repository is reachable, before the major release is cut.

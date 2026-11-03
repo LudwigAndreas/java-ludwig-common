@@ -13,6 +13,9 @@ See proposal.md - Why. The facts that shape the fix, read from the code:
   (`ru.ludwigandreas.security.web`) extend web-core's `LocalizedException`. `OperationEvaluator` throws both on every
   surface; `AdminCallerPolicy` and pat's `PatCredentialGuard` throw the second. Both HTTP and gRPC render exceptions
   through web-core's `ProblemMapperRegistry` (gRPC via `GrpcProblemRenderer`), so a mapper is all either needs.
+- Found during apply: `AdminObjectNotFoundException` (`ru.ludwigandreas.security.admin`) also extends
+  `LocalizedException`, and `OperationEvaluator` throws it for an object outside the caller's scope, so it is linked
+  wherever the evaluator is. It gets the same treatment as the other two and renders `NOT_FOUND`.
 - Nothing catches these two as `LocalizedException`; web-core's generic `LocalizedExceptionProblemMapper` is the
   only thing that recognised them.
 

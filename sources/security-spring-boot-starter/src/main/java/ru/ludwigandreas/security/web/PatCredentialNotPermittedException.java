@@ -1,8 +1,8 @@
 package ru.ludwigandreas.security.web;
 
+import java.util.Map;
 import ru.ludwigandreas.pat.problem.PatProblemTypes;
-import ru.ludwigandreas.webcore.problem.LocalizedException;
-import ru.ludwigandreas.webcore.problem.ProblemStatus;
+import ru.ludwigandreas.security.exception.SecurityRefusalException;
 
 /**
  * A token-backed caller reached a surface that refuses long-lived credentials: the token management surface, and
@@ -21,22 +21,21 @@ import ru.ludwigandreas.webcore.problem.ProblemStatus;
  * revoking the original accomplishes nothing. That is the single most valuable thing an attacker can do with
  * a narrow credential, so the surface refuses the credential rather than reasoning about its scopes.
  *
- * <p>The status comes from {@link ProblemStatus#FORBIDDEN} here rather than from a {@code @ResponseStatus}
- * annotation, which was the original approach and did not work: {@code web-core}'s shared advice catches the
- * exception before Spring consults the annotation and renders anything unmapped as a 500. In a service
- * running {@code web-core}, a module's statuses are whatever its exceptions and mappers say.
+ * <p>The status, {@code FORBIDDEN}, comes from {@link SecurityProblemMapper} rather than from a
+ * {@code @ResponseStatus} annotation, which was the original approach and did not work: {@code web-core}'s shared
+ * advice catches the exception before Spring consults the annotation and renders anything unmapped as a 500. In a
+ * service running {@code web-core}, a module's statuses are whatever its exceptions and mappers say.
  */
-public final class PatCredentialNotPermittedException extends LocalizedException {
+public final class PatCredentialNotPermittedException extends SecurityRefusalException {
 
     private static final long serialVersionUID = 1L;
 
     private final String credentialKind;
 
     public PatCredentialNotPermittedException(String credentialKind) {
-        super(ProblemStatus.FORBIDDEN, "ludwig.pat.credential-not-permitted");
+        super("ludwig.pat.credential-not-permitted",
+                Map.of("credentialKind", credentialKind, "manageCredentialsAt", PatProblemTypes.MANAGEMENT_PATH));
         this.credentialKind = credentialKind;
-        withProperty("credentialKind", credentialKind);
-        withProperty("manageCredentialsAt", PatProblemTypes.MANAGEMENT_PATH);
     }
 
     public String credentialKind() {
