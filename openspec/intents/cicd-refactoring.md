@@ -11,7 +11,7 @@ One Jenkinsfile builds every commit. Git tags set the version. Jenkins writes im
 - Remove every manual copy-paste between `jib-image.json`, the OpenShift UI and the GitOps repo.
 - One pipeline definition for dev and production: the same gates everywhere, only how strictly they block differs.
 - Versions come from git tags (GitVersion), and a release is a tag.
-- Auto-deploy to **dev** after a merge to `master`, and to **PSI (UAT)** after a release tag.
+- Auto-deploy to **dev** after a merge to `master`, to **IFT** after a release tag, and to **PSI (UAT)** with one click after IFT sign-off.
 - Production changes only through an automatic PR into the GitOps `master`, approved by a second person.
 - 4 developers test PRs in parallel without overwriting each other.
 - Build once, promote the same image digest: what PSI tested is byte-for-byte what prod runs.
@@ -24,13 +24,13 @@ One Jenkinsfile builds every commit. Git tags set the version. Jenkins writes im
 
 **Success metrics**
 
-| Metric                                | Today                                           | Target                           |
-| ------------------------------------- | ----------------------------------------------- | -------------------------------- |
-| Manual steps per release              | \~5 per service (copy, paste, branch, PR, sync) | 1 (approve the prod PR)          |
-| Merge to running on dev               | manual, unbounded                               | ≤ 15 min, no human               |
-| Tag to running on PSI                 | manual                                          | ≤ 30 min, no human               |
-| Jenkins pipeline definitions          | 2 (`backendBuild`, `backendUpload`)             | 1 Jenkinsfile + 1 shared library |
-| Rollback to the previous prod version | manual re-paste                                 | 1 revert PR                      |
+| Metric                                | Today                                           | Target                                  |
+| ------------------------------------- | ----------------------------------------------- | --------------------------------------- |
+| Manual steps per release              | \~5 per service (copy, paste, branch, PR, sync) | 2 (promote to PSI, approve the prod PR) |
+| Merge to running on dev               | manual, unbounded                               | ≤ 15 min, no human                      |
+| Tag to running on IFT                 | manual                                          | ≤ 30 min, no human                      |
+| Jenkins pipeline definitions          | 2 (`backendBuild`, `backendUpload`)             | 1 Jenkinsfile + 1 shared library        |
+| Rollback to the previous prod version | manual re-paste                                 | 1 revert PR                             |
 
 ## 2. Current state and what replaces each manual step
 
@@ -49,31 +49,31 @@ Today the pipeline stops at "image pushed". Everything after that is done by han
 
 **Traceability: each manual step to its replacement**
 
-| Manual step today                                                     | Replaced by                                                                      | Section |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------- |
-| Version set from the branch name                                      | GitVersion over tags; a release = `vX.Y.Z` tag                                   | 4       |
-| Two pipelines with different gates                                    | One Jenkinsfile; behaviour chosen by PR / `master` / tag                         | 5       |
-| Copy a tag from `jib-image.json` into the OpenShift UI                | Forbidden. Every deploy goes through git; Argo `selfHeal` reverts UI edits       | 8, 9    |
-| Copy a tag into GitOps, branch, push, sync for dev                    | Jenkins commits the digest to `envs/dev` on merge to `master`; Argo auto-syncs   | 5, 8    |
-| Testing a PR on dev                                                   | On-demand preview in a fixed slot, dev-1 to dev-4                                | 6       |
-| Copy every digest for a release into helm/kustomize                   | The tag pipeline writes all digests to `envs/psi`, then opens the prod PR        | 5       |
-| Create a branch named after the Jira release ticket, PR into `master` | Done by the tag pipeline; the ticket comes from the Jira fixVersion              | 5, 7    |
-| Merge, then sync Argo on prod                                         | A second person approves and merges; Argo syncs (manual button or a sync window) | 9       |
-| Publish release notes                                                 | Generated from Jira fixVersion + `CHANGELOG.md` at the tag                       | 5       |
+| Manual step today                                                     | Replaced by                                                                                                                   | Section |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Version set from the branch name                                      | GitVersion over tags; a release = `vX.Y.Z` tag                                                                                | 4       |
+| Two pipelines with different gates                                    | One Jenkinsfile; behaviour chosen by PR / `master` / tag                                                                      | 5       |
+| Copy a tag from `jib-image.json` into the OpenShift UI                | Forbidden. Every deploy goes through git; Argo `selfHeal` reverts UI edits                                                    | 8, 9    |
+| Copy a tag into GitOps, branch, push, sync for dev                    | Jenkins pushes the digests to the GitOps `develop` branch on merge to `master`; Argo auto-syncs                               | 5, 8    |
+| Testing a PR on dev                                                   | On-demand preview in a fixed slot, dev-1 to dev-4                                                                             | 6       |
+| Copy every digest for a release into helm/kustomize                   | The tag pipeline writes all digests to the `ift` branch; `promote` copies them to `psi`, then opens the prod PR into `master` | 5       |
+| Create a branch named after the Jira release ticket, PR into `master` | Done by the tag pipeline; the ticket comes from the Jira fixVersion                                                           | 5, 7    |
+| Merge, then sync Argo on prod                                         | A second person approves and merges; Argo syncs (manual button or a sync window)                                              | 9       |
+| Publish release notes                                                 | Generated from Jira fixVersion + `CHANGELOG.md` at the tag                                                                    | 5       |
 
 ## 3. Target architecture
 
-The GitOps repo is the single source of truth for what runs where. Jenkins builds and writes digests into it, Argo CD is the only thing that deploys, and people approve exactly one thing: the prod PR.
+The GitOps repo is the single source of truth for what runs where. Jenkins builds and writes digests into it, Argo CD is the only thing that deploys, and people do two things: click promote after IFT sign-off, and approve the prod PR.
 
 &#91;embedded content: target architecture · who writes what\]
 
 Jenkins never talks to a cluster, so a pipeline credential can't change prod. The clusters pull images from Nexus by digest.
 
-| Repo                                       | Owns                                              | Who writes                                                 |
-| ------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------- |
-| App monorepo (this repo)                   | Code, `Jenkinsfile`, version tags                 | Developers via PRs; `release-cut` for tags                 |
-| `ludwig-gitops`                            | Chart, overlays, image digests per env, Argo apps | CI bot (dev, psi, previews); PRs + approval (prod, config) |
-| `ludwig-pipeline` (Jenkins shared library) | All pipeline logic and utility jobs               | Platform owner via PRs, released with `vN` tags            |
+| Repo                                       | Owns                                                                        | Who writes                                                              |
+| ------------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| App monorepo (this repo)                   | Code, `Jenkinsfile`, version tags                                           | Developers via PRs; `release-cut` for tags                              |
+| `ludwig-gitops`                            | One branch per stand (develop, ift, psi, master), each with one images file | CI bot pushes to develop, ift, psi; master (prod) only by PR + approval |
+| `ludwig-pipeline` (Jenkins shared library) | All pipeline logic and utility jobs                                         | Platform owner via PRs, released with `vN` tags                         |
 
 ## 4. Versioning and tagging
 
@@ -87,15 +87,15 @@ A release is a `vX.Y.Z` git tag on `master`, and nothing else. Every deploy refe
 - The whole monorepo shares one version. A tag releases every library and every service image at once.
 - The image tag is set with `-Dludwig.image.tag=...`. The property already exists in `build/ludwig-service-parent/pom.xml`, with `${project.version}` as its default.
 
-| Trigger           | Maven version (`-Drevision`)     | Image tag            | Maven repo | Where it can deploy |
-| ----------------- | -------------------------------- | -------------------- | ---------- | ------------------- |
-| PR #123           | `1.4.0-SNAPSHOT` (not published) | `1.4.0-pr123.<sha7>` | none       | preview slot only   |
-| Merge to `master` | `1.4.0-SNAPSHOT`                 | `1.4.0-<sha7>`       | snapshots  | dev                 |
-| Tag `v1.4.0`      | `1.4.0` with `-Prelease`         | `1.4.0`              | releases   | PSI, then prod      |
+| Trigger           | Maven version (`-Drevision`)     | Image tag            | Maven repo | Where it can deploy      |
+| ----------------- | -------------------------------- | -------------------- | ---------- | ------------------------ |
+| PR #123           | `1.4.0-SNAPSHOT` (not published) | `1.4.0-pr123.<sha7>` | none       | preview slot only        |
+| Merge to `master` | `1.4.0-SNAPSHOT`                 | `1.4.0-<sha7>`       | snapshots  | dev                      |
+| Tag `v1.4.0`      | `1.4.0` with `-Prelease`         | `1.4.0`              | releases   | IFT, then PSI, then prod |
 
 **Why digests.** A tag can be pushed again over a different image, but a digest can't change. The pipeline reads each service's digest from jib's `target/jib-image.digest` / `jib-image.json` and writes it into Git. This is the step people do by hand today. Nexus also marks release tags (`x.y.z`) as non-overwritable (a repository setting).
 
-**Build once, promote.** The tag pipeline builds the release images once. PSI and prod get **the same digest**: promoting means copying a line in Git, not rebuilding. `master` images never go to PSI or prod, because they carry a SNAPSHOT version inside.
+**Build once, promote.** The tag pipeline builds the release images once. IFT, PSI and prod get **the same digest**: promoting means copying a line in Git, not rebuilding. `master` images never go to IFT, PSI or prod, because they carry a SNAPSHOT version inside.
 
 **Changes to the repo**
 
@@ -115,29 +115,30 @@ One multibranch job and one `Jenkinsfile` replace `backendBuild` and `backendUpl
 
 **Stages by trigger**
 
-| Stage                                                                         | PR                                      | `master`         | tag `vX.Y.Z`           | Notes                                                               |
-| ----------------------------------------------------------------------------- | --------------------------------------- | ---------------- | ---------------------- | ------------------------------------------------------------------- |
-| Checkout (full history + tags)                                                | yes                                     | yes              | yes                    | As today: GitVersion needs it                                       |
-| Version (GitVersion)                                                          | yes                                     | yes              | yes                    | Sets `REVISION`, `IMAGE_TAG`                                        |
-| Build + unit + integration tests                                              | yes                                     | yes              | yes                    | `mvn install`; JUnit + JaCoCo published                             |
-| Repo checks (`scripts/gate.sh`: image pins, migrations, protos, API baseline) | yes                                     | yes              | yes                    | Already in repo                                                     |
-| Sonar                                                                         | PR analysis, decorates the Bitbucket PR | branch analysis  | branch analysis        | Quality gate: report on PR, **block** on `master`/tag               |
-| AppSec SAST + SCA                                                             | yes, report only                        | yes, report only | yes, **block**         | Prod-only gate today; earlier feedback, same tool                   |
-| Publish Maven artifacts                                                       | no                                      | snapshots        | releases (`-Prelease`) |                                                                     |
-| Build + push images (jib)                                                     | yes, `pr<id>` tag                       | yes              | yes                    | Digests collected into `images.json`                                |
-| SBOM + image signing                                                          | no                                      | no               | yes                    | CycloneDX + cosign, see section 10                                  |
-| GitOps write                                                                  | preview only, on request                | `envs/dev`       | `envs/psi` + prod PR   | Bot commit, see section 8                                           |
-| Release notes                                                                 | no                                      | no               | yes                    | Jira fixVersion + `CHANGELOG.md` section; posted to Confluence/Jira |
-| Notify                                                                        | Bitbucket build status                  | chat on failure  | chat + Jira            |                                                                     |
+| Stage                                                                         | PR                                      | `master`         | tag `vX.Y.Z`                                       | Notes                                                               |
+| ----------------------------------------------------------------------------- | --------------------------------------- | ---------------- | -------------------------------------------------- | ------------------------------------------------------------------- |
+| Checkout (full history + tags)                                                | yes                                     | yes              | yes                                                | As today: GitVersion needs it                                       |
+| Version (GitVersion)                                                          | yes                                     | yes              | yes                                                | Sets `REVISION`, `IMAGE_TAG`                                        |
+| Build + unit + integration tests                                              | yes                                     | yes              | yes                                                | `mvn install`; JUnit + JaCoCo published                             |
+| Repo checks (`scripts/gate.sh`: image pins, migrations, protos, API baseline) | yes                                     | yes              | yes                                                | Already in repo                                                     |
+| Sonar                                                                         | PR analysis, decorates the Bitbucket PR | branch analysis  | branch analysis                                    | Quality gate: report on PR, **block** on `master`/tag               |
+| AppSec SAST + SCA                                                             | yes, report only                        | yes, report only | yes, **block**                                     | Prod-only gate today; earlier feedback, same tool                   |
+| Publish Maven artifacts                                                       | no                                      | snapshots        | releases (`-Prelease`)                             |                                                                     |
+| Build + push images (jib)                                                     | yes, `pr<id>` tag                       | yes              | yes                                                | Digests collected into `images.json`                                |
+| SBOM + image signing                                                          | no                                      | no               | yes                                                | CycloneDX + cosign, see section 10                                  |
+| GitOps write                                                                  | preview only, on request                | `develop` branch | `ift` branch; `promote` → `psi` + PR into `master` | Bot commit, see section 8                                           |
+| Release notes                                                                 | no                                      | no               | yes                                                | Jira fixVersion + `CHANGELOG.md` section; posted to Confluence/Jira |
+| Notify                                                                        | Bitbucket build status                  | chat on failure  | chat + Jira                                        |                                                                     |
 
 **Rule for blocking gates.** Sonar and AppSec run on PRs too, so nobody first learns about a security finding at release time. A PR can merge only with a green build and the Sonar gate passing. The Bitbucket merge check "minimum successful builds = 1" enforces this. AppSec blocks only at the tag, because a scan that takes hours shouldn't block a merge. If it finds a problem at the tag, the fix goes in as a new patch tag.
 
-**What the tag pipeline does after building**
+**What happens after the tag build**
 
-1. Writes all release digests to `envs/psi/images.yaml` in the GitOps repo and pushes to `master`. Argo auto-syncs PSI.
-2. Waits for PSI to be healthy: polls the Argo API for `Synced` + `Healthy`, with a 20 min timeout. Optionally runs a smoke or API test suite against PSI.
-3. Creates the GitOps branch `<JIRA-RELEASE-KEY>` (for example `REL-1234`), copies the PSI digests into `envs/prod/images.yaml` and opens a PR into GitOps `master`. Release notes and links to the build, Sonar and AppSec go in the description, and the reviewers come from CODEOWNERS.
-4. Comments the PR link on the Jira release ticket.
+1. The tag pipeline replaces `images/kustomization.yaml` on the GitOps `ift` branch with all release digests and pushes. Argo auto-syncs IFT.
+2. It waits for IFT to be healthy: polls the Argo API for `Synced` + `Healthy`, with a 20 min timeout. Optionally it runs a smoke or API test suite against IFT, then comments the result on the Jira release ticket.
+3. After IFT sign-off, someone runs `promote` (ift → psi), one click. It copies `images/`, `charts/` and `base/` from `ift` to `psi` and pushes. Argo auto-syncs PSI with the **same digests**.
+4. Once PSI is healthy, `promote` creates the branch `<JIRA-RELEASE-KEY>` (for example `REL-1234`) from GitOps `master`, copies the same paths into it and opens a PR into `master`. Release notes and links to the build, Sonar and AppSec go in the description, and the reviewers come from CODEOWNERS.
+5. It comments the PR link on the Jira release ticket. A second person approves and merges, and Argo syncs prod.
 
 **Jenkinsfile in the app repo (all logic lives in the shared library)**
 
@@ -166,7 +167,7 @@ Shared **dev** runs `master` and nothing else. A PR that needs a running stand b
 **How a preview works**
 
 1. The developer comments `/preview` on the PR. A Bitbucket webhook (`pr:comment:added`) triggers the `preview` Jenkins job through the Generic Webhook Trigger plugin. Running the job by hand with a `PR_ID` parameter works too.
-2. The job claims a free slot through the Jenkins lockable-resources plugin and writes `previews/<slot>/` in the GitOps repo: a `kustomization.yaml` that points to the `preview` base and sets the PR's latest image digests. Then it comments the URL on the PR.
+2. The job claims a free slot through the Jenkins lockable-resources plugin and writes `previews/<slot>/` on the GitOps `develop` branch: a `kustomization.yaml` that points to the `preview` base and sets the PR's latest image digests. Then it comments the URL on the PR.
 3. An Argo CD ApplicationSet with a **Git directory generator** over `previews/*` deploys the app into that slot's existing namespace. Argo never creates a namespace.
 4. Each new PR build that has a preview open updates the digests in its `previews/<slot>/` automatically.
 5. When the PR is merged or declined, the `preview-gc` job deletes the directory and releases the slot. Argo prunes the app; the empty namespace stays for the next PR. A nightly sweep also frees slots whose preview had no commit for 3 days.
@@ -182,7 +183,7 @@ spec:
   generators:
     - git:
         repoURL: ssh://git@bitbucket/ops/ludwig-gitops.git
-        revision: master
+        revision: develop # previews live on the dev stand's branch
         directories: [{ path: previews/* }]
   template:
     metadata: { name: "ludwig-{{.path.basename}}" }
@@ -191,17 +192,15 @@ spec:
       source:
         {
           repoURL: ssh://git@bitbucket/ops/ludwig-gitops.git,
-          targetRevision: master,
+          targetRevision: develop,
           path: "{{.path.path}}",
         }
-      destination:
-        {
+      destination: {
           server: https://kubernetes.default.svc,
           namespace: "ludwig-{{.path.basename}}",
-        }
+        } # slot namespace, pre-created
       syncPolicy:
         automated: { prune: true, selfHeal: true }
-        syncOptions: [CreateNamespace=true]
 ```
 
 **What a preview contains**
@@ -224,39 +223,40 @@ Eight small jobs cover what the main pipeline shouldn't do: cutting a release, m
 | Job                      | Trigger                                               | What it does                                                                                                                                                                                                                                                                                                                     | Priority |
 | ------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `release-cut`            | manual, input: Jira release key                       | Checks `master` is green. Runs GitVersion for the next version, or takes a bump the user picks. Checks that `CHANGELOG.md` and `CHANGELOG.ru.md` have the heading, since `-Prelease` requires it. Creates the annotated tag `vX.Y.Z` and pushes it, which starts the tag pipeline. Sets the Jira fixVersion and links the ticket | Must     |
-| `promote`                | manual, inputs: version, from env, to env             | Copies digests between envs in GitOps: dev, psi, prod-PR. Used to re-deploy an older release to PSI, or for a hotfix. Writes directly for dev and psi, opens a PR for prod                                                                                                                                                       | Must     |
-| `rollback`               | manual, input: env                                    | Opens a PR (prod) or commits directly (dev, psi) reverting the last image change in `envs/<env>/images.yaml`. The DB is not rolled back: see section 9                                                                                                                                                                           | Must     |
+| `promote`                | manual, inputs: version, from env, to env             | Copies `images/`, `charts/` and `base/` from one stand branch to the next: `develop` → `ift` → `psi` → PR into `master`. Never a git merge between stand branches (section 8). Used for the normal IFT → PSI step, to re-deploy an older release, or for a hotfix. Pushes to `ift`/`psi`, opens a PR for `master`                | Must     |
+| `rollback`               | manual, input: env                                    | Reverts the last `images/` commit on the stand's branch: pushes the revert to `develop`, `ift` or `psi`, and opens a revert PR for `master`. The DB is not rolled back: see section 9                                                                                                                                            | Must     |
 | `preview` / `preview-gc` | PR comment `/preview`; PR merged or declined; nightly | Claim or release a slot; create, update or delete `previews/<slot>/` (section 6)                                                                                                                                                                                                                                                 | Must     |
 | `gitops-lint`            | every PR in the GitOps repo                           | `kustomize build` every overlay, `kubeconform` against the OpenShift schemas, a check that every image has a digest (reuse the `scripts/check_image_pins.py` rule), and a policy check (conftest/kyverno CLI: limits set, no `latest`, no privileged)                                                                            | Must     |
-| `nightly`                | cron, 02:00                                           | A full AppSec SAST + SCA scan of `master`, a dependency CVE scan of the images that run in **prod** (from `envs/prod/images.yaml`), and a report to chat                                                                                                                                                                         | Should   |
-| `registry-cleanup`       | weekly                                                | Nexus cleanup policy: delete `*-pr*` images after 14 days and `x.y.z-<sha>` images after 30 days. Never delete `x.y.z` releases or any digest referenced in `envs/*`                                                                                                                                                             | Should   |
+| `nightly`                | cron, 02:00                                           | A full AppSec SAST + SCA scan of `master`, a dependency CVE scan of the images that run in **prod** (from `images/` on the `master` branch), and a report to chat                                                                                                                                                                | Should   |
+| `registry-cleanup`       | weekly                                                | Nexus cleanup policy: delete `*-pr*` images after 14 days and `x.y.z-<sha>` images after 30 days. Never delete `x.y.z` releases or any digest referenced on any stand branch                                                                                                                                                     | Should   |
 | Renovate                 | scheduled bot                                         | PRs for Maven dependency bumps, the base image digest (`ludwig.image.base`), the GitVersion image and Jenkins plugins. Through the normal PR flow                                                                                                                                                                                | Should   |
 
 Later, and not needed on day one: a DORA dashboard built from the GitOps history, and an Argo CD Image Updater. That one isn't needed because Jenkins already writes the digests.
 
 ## 8. GitOps repo design
 
-One GitOps repo (`ops/ludwig-gitops`, branch `master`) holds the desired state of every environment. A generic Helm chart renders the services, Kustomize overlays hold what differs per env, and one small `images` file per env is the **only** file CI ever edits.
+One GitOps repo (`ops/ludwig-gitops`) has **one branch per stand**. Every branch has the same file tree. Each branch holds its own stand's config plus **one images file** with the digest of every service, and that file is the only one CI edits.
+
+| Branch    | Stand               | How it changes                                                       |
+| --------- | ------------------- | -------------------------------------------------------------------- |
+| `develop` | dev + preview slots | Bot pushes on every app `master` merge and on `/preview`             |
+| `ift`     | IFT                 | Bot pushes on every `vX.Y.Z` tag                                     |
+| `psi`     | PSI (UAT)           | Bot pushes when `promote ift → psi` runs                             |
+| `master`  | prod                | **PR + approve + merge only.** The bot opens the PR and never pushes |
 
 ```text
-ludwig-gitops/
-├── charts/ludwig-service/          # one generic chart: Deployment, Service, Route, HPA, PDB, ServiceMonitor
-├── base/
-│   ├── crud-service-example/       # kustomization.yaml: helmCharts → ../../charts/ludwig-service + values.yaml
-│   └── notification-service/
-├── envs/
-│   ├── dev/
-│   │   ├── kustomization.yaml       # resources: ../../base/*, patches (replicas, limits, config)
-│   │   └── images/kustomization.yaml # kind: Component — written by CI only
-│   ├── psi/   (same)
-│   ├── prod/  (same)
-│   └── preview/                     # base for previews: small limits, own Postgres
-├── previews/pr-123/                 # written and deleted by the preview jobs
-├── argocd/                          # AppProjects + ApplicationSets (app-of-apps root)
-└── CODEOWNERS                       # envs/prod/** → release approvers
+ludwig-gitops/                     # same tree on every branch
+├── images/kustomization.yaml      # THE images file: every service's digest. Written by CI only
+├── charts/ludwig-service/         # generic chart: Deployment, Service, Route, HPA, PDB, ServiceMonitor
+├── base/<service>/                # helmCharts → ../../charts/ludwig-service + values.yaml
+├── env/                           # this stand only: replicas, limits, routes, config, ExternalSecrets
+│   └── kustomization.yaml         # resources: ../base/*  components: [../images]
+├── previews/<slot>/               # develop branch only, written by the preview jobs
+├── argocd/                        # master branch only: AppProjects + ApplicationSets
+└── CODEOWNERS
 ```
 
-**The file CI writes** (`envs/psi/images/kustomization.yaml`)
+**The images file** (`images/kustomization.yaml`, on the `ift` branch here)
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1alpha1
@@ -272,31 +272,35 @@ images:
     digest: sha256:9ac0...
 ```
 
-The whole file is rewritten with the full set of services on every write. A commit therefore always describes a complete, consistent release, and a revert restores the previous complete set.
+Every write replaces the whole file with the full set of services. A commit therefore always describes one complete, consistent release, and a revert restores the previous complete set.
+
+**Promotion copies files; it never merges branches.** `git merge develop → ift` would also carry dev's digests and dev's `env/` into IFT. So `promote` copies a fixed set of paths from the source branch to the target: `images/`, `charts/` and `base/`. It leaves `env/` alone. The chart change that a release needs therefore travels with the release. A change to one stand's own config is a normal PR into that stand's branch.
 
 **How the bot writes**
 
-- A dedicated Bitbucket service account with an SSH key, holding write access to the GitOps repo only. Jenkins credential `gitops-bot`.
-- Every write is serialized per env with `lock(resource: "gitops-<env>")`: `git pull --rebase`, write the file, commit, push. On a push race it retries 3 times. Two `master` builds finishing together therefore can't lose a write.
-- The commit message carries the version, the app commit SHA, the build URL and the Jira key (for example `dev: 1.4.0-a1b2c3d (REL-1234) build #57`). The GitOps history _is_ the deploy log.
-- dev, psi and previews: direct push to `master`, through a branch-permission exception for the bot only. prod: always a PR.
+- A dedicated Bitbucket service account with an SSH key and write access to this repo only. Jenkins credential `gitops-bot`.
+- Writes are serialized per branch with `lock(resource: "gitops-<branch>")`: `git pull --rebase`, write, commit, push, retrying 3 times on a push race. Two `master` builds finishing together therefore can't lose a write.
+- The commit message names the version, the app commit SHA, the build URL and the Jira key, for example `dev: 1.4.0-a1b2c3d (REL-1234) build #57`. Each branch's history _is_ that stand's deploy log.
+- `develop`, `ift`, `psi`: direct push, through a branch-permission exception for the bot only.
+- `master`: the bot creates a `<JIRA-RELEASE-KEY>` branch from `master`, commits there and opens the PR. It cannot push to `master`.
 
-**Branch protection on GitOps `master`**
+**Branch protection**
 
-- No direct pushes except the bot. The bot's exception does not cover `envs/prod/**`: a pre-receive hook or the Bitbucket "path permissions" app enforces this.
-- PRs touching `envs/prod/**` need 1 approval from CODEOWNERS (not the author), a green `gitops-lint`, and no unresolved tasks.
-- Merge strategy: squash, so each prod release is one commit and one revert.
+- `master`: no direct pushes for anyone, the bot included. A PR needs 1 approval from CODEOWNERS (not the author), a green `gitops-lint` and no unresolved tasks. Squash merge, so each release is one commit and one revert.
+- `develop`, `ift`, `psi`: people change `env/` through PRs with 1 approval. Only the bot pushes directly.
+- `images/` on every branch: `gitops-lint` fails any PR not opened by the bot that changes it. Use `promote` or `rollback` instead.
 
 ## 9. Argo CD configuration
 
-Argo CD pulls from GitOps `master`. dev, PSI and previews sync automatically. Prod syncs only after the approved PR is merged, either by an operator pressing Sync or automatically inside a sync window (an open question). Manual changes in the OpenShift UI get reverted, which ends the "paste a hash into the UI" path.
+Argo CD watches one GitOps branch per stand: `develop` (dev and the preview slots), `ift`, `psi` and `master` (prod). dev, IFT, PSI and previews sync automatically. Prod changes only when an approved PR is merged into `master`, and then syncs either by an operator pressing Sync or automatically inside a sync window (an open question). Manual changes in the OpenShift UI get reverted, which ends the "paste a hash into the UI" path.
 
-| Env     | AppProject      | Source                        | Sync policy                                                           | Who can sync                        |
-| ------- | --------------- | ----------------------------- | --------------------------------------------------------------------- | ----------------------------------- |
-| preview | `dev-1 … dev-4` | `previews/*` (ApplicationSet) | auto, prune, selfHeal                                                 | bot (via Git)                       |
-| dev     | `ludwig-dev`    | `envs/dev`                    | auto, prune, selfHeal                                                 | bot (via Git)                       |
-| psi     | `ludwig-psi`    | `envs/psi`                    | auto, prune, selfHeal                                                 | bot (via Git)                       |
-| prod    | `ludwig-prod`   | `envs/prod`                   | manual sync (or auto + sync window, Mon–Thu 10:00–16:00), selfHeal on | release approvers (Argo RBAC group) |
+| Env     | AppProject      | Source (branch · path)                    | Sync policy                                                           | Who can sync                        |
+| ------- | --------------- | ----------------------------------------- | --------------------------------------------------------------------- | ----------------------------------- |
+| preview | `dev-1 … dev-4` | `develop` · `previews/*` (ApplicationSet) | auto, prune, selfHeal                                                 | bot (via Git)                       |
+| dev     | `ludwig-dev`    | `develop` · `env/`                        | auto, prune, selfHeal                                                 | bot (via Git)                       |
+| ift     | `ludwig-ift`    | `ift` · `env/`                            | auto, prune, selfHeal                                                 | bot (via Git)                       |
+| psi     | `ludwig-psi`    | `psi` · `env/`                            | auto, prune, selfHeal                                                 | bot (via Git, `promote` job)        |
+| prod    | `ludwig-prod`   | `master` · `env/`                         | manual sync (or auto + sync window, Mon–Thu 10:00–16:00), selfHeal on | release approvers (Argo RBAC group) |
 
 **Settings**
 
@@ -345,13 +349,14 @@ A developer only touches the app repo, PR comments and the prod PR approval. Eve
 
 1. Add the `## X.Y.Z` heading to `CHANGELOG.md` and `CHANGELOG.ru.md` in a normal PR.
 2. Run `release-cut` with the Jira release key. It tags `vX.Y.Z`.
-3. The tag pipeline builds once, deploys to PSI and opens the prod PR `REL-1234` in GitOps.
-4. QA tests on PSI. A second person approves and merges the prod PR, and Argo syncs prod.
+3. The tag pipeline builds once and deploys to IFT through the GitOps `ift` branch.
+4. QA signs off IFT, then runs `promote` (ift → psi). PSI gets the same digests, and once PSI is healthy the prod PR `REL-1234` into GitOps `master` opens.
+5. UAT on PSI. A second person approves and merges the prod PR, and Argo syncs prod.
 
 **Hotfix on prod while `master` has moved on**
 
 1. Branch `release/1.3.x` from tag `v1.3.0`, cherry-pick the fix, then tag `v1.3.1` on that branch.
-2. The same tag pipeline runs: PSI, then the prod PR. Merge the fix to `master` as well.
+2. The same flow runs: IFT, promote to PSI, then the prod PR. Merge the fix to `master` as well.
 
 **Rollback**
 
@@ -362,8 +367,8 @@ A developer only touches the app repo, PR comments and the prod PR approval. Eve
 
 - [ ] Module under `services/`, inheriting `ludwig-service-parent` (jib config comes from there).
 - [ ] Add `:<artifactId>` to `services:` in the `Jenkinsfile`.
-- [ ] `base/<service>/` in GitOps with its `values.yaml`, and an entry in each `envs/*/kustomization.yaml`.
-- [ ] Route, secrets (`ExternalSecret`), DB schema if needed.
+- [ ] `base/<service>/` with its `values.yaml` in a GitOps PR into `develop`. `promote` carries it to `ift`, `psi` and `master` with the first release.
+- [ ] On each stand branch, an entry in `env/kustomization.yaml` plus the route, secrets (`ExternalSecret`) and DB schema if needed: a PR per branch.
 - [ ] First deploy happens on the next merge to `master`.
 
 **New starter (library)**
@@ -396,5 +401,9 @@ The design assumes Bitbucket Server/Data Center, one Argo CD instance with acces
 - [ ] AppSec tool: does it have a CLI/API Jenkins can call with a pass/fail result, and how long does a full scan take?
 - [ ] Prod sync: must it be a manual button by company policy, or is auto-sync inside a window after an approved merge acceptable?
 - [ ] Jira: is the release ticket key always known before the tag (as an input to `release-cut`), or created by the pipeline?
-- [ ] Smoke/API tests against PSI before the prod PR opens: do they exist, or are they a follow-up?
+- [ ] Smoke/API tests against IFT before promotion to PSI: do they exist, or are they a follow-up?
 - [ ] Is cosign signing required by security, or nice-to-have?
+
+* [ ] Can the bot push directly to `develop`, `ift` and `psi`? Assumed yes. If not, it opens a PR there and Bitbucket auto-merges it on a green `gitops-lint`.
+* [ ] IFT → PSI: a one-click `promote` after IFT sign-off (assumed), or automatic once the IFT smoke suite passes?
+* [ ] Is the UAT branch named `psi` or `uat`? The doc uses `psi`.
